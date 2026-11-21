@@ -141,11 +141,11 @@ describe("link previews", () => {
 
   it("builds at most a bounded handful of previews at once", async () => {
     const gates: Array<() => void> = [];
-    const request: PinnedRequest = async (url) => {
+    const request: PinnedRequest = async (_url) => {
       await new Promise<void>((release) => gates.push(release));
       return { status: 200, location: null, type: "text/html", body: fixture("article.html"), truncated: false };
     };
-    const resolve = async (host: string): Promise<LookupAddress[]> => [{ address: "93.184.215.14", family: 4 }];
+    const resolve = async (_host: string): Promise<LookupAddress[]> => [{ address: "93.184.215.14", family: 4 }];
     const dir = mkdtempSync(join(tmpdir(), "dusk-link-preview-"));
     dirs.push(dir);
     const previews = createLinkPreviews({ dir, net: { resolve, request }, now: () => 1_000_000 });
