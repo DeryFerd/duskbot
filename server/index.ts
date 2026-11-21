@@ -16651,6 +16651,7 @@ const handleRequestInner = async (req: IncomingMessage, res: ServerResponse) => 
   } catch (e) {
     if (isDiskFull(e)) return json(res, 507, { error: "The disk is full, so this could not be saved. Free up some space, then try again.", code: "disk_full" });
     const status = (e as any)?.status ?? 500;
+    if ((e as { status?: unknown })?.status === undefined) console.error(`unhandled error on ${method} ${path}:`, e);
     const candidateCode = (e as { code?: unknown })?.code;
     const code = typeof candidateCode === "string" && ["guarded_busy", "guarded_branch", "guarded_permissions", "guarded_request_changed", "guarded_request_untracked", "outside_workspace", "no_ai", BOT_LIMIT_CODE].includes(candidateCode)
       ? candidateCode : undefined;
