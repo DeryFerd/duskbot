@@ -16738,6 +16738,12 @@ if (CLOUD_HOME) registerCloudPower(cloudPower = createCloudPower({ dataDir: DATA
   ...workProbes, job: () => jobs.busy(), nextDueAt: () => { const due = [routines?.nextDueAt() ?? null, botWaits.nextWakeAt()].filter((at): at is number => at !== null); return due.length ? Math.min(...due) : null; }, upcoming: () => routines?.upcoming() ?? [],
  } })); if (!DESKTOP_MANAGED) updateState = createUpdateHost({ dataDir: DATA_DIR, version: serverVersion(), log: (line) => console.log(line), health: () => Array.isArray(store.bots), browser: async () => (builtInBrowserEnabled(cfg) ? (await chromeLauncher.binary()).path : null), connected: async () => { if (!composio.configured(cfg)) return null; const services = await composio.connectedServices(cfg); return { gmail: services.gmail?.connected === true, googlecalendar: services.googlecalendar?.connected === true }; }, relay: (payload, session, signal) => composio.relayMcp(cfg, payload as never, session, undefined, signal), runs: () => routines?.listRuns() ?? [] }); // the Mac app's server never updates itself
 
+server.on("error", (error: NodeJS.ErrnoException) => {
+  console.error(error.code === "EADDRINUSE"
+    ? `dusk bot cannot listen on 127.0.0.1:${PORT}: the port is already in use, often by another dusk bot or an OpenMausBot server on the same host. Stop that program, or set DUSK_PORT to another port.`
+    : `dusk bot's server failed to listen on 127.0.0.1:${PORT}: ${error.message}`);
+  process.exit(1);
+});
 server.listen(PORT, "127.0.0.1", async () => {
   engineProgressReady = true;
   companyRuntimeReady();
@@ -16781,6 +16787,9 @@ if (TUNNEL_SOCKET) {
   if (process.platform !== "win32") rmSync(TUNNEL_SOCKET, { force: true });
   tunnelListener = createServer(IDLE_HTTP_SERVER, gzipTunnelReplies(handleRequest));
   upgrades.attach(tunnelListener, handleRequest);
+  tunnelListener.on("error", (error: NodeJS.ErrnoException) => {
+    console.error(`dusk bot's tunnel listener failed on ${TUNNEL_SOCKET}: ${error.message}`);
+  });
   tunnelListener.listen(TUNNEL_SOCKET, () => {
     console.log(`duskbot tunnel listener on ${TUNNEL_SOCKET}`);
   });
