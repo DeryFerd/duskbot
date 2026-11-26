@@ -31,7 +31,7 @@ function controller(links, overrides = {}) {
     ownHome: { start: async () => {}, view: () => null, away: () => false, home: () => null, chosen: () => null }, ownHomeReset: () => {},
     localRequest: async () => Response.json({}),
     backups: { save: async () => ({ file: "", bytes: 0 }), open: async () => assert.fail("no backup") },
-    localCredentials: { codexAuth: async () => "{}", claudeCli: async () => null, claudeToken: async () => "" },
+    localCredentials: { claudeCli: async () => null, claudeToken: async () => "" },
     relaunch: () => {},
     ...overrides,
   });
@@ -89,6 +89,8 @@ test("concurrent settings requests share re-pairing and sign-in checks the sessi
     serverFetch: async (url) => {
       if (String(url).endsWith("/api/auth/session")) { checks += 1; await session.promise; return Response.json({ kind: "none" }); }
       if (String(url).endsWith("/api/auth/pair")) { pairs += 1; return Response.json({}); }
+      // ChatGPT signs in on the server itself; this mac's login is never copied over
+      if (String(url).endsWith("/api/instances/codex/auth/start")) return Response.json({ auth: { flowId: "flow-1", phase: "succeeded" } });
       return Response.json({ instances: [{ instanceId: "codex", driverKind: "codex" }] });
     },
     proxyFactory: () => ({ start: async () => "http://vps-aaaaaaaaaa.localhost:25", control: async () => ({ code: "TEST-CODE" }), close: async () => {} }),
