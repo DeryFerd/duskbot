@@ -547,6 +547,23 @@ describe("on the desktop app", () => {
     expect(step()).toBe("ai");
   });
 
+  it("Back from the AI choice after signing in stays on the sign-in, which says who is signed in", async () => {
+    const gate = optionalGate();
+    desktop({ accountGate: gate });
+    await show();
+    await press("Get started");
+    await type(document.body.querySelector<HTMLInputElement>("input[type=email]")!, "person@example.com");
+    await press("Email me a code");
+    const digits = [...document.body.querySelectorAll<HTMLInputElement>("input")];
+    for (const [index, digit] of digits.entries()) await type(digit, String(index + 1));
+    await press("Sign in");
+    // main tells every window of the new sign-in too, a moment after the code is taken
+    await gate.tell({ status: "connected" });
+    expect(step()).toBe("ai");
+    await press("Back");
+    expect(step()).toBe("account");
+  });
+
   it("someone already signed in (handed over from the website, or from before) goes from the hello straight to the AI choice", async () => {
     desktop({ accountGate: optionalGate({ status: "connected" }) });
     await show();

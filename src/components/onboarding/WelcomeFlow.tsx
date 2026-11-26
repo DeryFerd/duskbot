@@ -255,7 +255,9 @@ export function WelcomeFlow({
   const signedOutSeen = useRef(false);
   const websiteSeen = useRef(false);
   useEffect(() => {
-    if (at !== "account" || !known) return;
+    // a sign-in seen after the step was left (the code's own Continue went on first) is not one to go on from again
+    if (at !== "account") { signedOutSeen.current = false; return; }
+    if (!known) return;
     if (!known.signedIn) { signedOutSeen.current = true; return; }
     if (known.website === "open") { websiteSeen.current = true; return; }
     if (!signedOutSeen.current && !websiteSeen.current) return;
