@@ -536,6 +536,7 @@ import {
   stopCompanion,
 } from "./companion.mjs";
 import { autoStartCompanion } from "./companion-autostart.mjs";
+import { createCompanionWakeHold } from "./companion-wake.mjs";
 import { createRoutineWakeHold, rememberRoutineWake, routineWakePatch, routineWakeSettings } from "./routine-wake.mjs"; import { createSystemAwake } from "./system-awake.mjs";
 import { CREDENTIAL_PATCH, credentialSaveError } from "./credential-patch.mjs";
 import { createCappedLog } from "./capped-log.mjs";
@@ -564,17 +565,8 @@ const accountErrors = createAccountErrors({ origin: cloudTarget(process.env).ori
 accountErrors.watch(app, process, { ending: () => appEnding() });
 ipcMain.handle("error-reports:send", localOrHome("error-reports:send", (_event, report) => accountErrors.send(report)));
 
-let companionPowerBlocker = null;
-
-function syncCompanionKeepAwake(companionEnabled, keepAwake) {
-  const shouldBlock = companionEnabled && keepAwake;
-  if (shouldBlock && companionPowerBlocker === null) {
-    companionPowerBlocker = powerSaveBlocker.start("prevent-app-suspension");
-  } else if (!shouldBlock && companionPowerBlocker !== null) {
-    if (powerSaveBlocker.isStarted(companionPowerBlocker)) powerSaveBlocker.stop(companionPowerBlocker);
-    companionPowerBlocker = null;
-  }
-}
+const companionWake = createCompanionWakeHold({ blocker: powerSaveBlocker, isOnBattery: () => app.isReady() && powerMonitor.isOnBatteryPower(), log: (line) => slog(line) });
+const syncCompanionKeepAwake = (companionEnabled, keepAwake) => companionWake.sync(companionEnabled, keepAwake);
 
 const routineWake = createRoutineWakeHold({
   fetchStatus: () => (serverReady
@@ -3734,6 +3726,7 @@ ipcMain.handle("app-update:move", localOrAppPage("app-update:move", () => { try 
 ipcMain.handle("app-update:seen", localOrAppPage("app-update:seen", () => { if (appUpdatedTo) { appUpdatedTo = null; tellAppUpdate(); } }));
 
 // powerMonitor is usable only once the app is ready.
+void app.whenReady().then(() => companionWake.watchPower(powerMonitor));
 void app.whenReady().then(() => installSessionEndFlush({ app, windows: () => BrowserWindow.getAllWindows(), powerMonitor, flusher: browsersFlush, quit: () => app.quit(), log: slog, onSessionEnd: () => { windowsSessionEnding = true; } }));
 app.on("before-quit", (e) => {
   talk.close(); ambientSurfaces.close();
@@ -3751,7 +3744,7 @@ app.on("before-quit", (e) => {
   // Cancel a scheduled recovery before yielding.
   const browsersQuit = process.platform === "win32" ? browsersFlush.flush() : Promise.resolve(true);
   const stoppingServer = browsersQuit.then(() => Promise.all([serverSupervisor.shutdown(), devServer?.stop() ?? true])).then((all) => all.every(Boolean));
-  syncCompanionKeepAwake(false, false);
+  companionWake.stop();
   routineWake.stop();
   try {
     desktopCompanionRelay?.close?.();

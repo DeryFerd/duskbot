@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { keepAwakeBlockerType } from "./companion-wake.mjs";
+
 export const ROUTINE_WAKE_POLL_MS = 60_000;
 /** After a wake, the network counts as back after this many online reads in a row, one per ONLINE_POLL_MS. */
 export const ONLINE_READS = 2;
@@ -8,9 +10,6 @@ export const ONLINE_POLL_MS = 2_000;
 /** Routines go ahead after this even without the network, as they did before the hold. */
 export const ONLINE_WAIT_MS = 120_000;
 const NOTIFY_ATTEMPTS = 3;
-
-/** Keeps the system from idle-sleeping while letting the display turn off. */
-export const ROUTINE_WAKE_BLOCKER = "prevent-app-suspension";
 
 /**
  * `enabled`: hold the hour before a run is due. `pluggedIn`: hold whenever a routine is enabled on this computer
@@ -68,6 +67,7 @@ export function rememberRoutineWake(userData, patch) {
  * - fetchStatus(): Promise<{hold, reason?, at?} | null>, the server's answer, null when unreachable
  * - isOnBattery(): boolean
  * - blocker: { start(type): id, stop(id), isStarted(id): boolean }, Electron's powerSaveBlocker
+ * - platform?: process.platform by default; it picks the blocker type (keepAwakeBlockerType)
  * - settings(): { keepAwake: boolean, pluggedIn: boolean }
  * - log(line)
  * - powerMonitor?: { on(event, listener) }, Electron's, once the app is ready
@@ -87,7 +87,7 @@ export function createRoutineWakeHold(deps) {
 
   const apply = (decision) => {
     if (decision.hold && blockerId === null) {
-      blockerId = deps.blocker.start(ROUTINE_WAKE_BLOCKER);
+      blockerId = deps.blocker.start(keepAwakeBlockerType({ platform: deps.platform }));
       deps.log?.(`routine wake: holding this computer awake (${decision.reason}${decision.at ? ` at ${new Date(decision.at).toISOString()}` : ""})`);
     } else if (!decision.hold && blockerId !== null) {
       if (deps.blocker.isStarted(blockerId)) deps.blocker.stop(blockerId);
