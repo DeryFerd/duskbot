@@ -7,10 +7,18 @@ export const SERVER_LOG_MAX_BYTES = 10 * 1024 * 1024;
 
 /** @param {{ file: string, maxBytes?: number, fs?: typeof nodeFs }} options */
 export function createCappedLog({ file, maxBytes = SERVER_LOG_MAX_BYTES, fs = nodeFs }) {
-  let stream = null;
+  let fd = null;
   let size = 0;
 
+  const shut = () => {
+    if (fd === null) return;
+    try { fs.closeSync(fd); } catch {}
+    fd = null;
+  };
+
+  // closed first: Windows refuses to rename a file that is still open, and the log then grew without bound there
   function rotate() {
+    shut();
     try { fs.renameSync(file, `${file}.1`); } catch {}
     size = 0;
   }
@@ -19,26 +27,27 @@ export function createCappedLog({ file, maxBytes = SERVER_LOG_MAX_BYTES, fs = no
     fs.mkdirSync(path.dirname(file), { recursive: true });
     try { size = fs.statSync(file).size; } catch { size = 0; }
     if (size >= maxBytes) rotate();
-    // opened now, not on the stream's next tick, so a rename that follows lands its pending writes in the old file
-    stream = fs.createWriteStream(file, { fd: fs.openSync(file, "a") });
-    stream.on("error", () => { stream = null; });
+    fd = fs.openSync(file, "a");
   }
 
   return {
+    // each line is written before write returns, so a rotation never strands a pending one
     write(text) {
       const bytes = Buffer.byteLength(text);
-      if (!stream) open();
-      else if (size > 0 && size + bytes > maxBytes) {
-        stream.end();
-        rotate();
-        open();
+      try {
+        if (fd === null) open();
+        else if (size > 0 && size + bytes > maxBytes) {
+          rotate();
+          open();
+        }
+        fs.writeSync(fd, text);
+        size += bytes;
+      } catch {
+        shut();
       }
-      stream?.write(text);
-      size += bytes;
     },
     close() {
-      stream?.end();
-      stream = null;
+      shut();
     },
   };
 }

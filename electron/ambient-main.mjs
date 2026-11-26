@@ -77,7 +77,7 @@ export function installAmbient({ ipcMain, BrowserWindow, page, origin, file, ope
       return;
     }
     if (channel === "ambient:order" && surface === "dock") {
-      save(applyPrefsChange(saved(), { order: payload }));
+      save(applyPrefsChange(saved(), { order: payload }, platform));
       relayout("dock order");
     }
   };
@@ -217,7 +217,7 @@ export function installAmbient({ ipcMain, BrowserWindow, page, origin, file, ope
   ipcMain.handle("ambient:wanted", event => event.sender === appPage() && wanted());
   ipcMain.handle("ambient:prefs", fromApp("ambient:prefs", () => view()));
   ipcMain.handle("ambient:set", fromApp("ambient:set", change => {
-    save(applyPrefsChange(saved(), change));
+    save(applyPrefsChange(saved(), change, platform));
     relayout("settings");
     return view();
   }));
