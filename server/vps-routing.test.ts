@@ -561,7 +561,7 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
         // every session on the shared fake engine writes the plain dump (an earlier case's bot waking, a side job), so this
         // reads the copy kept for this bot's own sessions
         const ownDump = `${acpDump}.mcp.${bot.id}.json`;
-        const turnTools = () => { try { return JSON.parse(readFileSync(ownDump, "utf8")) as Array<{ name: string; args?: string[]; env?: Array<{ name: string; value: string }> }>; } catch { return null; } };
+        const turnTools = () => { try { return JSON.parse(readFileSync(ownDump, "utf8")) as any[]; } catch { return null; } };
         await until(async () => turnTools() !== null, "the discovery turn");
         const first = turnTools()!;
         if (state === "stopped-during-turn") {
