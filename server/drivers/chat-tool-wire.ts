@@ -1,6 +1,9 @@
 // The tool list one chat-completions request carries. The model reads these schemas; the server still checks every call
 // against the tool's full schema, so a provider's narrower schema dialect only loses hints, never validation.
 import type { ChatToolDefinition } from "./chat-mcp-tools.ts";
+import type { OpenAIChatMessage } from "./openai-chat.ts";
+import { UnsupportedChatToolsError } from "./openai-chat-refusals.ts";
+import { classifyError } from "./retry.ts";
 
 type Json = Record<string, unknown>;
 
@@ -143,6 +146,16 @@ export interface ToolWire {
   dropped: Set<string>;
 }
 
+/** Each model's wire on one provider, learned once for the runtime's life. */
+export function toolWiresFor(url: string): (model: string) => ToolWire {
+  const wires = new Map<string, ToolWire>();
+  return (model) => {
+    let wire = wires.get(model);
+    if (!wire) wires.set(model, wire = { none: false, strict: wantsStrictToolSchemas(url, model), dropped: new Set() });
+    return wire;
+  };
+}
+
 export function toolsOnWire(definitions: readonly ChatToolDefinition[], wire: ToolWire): ChatToolDefinition[] {
   if (wire.none) return [];
   const kept = wire.dropped.size ? definitions.filter((definition) => !wire.dropped.has(definition.function.name)) : [...definitions];
@@ -187,4 +200,42 @@ export class ToolSchemaRefusedError extends Error {
     super(message);
     this.tool = tool;
   }
+}
+
+const MAX_REFUSED_TOOL_DROPS = 8;
+export const TOOLS_REFUSED = "takes no tools; answering without them";
+export const STRICT_RESEND = "refused a tool schema; resending in the strict schema dialect";
+
+/** How the next request's tools change after `error`, or null when the refusal is not about them. A model that already
+ * took tools in this conversation's calls is not one without tool support, and a key refusal is never read as one. */
+export function adaptToolWire(error: unknown, wire: ToolWire, messages: readonly OpenAIChatMessage[], drops: number): string | null {
+  if (error instanceof UnsupportedChatToolsError && !wire.none && classifyError(error).reason !== "auth"
+    && !messages.some((message) => message.tool_calls?.length)) {
+    wire.none = true;
+    return TOOLS_REFUSED;
+  }
+  if (!(error instanceof ToolSchemaRefusedError)) return null;
+  if (!wire.strict) {
+    wire.strict = true;
+    return STRICT_RESEND;
+  }
+  if (!error.tool || wire.dropped.has(error.tool) || drops >= MAX_REFUSED_TOOL_DROPS) return null;
+  wire.dropped.add(error.tool);
+  return `refused tool ${error.tool}'s schema; leaving that tool out`;
+}
+
+const NO_TOOLS_NOTE = "[dusk bot: this model can't use tools, so nothing can be run, opened, fetched or checked in this reply. Answer from what you know and from the conversation, and say plainly when the request needs a step you can't take here. Never say or imply you ran a tool or looked something up.]";
+
+/** The conversation as one request carries it: a Gemini call's `extra_content` only to Google's endpoints, and a model
+ * sent no tools told it has none, so it never answers as if it had looked. */
+export function messagesOnWire(messages: OpenAIChatMessage[], { google, toolsWithheld }: { google: boolean; toolsWithheld: boolean }): OpenAIChatMessage[] {
+  let out = messages;
+  if (!google && out.some((message) => message.tool_calls?.some((call) => call.extra_content))) {
+    out = out.map((message) => message.tool_calls?.some((call) => call.extra_content)
+      ? { ...message, tool_calls: message.tool_calls.map(({ extra_content: _extra, ...call }) => call) } : message);
+  }
+  if (!toolsWithheld) return out;
+  const [first, ...rest] = out;
+  if (first?.role === "system" && typeof first.content === "string") return [{ ...first, content: `${first.content}\n\n${NO_TOOLS_NOTE}` }, ...rest];
+  return [{ role: "system", content: NO_TOOLS_NOTE }, ...out];
 }

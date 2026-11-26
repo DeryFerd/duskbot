@@ -33,7 +33,7 @@ import { plainFailureMessage } from "./engine-errors.ts"; import { toolFailureMe
 import { refusesRequestSize, RequestTooLargeError, sizeChange, smallerResend } from "./chat-size-limit.ts";
 import { requestTooLargeMessage } from "../../shared/request-too-large.ts"; import { thrownCode } from "../../shared/usage-signals.ts"; import { failureCodeOf, inPlainWords, noReplyError, nudgeOnce, unfinishedReply } from "./openai-chat-final.ts";
 import { toolSchemaProfileFor } from "../tool-schema-profile.ts";
-import { answeredWithoutTools, refusedToolName, refusesToolSchema, refusesToolsInWords, ToolSchemaRefusedError, toolsOnWire, wantsStrictToolSchemas, type ToolWire } from "./chat-tool-wire.ts";
+import { adaptToolWire, answeredWithoutTools, messagesOnWire, refusedToolName, refusesToolSchema, refusesToolsInWords, STRICT_RESEND, ToolSchemaRefusedError, TOOLS_REFUSED, toolsOnWire, toolWiresFor, wantsStrictToolSchemas } from "./chat-tool-wire.ts";
 import { classifyContinuable, writeTurnHandoff } from "../turn-continuation.ts";
 import { repairToolArguments } from "../tool-argument-repair.ts"; import { TurnGates } from "../turn-stop-gates.ts"; import { outboundSendKey } from "../../shared/declined-sends.ts";
 import { KEY_REJECTED_REASON, keyRejected, noteKeyAccepted, noteKeyRejected, rejectsKey } from "../key-rejections.ts";
@@ -152,23 +152,6 @@ const asError = (value: unknown): Error =>
   value instanceof Error ? value : new Error(String(value));
 
 const MAX_CHAT_ROUNDS = 64;
-const MAX_REFUSED_TOOL_DROPS = 8;
-
-const NO_TOOLS_NOTE = "[dusk bot: this model can't use tools, so nothing can be run, opened, fetched or checked in this reply. Answer from what you know and from the conversation, and say plainly when the request needs a step you can't take here. Never say or imply you ran a tool or looked something up.]";
-
-/** The conversation for a model sent no tools: its instructions say it has none, so it never answers as if it had looked. */
-function withNoToolsNote(messages: OpenAIChatMessage[]): OpenAIChatMessage[] {
-  const [first, ...rest] = messages;
-  if (first?.role === "system" && typeof first.content === "string") return [{ ...first, content: `${first.content}\n\n${NO_TOOLS_NOTE}` }, ...rest];
-  return [{ role: "system", content: NO_TOOLS_NOTE }, ...messages];
-}
-
-/** The conversation as another provider takes it: a Gemini call's `extra_content` stays with Google's endpoints. */
-function withoutGoogleExtras(messages: OpenAIChatMessage[]): OpenAIChatMessage[] {
-  if (!messages.some((message) => message.tool_calls?.some((call) => call.extra_content))) return messages;
-  return messages.map((message) => message.tool_calls?.some((call) => call.extra_content)
-    ? { ...message, tool_calls: message.tool_calls.map(({ extra_content: _extra, ...call }) => call) } : message);
-}
 const MAX_TURN_TOOL_CALLS = 200;
 const MAX_ANNOUNCEMENT_NUDGES = 8;
 const stoppedAfter = (count: string) =>
@@ -193,12 +176,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
     ending: boolean;
   }>();
   const reasoningReplayRejected = new Set<string>(), toolChoiceRefused = new Set<string>(), routes = createModelRoutes(options.apiUrl);
-  const toolWires = new Map<string, ToolWire>();
-  const wireOf = (model: string): ToolWire => {
-    let wire = toolWires.get(model);
-    if (!wire) toolWires.set(model, wire = { none: false, strict: wantsStrictToolSchemas(options.apiUrl, model), dropped: new Set() });
-    return wire;
-  };
+  const wireOf = toolWiresFor(options.apiUrl);
   /** Beside the messages, not on them, so encrypted reasoning never reaches a Chat Completions body, a log or a handoff. */
   const responseOutputs = new WeakMap<OpenAIChatMessage, ResponseItem[]>();
   const assistantReply = (model: string, completion: Completion, content: string | null, toolCalls?: ChatToolCall[]): OpenAIChatMessage => {
@@ -266,8 +244,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
 
       const served = options.servedModel ? await options.servedModel(model) : model, effort = chosenEffort(options.effort, model, requestedEffort);
       const sent = toolsOnWire(tools, wireOf(model));
-      if (!wantsStrictToolSchemas(options.apiUrl, model)) messages = withoutGoogleExtras(messages);
-      if (!sent.length && tools.some((tool) => tool.function.name !== ASK_USER_TOOL)) messages = withNoToolsNote(messages);
+      messages = messagesOnWire(messages, { google: wantsStrictToolSchemas(options.apiUrl, model), toolsWithheld: !sent.length && tools.some((tool) => tool.function.name !== ASK_USER_TOOL) });
       const forced = sent.length && toolChoice ? { tool_choice: toolChoice } : {};
       const payload = JSON.stringify(route === "responses"
         ? { ...responsesRequest({ model: served, messages, tools: sent, replay: (message) => responseOutputs.get(message), summaries: routes.summaries(model), ...(effort ? { effort } : {}) }), ...forced }
@@ -461,26 +438,11 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
         return withoutTools ? { ...completion, withoutTools: true } : completion;
       } catch (error) {
         // a refused tool list ran nothing, so the same request goes again in a form the provider takes
-        const wire = wireOf(model);
-        // a model that already took tools in this conversation's calls is not one without tool support
-        if (tools.length && !replied && !signal?.aborted && error instanceof UnsupportedChatToolsError && !wire.none
-          && classifyError(error).reason !== "auth" && !messages.some((message) => message.tool_calls?.length)) {
-          console.warn(`${options.driverKind}: ${model} takes no tools; answering without them`);
-          wire.none = true;
-          withoutTools = true;
+        const change = tools.length && !replied && !signal?.aborted ? adaptToolWire(error, wireOf(model), messages, drops) : null;
+        if (change) {
+          console.warn(`${options.driverKind}: ${model} ${change}`);
+          if (change === TOOLS_REFUSED) withoutTools = true; else if (change !== STRICT_RESEND) drops++;
           continue;
-        }
-        if (tools.length && !replied && !signal?.aborted && error instanceof ToolSchemaRefusedError) {
-          if (!wire.strict) {
-            console.warn(`${options.driverKind}: ${model} refused a tool schema; resending in the strict schema dialect`);
-            wire.strict = true;
-            continue;
-          }
-          if (error.tool && !wire.dropped.has(error.tool) && drops++ < MAX_REFUSED_TOOL_DROPS) {
-            console.warn(`${options.driverKind}: ${model} refused tool ${error.tool}'s schema; leaving that tool out`);
-            wire.dropped.add(error.tool);
-            continue;
-          }
         }
         if (!(error instanceof ModelRouteRefused) || replied || signal?.aborted) throw error;
         if (!routes.advance(model, error.refusal)) throw new ChatProtocolError(noRouteLeft(error.message), "responses_route_unavailable");
