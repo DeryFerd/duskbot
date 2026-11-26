@@ -337,17 +337,76 @@ async function resolveModels(
   return { default: options[0]?.id ?? "", options };
 }
 
-async function applySetting(
-  request: (method: string, params: unknown, timeoutMs?: number) => Promise<any>,
-  method: string,
-  params: Record<string, unknown>,
-  what: string,
-) {
+/** The model Hermes' config.yaml names now, as an ACP set_model id; null when it names none. Read per turn, never written. */
+export function hermesConfigModelId(env: Record<string, string | undefined>): string | null {
+  const dir = env.HERMES_HOME || harnessHome("hermes", env);
+  let picked: { model: string; provider: string } | null = null;
   try {
-    await request(method, params);
+    picked = hermesConfigDefault(readFileSync(join(dir, "config.yaml"), "utf8"));
+  } catch {}
+  if (!picked) return null;
+  const provider = picked.provider.toLowerCase();
+  return provider && provider !== "auto" ? `${provider}:${picked.model}` : picked.model;
+}
+
+/** `openrouter:qwen/x` and `qwen/x` name the same model when one side carries no provider. */
+function sameHermesModel(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const bare = (id: string) => (/^[a-z0-9_-]+:/i.test(id) ? id.slice(id.indexOf(":") + 1) : id);
+  return (!/^[a-z0-9_-]+:/i.test(a) || !/^[a-z0-9_-]+:/i.test(b)) && bare(a) === bare(b);
+}
+
+function hermesModelName(id: string): string {
+  return id.startsWith("custom:") ? id.split(":").slice(2).join(":") || id : id.replace(/^[a-z0-9_-]+:/i, "");
+}
+
+/** Hermes notices already shown per session, so a resumed or respawned session says it once, not every turn. */
+const hermesNoticesShown = new Map<string, string>();
+function noticeOnce(sessionId: string, message: string, notice: (message: string) => void) {
+  if (hermesNoticesShown.get(sessionId) === message) return;
+  hermesNoticesShown.set(sessionId, message);
+  if (hermesNoticesShown.size > 500) hermesNoticesShown.delete(hermesNoticesShown.keys().next().value!);
+  notice(message);
+}
+
+type HermesConfigureCtx = Parameters<NonNullable<AcpSupport["configureSession"]>>[0];
+
+/** Hermes stores each session's model in its state.db and session/load restores it, and a live session
+ * never re-reads config.yaml, so every turn re-pins the model it should run: the picked one, or for the
+ * config sentinel whatever config.yaml names now. A pick Hermes can no longer serve falls back to the
+ * config model once, with one notice, instead of failing every turn. */
+export async function configureHermesSession({ request, sessionId, turn, env, currentModelId, notice }: HermesConfigureCtx) {
+  // Decode only: ensure* here would read process.env and rewrite the user's real ~/.hermes/config.yaml.
+  const picked = hermesAcpModelId(turn.model);
+  const configured = hermesConfigModelId(env);
+  const target = picked ?? configured;
+  if (!target || sameHermesModel(currentModelId, target)) return;
+  const setModel = async (modelId: string) => {
+    await request("session/set_model", { sessionId, modelId });
+  };
+  try {
+    await setModel(target);
+    return;
   } catch (e) {
-    throw new Error(`Hermes rejected ${what} via ${method}: ${(e as Error).message}`);
+    const err = e as Error & { code?: unknown };
+    // -32601: a Hermes without session/set_model runs its own config model.
+    if (err.code === -32601) return;
+    console.warn(`Hermes: session/set_model ${target} failed on ${sessionId}: ${err.message}`);
+    if (err.code !== -32602) throw new Error(`Hermes rejected model "${target}" via session/set_model: ${err.message}`);
   }
+  const fallback = picked && configured && !sameHermesModel(configured, picked) ? configured : null;
+  if (fallback && !sameHermesModel(currentModelId, fallback)) {
+    try {
+      await setModel(fallback);
+    } catch (e) {
+      console.warn(`Hermes: fallback set_model ${fallback} failed on ${sessionId}: ${(e as Error).message}`);
+      noticeOnce(sessionId, `Hermes can't run ${hermesModelName(target)} anymore, so this chat stays on ${currentModelId ? hermesModelName(currentModelId) : "its current model"}. Pick another model to stop seeing this.`, notice);
+      return;
+    }
+  }
+  const running = fallback ?? currentModelId;
+  noticeOnce(sessionId, `Hermes can't run ${hermesModelName(target)} anymore, so this chat uses ${running ? hermesModelName(running) : "Hermes' default model"}. Pick another model to stop seeing this.`, notice);
 }
 
 const support: AcpSupport = {
@@ -387,17 +446,7 @@ const support: AcpSupport = {
   pickAuthMethod: () => null,
   authFailure: "continue",
   isAuthenticated: () => true,
-  async configureSession({ request, sessionId, turn }) {
-    // Decode only: ensure* here would read process.env and rewrite the user's real ~/.hermes/config.yaml.
-    const native = hermesAcpModelId(turn.model);
-    if (!native) return;
-    await applySetting(
-      request,
-      "session/set_model",
-      { sessionId, modelId: native },
-      `model "${native}"`,
-    );
-  },
+  configureSession: (ctx) => configureHermesSession(ctx),
   buildPromptText: (turn) => (turn.system ? `${turn.system}\n\n${turn.text}` : turn.text),
 };
 

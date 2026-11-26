@@ -297,7 +297,7 @@ export async function launchVerificationServer(
   browser?: { binaryPath: string; executablePath: string },
   room?: { scripted: boolean },
   /** Optional repository-owned fake providers for multi-engine setup checks. */
-  extraProviders: Array<"codex" | "cline" | "copilot" | "customAcp" | "cursorLogin"> = [],
+  extraProviders: Array<"codex" | "cline" | "copilot" | "customAcp" | "cursorLogin" | "hermes"> = [],
   /** Programmatic web UI qualification against the fixture's static server. */
   staticDir?: string,
 ): Promise<VerificationServer> {
@@ -323,6 +323,12 @@ export async function launchVerificationServer(
   const evidenceDir = join(tmpdir(), "duskbot-verification-evidence");
   mkdirSync(evidenceDir, { recursive: true });
   const logPath = join(evidenceDir, `server-${Date.now()}-${process.pid}.log`);
+  if (extraProviders.includes("hermes")) {
+    mkdirSync(join(dataDir, "hermes-fixture"), { recursive: true });
+    writeFileSync(join(dataDir, "hermes-fixture", "config.yaml"), "model:\n  provider: openrouter\n  default: fixture/first\n");
+    writeFileSync(join(dataDir, "hermes-fixture", ".env"), "OPENROUTER_API_KEY=fixture-only\n");
+    writeFileSync(join(dataDir, "hermes-servable.txt"), "openrouter:fixture/first,openrouter:fixture/second");
+  }
   writeFileSync(join(dataDir, "config.json"), JSON.stringify({
     // A setup card's answers would be one more engine call at every new bot, taking replies a test scripts for its turns.
     features: { smartSetupChoices: false },
@@ -349,6 +355,14 @@ export async function launchVerificationServer(
         driver: "cursorAgent", displayName: "Cursor",
         config: { cli: fileURLToPath(new URL("../server/testing/fake-login-cli.ts", import.meta.url)) },
         environment: { FAKE_LOGIN_PROVIDER: "cursor", FAKE_LOGIN_OUTCOME: "never" },
+      } } : {}),
+      // Hermes' session/new, session/load and set_model model handling (server/testing/fake-hermes-acp.ts); the fixture
+      // edits hermes-fixture/config.yaml and hermes-servable.txt to switch or retire models.
+      ...(extraProviders.includes("hermes") ? { hermes: {
+        driver: "hermesAgent", displayName: "Verification Hermes",
+        config: { cli: fileURLToPath(new URL("../server/testing/fake-hermes-acp.ts", import.meta.url)) },
+        environment: { HERMES_HOME: join(dataDir, "hermes-fixture"), FAKE_HERMES_SERVABLE_FILE: join(dataDir, "hermes-servable.txt"),
+          FAKE_HERMES_LOG: join(dataDir, "hermes-rpc.jsonl") },
       } } : {}),
       ...(extraProviders.includes("customAcp") ? { myAgent: {
         driver: "customAcp", displayName: "Verification custom ACP",
