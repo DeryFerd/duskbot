@@ -14,6 +14,8 @@ import { AGENTS_NODE_FLAG, SPAWNED_PROXIES } from "./proxy-paths.ts";
 export const HOST_SHELL_SERVER = "shell";
 export const HOST_SHELL_CWD_ENV = "DUSK_SHELL_CWD";
 export const HOST_SHELL_HIDDEN_ENV = "DUSK_SHELL_HIDDEN";
+/** Set by `duskbot serve` for the server it starts on the person's own computer. */
+export const SELF_HOSTED_ENV = "DUSK_SELF_HOSTED";
 
 const DEFAULT_SECONDS = 60;
 const MAX_SECONDS = 300;
@@ -44,7 +46,7 @@ export const HOST_SHELL_TOOLS = [
   {
     name: "find_files",
     description:
-      "Find files and folders on the person's computer through the system's own search index (Spotlight on macOS, Windows Search on Windows), the quick way to find a file the person names. Matches part of the file name by default; set in_content to also match text inside documents. Returns full paths, newest index order first. Never scan the whole disk with a command instead.",
+      "Find files and folders on the person's computer: the system's own search index first (Spotlight on macOS, Windows Search on Windows), then a walk of their home folder, iCloud Drive included, when the index finds nothing. The way to find a file the person names or describes. Matches every word of the query in the file name (any order) by default; set in_content to match a phrase inside the files instead. Returns full paths. Never scan the whole disk with a command instead.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -148,22 +150,42 @@ export function expandFolder(folder: unknown, home: string): string | undefined 
   return isAbsolute(expanded) ? resolve(expanded) : undefined;
 }
 
-/** The searches, in order: the first that runs answers, and a later one only stands in when one could not run at all. */
-export function findInvocations(query: string, opts: { content: boolean; folder?: string; limit: number; platform: NodeJS.Platform; home: string }):
-  Array<{ file: string; args: string[]; env?: Record<string, string> }> {
+/** One search a find_files call can run. An index search (Spotlight, Windows Search, locate) that answers with nothing
+ * hands over to the walk after it, as one that could not run does; a walk's answer is final. */
+export interface FindStep { file: string; args: string[]; env?: Record<string, string>; index?: true }
+
+const WALK_DEPTH = "8";
+
+/** Spotlight skips ~/Library (iCloud Drive's local copy lives there), a folder it was told to leave out, and anything
+ * outside an indexed volume, so a walk of the person's own folders stands in when it finds nothing. */
+function walkInvocation(query: string, opts: { content: boolean; folder?: string; home: string; platform: NodeJS.Platform }): FindStep {
+  const roots = opts.folder ? [opts.folder] : [opts.home, ...(opts.platform === "darwin" ? [posix.join(opts.home, "Library", "Mobile Documents")] : [])];
+  const skipped = ["-name", ".*", "-o", "-name", "node_modules", ...(opts.folder ? [] : ["-o", "-path", posix.join(opts.home, "Library")])];
+  if (opts.content) {
+    return { file: "grep", args: ["-rIlsi", "-F", "--exclude-dir=.*", "--exclude-dir=node_modules", ...(opts.folder ? [] : ["--exclude-dir=Library"]), "-e", query, "--", ...roots] };
+  }
+  const words = query.replace(/[*?[\]\\]/g, "").split(/\s+/).filter(Boolean);
+  return { file: "find", args: [...roots, "-maxdepth", WALK_DEPTH, "(", ...skipped, ")", "-prune", "-o", ...words.flatMap((word) => ["-iname", `*${word}*`]), "-print"] };
+}
+
+/** The searches, in order: the first that finds something answers. */
+export function findInvocations(query: string, opts: { content: boolean; folder?: string; limit: number; platform: NodeJS.Platform; home: string }): FindStep[] {
   if (opts.platform === "darwin") {
-    return [{ file: "mdfind", args: [...(opts.folder ? ["-onlyin", opts.folder] : []), ...(opts.content ? [query] : ["-name", query])] }];
+    return [
+      { file: "mdfind", args: [...(opts.folder ? ["-onlyin", opts.folder] : []), ...(opts.content ? [query] : ["-name", query])], index: true },
+      walkInvocation(query, opts),
+    ];
   }
   if (opts.platform === "win32") {
     return [
       { file: "powershell.exe", args: ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_SEARCH_SCRIPT],
-        env: { FIND_QUERY: query, FIND_CONTENT: opts.content ? "1" : "0", FIND_FOLDER: opts.folder ?? "", FIND_LIMIT: String(opts.limit) } },
+        env: { FIND_QUERY: query, FIND_CONTENT: opts.content ? "1" : "0", FIND_FOLDER: opts.folder ?? "", FIND_LIMIT: String(opts.limit) }, index: true },
       { file: "where.exe", args: ["/r", opts.folder ?? opts.home, `*${query.replace(/[*?]/g, "")}*`] },
     ];
   }
   return [
-    { file: "locate", args: ["-i", "-l", String(opts.limit), query] },
-    { file: "find", args: [opts.folder ?? opts.home, "-maxdepth", "6", "-iname", `*${query.replace(/[*?[\]]/g, "")}*`, "-not", "-path", "*/.*"] },
+    ...(opts.content ? [] : [{ file: "locate", args: ["-i", "-l", String(opts.limit), query], index: true as const }]),
+    walkInvocation(query, opts),
   ];
 }
 
@@ -187,24 +209,30 @@ export async function findFiles(
   const run = options.run ?? runProcess;
   const style = platform === "win32" ? win32 : posix;
   let failure = "";
+  let empty = false;
   for (const step of findInvocations(query, { content: args.in_content === true, folder, limit, platform, home })) {
     const result = await run(step.file, step.args, { cwd: home, env: { ...env, ...step.env }, timeoutMs: FIND_SECONDS * 1000 });
-    // where.exe answers 1 when nothing matched; that is an answer, not a failure
-    const answered = result.code === 0 || (step.file === "where.exe" && result.code === 1 && !result.timedOut) || (result.code !== null && result.stdout.trim() !== "");
-    if (!answered) { failure = (result.stderr || (result.timedOut ? "the search ran past its time limit" : "the search could not run")).trim(); continue; }
     const paths = result.stdout.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && style.isAbsolute(line) && !hiddenBy(options.hidden ?? [], line, style.sep));
-    if (!paths.length) return { text: `No files matched "${query}"${folder ? ` in ${folder}` : ""}.` };
+    // where.exe and grep answer 1 when nothing matched, find answers 1 when a folder could not be read: answers, not
+    // failures; a walk stopped at its time limit still answers with what it found by then
+    const answered = result.code === 0 || (!step.index && result.code === 1 && !result.timedOut) || paths.length > 0;
+    if (!answered) { failure = (result.stderr || (result.timedOut ? "the search ran past its time limit" : "the search could not run")).trim(); continue; }
+    if (!paths.length) { empty = true; if (step.index) continue; break; }
     const shown = paths.slice(0, limit);
     return { text: `${shown.join("\n")}${paths.length > shown.length ? `\n…(${paths.length - shown.length} more; narrow the query or pass a folder)` : ""}` };
   }
+  if (empty) return { text: `No files matched "${query}"${folder ? ` in ${folder}` : ""}. Try one distinctive word of the name, or in_content for a word inside the file.` };
   return { text: `The file search could not run on this computer (${clip(failure, 300)}). Use run_command to look in a likely folder instead, with a depth limit.`, isError: true };
 }
 
-/** The desktop app's own server lends its computer's shell, and a dusk cloud home its own (where Claude Code and Codex
- * run their shell too), only to an engine that has none, in a turn that works on this computer: never Off, a VPS or team
- * computer, a policy that bars this computer, a guest's or a confined turn, or an automation's test run. */
+/** The desktop app's own server lends its computer's shell, a dusk cloud home its own and a server the person runs on a
+ * computer of theirs with `duskbot serve` its own (where Claude Code and Codex run their shell too), only to an engine
+ * that has none, in a turn that works on this computer: never Off, a VPS or team computer, a policy that bars this
+ * computer, a guest's or a confined turn, or an automation's test run. */
 export function mountsHostShell(input: {
   engineHasShell: boolean; desktopApp: boolean; cloudHome: boolean; worksOn: "off" | string | undefined;
+  /** Started by `duskbot serve` on the person's own server: not the desktop app, a cloud home or a copy run from source. */
+  selfHosted?: boolean;
   remoteComputer: boolean; thisComputerRefused: boolean; guest: boolean; testRun: boolean;
   /** Where the model runs (agents-bridge-switch modelPlace). */
   model: "hosted" | "loopback" | "network";
@@ -212,7 +240,7 @@ export function mountsHostShell(input: {
   /** A person's own request or its continuation: not a routine, webhook, Bot API call or a teammate's hand-off. */
   watched: boolean;
 }): boolean {
-  const lent = !input.engineHasShell && (input.desktopApp || input.cloudHome) && input.worksOn !== "off"
+  const lent = !input.engineHasShell && (input.desktopApp || input.cloudHome || input.selfHosted === true) && input.worksOn !== "off"
     && !input.remoteComputer && !input.thisComputerRefused && !input.guest && !input.testRun;
   if (input.model === "hosted") return lent;
   // a local model gets it only from this machine, off Windows (the safety floor is inert there) and with a person behind the turn

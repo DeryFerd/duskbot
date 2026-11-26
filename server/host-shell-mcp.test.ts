@@ -1,11 +1,11 @@
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { modelPlace } from "./agents-bridge-switch.ts";
 import { planBox, visibleInBox } from "./bot-box/plan.ts";
-import { commandEnvironment, findFiles, hostShellLaunch, findInvocations, handleHostShellRpc, mountsHostShell, runCommand, type Runner } from "./host-shell-mcp.ts";
+import { commandEnvironment, findFiles, hostShellLaunch, findInvocations, handleHostShellRpc, mountsHostShell, runCommand, runProcess, type Runner } from "./host-shell-mcp.ts";
 
 const desktopTurn = { engineHasShell: false, desktopApp: true, cloudHome: false, worksOn: undefined, remoteComputer: false, thisComputerRefused: false, guest: false, testRun: false,
   model: "hosted" as const, platform: "darwin" as const, watched: true };
@@ -20,6 +20,13 @@ describe("mountsHostShell", () => {
     for (const change of [{ engineHasShell: true }, { desktopApp: false }, { worksOn: "off" }, { remoteComputer: true },
       { thisComputerRefused: true }, { guest: true }, { testRun: true }]) {
       expect(mountsHostShell({ ...desktopTurn, ...change })).toBe(false);
+    }
+  });
+  it("lends it on a server the person runs with duskbot serve, as on the desktop app", () => {
+    const own = { ...desktopTurn, desktopApp: false, selfHosted: true };
+    expect(mountsHostShell(own)).toBe(true);
+    for (const change of [{ engineHasShell: true }, { worksOn: "off" }, { remoteComputer: true }, { guest: true }, { testRun: true }]) {
+      expect(mountsHostShell({ ...own, ...change })).toBe(false);
     }
   });
   it("lends a local model the shell only from this machine, off Windows and on a turn a person is behind", () => {
@@ -110,10 +117,31 @@ describe("run_command", () => {
 });
 
 describe("find_files", () => {
-  it("asks Spotlight on macOS, by name or by content, inside a folder", () => {
-    expect(findInvocations("invoice", { content: false, limit: 50, platform: "darwin", home: "/Users/a" })).toEqual([{ file: "mdfind", args: ["-name", "invoice"] }]);
-    expect(findInvocations("invoice", { content: true, folder: "/Users/a/Documents", limit: 50, platform: "darwin", home: "/Users/a" }))
-      .toEqual([{ file: "mdfind", args: ["-onlyin", "/Users/a/Documents", "invoice"] }]);
+  it("asks Spotlight on macOS first, by name or by content, inside a folder", () => {
+    expect(findInvocations("invoice", { content: false, limit: 50, platform: "darwin", home: "/Users/a" })[0]).toEqual({ file: "mdfind", args: ["-name", "invoice"], index: true });
+    expect(findInvocations("invoice", { content: true, folder: "/Users/a/Documents", limit: 50, platform: "darwin", home: "/Users/a" })[0])
+      .toEqual({ file: "mdfind", args: ["-onlyin", "/Users/a/Documents", "invoice"], index: true });
+  });
+  it("walks the home folder when Spotlight finds nothing, with iCloud Drive and every word of the name", async () => {
+    const home = mkdtempSync(join(tmpdir(), "find-home-"));
+    const put = (path: string, body: string) => { mkdirSync(dirname(join(home, path)), { recursive: true }); writeFileSync(join(home, path), body); };
+    put("Desktop/old stuff/scans 2024/IMG_4471 halyard paddle club card.txt", "member no. HPC-20417");
+    put("Library/Mobile Documents/com~apple~CloudDocs/Trips/oct-weekend.md", "wifi: JuniperHollow_5G / pw: cedar-smoke-1987");
+    put("Library/Caches/halyard club card.txt", "cache");
+    put(".hidden/halyard club card.txt", "hidden");
+    const calls: string[] = [];
+    const run: Runner = async (file, args, options) => {
+      calls.push(file);
+      return file === "mdfind" ? { code: 0, stdout: "", stderr: "", timedOut: false } : runProcess(file, args, options);
+    };
+    const byName = await findFiles({ query: "club halyard card" }, { platform: "darwin", home, env: process.env, run });
+    expect(calls).toEqual(["mdfind", "find"]);
+    expect(byName).toEqual({ text: join(home, "Desktop/old stuff/scans 2024/IMG_4471 halyard paddle club card.txt") });
+    const byContent = await findFiles({ query: "juniperhollow", in_content: true }, { platform: "darwin", home, env: process.env, run });
+    expect(byContent).toEqual({ text: join(home, "Library/Mobile Documents/com~apple~CloudDocs/Trips/oct-weekend.md") });
+    const linux = await findFiles({ query: "paddle" }, { platform: "linux", home, env: process.env, run: async (file, args, options) => (file === "locate" ? { code: 0, stdout: "", stderr: "", timedOut: false } : runProcess(file, args, options)) });
+    expect(linux.text).toContain("IMG_4471 halyard paddle club card.txt");
+    rmSync(home, { recursive: true, force: true });
   });
   it("asks Windows Search with the query in the environment, then where.exe", () => {
     const [search, where] = findInvocations("it's 50%", { content: false, limit: 20, platform: "win32", home: "C:\\Users\\a" });
@@ -127,7 +155,7 @@ describe("find_files", () => {
     const found = await findFiles({ query: "invoice" }, { platform: "darwin", home: "/Users/a", hidden: ["/Users/a/Library/Application Support/dusk"], env: {}, run });
     expect(found).toEqual({ text: "/Users/a/Documents/invoice.pdf" });
     const none = await findFiles({ query: "zzz" }, { platform: "darwin", home: "/Users/a", env: {}, run: async () => ({ code: 0, stdout: "", stderr: "", timedOut: false }) });
-    expect(none).toEqual({ text: "No files matched \"zzz\"." });
+    expect(none.text).toMatch(/^No files matched "zzz"\./);
   });
   it("falls back to where.exe when Windows Search cannot run", async () => {
     const calls: string[] = [];

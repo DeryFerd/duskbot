@@ -509,6 +509,17 @@ export function directServers(servers: ReadonlyArray<{ name: string; tools: numb
   return direct;
 }
 
+/** The order built-in servers take their share of the tool limit; configured servers fit in what is left. The agents
+ * server keeps its whole list, then the shell and the browser theirs (short lists a turn cannot do without), then this
+ * computer's screen driver, the longest list and in its own order main tools first, before connected apps. */
+export function builtInShareRank(origin: { server: string; agents?: boolean }): number {
+  if (origin.agents) return 0;
+  if (origin.server === HOST_SHELL_SERVER) return 1;
+  if (origin.server === "browser") return 2;
+  if (origin.server === "computer") return 3;
+  return 4;
+}
+
 /** Under `schemaProfile` the model reads each tool's schema fitted to its provider; calls are still checked against the full one.
  * A tool result over 50KB is saved whole in `resultFolder`, the bot's working folder, after `scrub` masks secrets (see savedOrBounded). */
 export async function mountChatTools(integrations: SendTurnInput["integrations"], signal: AbortSignal, computerUse = false, toolScope?: ToolScope, callTimeoutMs: number = DEFAULT_CALL_MS,
@@ -647,9 +658,8 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
       searchOnly: catalogExceedsSize(tools.map(({ tool }) => tool)) }));
     const appTools = configuredCatalogs.reduce((sum, server) => sum + server.tools, 0);
     const searchRoom = appTools > 0 && (wanted > MCP_TOOL_COUNT || appTools > APP_TOOLS_LISTED_MAX || configuredCatalogs.some(server => server.searchOnly)) ? DIRECTORY_TOOL_COUNT : 0;
-    // The agents server keeps its whole list first; configured servers fit in what the built-ins leave.
-    const shares = shareToolBudget(offered.map(({ origin, tools }, index) => ({ name: String(index), tools: tools.length, agents: origin.agents }))
-      .sort((a, b) => Number(b.agents) - Number(a.agents)), MCP_TOOL_COUNT - searchRoom);
+    const shares = shareToolBudget(offered.map(({ origin, tools }, index) => ({ name: String(index), tools: tools.length, rank: builtInShareRank(origin) }))
+      .sort((a, b) => a.rank - b.rank), MCP_TOOL_COUNT - searchRoom);
     for (const [index, { origin, tools: listed }] of offered.entries()) {
       const tools = capToolList(listed, shares.get(String(index)));
       if (tools.length < listed.length) {

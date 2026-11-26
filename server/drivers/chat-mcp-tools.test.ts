@@ -834,6 +834,22 @@ describe("Chat MCP tool limit", () => {
     } finally { warn.mockRestore(); }
   });
 
+  it("keeps the shell and the whole browser on a Mac turn where this computer's driver would fill the limit", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const { session, names } = await mount({
+        localComputer: catalog(syntheticToolNames("screen", 56)),
+        browser: catalog(syntheticToolNames("agent_browser", 25)),
+        agents: catalog(syntheticToolNames("agent", 63)),
+        shell: catalog(["run_command", "find_files"]),
+      });
+      expect(names).toEqual(expect.arrayContaining(["shell_run_command", "shell_find_files"]));
+      expect(names.filter((name) => name.startsWith("browser_"))).toHaveLength(25);
+      expect(names).toEqual(expect.arrayContaining(syntheticToolNames("agents_agent", 63)));
+      expect(session.trimmed).toEqual([{ server: "computer", listed: 37, of: 56 }]);
+    } finally { warn.mockRestore(); }
+  });
+
   it("gives the agents server its whole list before a computer mounted ahead of it", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
