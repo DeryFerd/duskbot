@@ -518,6 +518,88 @@ test("Squirrel.Mac gets the verified zip from a feed on 127.0.0.1 at an unguessa
   rmSync(dir, { recursive: true, force: true });
 });
 
+function fakeSquirrel({ take = "all" } = {}) {
+  return import("node:events").then(({ EventEmitter }) => Object.assign(new EventEmitter(), {
+    feed: null,
+    setFeedURL({ url }) { this.feed = url; },
+    checkForUpdates() {
+      if (take === "nothing") return;
+      void (async () => {
+        const feed = await (await fetch(this.feed)).json();
+        if (take === "feed") return;
+        await (await fetch(feed.url)).arrayBuffer();
+        this.took = true;
+      })().catch(() => {});
+    },
+    quitAndInstall() {},
+  }));
+}
+const zipFile = () => { const dir = mkdtempSync(join(tmpdir(), "dusk-squirrel-")); const file = join(dir, "DuskBot-1.1.0-arm64.zip"); writeFileSync(file, Buffer.alloc(200_000, 1)); return { dir, file }; };
+const until = async (check) => { while (!check()) await new Promise((resolve) => setTimeout(resolve, 5)); };
+
+test("a slow disk is waited on while Squirrel.Mac's folder keeps growing, past the time it may sit still", async () => {
+  const { squirrelInstaller } = await import("./app-update.mjs");
+  const { dir, file } = zipFile();
+  const updater = await fakeSquirrel();
+  let written = 0, growing = true;
+  const installer = squirrelInstaller({ autoUpdater: updater, timeoutMs: 60, pollMs: 10, unpacked: () => (growing ? (written += 1000) : written) });
+  const preparing = installer.prepare(file, "1.1.0");
+  await until(() => updater.took);
+  // 300ms of unpacking: five times the timeout, but never still for that long
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  growing = false;
+  updater.emit("update-downloaded");
+  await preparing;
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("Squirrel.Mac going nowhere fails with where it stopped: never asked, stopped taking the zip, or did not unpack", async () => {
+  const { squirrelInstaller } = await import("./app-update.mjs");
+  const { dir, file } = zipFile();
+  for (const [take, message] of [["nothing", /squirrel never asked for the update in time/], ["feed", /squirrel stopped taking the update in time/], ["all", /the update did not unpack in time/]]) {
+    const updater = await fakeSquirrel({ take });
+    const started = Date.now();
+    await assert.rejects(squirrelInstaller({ autoUpdater: updater, timeoutMs: 80, pollMs: 10, unpacked: () => 5 }).prepare(file, "1.1.0"), message);
+    assert.ok(Date.now() - started < 2_000);
+    await assert.rejects(fetch(updater.feed), "the feed is closed after");
+  }
+  const forever = await fakeSquirrel();
+  let n = 0;
+  await assert.rejects(squirrelInstaller({ autoUpdater: forever, timeoutMs: 1_000, longestMs: 150, pollMs: 10, unpacked: () => (n += 1) }).prepare(file, "1.1.0"), /did not unpack in time/, "growing for ever still ends at the longest wait");
+  const none = await fakeSquirrel({ take: "nothing" });
+  const preparing = squirrelInstaller({ autoUpdater: none, timeoutMs: 60_000 }).prepare(file, "1.1.0");
+  await until(() => none.feed);
+  none.emit("update-not-available");
+  await assert.rejects(preparing, /squirrel found no update/);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("Squirrel.Mac's bytes count only this app's ShipIt folders made since the install began", async () => {
+  const { squirrelBytes } = await import("./app-update.mjs");
+  const { mkdirSync } = await import("node:fs");
+  const root = mkdtempSync(join(tmpdir(), "dusk-tmp-"));
+  assert.equal(squirrelBytes(root, "bot.dusk.app", 0), null);
+  mkdirSync(join(root, "bot.dusk.app.ShipIt.aaaa", "Dusk Bot.app", "Contents"), { recursive: true });
+  writeFileSync(join(root, "bot.dusk.app.ShipIt.aaaa", "update.zip"), Buffer.alloc(300));
+  writeFileSync(join(root, "bot.dusk.app.ShipIt.aaaa", "Dusk Bot.app", "Contents", "Info.plist"), Buffer.alloc(50));
+  mkdirSync(join(root, "com.other.app.ShipIt.bbbb"));
+  writeFileSync(join(root, "com.other.app.ShipIt.bbbb", "update.zip"), Buffer.alloc(999));
+  assert.equal(squirrelBytes(root, "bot.dusk.app", 0), 350);
+  assert.equal(squirrelBytes(root, "bot.dusk.app", Date.now() + 60_000), null, "a folder from an earlier try is not this one");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("the app is held out of App Nap while it downloads and installs, and let go after, whatever happened", async () => {
+  for (const fails of [false, true]) {
+    const holds = [];
+    const w = world({ prepare: async () => { assert.deepEqual(holds, ["on"], "held while installing"); if (fails) throw new Error("squirrel never asked for the update in time"); }, options: { awake: () => { holds.push("on"); return () => holds.push("off"); } } });
+    await w.updater.check();
+    assert.deepEqual(holds, ["on", "off"]);
+    assert.equal(w.failures.length, 0, "a stuck install is tried again quietly first");
+    done(w);
+  }
+});
+
 test("My Cloud's page, once it is home, hears this app's own update and may restart into it, as this computer's page does", () => {
   const main = readFileSync(new URL("./main.mjs", import.meta.url), "utf8");
   const preload = readFileSync(new URL("./preload.cjs", import.meta.url), "utf8");

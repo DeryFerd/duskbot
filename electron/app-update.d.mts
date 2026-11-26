@@ -50,7 +50,9 @@ export declare function setupIn(sums: string, version: string): { name: string; 
 export declare function setupSources(version: string, name: string): string[];
 export declare function developerIdSigned(bundle: string, run?: (file: string, args: string[]) => Promise<string>): Promise<boolean>;
 export interface AppInstaller { prepare(file: string, version: string): Promise<void>; install(): void; /** that version's installer ran and this app is still older */ failed?(version: string): boolean }
-export declare function squirrelInstaller(options: { autoUpdater: unknown; timeoutMs?: number }): AppInstaller;
+export declare function squirrelInstaller(options: { autoUpdater: unknown; timeoutMs?: number; longestMs?: number; unpacked?(since: number): number | null; pollMs?: number; timers?: Pick<typeof globalThis, "setTimeout" | "clearTimeout" | "setInterval" | "clearInterval"> }): AppInstaller;
+export declare function macBundleId(bundle: string, read?: (file: string) => string): string;
+export declare function squirrelBytes(root: string, bundleId: string, since: number): number | null;
 export declare function quietNow(signals: { locked(): boolean; idleMs(): number; typedAt(): number; work(): Promise<string | null>; busy?(): string | null; focused?(): boolean }, now?: number): Promise<boolean>;
 export declare function justUpdated(memory: { read(): { version?: string } | null; write(value: { version: string }): void }, current: string, installedHere?: () => boolean): boolean;
 export interface AppUpdater { /** `again`: the person asked, so a version that did not install is tried once more */ check(options?: { again?: boolean }): Promise<string | null>; restart(): boolean; state(): AppUpdateState; start(): void; soon(delayMs?: number): void; stop(): void }
@@ -60,7 +62,7 @@ export declare function createAppUpdater(options: {
   asset?(sums: string, version: string): { name: string; sha256: string } | null; sources?(version: string, name: string): string[]; /** files in `dir` the cleanup leaves */ keep?: string[];
   signed?(): Promise<boolean>; installer?: AppInstaller; quiet?(): Promise<boolean>; fallback: { check(): Promise<unknown> };
   onState?(state: AppUpdateState): void; /** a check or download failed: its message, the stage and a short reason word */ onFailed?(message: string, info: { stage: string | null; reason: string }): void;
-  download?: Partial<{ attempts: number; stallMs: number; headersMs: number; backoffMs: readonly number[]; wait(ms: number): Promise<void> }>; log?(line: string): void; firstDelayMs?: number; intervalMs?: number; jitterMs?: number; random?: () => number; quietEveryMs?: number;
+  download?: Partial<{ attempts: number; stallMs: number; headersMs: number; backoffMs: readonly number[]; wait(ms: number): Promise<void> }>; /** holds the app awake while it downloads and installs; returns the release */ awake?(): () => void; log?(line: string): void; firstDelayMs?: number; intervalMs?: number; jitterMs?: number; random?: () => number; quietEveryMs?: number;
   /** where the signed update policy is read; `bucket`: this install's fixed 0 to 99 for staged rollouts */ policySources?: readonly string[]; bucket?: () => number;
   timers?: Pick<typeof globalThis, "setTimeout" | "clearTimeout">;
 }): AppUpdater;

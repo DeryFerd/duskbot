@@ -35,9 +35,9 @@ const UNREACHABLE = new Set(["enotfound", "eai_again", "eai_fail", "timeout", "e
 export const unreachable = (reason) => UNREACHABLE.has(String(reason));
 /** an unreachable check counts as a failure only after this many in a row (hours apart), or when the person asked */
 export const OFFLINE_CHECKS_BEFORE_FAILED = 6;
-/** Squirrel.Mac taking longer than its timeout to unpack is tried again quietly this many times before the person is told */
+/** Squirrel.Mac going nowhere for its timeout is tried again quietly this many times before the person is told */
 export const SLOW_UNPACKS_BEFORE_FAILED = 3;
-const slowUnpack = (error) => error instanceof UpdateError && error.stage === "install" && /did not unpack in time/.test(error.message);
+const slowUnpack = (error) => error instanceof UpdateError && error.stage === "install" && /did not unpack in time|squirrel never asked for the update in time|squirrel stopped taking the update in time/.test(error.message);
 /** CI's release keys (apps/cloud-service/src/release-signing.ts pins the same ones; a test keeps them equal) */
 export const RELEASE_KEYS = Object.freeze([{ kid: "rel-2026-11", x: "wtwZypDwVPBXZ25XsZOVpd0PZPBbVMhugheUj5_NLIM" }]);
 const CHECK_EVERY_MS = 30 * 60_000;
@@ -151,41 +151,90 @@ export function updatePlace(bundle, writable = writableDir) {
   return bundle.startsWith("/Volumes/") ? "move" : "readonly";
 }
 
+/** bytes in the folders Squirrel.Mac made under `root` (its temporary folder, `<bundle id>.ShipIt.XXXXXXXX`) since
+ * `since`, where it downloads and unpacks an update; null when it has made none */
+export function squirrelBytes(root, bundleId, since, fs = { readdirSync, statSync }) {
+  let total = null;
+  const walk = (dir) => {
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      const at = join(dir, entry.name);
+      if (entry.isDirectory()) walk(at);
+      else if (entry.isFile()) { try { total += fs.statSync(at).size; } catch { /* gone meanwhile */ } }
+    }
+  };
+  let names = [];
+  try { names = fs.readdirSync(root); } catch { return null; }
+  for (const name of names) {
+    if (!name.startsWith(`${bundleId}.ShipIt.`)) continue;
+    const dir = join(root, name);
+    try { if (fs.statSync(dir).birthtimeMs < since) continue; } catch { continue; }
+    total ??= 0;
+    walk(dir);
+  }
+  return total;
+}
+
+/** the CFBundleIdentifier of the app at `bundle`, which names Squirrel.Mac's folders */
+export function macBundleId(bundle, read = (file) => readFileSync(file, "utf8")) {
+  try { return /<key>CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/.exec(read(join(bundle, "Contents", "Info.plist")))?.[1] ?? "bot.dusk.app"; } catch { return "bot.dusk.app"; }
+}
+
+/** an install that went nowhere for its whole timeout; each says where, and all of them are tried again quietly */
+const SQUIRREL_NEVER_ASKED = "squirrel never asked for the update in time";
+const SQUIRREL_STOPPED = "squirrel stopped taking the update in time";
+const NOT_UNPACKED = "the update did not unpack in time";
+
 /**
  * Squirrel.Mac fed from 127.0.0.1: a feed and the verified zip at an unguessable path, for one download, closed after.
- * `autoUpdater` is Electron's.
+ * `autoUpdater` is Electron's. it fails only after `timeoutMs` with nothing happening (no bytes taken from the feed and
+ * `unpacked(since)`, the bytes Squirrel has written since `since`, not growing), or after `longestMs` in all, so a slow disk is waited on.
  */
-export function squirrelInstaller({ autoUpdater, timeoutMs = 15 * 60_000 }) {
+export function squirrelInstaller({ autoUpdater, timeoutMs = 15 * 60_000, longestMs = 90 * 60_000, unpacked = () => null, pollMs = 20_000, timers = globalThis }) {
   return {
     async prepare(file, version) {
       const token = randomBytes(16).toString("hex"), size = statSync(file).size;
-      let port = 0;
+      let port = 0, asked = false, sent = 0;
+      let done, failed;
+      const settled = new Promise((resolve, reject) => { done = resolve; failed = reject; });
+      const why = () => (!asked ? SQUIRREL_NEVER_ASKED : sent < size ? SQUIRREL_STOPPED : NOT_UNPACKED);
+      let idle = null;
+      const moved = () => { timers.clearTimeout(idle); idle = timers.setTimeout(() => failed(new Error(why())), timeoutMs); };
       const server = createServer((req, res) => {
         if (req.method === "GET" && req.url === `/${token}/feed.json`) {
+          asked = true; moved();
           res.writeHead(200, { "content-type": "application/json" });
           return res.end(JSON.stringify({ url: `http://127.0.0.1:${port}/${token}/update.zip`, name: version }));
         }
         if (req.method === "GET" && req.url === `/${token}/update.zip`) {
           res.writeHead(200, { "content-type": "application/zip", "content-length": String(size) });
-          return void pipeline(createReadStream(file), res).catch(() => {});
+          const stream = createReadStream(file);
+          stream.on("data", (chunk) => { sent += chunk.length; moved(); });
+          return void pipeline(stream, res).catch(() => {});
         }
         res.writeHead(404).end();
       });
       await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
       port = server.address().port;
-      let done, failed;
-      const settled = new Promise((resolve, reject) => { done = resolve; failed = reject; });
-      const timer = setTimeout(() => failed(new Error("the update did not unpack in time")), timeoutMs);
+      moved();
+      const longest = timers.setTimeout(() => failed(new Error(why())), longestMs);
+      const started = Date.now();
+      let seen = unpacked(started);
+      const poll = timers.setInterval(() => { const now = unpacked(started); if (now !== null && now !== seen) { seen = now; moved(); } }, pollMs);
+      const none = () => failed(new Error("squirrel found no update in the feed"));
       autoUpdater.once("update-downloaded", done);
       autoUpdater.once("error", failed);
+      autoUpdater.once("update-not-available", none);
       try {
         autoUpdater.setFeedURL({ url: `http://127.0.0.1:${port}/${token}/feed.json`, serverType: "json" });
         autoUpdater.checkForUpdates();
         await settled;
       } finally {
-        clearTimeout(timer);
+        timers.clearTimeout(idle); timers.clearTimeout(longest); timers.clearInterval(poll);
         autoUpdater.removeListener("update-downloaded", done);
         autoUpdater.removeListener("error", failed);
+        autoUpdater.removeListener("update-not-available", none);
         server.close();
       }
     },
@@ -257,11 +306,12 @@ export async function installerUrl(version, name, fetchImpl = fetch) {
  * asked) tries it once more. `fallback.check()` (update-notice.mjs) also tells an unsigned build, and any failure.
  * `onState` hears: `available` (a newer version), `progress` (0 to 1) while it downloads, `retrying` while a failed try
  * waits for the next, `ready` once it waits for a restart, `checking` while a check runs, `failed` when the last could
- * not finish. `onFailed(message, { stage, reason })`: `reason` is a short word, never a path.
+ * not finish. `onFailed(message, { stage, reason })`: `reason` is a short word, never a path. `awake()` holds the app out
+ * of App Nap, which throttles its disk and timers, while it downloads and installs, and returns the release.
  */
 export function createAppUpdater({ current, arch, dir, fetchImpl = fetch, keys = RELEASE_KEYS, installs = true, platform = "darwin", appImage = false, signed, blocked = async () => null,
   asset = (sums, version) => zipIn(sums, version, arch), sources = zipSources, keep = [], installer, quiet, fallback, onState = () => {}, onFailed = () => {}, log = () => {}, firstDelayMs = 20_000, intervalMs = CHECK_EVERY_MS, jitterMs = JITTER_MS, random = Math.random,
-  quietEveryMs = 60_000, timers = globalThis, download = {}, policySources = POLICY_SOURCES, bucket = () => storedBucket(join(dirname(dir), "update-bucket.json")), serverRuns = () => null }) {
+  quietEveryMs = 60_000, timers = globalThis, download = {}, awake = () => () => {}, policySources = POLICY_SOURCES, bucket = () => storedBucket(join(dirname(dir), "update-bucket.json")), serverRuns = () => null }) {
   let ready = null, available = null, progress = null, timer = null, quietTimer = null, checking = null, installing = false, failed = false, retrying = false, stuck = null, manual = null, kick = null, again = false;
   const toldBlocked = new Set();
   const state = () => ({ ready, available, progress, checking: checking !== null, failed, retrying, blocked: stuck, manual });
@@ -367,6 +417,7 @@ export function createAppUpdater({ current, arch, dir, fetchImpl = fetch, keys =
     for (const name of readdirSync(dir)) if (name !== zip.name && name !== `${zip.name}.part` && !keep.includes(name)) rmSync(join(dir, name), { recursive: true, force: true });
     const file = join(dir, zip.name);
     progress = 0; retrying = false; tell();
+    const asleepAgain = awake();
     try {
       await resumableDownload({ sources: sources(version, zip.name), file, sha256: zip.sha256, fetchImpl, ...download,
         setKick: (fn) => { kick = fn; },
@@ -377,7 +428,7 @@ export function createAppUpdater({ current, arch, dir, fetchImpl = fetch, keys =
         },
         onRetry: (error, tries) => { retrying = true; log(`app update: download try ${tries} failed (${failReason(error)}), trying again`); tell(); } });
       try { await installer.prepare(file, version); } catch (error) { throw new UpdateError("install", `install_${failReason(error)}`.slice(0, 40).replace(/_+$/, ""), `the update could not install: ${error instanceof Error ? error.message : String(error)}`); }
-    } finally { progress = null; retrying = false; kick = null; }
+    } finally { progress = null; retrying = false; kick = null; try { asleepAgain(); } catch { /* the hold is gone */ } }
     ready = version;
     log(`app update: ${ready} is ready; it installs on quit or at a quiet moment`);
     tell();
