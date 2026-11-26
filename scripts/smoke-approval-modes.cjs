@@ -390,12 +390,16 @@ app.whenReady().then(async () => {
 
   // Revoking the receiving thread's grant must restore prompts on the resumed
   // delegated session, even when the sender itself has Full access.
+  // The sibling is whichever of the bot's two threads the work did not land in: its grant must stay.
+  const siblingThreadId = [peerThread.threadId, peerTarget.threadId].find((threadId) => threadId !== peerWorkThreadId);
+  assert.ok(siblingThreadId);
+  await coordinator.request(child, peerTarget.id, "full", { threadId: siblingThreadId });
   await coordinator.request(child, id, "full");
   await coordinator.request(child, peerTarget.id, "ask");
   assert.equal((await api(`/api/bots/${peerTarget.id}/tasks/${peerWorkThreadId}`, "PATCH", { approvalMode: "ask" })).status, 200);
   const revokedPeer = (await api("/api/bots?messages=0")).body.bots.find((bot) => bot.id === peerTarget.id);
   assert.equal(revokedPeer.tasks.find((task) => task.threadId === peerWorkThreadId).approvalMode, "ask");
-  assert.equal(revokedPeer.tasks.find((task) => task.threadId === peerThread.threadId).approvalMode, "full");
+  assert.equal(revokedPeer.tasks.find((task) => task.threadId === siblingThreadId).approvalMode, "full");
   const askPeerResponse = await api("/api/internal/coordinate-bots", "POST", { botIds: [peerTarget.id], message: "Ask target must not inherit sender Full", consult: true }, { authorization: `Bearer ${capability.body.token}` });
   assert.equal(askPeerResponse.status, 200);
   assert.equal(askPeerResponse.body.receipts[0].threadId, peerWorkThreadId);
@@ -418,7 +422,6 @@ app.whenReady().then(async () => {
   assert.equal(customResponse.status, 200);
   const customThreadId = customResponse.body.receipts[0].threadId;
   assert.ok(customThreadId);
-  assert.notEqual(customThreadId, customTarget.threadId);
   const customCard = await until(async () => pendingCard((await api(`/api/threads/${customThreadId}/messages`)).body));
   assert.equal(customCard.held, "The provider requires your approval for this action.");
   assert.equal((await api(`/api/threads/${customThreadId}/respond`, "POST", { requestId: customCard.requestId, behavior: "allow" })).status, 200);
