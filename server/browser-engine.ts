@@ -18,7 +18,7 @@ import { gateChromeSettings } from "./browser/egress/gate.ts";
 import { missingLibraries } from "./browser/chrome/host-setup.ts";
 import { installChromeForTesting } from "./browser/chrome/install.ts";
 import { commandOnPath, hostLibraryInstall, installChromeLibraries, type LibraryInstallDeps } from "./browser/chrome/linux-libraries.ts";
-import { chromeHost, legacyBrowserFound, resolveChromePlan } from "./browser/chrome/resolve.ts";
+import { chromeHost, legacyBrowserFound, resolveChromePlan, type ChromeHost } from "./browser/chrome/resolve.ts";
 import {
   AGENT_BROWSER_VERSION,
   agentBrowserReleaseUrl,
@@ -489,6 +489,8 @@ type EnsureChromeOptions = {
   withDeps?: boolean; dataDir?: string; env?: NodeJS.ProcessEnv; platform?: NodeJS.Platform; arch?: string; log?: (line: string) => void;
   /** Tests: the library install, the Chrome download and the missing-library check. */
   libraries?: LibraryInstallDeps; download?: typeof installChromeForTesting; missing?: typeof missingLibraries;
+  /** Tests: the computer's browsers as the plan sees them, so one with Chrome installed can stand in for one without. */
+  host?: ChromeHost;
 };
 
 /** `agent-browser install` fetches Chrome for Testing when no Chrome, Chromium or Brave is found; `--with-deps` adds Linux
@@ -542,7 +544,7 @@ async function ensureLinuxArmChrome(binaryPath: string, options: EnsureChromeOpt
   const dataDir = options.dataDir ?? DATA_DIR;
   const env = options.env ?? process.env;
   if (options.withDeps) await installChromeLibraries(options.libraries ?? hostLibraryInstall(log, env));
-  const host = chromeHost({ dataDir, env, platform: "linux", arch: "arm64" });
+  const host = options.host ?? chromeHost({ dataDir, env, platform: "linux", arch: "arm64" });
   const plan = resolveChromePlan(host, { managed: resolve(binaryPath) === pinnedBinaryPath(dataDir, "linux", "arm64") });
   if (plan.kind === "legacy") {
     if (!legacyBrowserFound(host)) throw new Error(`there is no Chrome or Chromium here for agent-browser to start (${plan.reason})`);
