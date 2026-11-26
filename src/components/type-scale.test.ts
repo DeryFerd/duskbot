@@ -19,7 +19,7 @@ function sourceFiles(dir: string): string[] {
 describe("type scale", () => {
   it("sizes text in whole pixels, so neighbouring steps stay distinct", () => {
     const offenders = sourceFiles(srcRoot).flatMap((file) =>
-      (readFileSync(file, "utf8").match(FRACTIONAL_SIZE) ?? []).map((size) => `${relative(srcRoot, file)}: ${size}`),
+      (readFileSync(file, "utf8").match(FRACTIONAL_SIZE) ?? []).map((size) => `${relative(srcRoot, file).replaceAll("\\", "/")}: ${size}`),
     ).filter((offender) => !CHOSEN_HALF_STEPS.has(offender));
     expect(offenders).toEqual([]);
   });

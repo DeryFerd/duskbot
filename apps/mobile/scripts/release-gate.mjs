@@ -9,7 +9,7 @@
 // has merged, so one list never has to be kept in two places.
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { basename, join, relative } from "node:path";
+import { basename, join, relative, sep } from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
@@ -103,13 +103,15 @@ export function flaggedHashes() {
 /** Every reason this bundle must not be shipped, as `file: reason`. */
 export function inspect(dir, flagged = flaggedHashes()) {
   const problems = [];
-  const says = (file, reason) => problems.push(`${relative(dir, file)}: ${reason}`);
+  // bundle paths with "/" on every platform, as the markers below match them
+  const rel = (file) => relative(dir, file).split(sep).join("/");
+  const says = (file, reason) => problems.push(`${rel(file)}: ${reason}`);
   for (const file of walk(dir)) {
     const name = basename(file);
     const copied = flagged.get(sha1(file));
     if (copied) says(file, `is ${copied}`);
     for (const [pattern, what] of FILE_MARKERS) if (pattern.test(name)) says(file, `is named like ${what}`);
-    for (const [pattern, what] of DEV_FILES) if (pattern.test(relative(dir, file))) says(file, `is ${what}, which only a development build carries`);
+    for (const [pattern, what] of DEV_FILES) if (pattern.test(rel(file))) says(file, `is ${what}, which only a development build carries`);
     if (!/\.(js|mjs|css|html|json|svg|txt)$/.test(name)) continue;
     const text = readFileSync(file, "utf8");
     for (const [pattern, what] of NAME_MARKERS) if (pattern.test(text)) says(file, `names ${what}`);

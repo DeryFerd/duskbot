@@ -38,7 +38,7 @@ function files(dir: string): string[] {
     return statSync(path).isDirectory() ? files(path) : /\.(ts|mjs|js)$/.test(name) && !/\.test\.|\.spec\./.test(name) ? [path] : [];
   });
 }
-const sources = SOURCES.flatMap(dir => files(join(ROOT, dir))).map(path => ({ path: relative(ROOT, path), text: readFileSync(path, "utf8") }));
+const sources = SOURCES.flatMap(dir => files(join(ROOT, dir))).map(path => ({ path: relative(ROOT, path).replaceAll("\\", "/"), text: readFileSync(path, "utf8") }));
 
 describe("admin and ops email triggers", () => {
   afterEach(() => vi.restoreAllMocks());

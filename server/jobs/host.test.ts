@@ -10,7 +10,8 @@ import { jobsFixture, PERSON_TURN } from "./testing.ts";
 const fixtures: Array<{ close(): Promise<void> }> = [];
 afterEach(async () => { for (const fixture of fixtures.splice(0)) await fixture.close(); });
 
-describe("background jobs host", () => {
+// background jobs refuse Windows by design (server/jobs/launch.ts), so they run where jobs can
+describe.skipIf(process.platform === "win32")("background jobs host", () => {
   it("a job's dusk-notify becomes a run of the bot through the event path, and --tell a line in its chat", async () => {
     const fixture = await jobsFixture({ secrets: { "Deals token": "tok-123456789" } });
     fixtures.push(fixture);

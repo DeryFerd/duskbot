@@ -114,8 +114,8 @@ describe("remote MCP disk metadata", () => {
   });
 
   it("stores boxed metadata in its existing private engine home under the data root", () => {
-    expect(remoteMcpCacheDirectory("/data/remote-mcp-cache", "/data/engine-home")).toBe("/data/engine-home/remote-mcp-cache");
-    expect(remoteMcpCacheDirectory("/data/remote-mcp-cache", "/data/engine-homes/member-a")).toBe("/data/engine-homes/member-a/remote-mcp-cache");
+    expect(remoteMcpCacheDirectory("/data/remote-mcp-cache", "/data/engine-home")).toBe(join("/data/engine-home", "remote-mcp-cache"));
+    expect(remoteMcpCacheDirectory("/data/remote-mcp-cache", "/data/engine-homes/member-a")).toBe(join("/data/engine-homes/member-a", "remote-mcp-cache"));
     expect(remoteMcpCacheDirectory("/data/remote-mcp-cache", "/home/person")).toBe("/data/remote-mcp-cache");
   });
 

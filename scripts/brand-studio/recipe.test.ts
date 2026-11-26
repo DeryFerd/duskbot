@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { dataFilePath, fill, plannedShots, readRecipe, readSteps, type CaptureStep } from "./recipe.ts";
@@ -69,7 +70,7 @@ describe("a capture recipe", () => {
   });
 
   it("writes rows only inside the fixture's data directory", () => {
-    expect(dataFilePath("/tmp/fixture", "usage/2026-11.jsonl")).toBe("/tmp/fixture/usage/2026-11.jsonl");
+    expect(dataFilePath("/tmp/fixture", "usage/2026-11.jsonl")).toBe(resolve("/tmp/fixture", "usage", "2026-11.jsonl"));
     expect(() => dataFilePath("/tmp/fixture", "../other/usage.jsonl")).toThrow(/only inside the fixture's data directory/);
     expect(() => dataFilePath("/tmp/fixture", "/etc/hosts")).toThrow(/only inside the fixture's data directory/);
     expect(() => dataFilePath("/tmp/fixture", ".")).toThrow(/only inside the fixture's data directory/);

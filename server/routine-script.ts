@@ -7,7 +7,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 
 import type { WrappedSpawn } from "./bot-box/box.ts";
 import { probeBwrap, whichOnPath } from "./bot-box/detect.ts";
@@ -45,7 +45,7 @@ export function sandboxProfile(scratch: string, home: string): string {
     "(version 1)", "(allow default)",
     "(deny file-write*)",
     `(allow file-write* (subpath ${quoted(scratch)}) (literal "/dev/null") (literal "/dev/zero") (regex #"^/dev/(fd/|tty|stdout|stderr)"))`,
-    `(deny file-read* ${PRIVATE_READS.map((part) => `(subpath ${quoted(join(home, part))})`).join(" ")})`,
+    `(deny file-read* ${PRIVATE_READS.map((part) => `(subpath ${quoted(posix.join(home, part))})`).join(" ")})`,
   ].join("\n");
 }
 
@@ -53,7 +53,7 @@ export function sandboxProfile(scratch: string, home: string): string {
  * key folders hidden behind empty ones (key files behind /dev/null), its own pid namespace, the network shared. */
 export function bwrapArgs(scratch: string, home: string, command: string, exists: (path: string) => "dir" | "file" | null = kindOf): string[] {
   const hidden = PRIVATE_READS.flatMap((part) => {
-    const path = join(home, part), kind = exists(path);
+    const path = posix.join(home, part), kind = exists(path);
     return kind === "dir" ? ["--tmpfs", path] : kind === "file" ? ["--ro-bind", "/dev/null", path] : [];
   });
   return ["--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--bind", scratch, scratch, ...hidden,

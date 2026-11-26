@@ -23,7 +23,8 @@ describe("script checks on dusk cloud", () => {
     expect(scriptRoutineRefusal(script, true, false)).toMatch(/owner/);
   });
 
-  it("runs in the bot's box, and fails plainly when the box is off", async () => {
+  // the box is a Linux sandbox run under /bin/sh, which a Windows host has not
+  it.skipIf(process.platform === "win32")("runs in the bot's box, and fails plainly when the box is off", async () => {
     const home = join(tempDir(), "home");
     expect(await runCheckScript("echo hi", { box: { wrap: () => null, botId: "b1", home } })).toEqual({ ok: false, error: BOX_OFF });
     const asked: unknown[] = [];

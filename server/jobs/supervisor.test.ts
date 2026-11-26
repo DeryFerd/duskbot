@@ -38,7 +38,8 @@ const spec = (command: string, patch: Partial<JobSpec> = {}): JobSpec => ({
   botId: "bot-a", threadId: "t-1", label: "Deal watch", command, cwd: tmpdir(), env: {}, secrets: {}, onNotify: "", ...patch,
 });
 
-describe("background job supervisor", () => {
+// background jobs refuse Windows by design (server/jobs/launch.ts), and these run them under sh
+describe.skipIf(process.platform === "win32")("background job supervisor", () => {
   it("starts a job, captures its output, and stops its whole process group", async () => {
     const { supervisor } = harness();
     const { job } = supervisor.start(spec("echo hello; sleep 30 & sleep 30"));
