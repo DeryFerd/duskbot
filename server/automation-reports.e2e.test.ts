@@ -28,8 +28,15 @@ type ScriptEntry = {
   steps?: Array<{ tool: string; arguments: Record<string, unknown> }>;
 };
 
+/** A fixed-offset zone where it is early afternoon now: a routine's plain report waits out the night's quiet hours, so a
+ * run at the CI runner's night would hold the very notification these tests read. */
+function afternoonZone(at = new Date()): string {
+  const offset = ((13 - at.getUTCHours() + 36) % 24) - 11;
+  return offset === 0 ? "Etc/GMT" : `Etc/GMT${offset > 0 ? "-" : "+"}${Math.abs(offset)}`;
+}
+
 async function server(env: NodeJS.ProcessEnv = {}) {
-  fixture = await launchVerificationServer({ ...process.env, ...env }, undefined, undefined, undefined, { scripted: true });
+  fixture = await launchVerificationServer({ ...process.env, TZ: afternoonZone(), ...env }, undefined, undefined, undefined, { scripted: true });
   const { url, dataDir } = fixture.info;
   const api = async (method: string, path: string, body?: unknown, status?: number) => {
     const response = await fetch(`${url}${path}`, {
