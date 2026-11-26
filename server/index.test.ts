@@ -8263,7 +8263,7 @@ describe("harness HTTP API", () => {
   });
 
   it("injects the bot's standing instructions (soul) into a real turn, directly after the persona", async () => {
-    const bot = (await api("POST", "/api/bots", { name: "Kiwi", title: "Tracker" })).body.bot;
+    const bot = (await api("POST", "/api/bots", { name: "Kestrel", title: "Tracker" })).body.bot;
     try {
       expect((await api("PATCH", `/api/bots/${bot.id}`, {
         modelSelection: { instanceId: "claude", model: "claude-sonnet-5" },
@@ -8273,8 +8273,8 @@ describe("harness HTTP API", () => {
       expect((await api("POST", `/api/bots/${bot.id}/messages`, { text: "hello" })).status).toBe(202);
       const seen = await readJsonFileWhenReady<{ systemPrompt?: string }>(fakeClaudeDump, 15_000);
       const system: string = seen.systemPrompt ?? "";
-      expect(system.startsWith("You are Kiwi, a personal bot in dusk bot. Role: Tracker.")).toBe(true);
-      const persona = "You are Kiwi, a personal bot in dusk bot. Role: Tracker.";
+      expect(system.startsWith("You are Kestrel, a personal bot in dusk bot. Role: Tracker.")).toBe(true);
+      const persona = "You are Kestrel, a personal bot in dusk bot. Role: Tracker.";
       const afterPersona = system.slice(persona.length);
       expect(afterPersona.startsWith("\n\nYour standing instructions follow.")).toBe(true);
       expect(system).toContain("--- BEGIN STANDING INSTRUCTIONS (SOUL.md, 28 bytes) ---\nFile bugs. Never file noise.\n--- END STANDING INSTRUCTIONS ---");
@@ -8417,7 +8417,7 @@ describe("harness HTTP API", () => {
   });
 
   it("re-enters setup mode for a configured bot when the user sends /setup, and rewrites the turn text", async () => {
-    const bot = (await api("POST", "/api/bots", { name: "Kiwi", description: "Files bugs." })).body.bot;
+    const bot = (await api("POST", "/api/bots", { name: "Kestrel", description: "Files bugs." })).body.bot;
     try {
       expect((await api("PATCH", `/api/bots/${bot.id}`, {
         modelSelection: { instanceId: "claude", model: "claude-sonnet-5" },
@@ -8658,7 +8658,7 @@ describe("harness HTTP API", () => {
   });
 
   it("never lets an out-of-band SOUL.md edit reach the prompt, and surfaces it as drift instead", async () => {
-    const bot = (await api("POST", "/api/bots", { name: "Kiwi", title: "Tracker" })).body.bot;
+    const bot = (await api("POST", "/api/bots", { name: "Kestrel", title: "Tracker" })).body.bot;
     try {
       expect((await api("PATCH", `/api/bots/${bot.id}`, {
         modelSelection: { instanceId: "claude", model: "claude-sonnet-5" },
@@ -10517,7 +10517,7 @@ describe("harness HTTP API", () => {
       const proposal = await fetch(`${BASE}/api/internal/profile-requests`, {
         method: "POST",
         headers: internalHeaders,
-        body: JSON.stringify({ fromBotId: bot.id, fromThreadId: bot.threadId, changes: { name: "Kiwi", soul: "Be brief." }, reason: "you asked" }),
+        body: JSON.stringify({ fromBotId: bot.id, fromThreadId: bot.threadId, changes: { name: "Kestrel", soul: "Be brief." }, reason: "you asked" }),
       });
       expect(proposal.status).toBe(201);
       const proposed = z.object({ requestId: z.string(), state: z.literal("applied"), appliedBy: z.literal("level") }).passthrough().parse(await proposal.json());
@@ -10555,7 +10555,7 @@ describe("harness HTTP API", () => {
 
       const stale = await api("POST", `/api/threads/${bot.threadId}/undo`, { requestId: proposed.requestId });
       expect(stale).toMatchObject({ status: 409, body: { code: "changed-since" } });
-      expect((await api("GET", "/api/bots")).body.bots.find((candidate: { id: string }) => candidate.id === bot.id).name).toBe("Kiwi");
+      expect((await api("GET", "/api/bots")).body.bots.find((candidate: { id: string }) => candidate.id === bot.id).name).toBe("Kestrel");
 
       const againResponse = await fetch(`${BASE}/api/internal/profile-requests`, {
         method: "POST",
@@ -10933,7 +10933,7 @@ describe("harness HTTP API", () => {
     expect(replacement.body.error).toMatch(/invalid project key/i);
     expect((await api("GET", "/api/config")).body.composio).toEqual(saved.body.composio);
 
-    const kiwi = (await api("POST", "/api/bots", { name: "Kiwi" })).body.bot;
+    const kiwi = (await api("POST", "/api/bots", { name: "Kestrel" })).body.bot;
     try {
       const overview = await api("GET", `/api/bots/${kiwi.id}/overview`);
       expect(overview.status).toBe(200);
@@ -12507,15 +12507,15 @@ describe("bot memory API", () => {
   });
 
   it("previews the system prompt the model will see, section by section", async () => {
-    const bot = (await api("POST", "/api/bots", { name: "Kiwi", title: "Tracker", description: "Files bugs." })).body.bot;
+    const bot = (await api("POST", "/api/bots", { name: "Kestrel", title: "Tracker", description: "Files bugs." })).body.bot;
     try {
       const before = await api("GET", `/api/bots/${bot.id}/system-prompt`);
       expect(before.status).toBe(200);
       expect(before.body.sections[0]).toEqual({
         id: "persona",
         label: "Identity",
-        text: "You are Kiwi, a personal bot in dusk bot. Role: Tracker. About: Files bugs.",
-        bytes: 75,
+        text: "You are Kestrel, a personal bot in dusk bot. Role: Tracker. About: Files bugs.",
+        bytes: 78,
       });
       expect(before.body.sections.map((s: { id: string }) => s.id)).not.toContain("soul");
       expect(before.body.sections.map((s: { id: string }) => s.id)).toContain("memory");
@@ -12549,14 +12549,14 @@ describe("bot memory API", () => {
   });
 
   it("builds a plain-language overview from a bot's real settings and history", async () => {
-    const bot = (await api("POST", "/api/bots", { name: "Kiwi", title: "Tracker", description: "Files bugs." })).body.bot;
+    const bot = (await api("POST", "/api/bots", { name: "Kestrel", title: "Tracker", description: "Files bugs." })).body.bot;
     try {
       // Pin the settings-dependent sentences a fresh record would not guarantee (composio false whatever the connector reports).
       await api("PATCH", `/api/bots/${bot.id}`, { computer: "off", peers: [], composio: false });
 
       const fresh = await api("GET", `/api/bots/${bot.id}/overview`);
       expect(fresh.status).toBe(200);
-      expect(fresh.body.who.name).toBe("Kiwi");
+      expect(fresh.body.who.name).toBe("Kestrel");
       expect(fresh.body.wont).toEqual([
         "Cannot initiate contact with other bots.",
         "Has no connected apps.",
