@@ -238,7 +238,7 @@ it("T1 records a person's turn as a root that runs and completes", () => scenari
 
 it("T2 parks the root on a credential card and runs it again with the provided line", () => scenario(async (f) => {
   f.script(f.clive.id,
-    { key: "C1", match: [SECRET_PROVIDED], reply: "T2-DONE: the model is set up." },
+    { key: "C1", match: [SECRET_PROVIDED], reply: "T2-DONE: thanks, the key came through." },
     { key: "C0", match: ["T2-JOB"], steps: [{ tool: "request_credential", arguments: { credential_id: "xaiApiKey", reason: "T2 fixture model" } }], reply: "T2-ASKED: waiting for the key." });
   const job = f.clive.activeTaskId;
   await f.say(f.clive.id, job, "T2-JOB: set up the Grok model; ask me for the key you need.");
@@ -267,7 +267,7 @@ it("T2 parks the root on a credential card and runs it again with the provided l
   await f.final(job, "T2-DONE");
   await expect.poll(() => f.roots()[0]?.status, { timeout: 15_000 }).toBe("completed");
   expect(f.roots()).toHaveLength(2);
-  expect(f.roots()[0]).toMatchObject({ id: parked.id, status: "completed", outcome: "done", executions: 2, result: "T2-DONE: the model is set up." });
+  expect(f.roots()[0]).toMatchObject({ id: parked.id, status: "completed", outcome: "done", executions: 2, result: "T2-DONE: thanks, the key came through." });
   expect(f.roots()[0].cards).toBeUndefined();
   expect(f.eventsOf(parked.id)).toEqual(expect.arrayContaining(["parked", "answered", "started", "settled"]));
   expect(f.turns(f.clive.id).map((record: any) => record.planKey)).toEqual(["C0", "C-TYPED", "C1"]);
