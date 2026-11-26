@@ -47,3 +47,13 @@ export function createGpuCrashWatch({ file, now = () => Date.now(), log = () => 
     },
   };
 }
+
+/** before the app is ready: hardware acceleration off when the GPU kept crashing, and every GPU crash from now counted */
+export function installGpuCrashFallback({ app, file, ending = () => false, log = () => {}, env = process.env }) {
+  if (gpuOffForCrashes({ file, env })) {
+    app.disableHardwareAcceleration();
+    log("gpu: hardware acceleration is off, the GPU process kept crashing");
+  }
+  const watch = createGpuCrashWatch({ file, log: (line) => { try { log(line); } catch { /* the log is not up yet */ } } });
+  app.on("child-process-gone", (_event, details) => { if (!ending()) watch.gone(details); });
+}

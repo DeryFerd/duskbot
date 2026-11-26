@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { createGpuCrashWatch, GPU_OFF_MS, GPU_WINDOW_MS, gpuOffForCrashes } from "./gpu-crash-fallback.mjs";
+import { EventEmitter } from "node:events";
+
+import { createGpuCrashWatch, GPU_OFF_MS, GPU_WINDOW_MS, gpuOffForCrashes, installGpuCrashFallback } from "./gpu-crash-fallback.mjs";
 
 const fileIn = () => join(mkdtempSync(join(tmpdir(), "gpu-")), "gpu-crashes.json");
 const gpu = (reason = "crashed", exitCode = 34) => ({ type: "GPU", reason, exitCode });
@@ -62,4 +64,20 @@ test("the GPU is tried again after a month, and DUSK_GPU=on or a broken file kee
   const watch = createGpuCrashWatch({ file, now: () => 300 });
   watch.gone(gpu());
   assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { crashes: [300], offSince: null });
+});
+
+test("installed before ready, it turns acceleration off for a launch after a crash loop, and counts crashes only while the app is not quitting", () => {
+  const file = fileIn();
+  const launch = (ending = false) => {
+    const app = Object.assign(new EventEmitter(), { off: 0, disableHardwareAcceleration() { this.off += 1; } });
+    installGpuCrashFallback({ app, file, ending: () => ending, env: {} });
+    return app;
+  };
+  const quitting = launch(true);
+  for (let i = 0; i < 3; i += 1) quitting.emit("child-process-gone", {}, gpu());
+  assert.equal(launch().off, 0, "crashes while quitting are not the GPU's fault");
+  const first = launch();
+  assert.equal(first.off, 0);
+  for (let i = 0; i < 3; i += 1) first.emit("child-process-gone", {}, gpu());
+  assert.equal(launch().off, 1);
 });

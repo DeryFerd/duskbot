@@ -17,8 +17,7 @@ import { installTalk, isTalkPanel } from "./talk-main.mjs";
 import { installVoiceInput } from "./voice-input-main.mjs";
 import { installAmbient, isAmbientWindow } from "./ambient-main.mjs";
 import { openBlankTerminal } from "./terminal-launch.mjs";
-import { linuxDisablesGpu } from "./linux-gpu.mjs";
-import { createGpuCrashWatch, gpuOffForCrashes } from "./gpu-crash-fallback.mjs";
+import { linuxDisablesGpu } from "./linux-gpu.mjs"; import { installGpuCrashFallback } from "./gpu-crash-fallback.mjs";
 import { pasteMenuItem } from "./paste-menu-item.mjs";
 import {
   appendDesktopCrashRecord,
@@ -221,7 +220,7 @@ if (process.platform === "linux") {
   app.setDesktopName("bot.dusk.app.desktop");
 }
 
-unlimitTunnelConnections(app);
+unlimitTunnelConnections(app); installGpuCrashFallback({ app, file: path.join(app.getPath("userData"), "gpu-crashes.json"), ending: () => appEnding(), log: line => slog(line) });
 
 // macOS dev app: its own keychain key. electron names the key "<app.name> Safe Storage" once this file has run
 // (electron_browser_main_parts.cc PostCreateMainMessageLoop), and the packaged app is "duskbot" too, so a key the dev
@@ -240,11 +239,6 @@ if (!app.isPackaged && process.platform === "darwin") {
   }
 }
 
-const GPU_CRASHES_FILE = path.join(app.getPath("userData"), "gpu-crashes.json");
-if (gpuOffForCrashes({ file: GPU_CRASHES_FILE })) {
-  app.disableHardwareAcceleration();
-  console.log("[desktop] hardware acceleration is off: the GPU process kept crashing");
-}
 
 if (!app.requestSingleInstanceLock()) {
   console.log("[desktop] dusk bot is already running: focusing that window");
@@ -457,8 +451,7 @@ const serverSupervisor = createServerSupervisor({
       });
     }
   },
-  onStopped() { slog("server process stopped by itself (exit 0); starting it again"); },
-  onCrash() { const exit = lastServerExit, props = crashProps("server", "crashed", { ending: appEnding(), exitCode: exit?.code }); if (props) productEvents.action("crash", props); if (!appEnding()) accountErrors.capture(new Error(`server process stopped (exit ${exitCodeText(exit?.code)})${exit?.problem ? `: ${exit.problem}` : ""}`)); },
+  onStopped() { slog("server process stopped by itself (exit 0); starting it again"); }, onCrash() { const exit = lastServerExit, props = crashProps("server", "crashed", { ending: appEnding(), exitCode: exit?.code }); if (props) productEvents.action("crash", props); if (!appEnding()) accountErrors.capture(new Error(`server process stopped (exit ${exitCodeText(exit?.code)})${exit?.problem ? `: ${exit.problem}` : ""}`)); },
   onUnavailable() {
     serverReady = false;
     serverProc = null;
@@ -561,8 +554,6 @@ const localOrHome = (channel, handler) => (event, ...args) => (homeWindow.homePa
 // an unpackaged run that opted in (the dev app against preview) says so in its version, so the admin can tell it apart
 const productEvents = createProductEvents({ origin: cloudTarget(process.env).origin, token: () => cloudAccount?.eventToken?.() ?? null, signedInSince: () => desktopPrefs?.signedInAt() ?? null, platform: process.platform, version: app.isPackaged ? app.getVersion() : `${app.getVersion()}+dev`,
   enabled: analyticsAllowed({ packaged: app.isPackaged, env: process.env, custom: cloudTarget(process.env).custom }) });
-const gpuCrashes = createGpuCrashWatch({ file: GPU_CRASHES_FILE, log: slog });
-app.on("child-process-gone", (_event, details) => { if (!appEnding()) gpuCrashes.gone(details); });
 for (const [kind, emitter] of [["page", "render-process-gone"], ["child", "child-process-gone"]]) {
   app.on(emitter, (...args) => { const details = args.at(-1); const props = crashProps(kind === "page" ? "page" : details?.type, details?.reason, { name: details?.name, ending: appEnding(), exitCode: details?.exitCode }); if (props) productEvents.action("crash", props); });
 }
