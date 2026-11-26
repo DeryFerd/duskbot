@@ -1031,7 +1031,10 @@ const playTurn = (prompt: JsonValue, late = false) => {
 
   if (process.env.FAKE_CLAUDE_ROOM_PLAN) {
     const progress = (text: string) => out({ type: "assistant", message: { content: [{ type: "text", text }] } });
-    void runRoomHandoffAgent(argv, process.env.FAKE_CLAUDE_ROOM_PLAN, prompt, undefined, progress, () => steered).then(text => {
+    const toolCall = (phase: "start" | "end", call: { id: string; tool: string; args: unknown; ok?: boolean; text?: string }) => out(phase === "start"
+      ? { type: "assistant", message: { content: [{ type: "tool_use", id: call.id, name: `mcp__agents__${call.tool}`, input: call.args }] } }
+      : { type: "user", message: { content: [{ type: "tool_result", tool_use_id: call.id, is_error: !call.ok, content: [{ type: "text", text: call.text ?? "" }] }] } });
+    void runRoomHandoffAgent(argv, process.env.FAKE_CLAUDE_ROOM_PLAN, prompt, undefined, progress, () => steered, toolCall).then(text => {
       replaySteered();
       const contextTokens = Number(process.env.FAKE_CLAUDE_CONTEXT_TOKENS);
       const usage = Number.isSafeInteger(contextTokens) && contextTokens > 0 ? { input_tokens: contextTokens, output_tokens: 5 } : undefined;

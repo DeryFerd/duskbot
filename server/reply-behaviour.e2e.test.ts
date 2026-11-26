@@ -44,7 +44,7 @@ it("remembers at once, learns only what the person said, forgets everywhere, and
   const cli = (...args: string[]) => runControlDusk([...args, "--url", fixture.info.url]) as Promise<any>;
   const turn = async (bot: { id: string; activeTaskId: string }, text: string, steps: Step[], reply: string) => {
     const before = evidence().length;
-    writeFileSync(planPath, JSON.stringify({ [bot.id]: { steps, reply } }));
+    writeFileSync(planPath, JSON.stringify({ [bot.id]: { steps, reply, streamTools: true } }));
     await cli("send", "--bot", bot.id, "--task", bot.activeTaskId, "--text", text);
     await expect.poll(() => evidence().length, { timeout: 20_000 }).toBe(before + 1);
     await cli("wait", "--bot", bot.id, "--task", bot.activeTaskId, "--timeout", "20");
