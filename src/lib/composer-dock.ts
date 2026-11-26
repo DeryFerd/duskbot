@@ -12,6 +12,16 @@ export function transcriptEndPad(composerHeightPx: number): string {
   return `calc(${height}px + ${TRANSCRIPT_GAP})`;
 }
 
+/** A call's bar, drawn over the chat's foot in the composer's place (VoiceCallBar.tsx); its own element, not the dock. */
+export const CALL_DOCK = ".voice-call-dock[data-call-surface]";
+
+/** What the transcript's end has to clear: the composer's dock, or a call's bar standing over it when that is taller. */
+export function dockClearance(dock: HTMLElement): number {
+  const own = dock.getBoundingClientRect().height;
+  const call = dock.closest("main")?.querySelector<HTMLElement>(`:scope > ${CALL_DOCK}`);
+  return Math.max(own, call ? call.getBoundingClientRect().height : 0);
+}
+
 /** The custom property the scroller carries with the composer's height on every frame of its spring. */
 export const DOCK_VAR = "--composer-dock";
 /** Marks an element inside the scroller whose own styles read DOCK_VAR. */
@@ -34,7 +44,7 @@ export function useComposerDockPad(ref: RefObject<HTMLElement | null>, scroller?
     const el = ref.current;
     if (!el) return;
     const apply = (mounting = false) => {
-      const live = el.getBoundingClientRect().height;
+      const live = dockClearance(el);
       const view = scrollerRef.current?.();
       if (view) {
         // near the end counts: a banner that lands while the chat is still settling onto its last row must not cover it
@@ -53,12 +63,26 @@ export function useComposerDockPad(ref: RefObject<HTMLElement | null>, scroller?
       // react keeps the height the pill is settling to, so it re-renders once instead of on every frame of the spring
       const pill = el.querySelector<HTMLElement>(".composer-pill");
       const settling = pill?.style.height ? parseFloat(pill.style.height) - pill.getBoundingClientRect().height : 0;
-      setHeight(live + (Number.isFinite(settling) ? settling : 0));
+      setHeight(Math.max(live, el.getBoundingClientRect().height + (Number.isFinite(settling) ? settling : 0)));
     };
     apply(true);
     const observer = new ResizeObserver(() => apply());
     observer.observe(el);
-    return () => observer.disconnect();
+    // a call's bar comes and goes beside the dock: watched while it is there, and measured as it arrives and leaves
+    const main = el.closest("main");
+    let call: Element | null = null;
+    const watchCall = () => {
+      const next = main?.querySelector(`:scope > ${CALL_DOCK}`) ?? null;
+      if (next === call) return;
+      if (call) observer.unobserve(call);
+      call = next;
+      if (call) observer.observe(call);
+      else apply();
+    };
+    watchCall();
+    const calls = main ? new MutationObserver(watchCall) : null;
+    calls?.observe(main!, { childList: true });
+    return () => { observer.disconnect(); calls?.disconnect(); };
   }, [ref]);
   const measured = height > 0 ? height : FALLBACK_COMPOSER_PX;
   return { pad: follows ? followedEndPad(measured) : transcriptEndPad(measured), height: measured };
