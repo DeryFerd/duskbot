@@ -6375,13 +6375,14 @@ describe("harness HTTP API", () => {
       stream = await openSse(`${BASE}/api/events`);
       await stream.until((frame) => frame.kind === "hello");
       expect((await api("POST", `/api/routines/${created.body.routine.id}/run`)).status).toBe(201);
+      const logged = stderr.length;
       await stream.until(
         (frame) =>
           frame.kind === "notify" &&
           frame.notification?.kind === "routine-failed" &&
           frame.notification?.botId === bot.id,
         hostTimeout(5_000),
-      );
+      ).catch((error: Error) => { throw new Error(`${error.message.slice(0, 300)}\nserver said meanwhile:\n${stderr.slice(logged).slice(-4000)}`); });
       const buzzes = stream.frames.filter(
         (frame: { kind?: string; notification?: { kind?: string; botId?: string } }) =>
           frame.kind === "notify" && frame.notification?.botId === bot.id,
