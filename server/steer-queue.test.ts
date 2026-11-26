@@ -929,7 +929,8 @@ describe("steer-queue e2e (fake ACP fleet)", () => {
     await until(async () => receipt() === undefined, "receipt settlement by the replacement's exact provider turn");
     const retried = await api("POST", `/api/bots/${bot.id}/messages`, body);
     expect(retried.body.message).toMatchObject({ queueId: queued.body.queueId, sendId: body.sendId });
-    expect(echoes(await botById(bot.id))).toHaveLength(2);
+    const settled = echoes(await botById(bot.id));
+    expect(settled, JSON.stringify(settled.map((message: any) => String(message.text).slice(0, 400)))).toHaveLength(2);
     evidence.push({ receiptGeneration: { queued, retried, final: await botById(bot.id) } });
   }, 30_000);
 
