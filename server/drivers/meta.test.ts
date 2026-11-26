@@ -151,3 +151,9 @@ describe("Meta provider", () => {
     } finally { recorder.stop(); }
   });
 });
+it("takes the Meta key only over https or loopback", () => {
+  expect(() => MetaDriver.decodeConfig({ url: "http://gateway.example.test/v1" })).toThrow("requires HTTPS");
+  expect(MetaDriver.decodeConfig({ url: "https://gateway.example.test/v1" }).url).toBe("https://gateway.example.test/v1");
+  expect(MetaDriver.decodeConfig({ url: "http://127.0.0.1:11434/v1" }).url).toBe("http://127.0.0.1:11434/v1");
+  expect(MetaDriver.decodeConfig({ url: "http://localhost:8080/v1" }).url).toBe("http://localhost:8080/v1");
+});
