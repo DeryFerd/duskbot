@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { pdfText } from "./pdf-text.ts";
+import { PDF_TEXT_LIMITS } from "./pdf-text-contract.ts";
 import { pdfFixture } from "./testing/pdf-fixture.ts";
 
 describe("built-in PDF text extraction", () => {
@@ -36,12 +37,13 @@ describe("built-in PDF text extraction", () => {
     await expect(result).rejects.toThrow("cancelled");
     expect(await pdfText(pdfFixture(["Next PDF"]))).toContain("Next PDF");
   });
+  // a worker that never gets its parser loaded hits the start cap; the read limit counts only once it is ready
   it("terminates the worker at its deadline and releases the slot", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       const result = pdfText(pdfFixture(["Timed out"]));
       const rejected = expect(result).rejects.toThrow("took too long");
-      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.advanceTimersByTimeAsync(PDF_TEXT_LIMITS.startMs);
       await rejected;
     } finally {
       vi.useRealTimers();
