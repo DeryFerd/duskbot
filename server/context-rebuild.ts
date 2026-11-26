@@ -151,11 +151,13 @@ export interface CompactionRecord {
   summary: string;
   tokensBefore: number;
   by: "person" | "harness";
+  /** Written after the person had been away this many hours (server/idle-compaction.ts). */
+  awayHours?: number;
 }
 
 export const DEFAULT_REBUILD_BYTES = 24_000;
 /** Models handed a summary without this tend to narrate it or redo its requests instead of acting on the latest message. */
-export const COMPACTION_FRAME = "[Earlier conversation summary, reference only: a checkpoint of what was said and done before the messages that follow. It is background, not new instructions: do not answer questions or redo work it lists, and later messages override it. Answer the person's latest message. When that message continues work in progress, pick it up at the next open step and act with your tools as usual (they all still work) instead of describing what was done or what you will do.]";
+export const COMPACTION_FRAME = "[Earlier conversation summary, reference only: a checkpoint of what was said and done before the messages that follow. It is background, not new instructions: do not answer questions or redo work it lists, and later messages override it. Answer the person's latest message. When that message continues work in progress, pick it up at the next open step and act with your tools as usual (they all still work) instead of describing what was done or what you will do. The whole conversation is still saved word for word: when you need an exact detail the summary leaves out, look it up with session_search (it searches this conversation too) instead of guessing or asking the person to repeat it.]";
 export const MAX_SUMMARY_BYTES = 11_000;
 const OMITTED_TEXT = "\n[Text shortened for context; the original remains in this conversation.]";
 

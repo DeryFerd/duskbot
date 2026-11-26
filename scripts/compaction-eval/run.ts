@@ -9,11 +9,11 @@ import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
 import { gatewayFromEnv } from "../memory-eval/sandbox.ts";
-import { CONTINUE, conversation, RECALL, type Turn } from "./conversation.ts";
+import { CONTINUE, conversation, RECALL, shiftNotes, type Turn } from "./conversation.ts";
 
 const { values } = parseArgs({ options: {
   repo: { type: "string" }, label: { type: "string" }, reps: { type: "string", default: "3" }, model: { type: "string", default: "gpt-6.2-sol" },
-  full: { type: "boolean", default: false }, out: { type: "string" },
+  full: { type: "boolean", default: false }, long: { type: "boolean", default: false }, out: { type: "string" },
 } });
 const repo = resolve(values.repo ?? process.cwd());
 const label = values.label ?? "run";
@@ -51,7 +51,9 @@ async function pool<T, R>(items: readonly T[], width: number, work: (item: T) =>
   return out;
 }
 
-const turns: Turn[] = conversation();
+// --long: every reply carries about 13 KB of shift notes, so the chat is about 600 KB (150k tokens), the size a real fold
+// has at the 200k threshold. The notes hold no fact any probe asks about.
+const turns: Turn[] = values.long ? conversation().map((turn, i) => ({ ...turn, assistant: `${turn.assistant}\n\n${shiftNotes(i)}` })) : conversation();
 const entries: Entry[] = turns.flatMap((turn, i) => [{ id: `u${i}`, role: "user" as const, text: turn.user }, { id: `a${i}`, role: "assistant" as const, text: turn.assistant }]);
 const FIRST_FOLD_AT = 26;
 
@@ -75,8 +77,9 @@ async function fold(context: Entry[], record: Record | undefined, recordAt: numb
   }
   let model = false;
   const started = Date.now();
+  // thorough: a fold off the person's time (warm, idle or asked for); a checkout without the option ignores it
   const summary: string = await summaryModule.draftSummary(point.folded, {
-    signal: new AbortController().signal, timeoutMs: 150_000, previous, archive, today: "2026-11-20",
+    signal: new AbortController().signal, timeoutMs: 150_000, previous, archive, today: "2026-11-20", thorough: true,
     generateText: async (prompt: string) => { const { content } = await chat([{ role: "user", content: prompt }]); model = Boolean(content.trim()); return content; },
   });
   const next: Record = { id: `c${recordAt}`, firstKeptId: point.firstKeptId, foldedThroughId, summary, tokensBefore: 0, by: "harness" };
@@ -161,7 +164,7 @@ for (let i = 1; i <= reps; i++) results.push(await rep(i, values.full!));
 const rate = (rows: Array<{ pass: boolean }>) => `${rows.filter((r) => r.pass).length}/${rows.length}`;
 const all = results.flatMap((r) => r.recall);
 const totals = {
-  label, model: values.model, reps, turns: turns.length,
+  label, model: values.model, reps, turns: turns.length, long: values.long, chatBytes: entries.reduce((n, e) => n + Buffer.byteLength(e.text), 0),
   earlyFactRecall: rate(all.filter((r) => r.early && !r.archiveOnly)),
   laterFactRecall: rate(all.filter((r) => !r.early)),
   archivedToolResultRecall: rate(all.filter((r) => r.archiveOnly)),

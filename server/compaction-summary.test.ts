@@ -1,6 +1,6 @@
-import { expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { EXCERPT_SUMMARY_HEADER } from "../shared/wire.ts";
-import { checkpointAnchors, checkpointPrompt, deterministicSummary, draftSummary, extractIdentifiers, foldPoint, personWords } from "./compaction-summary.ts";
+import { checkpointAnchors, checkpointChunks, checkpointPrompt, deterministicSummary, draftSummary, extractIdentifiers, foldPoint, personWords } from "./compaction-summary.ts";
 import type { ReplayEntry } from "./context-rebuild.ts";
 import { createSideJobs, type SideJobInstance, type SideJobsDeps } from "./side-jobs.ts";
 
@@ -192,4 +192,50 @@ it("a later fold carries the earlier checkpoint's quotes, identifiers and archiv
   expect(second).toContain("- src/test.ts");
   expect(second).toContain("- OPS-9912");
   expect(second).toContain("through-2.md: 3 tool results\n- /tmp/a/context-archive/through-8.md");
+});
+
+describe("a summary off the person's time", () => {
+  const big = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `m${i}`, role: (i % 2 ? "assistant" : "user") as "user" | "assistant", text: `${i % 2 ? "reply" : "ask"} ${i}: ${"x".repeat(9_000)}` }));
+
+  it("reads a long folded part in several calls, oldest first, each carrying the checkpoint so far", async () => {
+    const history = big(60); // about 540 KB, past one call's 160 KB
+    const prompts: string[] = [];
+    const generateText = async (prompt: string) => { prompts.push(prompt); return `## Goal\ncheckpoint ${prompts.length}`; };
+    const summary = await draftSummary(history, { signal: new AbortController().signal, generateText, thorough: true });
+    expect(prompts.length).toBe(checkpointChunks(history).length);
+    expect(prompts.length).toBeGreaterThan(2);
+    expect(prompts[0]).toContain("ask 0:");
+    expect(prompts[0]).not.toContain("Checkpoint of the earlier part");
+    expect(prompts[1]).toContain("Checkpoint of the earlier part of this same conversation");
+    expect(prompts[1]).toContain("checkpoint 1");
+    expect(prompts.at(-1)).toContain("reply 59:");
+    expect(summary).toContain(`checkpoint ${prompts.length}`);
+    // every part of the chat reached a call: the middle is not cut out
+    for (const i of [10, 25, 33, 47]) expect(prompts.some((prompt) => prompt.includes(`${i % 2 ? "reply" : "ask"} ${i}:`))).toBe(true);
+  });
+
+  it("at a turn's start reads one call's worth, the oldest and newest halves, as before", async () => {
+    const history = big(60);
+    const prompts: string[] = [];
+    await draftSummary(history, { signal: new AbortController().signal, generateText: async (prompt) => { prompts.push(prompt); return "## Goal\nx"; } });
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).not.toContain("ask 30:");
+  });
+
+  it("keeps the checkpoint so far when one part's call fails", async () => {
+    const history = big(60);
+    let call = 0;
+    const generateText = async () => { call++; if (call === 2) throw new Error("rate limited"); return `## Goal\npart ${call}`; };
+    const summary = await draftSummary(history, { signal: new AbortController().signal, generateText, thorough: true });
+    expect(summary).toContain(`part ${call}`);
+  });
+
+  it("puts the person's focus in the prompt, redacted and bounded", () => {
+    const prompt = checkpointPrompt([{ id: "1", role: "user", text: "hi" }], undefined, { focus: `the vendor emails and token sk-ant-api03-${"a".repeat(90)} ${"y".repeat(2_000)}` });
+    expect(prompt).toContain("named what matters most to them");
+    expect(prompt).toContain("the vendor emails");
+    expect(prompt).not.toContain("sk-ant-api03-aaaa");
+    expect(prompt.length).toBeLessThan(5_000);
+    expect(checkpointPrompt([{ id: "1", role: "user", text: "hi" }])).not.toContain("named what matters most");
+  });
 });
