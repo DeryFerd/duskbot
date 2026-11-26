@@ -10,7 +10,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { itemKey } from "../electron/cloud-send-parts.mjs";
-import { DEFAULT_BOT_NAME } from "../shared/default-bot.ts";
 import { launchCloudSendFixture, type CloudSendFixture } from "../scripts/testing/cloud-send-fixture.ts";
 import { startBrokerFake, type BrokerFake } from "./testing/broker-fake.ts";
 import { hostTimeout } from "./testing/host-timeout.ts";
@@ -139,8 +138,8 @@ it("lines My Cloud already held of this computer's become its owner's when the m
   await turn(local, lux, "Draft the launch memo.");
   // An older app's whole Send everything, which carried the chats too (a send of some items never does).
   const sent = (await fx.olderSend()).result;
-  // the built-in bot goes too since eb3b87157 posts its keep-an-eye suggestion in its chat; the cloud folds it into its own
-  expect(sent.bots.sort()).toEqual(["Kai", "Lux", DEFAULT_BOT_NAME].sort());
+  // the built-in bot posts no keep-an-eye card any more, so with no chat of its own it stays behind
+  expect(sent.bots.sort()).toEqual(["Kai", "Lux"]);
   expect(sent.chats?.messages, "the chats went with the bots").toBeGreaterThan(0);
   await asABringLeftThem([kai.threadId, lux.threadId]);
   for (const bot of [kai, lux]) {
