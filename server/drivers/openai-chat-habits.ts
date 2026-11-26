@@ -89,11 +89,21 @@ export function retryDelay(error: unknown, verdict: ErrorClassification, attempt
   // a 429 naming a wait within the minute is a per-minute limit, whatever its words call it (Gemini's free tier says
   // "You exceeded your current quota ... Please retry in 33s")
   const brief = verdict.reason === "quota" && typeof message === "string" && /\bHTTP 429\b/.test(message) && hinted !== undefined && hinted <= MAX_RETRY_WAIT_MS;
-  if ((!verdict.transient && !brief) || attempt >= RETRY_MAX_ATTEMPTS - 1) return null;
-  if (typeof asked === "number" && asked > MAX_RETRY_WAIT_MS) return null;
-  if (verdict.reason === "rate_limited" && typeof asked !== "number" && typeof named === "number" && named - Date.now() > MAX_RETRY_WAIT_MS) return null;
-  return Math.max(computeBackoff(attempt), brief || typeof asked === "number" ? Math.max(0, hinted!) : 0);
+  const spaced = SPACED_RETRIES[verdict.reason];
+  if ((!verdict.transient && !brief) || attempt >= (spaced?.length ?? RETRY_MAX_ATTEMPTS - 1)) return null;
+  if (hinted !== undefined && hinted > MAX_RETRY_WAIT_MS) return null;
+  const backoff = spaced ? jittered(spaced[attempt]!) : computeBackoff(attempt);
+  return Math.max(backoff, brief || hinted !== undefined ? Math.max(0, hinted!) : 0);
 }
+
+/** The waits before each further try for failures that clear on their own within the minute: a per-minute rate limit
+ * that names no wait, and a connection that dropped or never opened (a network still coming back after a wake). */
+const SPACED_RETRIES: Partial<Record<string, readonly number[]>> = {
+  rate_limited: [2_000, 8_000, 20_000],
+  connection_reset: [1_000, 3_000, 8_000],
+};
+
+const jittered = (ms: number) => Math.round(ms * (0.85 + Math.random() * 0.3));
 
 // gpt-oss's harmony tokens (`<|channel|>commentary to=functions.x <|constrain|>json<|message|>{...}<|call|>`), which a
 // provider whose parser missed them passes on as the reply's text

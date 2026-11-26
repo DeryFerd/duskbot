@@ -81,7 +81,14 @@ describe("retryDelay", () => {
   it("retries a transient failure within the attempts, waiting at least what the provider asked", () => {
     expect(retryDelay(new Error("429"), transient, 0)).toBeGreaterThan(0);
     expect(retryDelay(Object.assign(new Error("429"), { retryAfterMs: 20_000 }), transient, 0)).toBe(20_000);
-    expect(retryDelay(new Error("429"), transient, 2)).toBeNull();
+    expect(retryDelay(new Error("429"), transient, 3)).toBeNull();
+  });
+  it("spaces a rate limit's and a dropped connection's tries over about half a minute; other hiccups get two", () => {
+    expect(retryDelay(new Error("429"), transient, 2)).toBeGreaterThanOrEqual(17_000);
+    expect(retryDelay(new Error("fetch failed"), { transient: true, reason: "connection_reset" }, 2)).toBeGreaterThanOrEqual(6_800);
+    expect(retryDelay(new Error("fetch failed"), { transient: true, reason: "connection_reset" }, 3)).toBeNull();
+    expect(retryDelay(new Error("HTTP 503"), { transient: true, reason: "server_error" }, 1)).toBeGreaterThan(0);
+    expect(retryDelay(new Error("HTTP 503"), { transient: true, reason: "server_error" }, 2)).toBeNull();
   });
   it("never retries a terminal failure or one asking for a longer wait than a hiccup", () => {
     expect(retryDelay(new Error("401"), { transient: false, reason: "auth" }, 0)).toBeNull();

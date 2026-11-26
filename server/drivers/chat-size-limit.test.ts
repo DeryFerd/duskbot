@@ -215,8 +215,9 @@ describe("an OpenAI-compatible provider that refuses large requests", () => {
     const f = await provider(() => ({ status, body }));
     const done = await f.run({ transcript: transcript(20, 3_000) });
     expect(done).toMatchObject({ ok: false });
-    expect(f.requests).toHaveLength(status === 400 ? 1 : 3);
-    expect(f.retries()).toHaveLength(status === 400 ? 0 : 2);
+    // a rate limit is tried over about half a minute, other hiccups twice more
+    expect(f.requests).toHaveLength(status === 400 ? 1 : status === 429 ? 4 : 3);
+    expect(f.retries()).toHaveLength(status === 400 ? 0 : status === 429 ? 3 : 2);
     expect(new Set(f.requests.map((request) => request.bytes)).size).toBe(1);
     expect(f.errors()).toEqual([message]);
   });

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
+process.env.FAKE_CHAT_RETRY_SCALE = "0.001";
 import type { RuntimeEvent } from "../contracts.ts";
 import { recordEvents } from "../testing/events.ts";
 import { engineFailureKind } from "./engine-errors.ts";
