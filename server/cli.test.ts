@@ -7,7 +7,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { applyStartupPreferences, formatSessions, parseArgs, runAccess, runLogin, runOnboardingCommand, serverEntry, type CliOptions } from "./cli.ts";
+import { applyStartupPreferences, formatSessions, main, parseArgs, runAccess, runLogin, runOnboardingCommand, serverEntry, type CliOptions } from "./cli.ts";
 import { browserSignInLines, pairingBlock, qrToString } from "./cli-pairing.ts";
 import { commandHelp, USAGE } from "./cli-usage.ts";
 import { readAdminActivityRange } from "./admin-activity.ts";
@@ -23,6 +23,21 @@ const setup = vi.hoisted(() => ({ runSetup: vi.fn(), isSetupComplete: vi.fn(), r
 vi.mock("./cli-setup.ts", () => setup);
 
 describe("duskbot command line", () => {
+  it("update --help and version --help show that command's help, not unknown argument", async () => {
+    for (const command of ["update", "version"]) {
+      const out = vi.spyOn(console, "log").mockImplementation(() => {});
+      const err = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        expect(await main([command, "--help"])).toBe(0);
+        expect(out.mock.calls.flat().join("\n")).toContain(`duskbot ${command} [--check]`);
+        expect(err).not.toHaveBeenCalled();
+      } finally {
+        out.mockRestore();
+        err.mockRestore();
+      }
+    }
+  });
+
   it("parses commands and flags, and explains mistakes", () => {
     const serve = parseArgs(["serve", "--port", "9001", "--data-dir", "/tmp/x", "--label", "cab mini", "--tailscale", "--no-pair"], {});
     // --data-dir is resolved against the platform: C:\tmp\x on Windows.
