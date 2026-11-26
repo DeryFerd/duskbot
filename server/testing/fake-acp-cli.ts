@@ -408,6 +408,16 @@ if (argv[0] === "models" || argv.includes("--list-models")) {
 
 // ACP names the session in every update and request: the one whose request this answers, or the live one.
 const answering = new AsyncLocalStorage<string>();
+/** The session's MCP servers as `<dump>.mcp.json` (the last session's, whichever bot) and, where the agents server names
+ * its bot, also `<dump>.mcp.<bot id>.json`, which a test of one bot can read while other bots' sessions come and go. */
+function dumpMcp(servers: unknown, pretty = false) {
+  const text = JSON.stringify(servers, null, pretty ? 2 : undefined);
+  writeFileSync(`${process.env.FAKE_ACP_DUMP}.mcp.json`, text);
+  const agents = Array.isArray(servers) ? servers.find((server: { name?: string }) => server?.name === "agents") : undefined;
+  const botId = Array.isArray(agents?.env) ? agents.env.find((entry: { name?: string }) => entry?.name === "DUSK_BOT_ID")?.value : undefined;
+  if (typeof botId === "string" && /^[\w-]{1,64}$/.test(botId)) writeFileSync(`${process.env.FAKE_ACP_DUMP}.mcp.${botId}.json`, text);
+}
+
 const out = (obj: any) => {
   if ((obj?.method === "session/update" || obj?.method === "session/request_permission") && obj.params && obj.params.sessionId === undefined) {
     obj = { ...obj, params: { sessionId: answering.getStore() ?? liveSession ?? "fake-acp-session", ...obj.params } };
@@ -816,7 +826,7 @@ function handle(msg: any) {
       agentsMcp = mode === "list-peers" ? agentsMcp ?? offered : offered;
       sessionMcp = acceptedMcp(servers);
       if (process.env.FAKE_ACP_DUMP) {
-        writeFileSync(`${process.env.FAKE_ACP_DUMP}.mcp.json`, JSON.stringify(servers, null, 2));
+        dumpMcp(servers, true);
       }
       const opts = configOptions();
       const mdls = sessionModels();
@@ -864,7 +874,7 @@ function handle(msg: any) {
         agentsMcp ??= offeredAgents(msg.params?.mcpServers ?? []);
       }
       if (process.env.FAKE_ACP_DUMP) {
-        writeFileSync(`${process.env.FAKE_ACP_DUMP}.mcp.json`, JSON.stringify(msg.params?.mcpServers ?? []));
+        dumpMcp(msg.params?.mcpServers ?? []);
       }
       if (!cachedLiveLoad) sessionMcp = acceptedMcp(msg.params?.mcpServers ?? []);
       const opts = configOptions();
@@ -883,7 +893,7 @@ function handle(msg: any) {
         break;
       }
       if (process.env.FAKE_ACP_DUMP) {
-        writeFileSync(`${process.env.FAKE_ACP_DUMP}.mcp.json`, JSON.stringify(msg.params?.mcpServers ?? []));
+        dumpMcp(msg.params?.mcpServers ?? []);
       }
       const opts = configOptions();
       const mdls = sessionModels();

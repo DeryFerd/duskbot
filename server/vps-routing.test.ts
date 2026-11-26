@@ -5,7 +5,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import {
   BASE_IMAGE_DIGEST,
@@ -20,6 +20,7 @@ import { VPS_CONTAINER_LABEL, VPS_IMAGE, VPS_MANAGED_LABEL, VPS_VIEWER_LABEL, vp
 import { CONTROL_BUSY, CONTROL_REFUSAL_PLAIN, controlRefusal, createControlClient } from "./control-client.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { teamComputerOwner } from "./team-computers.ts";
+import { PIDS_LIMIT } from "./container-limits.ts";
 import { workerPort } from "./testing/worker-port.ts";
 import { BOT_DESKTOP_IMAGE, BOT_DESKTOP_LABEL, BOT_DESKTOP_MODE_LABEL, BOT_DESKTOP_NETWORK, BOT_DESKTOP_VERSION } from "../shared/bot-desktop.ts";
 
@@ -83,7 +84,8 @@ function containerInspectTemplate(): string {
         Memory: 4 * 1024 * 1024 * 1024,
         MemorySwap: 4 * 1024 * 1024 * 1024,
         NanoCpus: 2_000_000_000,
-        PidsLimit: 512,
+        // today's cap: a desktop made under the old 512 gets a one-time `docker update`, whichever test inspects it first
+        PidsLimit: PIDS_LIMIT,
         CapDrop: ["ALL"],
         CapAdd: ["CAP_SETUID", "CAP_SETGID"],
         Privileged: false,
@@ -113,7 +115,9 @@ if [ -f "$FAKE_DOCKER_DIR/hold" ]; then
   while [ -f "$FAKE_DOCKER_DIR/hold" ]; do sleep 0.05; done
 fi
 case "$*" in
-  *" run "*) rm -f "$FAKE_DOCKER_DIR/container-missing" ;;
+  *" run "*)
+    # container-missing holds "missing" (every container) or the one name that is missing
+    if [ "$(cat "$FAKE_DOCKER_DIR/container-missing" 2>/dev/null)" = "missing" ] || printf '%s' "$*" | grep -qF -- "--name $(cat "$FAKE_DOCKER_DIR/container-missing" 2>/dev/null) "; then rm -f "$FAKE_DOCKER_DIR/container-missing"; fi ;;
   *" start "*) sed 's/"Running":false/"Running":true/' "$FAKE_DOCKER_DIR/container.json.tpl" > "$FAKE_DOCKER_DIR/container.next"; mv "$FAKE_DOCKER_DIR/container.next" "$FAKE_DOCKER_DIR/container.json.tpl" ;;
   *" container ls "*)
     alias=$(printf '%s' "$2" | sed 's|ssh://||')
@@ -146,8 +150,8 @@ case "$*" in
   *" exec "*"rm -f"*) : ;;
   *" rm -f "*) : ;;
   *" inspect "*)
-    if [ -f "$FAKE_DOCKER_DIR/container-missing" ]; then echo "No such container" >&2; exit 1; fi
     for arg in "$@"; do name="$arg"; done
+    if [ -f "$FAKE_DOCKER_DIR/container-missing" ] && { [ "$(cat "$FAKE_DOCKER_DIR/container-missing")" = "missing" ] || [ "$(cat "$FAKE_DOCKER_DIR/container-missing")" = "$name" ]; }; then echo "No such container" >&2; exit 1; fi
     alias=$(printf '%s' "$2" | sed 's|ssh://||')
     if [ -f "$FAKE_DOCKER_DIR/container.name.$alias" ]; then printf '%s' "$name" > "$FAKE_DOCKER_DIR/container.name.$alias"; else printf '%s' "$name" > "$FAKE_DOCKER_DIR/container.name"; fi
     sed "s|__NAME__|$name|g" "$FAKE_DOCKER_DIR/container.json.tpl" ;;
@@ -165,6 +169,7 @@ posixOnly("VPS turn routing e2e (fake ACP fleet + fake docker over SSH)", () => 
   let askerGate: string;
   let askerDump: string;
   let dockerLog: string;
+  const installBots = new Set<string>();
 
   type ApiBody = Record<string, unknown>;
 
@@ -272,7 +277,23 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
       if (child.exitCode !== null) throw new Error(`server exited ${child.exitCode}. stderr:\n${stderr}`);
       await new Promise((r) => setTimeout(r, 150));
     }
+    for (const bot of (await api("GET", "/api/bots?messages=0")).body.bots as Array<{ id: string }>) installBots.add(bot.id);
   }, 40_000);
+
+  // Every test starts with no bot left from the one before: a bot still running (a switched turn, a queued wake) or still
+  // set up for a VPS otherwise takes the shared fake engine's dump, the fake docker state and the computer lock from the
+  // next test, which then fails or passes by timing.
+  afterEach(async () => {
+    writeFileSync(gateFile, "open");
+    writeFileSync(askerGate, "open");
+    // the install's own bot (the Chief of Staff, which cannot be deleted) is no test's
+    const bots = async () => ((await api("GET", "/api/bots?messages=0")).body.bots as Array<{ id: string; busy?: boolean }>)
+      .filter((bot) => !installBots.has(bot.id));
+    for (const bot of await bots()) await api("POST", `/api/bots/${bot.id}/interrupt`, {});
+    await until(async () => (await bots()).every((bot) => !bot.busy), "every test bot's turn to end");
+    for (const bot of await bots()) await api("DELETE", `/api/bots/${bot.id}`);
+    await until(async () => (await bots()).length === 0, "every test bot to be deleted");
+  }, 60_000);
 
   afterAll(async () => {
     await waitForExit(child, { signal: "SIGTERM" });
@@ -530,14 +551,19 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
       const original = readFileSync(template, "utf8");
       try {
         if (state === "stopped") writeFileSync(template, original.replace('"Running":true', '"Running":false'));
-        else if (state === "missing") writeFileSync(missing, "missing");
+        // only this bot's container is missing: an earlier case's bot that wakes now must not make it exist
+        else if (state === "missing") writeFileSync(missing, vpsContainerName(bot.id));
         writeFileSync(join(dirname(dockerLog), "container.name"), vpsContainerName(bot.id));
         rmSync(gateFile, { force: true }); rmSync(`${acpDump}.mcp.json`, { force: true });
         await api("PATCH", `/api/bots/${bot.id}`, { browser: false, cloudBackend: "vps", computer: null, autoStartVps: false,
           modelSelection: { instanceId: "vps", model: "fake-model" } });
         expect((await api("POST", `/api/bots/${bot.id}/messages`, { text: "Open Chrome on the available remote VM" })).status).toBe(202);
-        await until(async () => existsSync(`${acpDump}.mcp.json`), "the discovery turn");
-        const first = JSON.parse(readFileSync(`${acpDump}.mcp.json`, "utf8"));
+        // every session on the shared fake engine writes the plain dump (an earlier case's bot waking, a side job), so this
+        // reads the copy kept for this bot's own sessions
+        const ownDump = `${acpDump}.mcp.${bot.id}.json`;
+        const turnTools = () => { try { return JSON.parse(readFileSync(ownDump, "utf8")) as Array<{ name: string; args?: string[]; env?: Array<{ name: string; value: string }> }>; } catch { return null; } };
+        await until(async () => turnTools() !== null, "the discovery turn");
+        const first = turnTools()!;
         if (state === "stopped-during-turn") {
           expect(first.find((tool: { name: string }) => tool.name === "computer")).toBeTruthy();
           writeFileSync(template, original.replace('"Running":true', '"Running":false'));
@@ -550,13 +576,15 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
         const selected = await fetch(`${BASE}/api/internal/computer/select`, { method: "POST",
           headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ surface: "auto" }) });
         expect(await selected.json()).toMatchObject({ status: "pending", surface: "cloud" });
-        rmSync(`${acpDump}.mcp.json`, { force: true });
+        rmSync(ownDump, { force: true });
         const before = readFileSync(dockerLog, "utf8").length;
         writeFileSync(gateFile, "open");
-        await until(async () => existsSync(`${acpDump}.mcp.json`) && !(await botById(bot.id))?.busy, "the switched VPS turn");
-        const next = JSON.parse(readFileSync(`${acpDump}.mcp.json`, "utf8"));
+        await until(async () => turnTools() !== null && !(await botById(bot.id))?.busy, "the switched VPS turn");
+        const next = turnTools()!;
         expect(next.find((tool: { name: string }) => tool.name === "computer")?.args).toContain("production-vps");
-        const commands = readFileSync(dockerLog, "utf8").slice(before);
+        const commands = readFileSync(dockerLog, "utf8").slice(before).split("\n")
+          // a start names the container by id, which every fixture container shares; a run names it, so another bot's run is not this one's
+          .filter((line) => line.includes(" start ") || line.includes(vpsContainerName(bot.id))).join("\n");
         expect(commands).toContain(state === "missing" ? " run " : " start ");
         expect(commands).not.toMatch(/ssh:\/\/production-vps (?:pull|build) /);
         if (state !== "missing") expect(commands).not.toContain(" run ");
@@ -833,6 +861,8 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
       const routineMessages = (await api("GET", `/api/threads/${completed.threadId}/messages?limit=100`)).body.messages;
       expect(routineMessages.some((message: any) => message.text?.includes("a sandboxed computer on the user's own VPS"))).toBe(true);
 
+      // a run reads completed a beat before its turn lets the VPS go; this checks the guard for the computers left behind
+      await until(async () => !(await botById(bot.id))?.busy, "the routine's turn to let the VPS go");
       const released = await api("PUT", "/api/config", { vps: { sshAlias: "other-vps" } });
       expect(released.status, JSON.stringify(released.body)).toBe(409);
       expect(released.body.error).toMatch(/remove.*VPS computers/i);
