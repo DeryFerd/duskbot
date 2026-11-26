@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -10,6 +11,8 @@ import { describe, expect, it } from "vitest";
 const run = promisify(execFile);
 const source = (await readFile(new URL("../install.sh", import.meta.url), "utf8")).replace(/\nmain "\$@"\s*$/, "\n");
 const env = { PATH: `${dirname(process.execPath)}:/usr/bin:/bin`, TERM: "dumb" };
+// the cut-off is coreutils timeout, which every Linux server has; a Mac before macOS 26 has none on this PATH
+const hasTimeout = ["/usr/bin/timeout", "/bin/timeout"].some((path) => existsSync(path));
 const setup = `
 TMP=$1
 PROGRESS=$TMP/progress
@@ -243,9 +246,10 @@ fetch https://link.example/docker-gate.mjs "$TMP/gate.mjs"
 `, async ({ dir, run: execute }) => { const r = await execute(); return { stdout: r.stdout, calls: await readFile(join(dir, "calls"), "utf8") }; });
     expect(out.stdout).toContain("attempt 1/5 failed (exit 35); retrying over ipv4 in 2 seconds");
     const curls = out.calls.trim().split("\n");
-    expect(curls[0]).not.toContain("-4");
+    // flags as words: the temp folder's random name can hold "-4" too
+    expect(curls[0].split(" ")).not.toContain("-4");
     expect(curls[1]).toBe("sleep 2");
-    expect(curls.slice(2).every((line) => line.startsWith("curl -4"))).toBe(true);
+    expect(curls.slice(2).every((line) => line.startsWith("curl -4 "))).toBe(true);
     expect(curls).toHaveLength(4);
   });
 
@@ -338,7 +342,7 @@ do_engines && echo engines-ok
     expect(out).toContain("engines-ok");
   });
 
-  it("cuts off a free backup install that never finishes, once, and keeps going", async () => {
+  it.runIf(hasTimeout)("cuts off a free backup install that never finishes, once, and keeps going", async () => {
     const started = Date.now();
     const { out, calls, sub } = await fixture(`
 SVC_HOME=$TMP/home

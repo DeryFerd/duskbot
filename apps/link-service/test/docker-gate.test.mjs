@@ -561,7 +561,8 @@ describe("docker gate self-check", () => {
   });
 });
 
-describe("docker gate over unix sockets", () => {
+// POSIX only: the gate runs on Linux servers and listens on a unix socket with a 0660 mode; Windows has no such sockets
+describe.skipIf(process.platform === "win32")("docker gate over unix sockets", () => {
   let dir, docker, gate, logs;
 
   beforeEach(async () => {
