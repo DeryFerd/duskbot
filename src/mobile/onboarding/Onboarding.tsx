@@ -348,6 +348,7 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
   };
   const cameraLine = cameraDenied ? (
     <ErrorLine action={platform.camera?.openSettings ? <button type="button" data-camera-settings="" onClick={() => void platform.camera?.openSettings?.()} className="mobile-press -ms-2 mt-1 flex min-h-11 items-center rounded-full px-2 text-[15px] font-semibold text-ink underline underline-offset-2">{t("mobile.onboarding.openSettings")}</button> : null}>
+      <span className="block font-semibold">{t("mobile.onboarding.deniedTitle")}</span>
       {t("mobile.onboarding.deniedBody")}
     </ErrorLine>
   ) : null;
@@ -559,7 +560,8 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
         {step === "scan" && (
           <Scanner key="scan" platform={platform} busy={busy}
             onCode={(text) => void redeem(text, "scan")}
-            onClose={() => go(home)} onEnterCode={() => go("code")} onPaste={() => go("paste")} />
+            onClose={() => go(home)} onEnterCode={() => go("code")} onPaste={() => go("paste")}
+            onDenied={() => { haptic("error"); go(home); setCameraDenied(true); }} />
         )}
       </AnimatePresence>
     </main>
