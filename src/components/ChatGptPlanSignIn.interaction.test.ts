@@ -99,6 +99,6 @@ it.each([undefined, "google-original"])("adds a named account, then hands its id
   expect(fixture.api).toHaveBeenCalledWith(`/api/instances/${antigravityInstanceId ? "antigravity" : "chatgpt"}-accounts`, { method: "POST", body: JSON.stringify({ displayName: "Work", ...(antigravityInstanceId ? { sourceInstanceId: antigravityInstanceId } : {}) }) });
   expect(fixture.api).toHaveBeenCalledOnce();
   expect(fixture.dispatch).toHaveBeenCalledWith({ type: "instances", instances: accounts });
-  expect(onAdded).toHaveBeenCalledWith("chatgpt-second");
+  expect(onAdded).toHaveBeenCalledWith("chatgpt-second", "Work");
   expect(fixture.openExternal).not.toHaveBeenCalled();
 });
