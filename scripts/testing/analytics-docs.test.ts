@@ -34,11 +34,11 @@ describe("docs/analytics.md", () => {
 
   it("says it is on by default and how to turn it off, says the phone app sends none, and names no third-party SDK", () => {
     const docs = read("docs/analytics.md");
-    expect(docs).toMatch(/on on a new\s+install \(an opt-out\)/);
-    expect(docs).toMatch(/turn it off at any time/);
+    expect(docs).toMatch(/on by default \(an opt-out\)/);
+    expect(docs).toMatch(/Turning either off stops it/);
     expect(docs).toMatch(/phone app sends none/i);
     expect(docs).not.toMatch(/posthog|\bfork\b/i);
-    expect(read("README.md")).toMatch(/on until you turn off "help improve dusk bot"/);
+    expect(read("README.md")).toMatch(/on until you turn off "help improve dusk bot"/i);
   });
 
   const harness = async () => {

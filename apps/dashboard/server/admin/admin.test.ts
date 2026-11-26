@@ -416,12 +416,12 @@ describe("admin panel api", () => {
       expect(sink.all.some(event => event.accountId === id)).toBe(true);
       expect((await call("/v1/account/analytics", { method: "PUT", body: { optOut: true }, cookie, csrf: false })).status).toBe(403);
       const out = await call("/v1/account/analytics", { method: "PUT", body: { optOut: true }, cookie });
-      expect(await out.json()).toEqual({ optOut: true });
+      expect(await out.json()).toEqual({ optOut: true, notes: false, askUsage: false });
       expect(sink.all.some(event => event.accountId === id)).toBe(false);
       await call("/v1/events", { cookie, body: { events: [{ name: "onboarding_done" }] } });
       await settle();
       expect(sink.all.some(event => event.accountId === id)).toBe(false);
-      expect(await (await call("/v1/account/analytics", { cookie })).json()).toEqual({ optOut: true });
+      expect(await (await call("/v1/account/analytics", { cookie })).json()).toEqual({ optOut: true, notes: false, askUsage: false });
       await call("/v1/account/analytics", { method: "PUT", body: { optOut: false }, cookie });
       await call("/v1/events", { cookie, body: { events: [{ name: "onboarding_done" }] } });
       await settle();
