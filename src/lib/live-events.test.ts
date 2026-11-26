@@ -391,6 +391,29 @@ describe("live events supervisor", () => {
   });
 });
 
+describe("a page put in the back/forward cache", () => {
+  it("closes its stream as it leaves, without reporting a lost connection, and resumes where it was when shown again", () => {
+    const test = harness();
+    const onError = vi.fn();
+    const stop = openLiveEvents({ since: "ab12cd34:9", onFrame: vi.fn(), onSnapshotRequired: async () => true, onError }, test.platform);
+    test.sources[0].message({ kind: "hello", cursor: "ab12cd34:10", resumed: true });
+    test.sources[0].message({ kind: "message" }, "ab12cd34:11");
+
+    test.windowTarget.emit("pagehide");
+    expect(test.sources[0].close).toHaveBeenCalledOnce();
+    expect(test.sources).toHaveLength(1);
+    expect(onError).not.toHaveBeenCalled();
+
+    test.windowTarget.emit("pageshow");
+    expect(test.sources).toHaveLength(2);
+    expect(test.sources[1].url).toMatch(/^\/api\/events\?since=ab12cd34%3A11(&|$)/);
+
+    stop();
+    expect(test.windowTarget.count("pagehide")).toBe(0);
+    expect(test.windowTarget.count("pageshow")).toBe(0);
+  });
+});
+
 describe("a phone that moved to another route", () => {
   it("dials its open stream again over the new route without reporting a lost connection", () => {
     const test = harness();
