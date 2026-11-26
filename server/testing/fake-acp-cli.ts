@@ -16,7 +16,8 @@
 //     | interleave (message, tool, message, tool, message) | no-session-config (set_mode/set_model answer -32601)
 //     | ask-peer | delegate-peer | chief-delegate | create-peer (coordinate_bots through the injected agents
 //       MCP; FAKE_ACP_REDELEGATE_FILE, FAKE_ACP_TASKID_FILE; a hand-off result wake gets a fixed line)
-//     | echo-gated (echo the whole prompt; hold until FAKE_ACP_GATE_FILE exists) | safe-agent-reads
+//     | echo-gated (echo the whole prompt; hold until FAKE_ACP_GATE_FILE exists; FAKE_ACP_ECHO_QUOTED=1 quotes each echoed
+//       line with "> ", so the host reads the echoed instructions as a quote, not as the bot saying it did them) | safe-agent-reads
 //     | stall-after-text | stall-after-tool (then silent forever) | slow-tool (silent for FAKE_ACP_TOOL_MS, or until
 //       FAKE_ACP_TOOL_GATE exists when set; FAKE_ACP_TOOL_OUTPUT is the text its running call shows meanwhile)
 //     | quiet-then-answer (silent for FAKE_ACP_QUIET_MS; with QWEN_HOME, append FAKE_ACP_QWEN_LOG lines to
@@ -1398,7 +1399,8 @@ function handle(msg: any) {
       }
       if (mode === "echo-gated") {
         const finish = () => {
-          out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: `echo: ${promptText}` } } } });
+          const echoed = process.env.FAKE_ACP_ECHO_QUOTED === "1" ? promptText.split("\n").map((line) => `> ${line}`).join("\n") : promptText;
+          out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: `echo: ${echoed}` } } } });
           complete();
         };
         const gate = process.env.FAKE_ACP_GATE_FILE;

@@ -825,7 +825,7 @@ describe("steer-queue e2e (fake ACP fleet)", () => {
           },
           steerReceipt: {
             driver: "grokAgent",
-            environment: { FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: receiptGate },
+            environment: { FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: receiptGate, FAKE_ACP_ECHO_QUOTED: "1" },
             config: { cli: FAKE_CLI, fullAuto: true },
           },
           // Wait for session/prompt to be in flight: an earlier interrupt is a no-op on a turn the driver has not registered.
