@@ -9,7 +9,8 @@ import { VOICE_RULES } from "./group-voice.ts";
 
 const EM = String.fromCharCode(0x2014);
 const POLL = { timeout: 30_000, interval: 50 };
-const casualGuide = readFileSync(new URL("./prompts/talking-style/casual.md", import.meta.url), "utf8").trim();
+// the guide sits under the prompt's "How you talk", so its headings go one level down
+const casualGuide = readFileSync(new URL("./prompts/talking-style/casual.md", import.meta.url), "utf8").trim().replace(/^(#+) /gm, "#$1 ");
 
 it("puts the person's talking style and the voice rules in every turn type, and cleans what bots write", async () => {
   const dir = mkdtempSync(join(tmpdir(), "dusk-group-voice-"));
