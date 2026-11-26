@@ -24,7 +24,11 @@ const MACHINE_CODE = /^[a-z][a-z0-9_]*$/;
 /** A failed response's own error message, then its machine code, else the raw body. */
 export function httpErrorDetail(body: string, limit = 500): string {
   let json: ProviderBody | undefined;
-  try { json = object(JSON.parse(body)); } catch { json = undefined; }
+  try {
+    const parsed: unknown = JSON.parse(body);
+    // Gemini's OpenAI-compatible endpoint answers an error as a one-element list of its error envelope
+    json = object(Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed);
+  } catch { json = undefined; }
   const message = json ? providerError(json) : null;
   if (!message || message === "unknown error") return body.slice(0, limit);
   const code = object(json?.error)?.code;

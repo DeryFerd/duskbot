@@ -243,7 +243,7 @@ describe("falling back mid-turn to the bot's backup AI", () => {
     const limited = await fixture((_body, response) => refuse(response, 429, "Rate limit exceeded"));
     await limited.start({ approvalMode: "full", chatBackups: () => [backup.backup] });
     expect(await limited.completed()).toMatchObject({ ok: true });
-    expect(limited.requests).toHaveLength(3);
+    expect(limited.requests).toHaveLength(4);
     expect(backup.seen).toHaveLength(1);
     const alone = await fixture((_body, response) => refuse(response, 429, "Rate limit exceeded"));
     await alone.start({ approvalMode: "full" });
@@ -658,7 +658,7 @@ describe("optional built-in question compatibility", () => {
     [422, { error: { code: "unsupported_parameter", param: "tools", message: "Unsupported request parameter." } }],
     [400, { error: "tools are not supported by this model" }],
     [400, { error: { message: "Unrecognized parameter: 'tools'" } }],
-  ])("retries a plain turn once without optional questions after explicit HTTP %s rejection", async (status, error) => {
+  ])("retries a plain turn without optional questions after explicit HTTP %s rejection, and sends that model none again", async (status, error) => {
     const f = await fixture((_body, response, round) => {
       if (round === 1) {
         response.writeHead(status as number, { "content-type": "application/json" });
@@ -675,14 +675,13 @@ describe("optional built-in question compatibility", () => {
     f.recorder.events.length = 0;
     await f.start({ integrations: undefined });
     expect(await f.completed()).toMatchObject({ ok: true });
-    expect(f.requests[2].tools?.map(tool => tool.function.name)).toEqual(["ask_user"]);
+    expect(f.requests).toHaveLength(3);
+    expect(f.requests[2]).not.toHaveProperty("tools");
   });
 
   it.each([
     [401, unsupported], [403, unsupported], [429, unsupported], [500, unsupported],
     [400, { error: { message: "Invalid API key; tools are not supported." } }],
-    [400, { error: { message: "Invalid schema for tools[0].function.parameters." } }],
-    [400, { error: { message: "Unsupported parameter: tools[0].function.parameters." } }],
     [400, { error: { code: "unsupported_parameter", param: "temperature", message: "Unsupported parameter: temperature" } }],
     [400, { error: { message: "Invalid request body." } }],
     [404, { error: { message: "Unknown model." } }],
@@ -694,11 +693,24 @@ describe("optional built-in question compatibility", () => {
     });
     await f.start({ integrations: undefined });
     expect(await f.completed()).toMatchObject({ ok: false });
-    expect(f.requests).toHaveLength(status === 429 || status === 500 ? 3 : 1);
+    expect(f.requests).toHaveLength(status === 429 ? 4 : status === 500 ? 3 : 1);
     for (const request of f.requests) expect(request.tools?.map(tool => tool.function.name)).toEqual(["ask_user"]);
   });
 
-  it("retries a network failure the same way and never strips tools mounted by the person", async () => {
+  it.each([
+    "Invalid schema for tools[0].function.parameters.",
+    "Unsupported parameter: tools[0].function.parameters.",
+  ])("resends a tool schema refusal (%s) in the strict dialect, then without the tool it names, then fails plainly", async (message) => {
+    const f = await fixture((_body, response) => {
+      response.writeHead(400, { "content-type": "application/json" });
+      response.end(JSON.stringify({ error: { message } }));
+    });
+    await f.start({ integrations: undefined });
+    expect(await f.completed()).toMatchObject({ ok: false });
+    expect(f.requests.map((request) => request.tools?.map(tool => tool.function.name) ?? [])).toEqual([["ask_user"], ["ask_user"], []]);
+  });
+
+  it("retries a network failure without touching the tools, and answers without tools a model that takes none", async () => {
     for (const network of [false, true]) {
       const f = await fixture((_body, response) => {
         if (network) return response.destroy(new Error("tools are not supported"));
@@ -707,8 +719,11 @@ describe("optional built-in question compatibility", () => {
       });
       await f.start(network ? { integrations: undefined } : {});
       expect(await f.completed()).toMatchObject({ ok: false });
-      expect(f.requests).toHaveLength(network ? 3 : 1);
-      if (!network) expect(f.requests[0].tools?.some(tool => tool.function.name === "audit_write")).toBe(true);
+      expect(f.requests).toHaveLength(network ? 4 : 2);
+      if (!network) {
+        expect(f.requests[0].tools?.some(tool => tool.function.name === "audit_write")).toBe(true);
+        expect(f.requests[1]).not.toHaveProperty("tools");
+      }
       expect(f.effects()).toEqual([]);
     }
   });
