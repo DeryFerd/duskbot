@@ -2,9 +2,10 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 /** grok's transcript system event: a centered 12/16 line of quiet labels and chips. */
-export function EventLine({ children, className, ...rest }: { children: ReactNode; className?: string } & Record<`data-${string}`, string | undefined>) {
+export function EventLine({ children, className, role, ...rest }: { children: ReactNode; className?: string; role?: "status" } & Record<`data-${string}`, string | undefined>) {
   return (
     <div
+      role={role}
       {...rest}
       data-event-line=""
       className={cn("flex min-h-6 w-full min-w-0 items-center justify-center gap-0.5 text-[12px] leading-4 tracking-[0.01em] text-ink-secondary", className)}

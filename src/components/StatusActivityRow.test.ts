@@ -60,6 +60,7 @@ describe("stopped row", () => {
   it("says one quiet word, whoever stopped it", () => {
     act(() => root.render(createElement(CancelledTurnRow, { name: PERSON_STOPPED_TURN_NAME })));
     expect(host.textContent).toBe("Stopped");
+    expect(host.querySelector('[role="status"][data-event-line]')).not.toBeNull();
     act(() => root.render(createElement(CancelledTurnRow, { name: STOPPED_TURN_NAME })));
     expect(host.textContent).toBe("Stopped");
   });

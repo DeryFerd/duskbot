@@ -426,7 +426,7 @@ describe("thread control placement", () => {
     ];
     try {
       const markup = renderToStaticMarkup(createElement(ChatView, { bot: { ...bot, busy: false, messages } }));
-      expect(markup).toContain('data-mid="recovery"><div role="status" data-transcript-note=""');
+      expect(markup).toContain('data-mid="recovery"><div role="status" data-transcript-note="" data-event-line=""');
       expect(markup).not.toContain("data-chat-error");
       expect(markup).toContain(explanation);
       expect(markup).not.toContain(`recovery: ${explanation}`);
@@ -447,7 +447,7 @@ describe("thread control placement", () => {
     ];
     try {
       const markup = renderToStaticMarkup(createElement(ChatView, { bot: { ...bot, busy: false, messages } }));
-      expect(markup).toMatch(/data-mid="notice"[^>]*><div role="status" data-transcript-note=""/);
+      expect(markup).toMatch(/data-mid="notice"[^>]*><div role="status" data-transcript-note="" data-event-line=""[^>]*justify-center/);
       expect(markup.match(/no longer offers/g)).toHaveLength(1);
       expect(markup).not.toContain(`notice: ${explanation}`);
       if (!showToolCalls) expect(markup).not.toContain('data-testid="tool-activity"');
