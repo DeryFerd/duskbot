@@ -12,6 +12,7 @@ describe("claimedDeeds", () => {
     ["I've booked the dentist for Thursday at 10.", ["schedule"]],
     ["I've created a reminder for 2:15.", ["schedule"]],
     ["Your Acme Robotics briefing is ready. The call is with Lena.", ["save"]],
+    ["I sent it to Grace when the draft was ready.", ["send"]],
   ])("hears %s", (text, deeds) => {
     expect(claimedDeeds(text)).toEqual(deeds);
   });
@@ -23,6 +24,8 @@ describe("claimedDeeds", () => {
     "The notes are below.",
     "I can save this to your notes if you want.",
     "Once you say yes, I'll book it.",
+    "The request was cancelled by the client.",
+    "Current time when this message was sent: Thursday, 2026-11-26 20:03 Asia/Calcutta.",
   ])("hears no claim in %s", (text) => {
     expect(claimedDeeds(text)).toEqual([]);
   });
