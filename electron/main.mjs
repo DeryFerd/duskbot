@@ -18,6 +18,7 @@ import { installVoiceInput } from "./voice-input-main.mjs";
 import { installAmbient, isAmbientWindow } from "./ambient-main.mjs";
 import { openBlankTerminal } from "./terminal-launch.mjs";
 import { linuxDisablesGpu } from "./linux-gpu.mjs";
+import { createGpuCrashWatch, gpuOffForCrashes } from "./gpu-crash-fallback.mjs";
 import { pasteMenuItem } from "./paste-menu-item.mjs";
 import {
   appendDesktopCrashRecord,
@@ -239,6 +240,11 @@ if (!app.isPackaged && process.platform === "darwin") {
   }
 }
 
+const GPU_CRASHES_FILE = path.join(app.getPath("userData"), "gpu-crashes.json");
+if (gpuOffForCrashes({ file: GPU_CRASHES_FILE })) {
+  app.disableHardwareAcceleration();
+  console.log("[desktop] hardware acceleration is off: the GPU process kept crashing");
+}
 
 if (!app.requestSingleInstanceLock()) {
   console.log("[desktop] dusk bot is already running: focusing that window");
@@ -555,6 +561,8 @@ const localOrHome = (channel, handler) => (event, ...args) => (homeWindow.homePa
 // an unpackaged run that opted in (the dev app against preview) says so in its version, so the admin can tell it apart
 const productEvents = createProductEvents({ origin: cloudTarget(process.env).origin, token: () => cloudAccount?.eventToken?.() ?? null, signedInSince: () => desktopPrefs?.signedInAt() ?? null, platform: process.platform, version: app.isPackaged ? app.getVersion() : `${app.getVersion()}+dev`,
   enabled: analyticsAllowed({ packaged: app.isPackaged, env: process.env, custom: cloudTarget(process.env).custom }) });
+const gpuCrashes = createGpuCrashWatch({ file: GPU_CRASHES_FILE, log: slog });
+app.on("child-process-gone", (_event, details) => { if (!appEnding()) gpuCrashes.gone(details); });
 for (const [kind, emitter] of [["page", "render-process-gone"], ["child", "child-process-gone"]]) {
   app.on(emitter, (...args) => { const details = args.at(-1); const props = crashProps(kind === "page" ? "page" : details?.type, details?.reason, { name: details?.name, ending: appEnding(), exitCode: details?.exitCode }); if (props) productEvents.action("crash", props); });
 }
