@@ -553,6 +553,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
       // a text-only answer after a failed tool that does not say what failed, while rounds to fix it remain: it is not shown; the next answer is
       const correcting = (done: Completion) => toolFailed && !done.toolCalls.length && !denials.length && !turnEntry.ending && correctiveRounds < correctiveMax && !ownsFailure(done.text);
       const denials: string[] = [], failedCalls: string[] = [];
+      let failedChange = false, okCalls = 0;
       const seenCalls = new Set<string>();
       let nudges = 0, effectful = 0, toolsRan = 0, toolFailedEver = false, claimNudged = false, lastReply = "";
       const said: string[] = [];
@@ -730,7 +731,8 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
                 messages.push(assistantReply(carrier?.model ?? model, completion, reply), { role: "user", content: CORRECTIVE_ROUND });
                 continue;
               }
-              if (denials.length || !ownsFailure(reply)) {
+              const onlyLookupsFailed = !failedChange && okCalls > 0 && !claimsUnmadeChange(reply, effectful);
+              if (denials.length || !(ownsFailure(reply) || onlyLookupsFailed)) {
                 stopReason = "tool_error"; lastReply = reply;
                 throw new ChatProtocolError(toolFailureMessage(failedCalls, denials.filter((name) => name !== ASK_USER_TOOL)));
               }
@@ -766,7 +768,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
           }
           if (seenCalls.size > MAX_TURN_TOOL_CALLS) throw stoppedAfter(`${MAX_TURN_TOOL_CALLS} tool calls`);
           messages.push(assistantReply(carrier?.model ?? model, completion, completion.text || null, completion.toolCalls));
-          if (!denials.length) { toolFailed = false; failedCalls.length = 0; }
+          toolFailed = denials.length > 0; failedCalls.length = 0; failedChange = false;
           const screenshotParts: ChatContentPart[] = [];
           const session = tools;
           const executeCall = async (call: ChatToolCall) => {
@@ -791,7 +793,6 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
                 });
                 started = true;
                 if (!questions) {
-                  denials.push(ASK_USER_TOOL);
                   result = { ok: false, text: "The ask_user arguments are malformed: pass a JSON object with a questions array of one to six questions, each with a question string and at most twelve options carrying a label. Ask again with valid arguments." };
                 } else {
                   const answer = await approval.question(ASK_USER_TOOL, askQuestionSummary(questions), questions);
@@ -853,7 +854,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
             full: () => (turn.approvalModeNow?.() ?? turn.approvalMode) === "full", covered: approval.covered, execute: executeCall })) {
             for (const { call, result, text, title, skipRepeatCount } of results) {
               const repeatNote = skipRepeatCount ? undefined : repeats.noteAfter(call.function.name, call.function.arguments, result), shown = skipRepeatCount ? text : repeats.shown({ id: call.id, name: call.function.name, args: call.function.arguments }, result, text, messages);
-              toolsRan += 1; if (!result.ok) { toolFailed = true; toolFailedEver = true; failedCalls.push(title); } else if (effectfulCall(call.function.name, call.function.arguments)) effectful += 1; gates.ran(call.function.name, call.function.arguments, result.ok, text, title);
+              toolsRan += 1; if (!result.ok) { toolFailed = true; toolFailedEver = true; failedCalls.push(title); failedChange ||= call.function.name === ASK_USER_TOOL || effectfulCall(call.function.name, call.function.arguments); } else { okCalls += 1; if (effectfulCall(call.function.name, call.function.arguments)) effectful += 1; } gates.ran(call.function.name, call.function.arguments, result.ok, text, title);
               messages.push({ role: "tool", tool_call_id: call.id, content: repeats.record(call.id, JSON.stringify({ ok: result.ok, result: repeatNote ? `${shown}\n\n${repeatNote}` : shown })) });
               screenshotParts.push(...chatToolImages(call.id, result.images));
             }

@@ -1015,13 +1015,15 @@ describe.each<Provider>(["openai-compat", "grok", "minimax"])("%s structured too
     expect(await f.instance.adapter.respondToRequest(f.threadId, opened.requestId!, { behavior: "answer", message: "late" })).toBe("unavailable");
   }, 20_000);
 
-  it("denies a malformed ask_user call with teaching text instead of opening a card", async () => {
+  it("answers a malformed ask_user call with teaching text instead of opening a card, as a failed call and not a denial", async () => {
     const f = await fixture((_body, response, round) => {
       if (round === 1) sse(response, [chunk({ content: null, tool_calls: [toolCall("ask_user", '{"questions":[]}', "call_ask")] }, "tool_calls")]);
       else answer(response, "The question was not asked.");
     }, provider);
     await f.start();
-    expect(await f.completed()).toMatchObject({ ok: false, denials: ["ask_user"] });
+    const completed = await f.completed();
+    expect(completed).toMatchObject({ ok: true });
+    expect((completed as any).denials).toBeUndefined();
     expect(f.recorder.events.some((event) => event.type === "request.opened")).toBe(false);
     expect(JSON.parse(String(f.requests[1].messages.at(-1)?.content))).toMatchObject({
       ok: false,
