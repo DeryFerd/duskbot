@@ -451,6 +451,7 @@ const serverSupervisor = createServerSupervisor({
       });
     }
   },
+  onStopped() { slog("server process stopped by itself (exit 0); starting it again"); },
   onCrash() { const exit = lastServerExit, props = crashProps("server", "crashed", { ending: appEnding(), exitCode: exit?.code }); if (props) productEvents.action("crash", props); if (!appEnding()) accountErrors.capture(new Error(`server process stopped (exit ${exitCodeText(exit?.code)})${exit?.problem ? `: ${exit.problem}` : ""}`)); },
   onUnavailable() {
     serverReady = false;

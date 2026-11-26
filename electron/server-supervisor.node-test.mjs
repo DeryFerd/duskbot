@@ -77,6 +77,25 @@ test("crash clears readiness immediately, backs off, and exhausts a bounded budg
   assert.equal(f.children.length, 4);
 });
 
+test("a ready server ending with code 0 is started again but is not a crash; any other code is", async (t) => {
+  const crashes = [], stops = [];
+  const f = fixture(t, { onCrash: (code) => crashes.push(code), onStopped: (code) => stops.push(code) });
+  const first = f.spawn();
+  f.supervisor.ready(first);
+  // windows ends a killed utility process with 0, and the server's own graceful shutdown exits 0
+  first.emit("exit", 0);
+  assert.deepEqual(crashes, []);
+  assert.deepEqual(stops, [0]);
+  await f.tick(10);
+  const second = f.children.at(-1);
+  assert.notEqual(second, first, "recovery still starts it again");
+  assert.deepEqual(f.events.at(-1), ["ready", second]);
+  second.emit("exit", 3221225477);
+  second.emit("exit", 1);
+  assert.deepEqual(crashes, [3221225477]);
+  assert.deepEqual(stops, [0]);
+});
+
 test("only a stable ready uptime resets the recovery budget", async (t) => {
   const f = fixture(t);
   f.supervisor.ready(f.spawn());
