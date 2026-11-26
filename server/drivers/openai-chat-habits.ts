@@ -169,10 +169,12 @@ export class LeakHoldback {
 }
 
 const FAILURE_WORDS = /\b(?:could(?:n['’]t| not)|can(?:['’]t|not)|did(?:n['’]t| not)|was(?:n['’]t| not)|is(?:n['’]t| not) (?:connected|available|set up)|failed|unable|not connected|nothing (?:was|went|got)|no (?:access|connection)|blocked|refused|went wrong)\b/i;
+// the languages the app ships in, plus French, Portuguese and Italian, said the plain way a model reports a step that broke
+const FAILURE_WORDS_MORE = /\b(?:(?:returned|got|hit|gave|threw) an error|an error (?:came back|occurred)|errored|timed out|ran into (?:a |an )?(?:problem|issue|error)|had trouble|unfortunately|(?:is|was|are|were) (?:currently )?unavailable|access denied|no pude|no se pudo|no he podido|fall[óo](?![a-z])|error al|konnte\b[^.!?\n]{0,60}\bnicht|fehlgeschlagen|je n['’]ai pas pu|impossible de|a échoué|não consegui|não foi possível|falhou|non (?:sono riuscit[oa]|è stato possibile|ho potuto)|non riesco)/i;
 
 /** a reply that tells the person a step failed and does not claim it worked: a failure card under it would say it twice */
 export function ownsFailure(reply: string): boolean {
-  return FAILURE_WORDS.test(reply) && !claimsUnmadeChange(reply, 0);
+  return (FAILURE_WORDS.test(reply) || FAILURE_WORDS_MORE.test(reply)) && !claimsUnmadeChange(reply, 0);
 }
 
 const REPEAT_MIN = 20;

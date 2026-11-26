@@ -167,6 +167,28 @@ describe("ownsFailure", () => {
     expect(ownsFailure("Done.")).toBe(false);
     expect(ownsFailure("I've posted it, though the preview failed to load.")).toBe(false);
   });
+
+  it.each([
+    "The search returned an error, so I don't have today's prices yet.",
+    "The calendar request timed out; try again in a minute.",
+    "I ran into a problem reading the sheet: it says access denied.",
+    "Unfortunately the page is unavailable right now.",
+    "I wasn't able to open the file.",
+    "I had trouble reaching Slack, so the summary below is from email only.",
+    "No pude enviar el correo: Gmail no está conectado.",
+    "La búsqueda falló, así que no tengo los precios.",
+    "Ich konnte die Datei nicht öffnen.",
+    "Das Senden ist fehlgeschlagen.",
+    "Je n'ai pas pu envoyer le message.",
+    "Não consegui abrir a planilha.",
+    "Non sono riuscito a inviare l'email.",
+  ])("reads a failure said in other words or another language: %s", (reply) => {
+    expect(ownsFailure(reply)).toBe(true);
+  });
+
+  it.each(["Here are today's three meetings.", "Listo, aquí tienes el resumen.", "Erledigt.", "No problem, here is the summary."])("does not read a plain answer as a failure: %s", (reply) => {
+    expect(ownsFailure(reply)).toBe(false);
+  });
 });
 
 describe("withoutRepeats", () => {
