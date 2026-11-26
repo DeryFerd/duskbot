@@ -12,10 +12,17 @@ export type ServerUpdatePhase = "idle" | "checking" | "up-to-date" | "available"
  * the old bundle (the version About shows), so a current server alone doesn't make the page up to date. A reload only
  * helps a page older than its server: a server that names an older version would ask for a reload forever.
  */
-export function serverCheckPhase(check: ServerUpdateCheck, bundle = appVersion()): ServerUpdatePhase {
+export function serverCheckPhase(check: ServerUpdateCheck, bundle = appVersion(), appBuild = desktopAppBuild()): ServerUpdatePhase {
   if (check.available) return "available";
   if (check.install === "desktop" || check.install === "managed") return "up-to-date";
+  // the desktop app shows its own build for every server: a reload brings back the same build, only the app's update helps
+  if (appBuild && appBuild === bundle) return "up-to-date";
   return bundle !== "dev" && compareVersions(check.current, bundle) > 0 ? "reload" : "up-to-date";
+}
+
+/** the desktop app's version when this page runs inside it */
+function desktopAppBuild(): string | null {
+  return typeof window !== "undefined" ? window.duskDesktop?.app?.version ?? null : null;
 }
 
 /** `otherServer`: the name of the server the desktop app's window shows when it isn't this computer's own; its update is

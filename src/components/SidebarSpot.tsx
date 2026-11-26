@@ -22,8 +22,9 @@ import { UpdatedLine } from "./UpdatedLine";
 
 const DOWNLOAD_PAGE = "https://dusk.bot/download";
 
+/** this app's own updater, wherever main gives this page one (electron/preload.cjs) */
 function ownBridge() {
-  return window.duskDesktop?.remoteClient?.active === true ? undefined : window.duskDesktop?.appUpdate;
+  return window.duskDesktop?.appUpdate;
 }
 
 function restartInto(bridge: AppUpdateBridge, setRestarting: (on: boolean) => void) {

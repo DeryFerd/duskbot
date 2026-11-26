@@ -28,6 +28,7 @@ export function installUpdateFakes(params: URLSearchParams, own = "0.2.31") {
   const server = params.get("server") ?? "current";
   const check = server === "managed" ? { current: own, install: "managed", available: false }
     : server === "desktop" ? { current: own, install: "desktop", available: false }
+    : server === "newer" ? { current: "0.2.32", install: "npm", available: false, latest: "0.2.32" }
     : server === "behind" ? { current: "0.2.29", install: "docker", available: true, latest: own, releaseUrl: `https://github.com/DuskBotAI/duskbot/releases/tag/v${own}`, command: "docker compose pull dusk && docker compose up -d" }
     : { current: own, install: "docker", available: false, latest: own, releaseUrl: `https://github.com/DuskBotAI/duskbot/releases/tag/v${own}`, command: "docker compose pull dusk && docker compose up -d" };
   const changelog = params.get("changelog") === "0" ? null : SAMPLE_CHANGELOG;

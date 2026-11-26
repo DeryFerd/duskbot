@@ -22,7 +22,9 @@ interface Shot { name: string; phone?: boolean; query: string; steps?: string[];
 const SHOTS: Shot[] = [
   { name: "01-desktop-settings-current", query: "app=current&server=desktop", ready: "[data-settings-open='app-update']" },
   { name: "02-desktop-settings-downloading", query: "app=downloading&server=desktop", ready: "[data-settings-open='app-update']" },
-  { name: "03-desktop-settings-remote-server-behind", query: "app=remote&server=behind", ready: "[data-settings-open='server-update']" },
+  { name: "18-desktop-remote-client-ready", query: "app=remote-ready&server=newer", wait: 2500 },
+  { name: "19-desktop-place-ready", query: "app=place-ready&server=newer", wait: 2500 },
+  { name: "20-desktop-place-current", query: "app=place&server=newer", wait: 2500 },
   { name: "04-desktop-settings-no-changelog", query: "app=current&server=desktop&changelog=0", ready: "[data-settings-open='app-update']" },
   { name: "05-desktop-whats-new", query: "app=current&server=desktop", ready: "[data-settings-open='whats-new']", steps: [`document.querySelector("[data-settings-open='whats-new']").click()`], wait: 900 },
   { name: "06-desktop-after-update-line", query: "updated=0.2.31&from=0.2.30&server=desktop", wait: 2500 },
@@ -78,7 +80,7 @@ try {
   try {
     for (const shot of SHOTS) for (const dark of [false, true]) {
       if (only && !only.test(shot.name)) continue;
-      if (dark && !/0[13578]|11|13|17/.test(shot.name.slice(0, 2))) continue;
+      if (dark && !/0[13578]|11|13|17|18|19/.test(shot.name.slice(0, 2))) continue;
       const file = join(shots, `${shot.name}${dark ? "-dark" : ""}${suffix}.png`);
       const base = shot.phone ? phone.previewUrl : desk.previewUrl;
       const skin = shot.phone ? (dark ? "&scheme=dark" : "&scheme=light") : (dark ? "&skin=grok-dark" : "&skin=grok");

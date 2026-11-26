@@ -1,5 +1,6 @@
 // Settings > Updates as the desktop app shows it, against a fixture server, with main's updater and the update answers
-// faked (scripts/testing/updates-ui-fakes.ts). ?app=current|downloading|ready|remote, ?updated=<version> (the first launch
+// faked (scripts/testing/updates-ui-fakes.ts). ?app=current|downloading|ready|remote|remote-ready|place|place-ready (remote:
+// paired as a client of another server; place: a server of the person's own open in the window), ?updated=<version> (the first launch
 // after an update: the sidebar spot's line), ?skin=. Served only by scripts/verify-updates-ui.ts.
 import { useEffect } from "react";
 import { createRoot } from "react-dom/client";
@@ -27,13 +28,14 @@ installUpdateFakes(params);
 const app = params.get("app") ?? "current";
 const updated = params.get("updated");
 if (updated) localStorage.setItem("dusk-whats-new:desktop", params.get("from") ?? "0.2.30");
-const state = app === "ready" ? { ready: "0.2.32", mode: "self" }
+const remote = app.startsWith("remote"), place = app.startsWith("place");
+const state = app.endsWith("ready") ? { ready: "0.2.32", mode: "self" }
   : app === "downloading" ? { ready: null, available: "0.2.32", progress: 0.42, mode: "self" }
   : { ready: null, mode: "self", ...(updated ? { updated } : {}) };
 window.duskDesktop = {
   platform: "darwin",
-  app: { version: "0.2.31", ownPage: app !== "remote" },
-  ...(app === "remote" ? { remoteClient: { active: true } } : {}),
+  app: { version: "0.2.31", ownPage: !place },
+  ...(remote ? { remoteClient: { active: true } } : {}),
   getCapabilities: async () => initialDesktopCapabilities(),
   appUpdate: {
     state: async () => state,

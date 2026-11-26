@@ -40,7 +40,8 @@ import "../styles/settings.css";
 
 export { openBotSettings, openSettings, settingsLocation, SETTINGS_PANES, type SettingsLocation, type SettingsPane } from "@/lib/open-settings";
 
-const REMOTE_SECTIONS: readonly AppSettingsSection[] = ["appearance", "companion", "desktopWorkspaces", "looks", "voice"];
+// a client of another server still updates this app itself (Updates)
+const REMOTE_SECTIONS: readonly AppSettingsSection[] = ["appearance", "companion", "desktopWorkspaces", "looks", "voice", "updates", "about"];
 
 const RAIL_GLYPH: Record<SettingsPane, SettingGlyphName> = {
   general: "gear", voice: "mic", texting: "bubble", computer: "laptop", permissions: "shield", vault: "key",
@@ -131,7 +132,7 @@ export function SettingsModal() {
   offered.permissions = offered.botAccess || offered.activity;
   const has = (id: AppSettingsSection) => offered[id] && (!remoteActive || REMOTE_SECTIONS.includes(id));
 
-  const paneShown = (pane: SettingsPane) => (pane !== "texting" || phoneAppEnabled()) && (!remoteActive || pane === "general" || pane === "voice" || pane === "texting" || pane === "computer");
+  const paneShown = (pane: SettingsPane) => (pane !== "texting" || phoneAppEnabled()) && (!remoteActive || pane === "general" || pane === "voice" || pane === "texting" || pane === "computer" || pane === "updates");
   const panes = SETTINGS_PANES.filter((pane) => paneShown(pane.id) && pane.sections.some(has));
   const advancedPages = ADVANCED_PAGES.filter((page) => page.sections.some(has)).map((page) => page.id);
 

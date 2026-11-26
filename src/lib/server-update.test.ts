@@ -114,3 +114,12 @@ describe("the update row for another server the app shows", () => {
     }
   });
 });
+
+describe("inside the desktop app", () => {
+  it("never asks for a reload that brings back the same build: the app's own update is what helps", () => {
+    const newer = { current: "0.2.28", install: "npm" as const, available: false };
+    expect(serverCheckPhase(newer, "0.2.26", "0.2.26")).toBe("up-to-date");
+    expect(serverCheckPhase(newer, "0.2.26", null)).toBe("reload");
+  });
+});
+

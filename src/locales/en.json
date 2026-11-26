@@ -10291,5 +10291,6 @@
   "mobile.updates.copy": "Copy",
   "mobile.updates.copied": "Copied",
   "mobile.updates.apkLine": "{app} {version} is out.",
-  "mobile.updates.notNow": "Not now"
+  "mobile.updates.notNow": "Not now",
+  "settings.updates.server": "Server"
 }

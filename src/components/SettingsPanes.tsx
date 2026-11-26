@@ -19,7 +19,7 @@ import type { LocaleKey } from "@/locales";
 import { productName } from "../lib/brand";
 import { AccountsSheet, useAccounts } from "./AccountMenu";
 import { AboutDialog } from "./AboutDialog";
-import { AppVersionRow } from "./AppVersionRow";
+import { AppVersionRow, showsOtherServer } from "./AppVersionRow";
 import { WhatsNewDialog } from "./WhatsNewDialog";
 import { AdminOnly } from "./AdminOnly";
 import { AmbientRows } from "./AmbientSettingsRows";
@@ -358,18 +358,15 @@ function ServerUpdatesRow() {
     : entry.phase === "available" ? t(entry.check?.compose?.supported ? "settings.updates.updateNow" : "settings.simple.updates.seeRelease")
     : entry.phase === "reload" ? t("settings.simple.updates.reload")
       : entry.phase === "checking" ? t("common.checking") : t("settings.updates.check");
-  const title = entry.check?.install === "docker" ? t("settings.updates.serverVersion", { version: entry.check.current }) : versionTitle();
+  // beside this app's own row (another server's page) it is named as the server, so the two never read alike
+  const other = showsOtherServer();
+  const title = entry.check && (other || entry.check.install === "docker") ? t("settings.updates.serverVersion", { version: entry.check.current })
+    : other ? t("settings.updates.server") : versionTitle();
   return <>
     <NavRow data-settings-open="server-update" title={title} hint={status} value={action} drill={false} disabled={entry.item.disabled} onClick={entry.item.onSelect} />
     {entry.toggleAutomatic && <SwitchRow title={t("settings.updates.automaticServer")} checked={entry.check?.compose?.automatic === true}
       disabled={entry.item.disabled} onChange={entry.toggleAutomatic} />}
   </>;
-}
-
-/** in a window showing another computer's server: this app's own version above that server's */
-function RemoteAppVersionRow() {
-  const version = window.duskDesktop?.remoteClient?.active === true ? window.duskDesktop.app?.version : undefined;
-  return version ? <ItemRow data-settings-row="app-version" title={t("settings.updates.appVersion", { app: productName(), version })} /> : null;
 }
 
 /** What's new: this app's release notes (changelog.json); with none to show, the changelog page on dusk.bot */
@@ -391,7 +388,6 @@ export function UpdatesPane() {
     <>
       <SettingsGroup label={t("settings.grok.group.version")} block="updates">
         <SettingsRows>
-          <RemoteAppVersionRow />
           <AppVersionRow fallback={<ServerUpdatesRow />} />
           <WhatsNewRow />
         </SettingsRows>

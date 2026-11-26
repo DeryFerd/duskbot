@@ -7,8 +7,15 @@ import type { AppUpdateBridge, AppUpdateState } from "../../electron/app-update.
 import { productName } from "../lib/brand";
 import { ItemRow, NavRow } from "./ListRows";
 
+/** this app's own updater: main hands it to this computer's page (also while it is a client of another server), My Cloud's
+ * home page, and a place of the person's own open in the window */
 function ownBridge() {
-  return window.duskDesktop?.app?.ownPage === false || window.duskDesktop?.remoteClient?.active === true ? undefined : window.duskDesktop?.appUpdate;
+  return window.duskDesktop?.appUpdate;
+}
+
+/** the page shows a server other than this app's own: the app's row is named as the app, and the server keeps its own row */
+export function showsOtherServer(): boolean {
+  return window.duskDesktop?.app?.ownPage === false || window.duskDesktop?.remoteClient?.active === true;
 }
 
 /**
@@ -16,10 +23,8 @@ function ownBridge() {
  * (or a Linux AppImage) checks, downloads and restarts here, and always says how a check went; a source checkout says it is a dev build.
  * Anything else (a .deb, a server's page, the browser) keeps `fallback`, the server's check.
  */
-export function AppVersionRow({ fallback, bridge = ownBridge() }: { fallback: ReactNode; bridge?: AppUpdateBridge }) {
+export function AppVersionRow({ fallback, bridge = ownBridge(), other = showsOtherServer() }: { fallback: ReactNode; bridge?: AppUpdateBridge; other?: boolean }) {
   const [update, setUpdate] = useState<AppUpdateState | null>(bridge ? null : { ready: null, mode: "notice" });
-  const [asked, setAsked] = useState<"checking" | "done" | null>(null);
-  const [restarting, setRestarting] = useState(false);
   useEffect(() => {
     if (!bridge) return;
     let active = true;
@@ -33,8 +38,16 @@ export function AppVersionRow({ fallback, bridge = ownBridge() }: { fallback: Re
     return <ItemRow data-settings-row="app-version" title={t("appUpdate.devTitle", { app: productName() })} hint={t("appUpdate.devHint")} />;
   }
   if (update.mode !== "self" || !bridge) return <>{fallback}</>;
+  // on another server's page the app's update is its own row, and that server's update stays beside it
+  if (other) return <><OwnAppRow bridge={bridge} update={update} other />{fallback}</>;
+  return <OwnAppRow bridge={bridge} update={update} other={false} />;
+}
 
-  const title = `${productName()} ${appVersion()}`;
+function OwnAppRow({ bridge, update, other }: { bridge: AppUpdateBridge; update: AppUpdateState; other: boolean }) {
+  const [asked, setAsked] = useState<"checking" | "done" | null>(null);
+  const [restarting, setRestarting] = useState(false);
+  const version = window.duskDesktop?.app?.version ?? appVersion();
+  const title = other ? t("settings.updates.appVersion", { app: productName(), version }) : `${productName()} ${version}`;
   const ready = update.ready;
   if (ready) {
     const restart = () => {
