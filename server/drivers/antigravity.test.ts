@@ -1821,7 +1821,8 @@ describe("Antigravity background waits", () => {
     const completed = await recorder!.until((event) => event.turnId === turnId && event.type === "turn.completed", 3_000);
     expect(Date.now() - stoppedAt).toBeLessThan(2_000);
     expect(completed).toMatchObject({ ok: true, stopReason: "cancelled" });
-    expect(rpc()).toContain("session/cancel");
+    // the turn ends as session/cancel is sent; the fake writes down what it received when that line reaches it
+    await vi.waitFor(() => expect(rpc()).toContain("session/cancel"), { timeout: 2_000, interval: 25 });
     expect(said()).toEqual(["I have scheduled a one-shot timer to fire in 45 seconds. Standing by until it wakes me."]);
   });
 });

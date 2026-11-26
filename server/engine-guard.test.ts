@@ -1,5 +1,5 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir, userInfo } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, expect, it } from "vitest";
@@ -37,7 +37,8 @@ it("lets the read-only probes through, and an engine that is not installed fail 
 it("guards a server whose data folder is temporary, never an installed one, unless a live check allows real engines", () => {
   expect(fixtureServer({ DUSK_DATA_DIR: fixtureHome })).toBe(true);
   expect(fixtureServer({ DUSK_DATA_DIR: fixtureHome, DUSK_ALLOW_REAL_ENGINES: "1" })).toBe(false);
-  expect(fixtureServer({ DUSK_DATA_DIR: join(homedir(), ".duskbot") })).toBe(false);
+  // the account's real home: the suite's setup points HOME at a throwaway folder under the temp root
+  expect(fixtureServer({ DUSK_DATA_DIR: join(userInfo().homedir, ".duskbot") })).toBe(false);
   expect(fixtureServer({})).toBe(false);
 });
 
