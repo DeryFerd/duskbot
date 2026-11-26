@@ -12,8 +12,9 @@ const MARK = "X-Dusk-AppImage=true";
 const CONTROL = /[\u0000-\u001f\u007f]/;
 
 export function menuEntryPaths({ home, env = {} }) {
-  const data = env.XDG_DATA_HOME && path.isAbsolute(env.XDG_DATA_HOME) ? env.XDG_DATA_HOME : path.join(home, ".local", "share");
-  return { entry: path.join(data, "applications", ENTRY_NAME), icon: path.join(data, "icons", "hicolor", "scalable", "apps", "bot.dusk.app.svg") };
+  // XDG paths on a Linux desktop: always POSIX, whichever host computes them
+  const data = env.XDG_DATA_HOME && path.posix.isAbsolute(env.XDG_DATA_HOME) ? env.XDG_DATA_HOME : path.posix.join(home, ".local", "share");
+  return { entry: path.posix.join(data, "applications", ENTRY_NAME), icon: path.posix.join(data, "icons", "hicolor", "scalable", "apps", "bot.dusk.app.svg") };
 }
 
 /**

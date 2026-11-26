@@ -300,7 +300,7 @@ test("the agent's key line allows one forced command and nothing else, and leave
     const file = join(dir, ".ssh", "authorized_keys");
     setDirectKey(ID, null, file);
     setDirectKey(ID, line, file);
-    assert.equal(statSync(file).mode & 0o777, 0o600);
+    if (process.platform !== "win32") assert.equal(statSync(file).mode & 0o777, 0o600);
     writeFileSync(file, `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOWNERS person@laptop\n${readFileSync(file, "utf8")}`);
     setDirectKey(ID, line.replace(publicKey, newDirectKey().publicKey), file);
     const lines = readFileSync(file, "utf8").trim().split("\n");

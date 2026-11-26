@@ -7,12 +7,16 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { Agent, fetch as loopbackFetch } from "undici";
 
 import { createLinkService } from "../apps/link-service/src/app.mjs";
 import { jsonFile } from "./desktop-prefs.mjs";
 import { createPhoneRelay, installPhoneRelay, phoneRelayStore, proxyFromResolved, systemProxy } from "./phone-relay.mjs";
 import { createTunnelProxy, sealKeyOf, sha256hex, x25519Pair } from "./vps-link-protocol.mjs";
 
+// the app reaches its proxy (vps-<id>.localhost) through Chromium, which always resolves *.localhost to loopback; node's
+// resolver on Windows does not, so the phone here connects to loopback by itself and keeps the name in Host
+const loopback = new Agent({ connect: { lookup: (_name, options, done) => (options?.all ? done(null, [{ address: "127.0.0.1", family: 4 }]) : done(null, "127.0.0.1", 4)) } });
 const linkRoot = fileURLToPath(new URL("../apps/link-service/", import.meta.url));
 const OWNER = "owner-token-for-tests";
 const ACCT = "0123456789abcdef0123456789abcdef";
@@ -108,7 +112,7 @@ async function fixture(t) {
       const proxy = createTunnelProxy({ base, id: channel, route: `${base}/v1/channels/${channel}`, key: key.toString("base64url"), token, replyTimeoutMs: 5000 });
       proxies.push(proxy);
       const origin = new URL(await proxy.start());
-      return (path, init = {}) => fetch(`${origin.origin}${path}`, { ...init, signal: AbortSignal.timeout(8000) });
+      return (path, init = {}) => loopbackFetch(`${origin.origin}${path}`, { ...init, dispatcher: loopback, signal: AbortSignal.timeout(8000) });
     },
   };
 }

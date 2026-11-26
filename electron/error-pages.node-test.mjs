@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { join } from "node:path";
 import test from "node:test";
 
 import { buildErrorPage, SERVER_FAILURES, SERVER_PAGE_ACTIONS, serverPageAction, serverProblemReportUrl } from "./error-pages.mjs";
@@ -12,7 +13,7 @@ test("server fails: the page says so in plain words with Try again and a way to 
     assert.ok(page.includes(SERVER_FAILURES[reason].replace(/'/g, "&#39;")), reason);
     assert.ok(page.includes(`<a href="${SERVER_PAGE_ACTIONS.retry}">Try again</a>`));
     assert.ok(page.includes(`<a href="${SERVER_PAGE_ACTIONS.report}">Report the problem</a>`));
-    assert.ok(page.includes("/Users/me/Library/Logs/dusk bot/server.log"));
+    assert.ok(page.includes(join("/Users/me/Library/Logs/dusk bot", "server.log")));
     assert.doesNotMatch(page, /health checks|8799|—/, "no internals, no em dash");
   }
 });
