@@ -95,6 +95,23 @@ App checks address the state by path: `sent`, `drafts`, `events`, `cancelled`, `
 
 Before a long run, check the library: `node --experimental-strip-types -e 'const s = await import("./scripts/user-sim/scenario.ts"); console.log(s.loadScenarios().flatMap(s.validate))'`.
 
+## Capability (`--tag capability`)
+
+Five `cap-*` scenarios replay simple tasks that made people uninstall: a PR's CI checked and commented on with a signed-in
+`gh` instead of the browser, files found anywhere in the home folder (by name and by a phrase inside, iCloud Drive
+included), saying which browser the bot uses and using it, uninstalling an app and reading the free disk space, and a
+request sent at night while the AI is at its usage limit that must carry on by itself after the reset. They use:
+
+- `"computer": true`: Works on Auto and the bot's own browser, as a new bot in the app, and this computer's shell (the
+  server runs as `duskbot serve` would start it). The bot works on this Mac for real: keep app and file names in seeds
+  that exist nowhere on it.
+- `"cli": ["gh"]`: a signed-in `gh` (`gh.mjs`) on the server's PATH over the same app state, logged as app `gh`.
+- `"apps": [...]`: the connected apps, replacing the world's list.
+- `"limit": { "until": "@+1d 02:00", "message": "..." }`: the bot's AI refuses every call with a 429 and that message
+  until then on the simulated clock (`limit-proxy.ts`).
+- checks `{ "tool": { "step", "match" }, "min", "max" }` over the bot's tool calls (name and input) and
+  `{ "gone": { "path" } }` for a file or folder that must be removed. The judge sees the tool calls for these scenarios.
+
 ## Personality (`--tag vibe`, `vibe.ts`)
 
 Twelve `vibe-*` scenarios across the five worlds test how the bot feels to live with while it works: a rude day and a
