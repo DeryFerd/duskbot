@@ -10,6 +10,10 @@ import { splitLaunchNote } from "./testing/launch-note.ts";
 import { withoutTurnClock } from "./testing/turn-clock-text.ts";
 import { workerPort } from "./testing/worker-port.ts";
 
+/** The fake engine's echo of a turn as the person wrote it: without its clock line, or the reminder a later turn in the same session opens
+ * with when its instructions changed (a first turn that used the browser pins the conversation to it). */
+const asSent = (text: string) => withoutTurnClock(text).replace(/^(reply to: )<system-reminder>\n[\s\S]*?\n<\/system-reminder>\n\n/, "$1");
+
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
 const FAKE_ACP = join(SERVER_DIR, "testing", "fake-acp-cli.ts");
@@ -242,7 +246,7 @@ posixOnly("mid-turn steering e2e", () => {
 
     await waitFor(async () => {
       const bot = await getBot(created.id);
-      return !bot.busy && bot.messages.some((m: any) => m.role === "bot" && m.kind === "text" && withoutTurnClock(m.text).startsWith("reply to: a new task for later"));
+      return !bot.busy && bot.messages.some((m: any) => m.role === "bot" && m.kind === "text" && asSent(m.text).startsWith("reply to: a new task for later"));
     }, "the queued message to run after the first turn");
     const bot = await getBot(created.id);
     expect(bot.messages.find((m: any) => m.role === "user" && m.text === "a new task for later").steered).toBeUndefined();
@@ -255,7 +259,7 @@ posixOnly("mid-turn steering e2e", () => {
     expect(dones).toHaveLength(1);
     // the body previews the reply that finished last; the fake engine echoes the turn clock first, whose length
     // depends on the zone, so the preview is matched against that reply rather than a fixed slice of it
-    const last = bot.messages.find((m: any) => m.role === "bot" && m.kind === "text" && withoutTurnClock(m.text).startsWith("reply to: a new task for later"));
+    const last = bot.messages.find((m: any) => m.role === "bot" && m.kind === "text" && asSent(m.text).startsWith("reply to: a new task for later"));
     expect(last.text.replace(/\s+/g, " ").startsWith(dones[0].body.replace(/…$/, ""))).toBe(true);
   }, 40_000);
 
@@ -274,7 +278,7 @@ posixOnly("mid-turn steering e2e", () => {
     } finally {
       writeFileSync(steerFinishGate, "finish");
     }
-    await waitFor(async () => (await getBot(created.id)).messages.some((m: any) => m.role === "bot" && m.kind === "text" && withoutTurnClock(m.text).startsWith("reply to: start over with this")),
+    await waitFor(async () => (await getBot(created.id)).messages.some((m: any) => m.role === "bot" && m.kind === "text" && asSent(m.text).startsWith("reply to: start over with this")),
       "the restarted turn's reply");
     await waitFor(async () => (await getBot(created.id)).busy === false, "the restarted turn to settle");
     const bot = await getBot(created.id);
