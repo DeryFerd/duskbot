@@ -73,7 +73,7 @@ import { goalCoordinatorForComposer, openTaskWorking, roomRouteForComposer } fro
 import { composerPlaceholder, pendingQuestion, sendLabels, SIMPLE_COMPOSER, SIMPLE_CONTROL, slotColors } from "./composer-simple"; import { ComposerSendButton, FollowUpKeyHint } from "./ComposerSendButton"; import { Icon } from "./Icon";
 import { PendingApprovalActions, PendingApprovalPanel, pendingApprovals } from "./PendingApproval";
 import { CallButton } from "./CallView";
-import { ApprovalChip, ComposerPlusMenu, GoalToggle } from "./ComposerPlusMenu"; import { ComposerModelChip } from "./ComposerModelChip";
+import { ApprovalChip, ComposerPlusMenu, GoalToggle } from "./ComposerPlusMenu";
 import { PhoneMicGhost, PhonePlus } from "./PhonePlus";
 import { useThreadApproval } from "./thread-approval";
 import { usePillHeight, useSlideOnChange, useStackedField } from "./composer-wrap";
@@ -990,10 +990,10 @@ export const Composer = memo(function Composer({
         <div data-composer-row data-glyph-swap={glyphs.swapped ? "" : undefined} data-glyph-from-held={glyphs.swapped && glyphs.fromHeld ? "" : undefined} style={simpleDock ? slot.vars : undefined} className={cn("flex items-end", simpleDock ? cn("gap-2", stacked && "gap-y-2") : "gap-1", !singleRow && !simpleDock && "@max-[30rem]/composer:flex-wrap", stacked && "flex-wrap")}>
           {pickers.inputs}
           {/* the phone's + is the pill's first control, at its left edge, the size of the others */}
-          {singleRow && !locked && <><PhonePlus onAttach={pickers.files} attachChoices={pickers.choices} /><ComposerModelChip bot={group ? undefined : bot} phone typing={hasContent} /></>}
+          {singleRow && !locked && <PhonePlus onAttach={pickers.files} attachChoices={pickers.choices} />}
           {!locked && !singleRow && (
             <div className={cn("flex items-center gap-1", simpleDock ? "shrink-0" : "flex-wrap")}>
-              {simpleDock && <><ComposerPlusMenu onAttach={pickers.files} attachChoices={pickers.choices} /><ComposerModelChip bot={group ? undefined : bot} phone={false} typing={hasContent} /></>}
+              {simpleDock && <ComposerPlusMenu onAttach={pickers.files} attachChoices={pickers.choices} />}
               {/* a mode's chip shows only while it is on, so a choice made in the + menu or the bot panel stays in view */}
               {goal?.on && <GoalToggle {...goal} compact={simpleDock} />}
               {simpleDock && approvalChoice && profile && bot && approvalModeFor(bot) !== approvalModeFor(profile) && <ApprovalChip choice={approvalChoice} />}
@@ -1102,7 +1102,7 @@ export const Composer = memo(function Composer({
             locked: setupLocked, approval: blocking, attaching: attachmentPending, attached: attachments.length > 0, listening: recording,
             replying: Boolean(replyTo), busy, group, members: members ?? [], goal: channelMode === "goal", botName: bot?.name ?? "",
             setupHint: group ? null : setupRequestPlaceholder(bot, threadId),
-            question: !group && pendingQuestion(bot?.messages), narrow: phoneApp(), holdToSteer: phoneApp() && !steersNow && canSteer,
+            question: !group && pendingQuestion(bot?.messages), narrow: phoneApp(),
           })}
           aria-describedby={followUpHinted ? followUpHintId : undefined} aria-label={t("composer.placeholder.bot", { name: group ? group.name : (bot?.name ?? "") })}
             className={cn(

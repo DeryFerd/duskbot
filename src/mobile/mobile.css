@@ -133,8 +133,6 @@ html[data-mobile-app] [data-selectable] :is(button, [role="button"]) { -webkit-u
 .dusk-mobile [data-mobile-chat] form button { min-width: 44px; min-height: 44px; }
 /* small dismiss buttons inside composer strips keep their compact size and answer 44 through the coarse-pointer rule below */
 .dusk-mobile [data-mobile-chat] [data-grok-inset] :is([data-composer-attachment], [data-composer-reply], [data-composer-selection-quote]) button:not([role="menuitem"]) { min-width: 0; min-height: 0; }
-/* the model chip is one of the pill's 32px controls and reaches 44 with its own hit area, so the row stays 32 tall */
-.dusk-mobile [data-mobile-chat] :is([data-grok-inset], form) button[data-composer-model]:not([role="menuitem"]) { min-width: 0; min-height: 0; }
 
 /* the rest (a code block's copy, a message's actions, a panel switch, an inline link) answer a 44px square around
    their centre without changing how they look; in the base layer, so a control placed with a position utility keeps it */

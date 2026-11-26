@@ -48,8 +48,7 @@ async function chatScreen({ page, home, chat }: Stage, scheme: Scheme) {
     const nav = [...document.querySelectorAll("[data-mobile-chat] nav button")].filter(visible).map(name);
     const c = composer.getBoundingClientRect();
     const box = (el) => { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; };
-    const discs = [...composer.querySelectorAll("button:not([data-composer-model])")].filter(visible).map(box);
-    const chipEl = composer.querySelector("button[data-composer-model]"), chip = chipEl && visible(chipEl) ? box(chipEl) : null;
+    const discs = [...composer.querySelectorAll("button")].filter(visible).map(box);
     const field = box(composer.querySelector("textarea"));
     const round = [...document.querySelectorAll("[data-mobile-chat] nav [data-glass=back], [data-mobile-chat] nav button[aria-label='More' i], [data-mobile-chat] nav [data-glass=right]")].filter(visible).map(box);
     const title = box(document.querySelector("[data-mobile-chat] nav [data-glass=title]"));
@@ -59,22 +58,21 @@ async function chatScreen({ page, home, chat }: Stage, scheme: Scheme) {
       const hit = document.elementFromPoint(x, y);
       if (hit && !composer.contains(hit)) covered.push(hit.tagName + "." + String(hit.className).slice(0, 50));
     }
-    return { bubbles, controls, nav, covered, composerBottom: c.bottom, height: innerHeight, pill: box(composer), discs, chip, field, round, title };
+    return { bubbles, controls, nav, covered, composerBottom: c.bottom, height: innerHeight, pill: box(composer), discs, field, round, title };
   })()`);
 
   const long = (own: boolean) => g.bubbles.filter((b: any) => b.own === own && b.lines >= 2);
   const short = g.bubbles.filter((b: any) => b.chars <= 20);
   check(where, "a long bot reply wraps 44px short of the column", long(false).length > 0 && long(false).every((b: any) => Math.abs(b.short - 44) <= 1), long(false));
   check(where, "a short bubble fits its text on one line", short.length > 0 && short.every((b: any) => b.lines === 1 && b.width < 0.6), short);
-  check(where, "the composer shows add, the model, the message field, the microphone and the call, nothing else", g.controls.length === 5 && /add|attach|\+/.test(g.controls[0]) && String(g.controls[1]).startsWith("model, ") && g.controls[2] === "textarea" && /dictat|voice|mic|speak/.test(g.controls[3]) && /call/.test(g.controls[4]), g.controls);
+  check(where, "the composer shows add, the message field, the microphone and the call, nothing else", g.controls.length === 4 && /add|attach|\+/.test(g.controls[0]) && g.controls[1] === "textarea" && /dictat|voice|mic|speak/.test(g.controls[2]) && /call/.test(g.controls[3]), g.controls);
   check(where, "the top bar has back, the name pill, more and the computer", g.nav.length === 4 && /back/.test(g.nav[0]) && /nova/.test(g.nav[1]) && /more/.test(g.nav[2]) && /computer/.test(g.nav[3]), g.nav);
   const near = (a: number, b: number) => Math.abs(a - b) <= 0.5;
   const discs = g.discs as Array<Record<string, number>>;
   const inset = (g.pill.h - 32) / 2;
   check(where, "every composer control is the same 32 disc on one line", discs.length === 3 && discs.every((d) => near(d.w, 32) && near(d.h, 32) && near(d.t, discs[0]!.t)), discs);
   check(where, "the + and the last control sit as far from the pill's ends as from its top and bottom", near(discs[0]!.l - g.pill.l, inset) && near(g.pill.r - discs.at(-1)!.r, inset) && near(discs[0]!.t - g.pill.t, inset), { pill: g.pill, discs });
-  check(where, "the model chip is a 32 control on the discs' line, 4 after the +", Boolean(g.chip) && near(g.chip.h, 32) && near(g.chip.t, discs[0]!.t) && near(g.chip.l - discs[0]!.r, 4), [g.chip, discs[0]]);
-  check(where, "the field starts 10 after the model chip", Boolean(g.chip) && near(g.field.l - g.chip.r, 10), [g.field.l, g.chip?.r]);
+  check(where, "the field starts 10 after the +", near(g.field.l - discs[0]!.r, 10), [g.field.l, discs[0]!.r]);
   const round = g.round as Array<Record<string, number>>;
   check(where, "the top bar's round buttons are one size, centred on the name pill", round.length === 3 && round.every((b) => near(b.w, round[0]!.w) && near(b.h, round[0]!.h) && near(b.t + b.h / 2, g.title.t + g.title.h / 2)), { round, title: g.title });
   check(where, "nothing covers the composer", g.covered.length === 0, g.covered);

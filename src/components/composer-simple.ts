@@ -32,9 +32,7 @@ export function slotColors(color: Bot["color"] | undefined, room: boolean): { fi
   return { fill: grok ? `var(--grok-cta, ${tone.fill})` : tone.fill, ink: tone.ink, button: { className: cn(BOT_BUTTON, grok && "grok-cta"), style: { ...botButtonStyle(own), ...vars } }, vars };
 }
 
-export function composerPlaceholder({ locked, approval, attaching, attached = false, listening, replying, busy, group, members, goal, botName, setupHint, question = false, narrow = false, holdToSteer = false }: {
-  /** A phone's message to a working bot waits for its turn, and a held Send steers it in instead. */
-  holdToSteer?: boolean;
+export function composerPlaceholder({ locked, approval, attaching, attached = false, listening, replying, busy, group, members, goal, botName, setupHint, question = false, narrow = false }: {
   /** A question card waits for the person's answer: grok says the field answers it, or talks past it. */
   question?: boolean;
   /** A phone's field: too narrow for the longer hints, so it keeps to the short ones. */
@@ -59,7 +57,6 @@ export function composerPlaceholder({ locked, approval, attaching, attached = fa
   if (replying && !busy) return t("composer.placeholder.reply");
   if (question) return t(narrow ? "question.answerPlaceholder" : "composer.placeholder.question");
   if (attached && !narrow) return t("composer.placeholder.attached");
-  if (busy && holdToSteer && !group) return t("composer.followUp.holdToSteer");
   if (!busy && goal) return group ? t("composer.placeholder.goal", { name: group.name }) : t("composer.placeholder.goalSolo", { name: botName });
   if (!busy && !group && setupHint) return setupHint;
   if (group && !group.dm && effectiveDefaultResponder(group, members).kind === "mentions") {

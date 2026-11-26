@@ -22,7 +22,6 @@ vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("@/lib/use-owner-or-admin", () => ({ useOwnerOrAdmin: () => true }));
 vi.mock("@/lib/use-slash-skills", () => ({ useSlashSkills: () => [] }));
 vi.mock("./CallView", () => ({ CallButton: () => null }));
-vi.mock("./ComposerModelChip", () => ({ ComposerModelChip: () => null }));
 
 import { Composer } from "./Composer";
 

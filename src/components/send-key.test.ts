@@ -259,14 +259,14 @@ describe("a message sent while a one-to-one bot works", () => {
     expect(host.querySelector("[data-composer-follow-up-hint]")).toBeNull();
   });
 
-  it("on a phone a held Send steers and a tap queues, and the empty field says so", () => {
+  it("on a phone a held Send steers and a tap queues, and the empty field keeps its usual Message line", () => {
     fixture.instances = [steers];
     setFollowUpDefault("queue");
     document.documentElement.dataset.mobileApp = "ios";
     vi.useFakeTimers();
     try {
       render(createElement(Composer, { bot: working }));
-      expect(textarea().placeholder).toBe("Send queues, hold to steer");
+      expect(textarea().placeholder).toBe("Message Pepper");
       expect(host.querySelector("[data-composer-follow-up-hint]")).toBeNull();
       type(textarea(), "tapped");
       flushSync(() => sendButton().click());
