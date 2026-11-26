@@ -3,7 +3,7 @@
 // app signed in through the tunnel, AI sign-ins sent from this mac, and the move with its backup first.
 import { execFile, execFileSync, spawn } from "node:child_process";
 import { generateKeyPairSync, sign } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -81,6 +81,7 @@ beforeAll(async () => {
       if (req.url === "/api/auth/session") return reply(200, signedIn ? { kind: "session" } : { kind: "none" });
       if (!signedIn) return reply(403, { error: "pair this device" });
       if (req.url === "/api/config") return reply(200, { onboarding: req.method === "PUT" ? JSON.parse(body).onboarding : { completedAt: "", version: 0 } });
+      if (req.url === "/api/instances/codex/auth/start") return reply(200, { auth: { flowId: "codex-device", phase: "waiting", authorizationUrl: "https://auth.openai.com/codex/device", userCode: "ABCD-1234" } });
       if (req.url === "/api/instances?fresh=1") return reply(200, { instances: [
         { instanceId: "claude", driverKind: "claudeAgent", snapshot: { authenticated: false } },
         { instanceId: "codex", driverKind: "codex", snapshot: { authenticated: false } },
@@ -232,8 +233,9 @@ describe("Add your VPS", () => {
 
     const engines = await link.engines();
     expect(engines.map((engine) => engine.kind)).toEqual(["claude", "codex"]);
-    expect(await link.signIn("codex")).toMatchObject({ phase: "succeeded" });
-    expect(JSON.parse(readFileSync(join(home, ".codex", "auth.json"), "utf8")).tokens.access_token).toBe("codex-on-the-mac");
+    // ChatGPT signs in on the server itself: a copy of this mac's login would race it for the single-use refresh token
+    expect(await link.signIn("codex")).toMatchObject({ phase: "waiting", authorizationUrl: "https://auth.openai.com/codex/device", userCode: "ABCD-1234" });
+    expect(existsSync(join(home, ".codex", "auth.json"))).toBe(false);
     const claude = await link.signIn("claude");
     expect(claude.phase).toBe("waiting");
     await until(async () => (await link.signInStatus("claude", claude.flowId)).phase === "succeeded");

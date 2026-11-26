@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { CARRIED_DRIVERS } from "./ai-signins-carry.mjs";
 import { createManagedDesktopStore, retryDelay, unreadableRecord } from "./managed-desktop.mjs";
 import { CLOUD_MACHINE_CONNECTABLE, cloudUnreachableText, parseCloudOffer, parseCloudPurchase, parseCloudSummary, parseCloudTeams, parseCloudRoom, parseCloudTrial, parseCloudUsage, parsePairingGrant, parsePublicOffer, withoutTrial } from "./cloud-home.mjs";
 import { CLOUD_ID, CLOUD_SWATCHES, cleanCloudListName, ORGANIZATION_BLOCKS, otherOwnClouds, ownCloud, parseCloudList, parseCloudPayment, parseCloudRenewal, parseOrganizations, releaseVersion } from "./cloud-list.mjs";
@@ -863,15 +864,10 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
       const signedIn = grant, current = state();
       const cloud = current.clouds?.find(entry => entry.primary && entry.runsOn === "cloud" && ["checkout", "setting_up", "ready"].includes(entry.status));
       if (!signedIn || current.status !== "connected" || !cloud) return { outcome: "no-cloud" };
-      if (!Array.isArray(items) || !items.length) return { outcome: "nothing" };
-      const hold = (list) => request(`clouds/${encodeURIComponent(cloud.id)}/ai-signins`, { method: "POST", body: { items: list }, token: signedIn.token, timeoutMs: 30_000 });
-      try { await hold(items); }
-      catch (error) {
-        // an older Admin refuses kinds it doesn't know: it still holds the ChatGPT login, the one kind it always took
-        const known = items.filter(item => item?.kind === "codex-auth");
-        if (error?.status !== 400 || !known.length || known.length === items.length) return { outcome: "failed" };
-        try { await hold(known); } catch { return { outcome: "failed" }; }
-      }
+      const movable = Array.isArray(items) ? items.filter(item => CARRIED_DRIVERS[item?.kind]) : [];
+      if (!movable.length) return { outcome: "nothing" };
+      try { await request(`clouds/${encodeURIComponent(cloud.id)}/ai-signins`, { method: "POST", body: { items: movable }, token: signedIn.token, timeoutMs: 30_000 }); }
+      catch { return { outcome: "failed" }; }
       return { outcome: "held" };
     },
     /** Keep my plan: renewal back on for the same Cloud, as `cancelPlan` names it. */

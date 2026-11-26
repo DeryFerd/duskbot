@@ -63,33 +63,30 @@ describe("POST /api/cloud/ai-signins", () => {
 });
 
 describe("applying held sign-ins", () => {
-  it("writes the ChatGPT login only where none is, readable by this account alone", () => {
+  it("never writes a login whose refresh token another computer keeps renewing (ChatGPT, Grok, Kimi)", () => {
     const home = mkdtempSync(join(tmpdir(), "dusk-codex-home-"));
     cleanup.push(home);
-    const env = { CODEX_HOME: join(home, "codex") };
-    expect(applyCloudAiSignIns([{ kind: "codex-auth", auth }], env)).toEqual({ applied: ["codex-auth"], kept: [] });
-    const file = join(home, "codex", "auth.json");
-    expect(readFileSync(file, "utf8")).toBe(auth);
-    if (process.platform !== "win32") expect(statSync(file).mode & 0o777).toBe(0o600);
-    writeFileSync(file, "{\"mine\":true}");
-    expect(applyCloudAiSignIns([{ kind: "codex-auth", auth }], env)).toEqual({ applied: [], kept: ["codex-auth"] });
-    expect(readFileSync(file, "utf8")).toBe("{\"mine\":true}");
-    expect(existsSync(`${file}.${process.pid}.tmp`)).toBe(false);
+    const env = { HOME: home, CODEX_HOME: join(home, "codex") };
+    const kimi = { kind: "kimi-auth" as const, auth, file: "kimi-code.json" };
+    expect(applyCloudAiSignIns([{ kind: "codex-auth", auth }, { kind: "grok-auth", auth }, kimi], env)).toEqual({ applied: [], kept: [], refused: ["codex-auth", "grok-auth", "kimi-auth"] });
+    expect(existsSync(join(home, "codex", "auth.json"))).toBe(false);
+    expect(existsSync(join(home, ".grok", "auth.json"))).toBe(false);
+    expect(existsSync(join(home, ".kimi-code"))).toBe(false);
   });
 
-  it("writes Grok, Gemini and Kimi logins where their CLIs read them, and keeps any login already there", () => {
+  it("writes a Gemini login where its CLI reads it, readable by this account alone, and keeps any login already there", () => {
     const home = mkdtempSync(join(tmpdir(), "dusk-cli-home-"));
     cleanup.push(home);
     const env = { HOME: home };
-    const grok = JSON.stringify({ "https://auth.x.ai::id": { refresh_token: "grok-secret" } });
     const gemini = JSON.stringify({ access_token: "gemini-secret", refresh_token: "r" });
-    const kimi = JSON.stringify({ access_token: "kimi-secret", refresh_token: "r" });
-    const items = [{ kind: "grok-auth" as const, auth: grok }, { kind: "gemini-oauth" as const, auth: gemini }, { kind: "kimi-auth" as const, auth: kimi, file: "kimi-code-env-ab12.json" }];
-    expect(applyCloudAiSignIns(items, env)).toEqual({ applied: ["grok-auth", "gemini-oauth", "kimi-auth"], kept: [] });
-    expect(readFileSync(join(home, ".grok", "auth.json"), "utf8")).toBe(grok);
-    expect(readFileSync(join(home, ".gemini", "oauth_creds.json"), "utf8")).toBe(gemini);
-    expect(readFileSync(join(home, ".kimi-code", "credentials", "kimi-code-env-ab12.json"), "utf8")).toBe(kimi);
-    expect(applyCloudAiSignIns([{ ...items[2]!, file: "kimi-code.json" }], env), "a Kimi login for another region is still a login").toEqual({ applied: [], kept: ["kimi-auth"] });
+    expect(applyCloudAiSignIns([{ kind: "gemini-oauth", auth: gemini }], env)).toEqual({ applied: ["gemini-oauth"], kept: [], refused: [] });
+    const file = join(home, ".gemini", "oauth_creds.json");
+    expect(readFileSync(file, "utf8")).toBe(gemini);
+    if (process.platform !== "win32") expect(statSync(file).mode & 0o777).toBe(0o600);
+    writeFileSync(file, "{\"mine\":true}");
+    expect(applyCloudAiSignIns([{ kind: "gemini-oauth", auth: gemini }], env)).toEqual({ applied: [], kept: ["gemini-oauth"], refused: [] });
+    expect(readFileSync(file, "utf8")).toBe("{\"mine\":true}");
+    expect(existsSync(`${file}.${process.pid}.tmp`)).toBe(false);
     expect(signedInDrivers(["codex-auth", "grok-auth", "gemini-oauth", "kimi-auth"])).toEqual(new Set(["codex", "grokAgent", "geminiAgent", "kimiAgent"]));
   });
 });

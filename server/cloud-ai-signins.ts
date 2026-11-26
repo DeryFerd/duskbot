@@ -1,8 +1,9 @@
 // AI sign-ins the Admin held for this Cloud while it was being made (apps/dashboard/server/clouds/ai-stash.ts), pushed once
-// over the signed home channel. Never log what arrives. A login already on this Cloud wins: a held one never replaces it.
+// over the signed home channel. Never log what arrives. A login already on this Cloud wins: a held one never replaces it, and
+// a login with a single-use refresh token is never written (shared/ai-signins.ts ROTATING_AI_SIGNIN_KINDS).
 import { existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
-import { AI_SIGNIN_DRIVERS, KIMI_TOKEN_FILE, parseAiSignInList, type AiSignIn } from "../shared/ai-signins.ts";
+import { AI_SIGNIN_DRIVERS, KIMI_TOKEN_FILE, ROTATING_AI_SIGNIN_KINDS, parseAiSignInList, type AiSignIn } from "../shared/ai-signins.ts";
 import { codexHome } from "./drivers/codex-identity.ts";
 import { harnessHome, userHome } from "./env-path.ts";
 
@@ -31,10 +32,12 @@ function signedInAlready(item: CloudAiSignIn, file: string): boolean {
   try { return readdirSync(dirname(file)).some((name) => KIMI_TOKEN_FILE.test(name)); } catch { return false; }
 }
 
-/** Writes each sign-in where its engine reads it; `applied` names the kinds that landed, `kept` those already signed in here. */
-export function applyCloudAiSignIns(items: readonly CloudAiSignIn[], env: Record<string, string | undefined>): { applied: string[]; kept: string[] } {
-  const applied: string[] = [], kept: string[] = [];
+/** Writes each sign-in where its engine reads it; `applied` names the kinds that landed, `kept` those already signed in
+ * here, `refused` the logins a desktop still sends whose refresh token another computer renews too. */
+export function applyCloudAiSignIns(items: readonly CloudAiSignIn[], env: Record<string, string | undefined>): { applied: string[]; kept: string[]; refused: string[] } {
+  const applied: string[] = [], kept: string[] = [], refused: string[] = [];
   for (const item of items) {
+    if (ROTATING_AI_SIGNIN_KINDS.has(item.kind)) { refused.push(item.kind); continue; }
     const file = loginFile(item, env);
     if (!file || !isAbsolute(file)) continue;
     if (signedInAlready(item, file)) { kept.push(item.kind); continue; }
@@ -44,7 +47,7 @@ export function applyCloudAiSignIns(items: readonly CloudAiSignIn[], env: Record
     renameSync(temp, file);
     applied.push(item.kind);
   }
-  return { applied, kept };
+  return { applied, kept, refused };
 }
 
 /** The engines (driver kinds) the `applied` sign-ins sign in. */

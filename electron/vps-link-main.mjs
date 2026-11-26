@@ -2,8 +2,7 @@
 // only, a pinned tls key for a server reached directly, and this mac's own ai sign-ins read or made locally.
 import { spawn } from "node:child_process";
 import { X509Certificate, createHash } from "node:crypto";
-import { createReadStream, createWriteStream, promises as fsp, readFileSync, statSync } from "node:fs";
-import { homedir } from "node:os";
+import { createReadStream, createWriteStream, promises as fsp, statSync } from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -228,10 +227,6 @@ export function installVpsLink(deps) {
       },
     },
     localCredentials: {
-      async codexAuth() {
-        const file = path.join(process.env.CODEX_HOME || path.join(homedir(), ".codex"), "auth.json");
-        try { const text = readFileSync(file, "utf8"); JSON.parse(text); return text; } catch { return null; }
-      },
       async claudeCli() {
         const response = await deps.localRequest("/api/cli-candidates?name=claude");
         const body = await response.json().catch(() => ({}));
