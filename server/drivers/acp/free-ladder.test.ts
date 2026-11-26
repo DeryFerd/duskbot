@@ -1,9 +1,9 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ModelCatalog } from "../../contracts.ts";
 import {
-  advertisedVariant, coolFreeRung, FREE_RUNG_COOL_MS, FREE_RUNG_WARM_MS, freeFailure, freeLadder, freeRungCooling, probeFreeLadder, resetFreeLadder, spannedSuspend,
-  warmFreeModel, warmFreeRung,
+  advertisedVariant, coolFreeRung, FREE_LIMIT_TRIES, FREE_RUNG_COOL_MS, FREE_RUNG_LIMIT_MS, FREE_RUNG_WARM_MS, freeFailure, freeLadder, freeLadderLimited, freeLimitBucket,
+  freeOneShot, freeRungCooling, freeRungLimited, nextFreeRung, probeFreeLadder, resetFreeLadder, spannedSuspend, warmFreeModel, warmFreeRung,
 } from "./free-ladder.ts";
 
 const low = [{ id: "low", label: "Low" }, { id: "high", label: "High" }];
@@ -124,6 +124,58 @@ describe("free model start-up probe", () => {
     calls = 0;
     expect(await probeFreeLadder(ladder, async () => { calls += 1; throw new Error("503"); }, () => {}, { maxRungs: 2 })).toBeNull();
     expect(calls).toBe(2);
+  });
+});
+
+describe("free usage limit", () => {
+  beforeEach(() => resetFreeLadder());
+  const rungs = (...ids: string[]) => ids.map((model) => ({ model }));
+
+  it("keys Zen's per-model count on the first two letters of the Zen id", () => {
+    expect(freeLimitBucket("opencode/deepseek-v4.1-flash-free")).toBe("de");
+    expect(freeLimitBucket("opencode/nemotron-3.5-lightning-free")).toBe(freeLimitBucket("opencode/nemotron-3.5-super-vl-free"));
+  });
+
+  it("skips a limited model for half an hour, not the five minutes of a busy one", () => {
+    coolFreeRung("opencode/beam-free", "pool_limit", 0);
+    expect(freeRungLimited("opencode/beam-free", FREE_RUNG_COOL_MS + 1)).toBe(true);
+    expect(freeRungLimited("opencode/beam-free", FREE_RUNG_LIMIT_MS + 1)).toBe(false);
+    coolFreeRung("opencode/mimo-v2.6-flash-free", "busy", 0);
+    expect(freeRungLimited("opencode/mimo-v2.6-flash-free", 1)).toBe(false);
+  });
+
+  it("moves on after the limit only to a model counted apart that is not known to be at the limit", () => {
+    const ladder = rungs("opencode/beam-free", "opencode/beta-free", "opencode/iceman-free", "opencode/mimo-v2.6-flash-free");
+    coolFreeRung("opencode/beam-free", "pool_limit", 0);
+    coolFreeRung("opencode/iceman-free", "pool_limit", 0);
+    expect(nextFreeRung(ladder, ["opencode/beam-free"], 1)?.model).toBe("opencode/mimo-v2.6-flash-free");
+    expect(nextFreeRung(ladder, ["opencode/beam-free", "opencode/mimo-v2.6-flash-free"], 1)).toBeUndefined();
+  });
+
+  it("tries at most a few models after the limit", () => {
+    const ids = ["a", "b", "c", "d", "e", "f"].map((letter) => `opencode/${letter}${letter}-free`);
+    const tried = ids.slice(0, FREE_LIMIT_TRIES);
+    for (const model of tried) coolFreeRung(model, "pool_limit", 0);
+    const last = nextFreeRung(rungs(...ids), tried, 1)!.model;
+    expect(last).toBe(ids[FREE_LIMIT_TRIES]);
+    coolFreeRung(last, "pool_limit", 0);
+    expect(nextFreeRung(rungs(...ids), [...tried, last], 1)).toBeUndefined();
+  });
+
+  it("skips models at the limit after another failure too", () => {
+    coolFreeRung("opencode/beam-free", "pool_limit", 0);
+    coolFreeRung("opencode/iceman-free", "timeout", 0);
+    expect(nextFreeRung(rungs("opencode/iceman-free", "opencode/beam-free", "opencode/mimo-free"), ["opencode/iceman-free"], 1)?.model).toBe("opencode/mimo-free");
+  });
+
+  it("makes no call at all for background work while every free model is at the limit", async () => {
+    const ladder = rungs("opencode/beam-free", "opencode/mimo-free");
+    for (const { model } of ladder) coolFreeRung(model, "pool_limit");
+    expect(freeLadderLimited(ladder)).toBe(true);
+    const run = vi.fn(async () => "ok");
+    await expect(freeOneShot(ladder, run, undefined, "OpenCode")).rejects.toThrow(/free usage limit/);
+    await expect(probeFreeLadder(ladder, run, () => {})).resolves.toBeNull();
+    expect(run).not.toHaveBeenCalled();
   });
 });
 

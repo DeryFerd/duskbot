@@ -16,13 +16,26 @@ export const FREE_PROBE_MS = 15_000;
 /** The lighter reasoning settings a fallback rung runs at, first one offered wins: a quicker first word. */
 const LIGHT_VARIANTS = ["low", "minimal"] as const;
 
-/** Zen's free limit is per client across every free model (verified 2026-11-14: all twelve answered
- * FreeUsageLimitError at once), so it ends the ladder; any other 429 is one model's and moves to the next rung. */
+/** Zen's free limit (FreeUsageLimitError, HTTP 429): a daily request count per IP address that resets at midnight UTC.
+ * Models Zen gives a limit of their own count apart, keyed by the first two letters of their Zen id; every other free
+ * model shares one count (Zen's console ipRateLimiter, read 2026-11-27; on 2026-11-14 all twelve free models answered
+ * the limit at once). Any other 429 is one model's. */
 export const FREE_POOL_LIMIT = /FreeUsageLimitError|free usage limit/i;
 
 export type FreeFailure = "pool_limit" | "rate_limited" | "busy" | "timeout" | "empty" | "unavailable" | "error";
 /** How long a model its provider says it no longer serves is skipped. */
 export const FREE_RUNG_GONE_MS = 6 * 60 * 60_000;
+/** How long a model that answered the free limit is skipped. Shorter than the limit's day: a computer that moved to
+ * another network has a fresh count, and one look costs a single fast refusal. */
+export const FREE_RUNG_LIMIT_MS = 30 * 60_000;
+/** The free models a turn tries after the free limit refused one, each counted apart by Zen or not. */
+export const FREE_LIMIT_TRIES = 3;
+
+/** The count Zen's free limit keeps for this model: the first two letters of its Zen id. */
+export function freeLimitBucket(model: string): string {
+  const bare = model.startsWith("opencode/") ? model.slice("opencode/".length) : model;
+  return bare.slice(0, 2).toLowerCase();
+}
 
 const cooling = new Map<string, { until: number; reason: FreeFailure }>();
 let warm: { model: string; variant?: string; until: number } | null = null;
@@ -50,8 +63,28 @@ export function freeFailure(message: string, flags: { limit?: boolean; empty?: b
 }
 
 export function coolFreeRung(model: string, reason: FreeFailure, now = Date.now()): void {
-  cooling.set(model, { until: now + (reason === "unavailable" ? FREE_RUNG_GONE_MS : FREE_RUNG_COOL_MS), reason });
+  const ms = reason === "unavailable" ? FREE_RUNG_GONE_MS : reason === "pool_limit" ? FREE_RUNG_LIMIT_MS : FREE_RUNG_COOL_MS;
+  cooling.set(model, { until: now + ms, reason });
   if (warm?.model === model) warm = null;
+}
+
+/** The model answered the free limit within its cool-down. */
+export function freeRungLimited(model: string, now = Date.now()): boolean {
+  return freeRungCooling(model, now) && cooling.get(model)?.reason === "pool_limit";
+}
+
+/** Every rung answered the free limit within its cool-down: a call can only be refused again. */
+export function freeLadderLimited(ladder: readonly FreeRung[], now = Date.now()): boolean {
+  return ladder.length > 0 && ladder.every((rung) => freeRungLimited(rung.model, now));
+}
+
+/** The rung a turn moves to after `tried` failed. After the free limit, only a model whose count Zen may keep apart (a
+ * bucket no tried model hit the limit in), at most FREE_LIMIT_TRIES of them; never a model known to be at the limit. */
+export function nextFreeRung(ladder: readonly FreeRung[], tried: readonly string[], now = Date.now()): FreeRung | undefined {
+  const limited = tried.filter((model) => freeRungLimited(model, now));
+  const spent = new Set(limited.map(freeLimitBucket));
+  if (limited.length > FREE_LIMIT_TRIES) return undefined;
+  return ladder.find((rung) => !tried.includes(rung.model) && !freeRungLimited(rung.model, now) && !spent.has(freeLimitBucket(rung.model)));
 }
 
 export function warmFreeRung(rung: FreeRung, now = Date.now()): void {
@@ -122,6 +155,7 @@ export async function probeFreeLadder(
   { maxRungs = 3, now = Date.now, monotonic = () => performance.now(), limitMs = FREE_PROBE_MS }:
     { maxRungs?: number; now?: () => number; monotonic?: () => number; limitMs?: number } = {},
 ): Promise<FreeRung | null> {
+  if (freeLadderLimited(ladder, now())) return null;
   let retried = false;
   const rungs = ladder.slice(0, maxRungs);
   for (let at = 0; at < rungs.length; at++) {
@@ -155,6 +189,7 @@ export async function probeFreeLadder(
  * can be a model of a provider it has no access to (OpenCode 1.19 answers "Authentication required"), and a rung that
  * fails hands over to the next, up to `maxRungs` or the free limit every free model shares. */
 export async function freeOneShot<T>(ladder: readonly FreeRung[], run: (rung: FreeRung) => Promise<T>, signal: AbortSignal | undefined, name: string, maxRungs = 3): Promise<T> {
+  if (freeLadderLimited(ladder)) throw new Error(`${name}'s free models are at their free usage limit`);
   let failure: unknown = new Error(`${name} background call aborted`);
   for (const rung of ladder.slice(0, maxRungs)) {
     if (signal?.aborted) break;

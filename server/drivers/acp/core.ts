@@ -28,7 +28,7 @@ import {
 import { readSessionReport } from "./session-reports.ts";
 import { pickSessionModel, SessionModelControls, type AcpModelSelection } from "./session-model-controls.ts";
 import { acpVariantOption } from "./config-options.ts";
-import { advertisedVariant, coolFreeRung, FREE_POOL_LIMIT, FREE_PROBE_MS, FREE_PROBE_PROMPT, freeFailure, freeLadder, freeOneShot, probeFreeLadder, warmFreeModel, warmFreeRung, type FreeFailure, type FreeRung } from "./free-ladder.ts";
+import { advertisedVariant, coolFreeRung, FREE_POOL_LIMIT, FREE_PROBE_MS, FREE_PROBE_PROMPT, freeFailure, freeLadder, freeOneShot, freeRungLimited, nextFreeRung, probeFreeLadder, warmFreeModel, warmFreeRung, type FreeFailure, type FreeRung } from "./free-ladder.ts";
 import { trail } from "../../trail.ts";
 import { versionFromProbe } from "./version-probe.ts"; import { engineHomes } from "../../engine-homes/engine-homes.ts";
 
@@ -1018,7 +1018,8 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
       };
 
       // `freeTried`: the free models this turn already gave up on; `freeBy`: when the turn's free models together run out
-      // of time; `freeRungs`: the ladder the turn steps through
+      // of time, counted from the first model's prompt so a slow engine start never uses up the models' wait;
+      // `freeRungs`: the ladder the turn steps through
       const sendTurn = async (turn: SendTurnInput, retryOf?: string, freeTried: readonly string[] = [], freeBy?: number, freeRungs?: readonly FreeRung[]) => {
         requireRunning();
         if (startupModelRefresh) await startupModelRefresh;
@@ -1242,9 +1243,8 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         const ladder = freeOrder
           ? freeRungs ?? freeLadder({ model: freeModel, ...(turn.variant ? { variant: turn.variant } : {}) }, freeOrder, catalog.models)
           : null;
-        // counted from the turn's start, engine start included: what the person waits for is the whole turn
-        const freeDeadline = freeBy ?? Date.now() + freeTurnMs();
-        const freeStartedAt = freeDeadline - freeTurnMs();
+        let freeDeadline = freeBy ?? Number.POSITIVE_INFINITY;
+        const freeStartedAt = freeBy === undefined ? Date.now() : freeBy - freeTurnMs();
         let freeAnsweredOnce = false;
         const freeAnswered = () => {
           if (!ladder || freeAnsweredOnce) return;
@@ -1513,6 +1513,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             const promptIdleMs = promptIdleTimeoutMs();
             const quiet = startQuietWatch(threadId, session, current);
             const promptAt = Date.now();
+            if (freeBy === undefined) freeDeadline = promptAt + freeTurnMs();
             // one model never waits past the turn's free deadline, so a turn no free model answers ends inside it
             const replyMs = Math.max(0, Math.min(firstReplyMs(), freeDeadline - promptAt));
             // a free model that hangs before its first word, or whose request fails in OpenCode's log (busy, rate limited,
@@ -1630,21 +1631,26 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
               closeSession(threadId, "prompt-stall");
               const tried = [...freeTried, freeModel];
               const failure: FreeFailure = (e as any)?.acpFreeFailure ?? freeFailure(freeError, { empty: (e as any)?.acpEmptyReply === true });
-              const limited = (e as any)?.acpFreeLimit === true || failure === "pool_limit";
-              coolFreeRung(freeModel, failure);
-              const next = !limited && tried.length < FREE_MODEL_ATTEMPTS && Date.now() < freeDeadline
-                ? ladder.find((rung) => !tried.includes(rung.model)) : undefined;
+              coolFreeRung(freeModel, (e as any)?.acpFreeLimit === true ? "pool_limit" : failure);
+              // no free model answered and the free limit refused at least one: the limit is why
+              const limited = tried.some((model) => freeRungLimited(model));
+              // the free limit is counted apart for some models, so it moves on only to one that may still have replies
+              const next = tried.length < FREE_MODEL_ATTEMPTS && Date.now() < freeDeadline ? nextFreeRung(ladder, tried) : undefined;
               const language = conversationLanguage(threadId);
               trail(next ? "free_model.switch" : "free_model.exhausted", {
                 from: freeModel, ...(next ? { to: next.model, variant: next.variant ?? null } : { tried }),
                 reason: failure, rung: tried.length, ms: Date.now() - freeStartedAt,
               });
               if (next) {
-                emit({ ...base(threadId, turnId), type: "runtime.notice", message: (e as any)?.acpEmptyReply === true
-                  ? serverLine(language, "server.freeModel.emptyNext")
-                  : serverLine(language, "server.freeModel.tryingNext", { seconds: Math.round(firstReplyMs() / 1000) }) });
+                // a refusal is over in a moment, so only a wait the person sat through gets a line
+                if (failure === "timeout" || failure === "empty") {
+                  emit({ ...base(threadId, turnId), type: "runtime.notice", message: (e as any)?.acpEmptyReply === true
+                    ? serverLine(language, "server.freeModel.emptyNext")
+                    : serverLine(language, "server.freeModel.tryingNext", { seconds: Math.round(firstReplyMs() / 1000) }) });
+                }
                 try {
-                  await sendTurn({ ...turn, model: next.model, variant: next.variant, startupRecovery: undefined, sessionReset: undefined }, turnId, tried, freeDeadline, ladder);
+                  await sendTurn({ ...turn, model: next.model, variant: next.variant, startupRecovery: undefined, sessionReset: undefined }, turnId, tried,
+                    Number.isFinite(freeDeadline) ? freeDeadline : Date.now() + freeTurnMs(), ladder);
                   return;
                 } catch (error) {
                   console.warn(`${support.displayName}: the next free model did not start on ${threadId}: ${error instanceof Error ? error.message : String(error)}`);

@@ -1610,17 +1610,58 @@ describe("OpenCode free model that never answers, or answers nothing", () => {
     expect(events.filter((event) => event.type === "runtime.error")).toHaveLength(1);
   }, 20_000);
 
-  it("stops at OpenCode's free usage limit, which every free model shares, and says so", async () => {
-    // well before the first-reply wait: the limit in OpenCode's log ends the turn at the next 2 s look
+  it("says the free usage limit is why once every free model answered it, without a line per model", async () => {
+    // well before the first-reply wait: the limit in OpenCode's log ends each model at the next look
     const { done, events, tried, ms } = await firstMessage("opencode/big-pickle,opencode/grok-code,opencode/minimax", { FAKE_ACP_FREE_LIMIT: "1" }, "8000");
-    expect(tried).toEqual(["opencode/big-pickle"]);
-    expect(ms).toBeLessThan(7_000);
+    expect(tried).toEqual(["opencode/big-pickle", "opencode/grok-code", "opencode/minimax"]);
+    expect(ms).toBeLessThan(12_000);
     expect(done).toMatchObject({ ok: false, stopReason: "no_reply" });
     expect(events.some((event) => event.type === "runtime.notice" && /another free model/.test(event.message))).toBe(false);
     expect(events.filter((event) => event.type === "runtime.error")).toEqual([expect.objectContaining({
       message: "The free backup model has used up its free replies for now, so this message got no reply. Connect your own AI, like Claude or ChatGPT, to keep going, or send it again later.",
       errorCode: "free_pool_limit", limit: "engine",
     })]);
+  }, 20_000);
+
+  const zenLimit = "FreeUsageLimitError: Free usage limit reached. Free models work in OpenCode";
+
+  it("moves past the free usage limit to a model Zen counts apart, and the reply comes with no line about it", async () => {
+    const { done, events, tried } = await firstMessage("", { FAKE_ACP_REJECT_MODELS: JSON.stringify({ "opencode/big-pickle": zenLimit }) }, "8000");
+    expect(tried).toEqual(["opencode/big-pickle", "opencode/grok-code"]);
+    expect(done).toMatchObject({ ok: true });
+    expect(events.some((event) => event.type === "runtime.error" || event.type === "runtime.notice")).toBe(false);
+    expect(events).toEqual(expect.arrayContaining([expect.objectContaining({ type: "item.completed", itemType: "assistant_text", text: "ok" })]));
+    expect(trailed).toEqual(expect.arrayContaining([expect.objectContaining({ ev: "free_model.switch", from: "opencode/big-pickle", reason: "pool_limit" })]));
+  }, 20_000);
+
+  it("never moves to a model sharing the limited model's count", async () => {
+    const models = catalog("opencode/big-pickle", "opencode/bi-other", "opencode/minimax");
+    const { done, tried } = await firstMessage("", {
+      FAKE_ACP_MODELS: "opencode/big-pickle,opencode/bi-other,opencode/minimax",
+      FAKE_ACP_REJECT_MODELS: JSON.stringify({ "opencode/big-pickle": zenLimit }),
+    }, "8000", undefined, models);
+    expect(tried).toEqual(["opencode/big-pickle", "opencode/minimax"]);
+    expect(done).toMatchObject({ ok: true });
+  }, 20_000);
+
+  it("once every free model is at the limit, the next message asks one and shows the limit card within seconds", async () => {
+    const all = JSON.stringify({ "opencode/big-pickle": zenLimit, "opencode/grok-code": zenLimit, "opencode/minimax": zenLimit });
+    await firstMessage("", { FAKE_ACP_REJECT_MODELS: all }, "8000");
+    const { done, events, tried, ms } = await firstMessage("", { FAKE_ACP_REJECT_MODELS: all }, "8000");
+    expect(tried).toHaveLength(1);
+    expect(ms).toBeLessThan(6_000);
+    expect(done).toMatchObject({ ok: false, stopReason: "no_reply" });
+    expect(events.filter((event) => event.type === "runtime.error")).toEqual([expect.objectContaining({ errorCode: "free_pool_limit", limit: "engine" })]);
+  }, 30_000);
+
+  it("gives the first free model its full wait when the engine was slow to start", async () => {
+    // a start that outlasts the turn's free budget once left the first model no time at all, failing a model that answers
+    process.env.DUSK_ACP_FREE_TURN_MS = "1000";
+    const { done, events } = await firstMessage("", {
+      FAKE_ACP_SESSION_NEW_MS: "1500", FAKE_ACP_TEXT_REPLY_MS: "400", FAKE_ACP_EMPTY_MODELS: "opencode/none",
+    }, "900");
+    expect(done).toMatchObject({ ok: true });
+    expect(events.some((event) => event.type === "runtime.error")).toBe(false);
   }, 20_000);
 
   // The owner's Mac (no AI connected): OpenCode's auth.json held only a stray codex key, so the turn was not treated as a
@@ -1630,8 +1671,8 @@ describe("OpenCode free model that never answers, or answers nothing", () => {
 
     it("stops at the free usage limit within seconds, with the line the connect card is drawn from", async () => {
       const { done, events, tried, ms } = await firstMessage("opencode/big-pickle,opencode/grok-code,opencode/minimax", { FAKE_ACP_FREE_LIMIT: "1" }, "25000", stray);
-      expect(tried).toEqual(["opencode/big-pickle"]);
-      expect(ms).toBeLessThan(7_000);
+      expect(tried).toHaveLength(3);
+      expect(ms).toBeLessThan(12_000);
       expect(done).toMatchObject({ ok: false, stopReason: "no_reply" });
       expect(events.filter((event) => event.type === "runtime.notice")).toEqual([]);
       expect(events.filter((event) => event.type === "runtime.error")).toEqual([expect.objectContaining({

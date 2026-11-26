@@ -5,7 +5,7 @@
 //   FAKE_ACP_REJECT_LIVE_LOAD_FILE  while it exists, load/resume of a session live in this process errors
 //     (FAKE_ACP_REJECT_LIVE_LOAD_DSH=1: with dsh 0.2's -32602 "session is already active" instead of -32000)
 //   FAKE_ACP_CACHED_LIVE_LOAD  a live session/load is acknowledged but keeps the old MCP credentials, like Qwen
-//   FAKE_ACP_TEXT_REPLY  answer every session/prompt with only this text
+//   FAKE_ACP_TEXT_REPLY  answer every session/prompt with only this text, after FAKE_ACP_TEXT_REPLY_MS when set
 //   FAKE_ACP_MODE  happy (default) | image | empty-reply | reasoning-only | exit-early | fail-after-text | crash-in-prompt
 //     | abort-in-prompt (a sign-in link, then a TCMalloc CHECK line on stderr, then exit 134 as bubblewrap reports SIGABRT) | hang
 //     | hang-initialize | unkeyed-tool | finished-tools (tool_call frames that arrive already completed or failed, one updated again)
@@ -48,6 +48,7 @@
 //   FAKE_ACP_VERBOSE_FAIL_ONCE  marker path: the first `models --verbose` fails, like a new OpenCode home's first run
 //   FAKE_ACP_HANG_MODELS  comma-separated model ids whose session/prompt never answers (a hung free model);
 //     with FAKE_ACP_FREE_LIMIT=1 each also logs Zen's "Free usage limit reached" row under XDG_DATA_HOME
+//   FAKE_ACP_SESSION_NEW_MS  every session/new answers after this long (a slow engine start)
 //   FAKE_ACP_EMPTY_MODELS  comma-separated model ids that end their turn with no reply at all
 //   FAKE_ACP_ERROR_MODELS  JSON map model -> provider error: logs it as opencode 1.18's ERROR row under XDG_DATA_HOME,
 //     then the prompt never answers (opencode retrying on its own)
@@ -735,6 +736,10 @@ function handle(msg: any) {
   }
   if (!msg.method) return;
   if (msg.method === "session/prompt" && heldByHoldFile(msg)) return;
+  if (msg.method === "session/new" && process.env.FAKE_ACP_SESSION_NEW_MS && !msg.startDelayed) {
+    setTimeout(() => handle({ ...msg, startDelayed: true }), Number(process.env.FAKE_ACP_SESSION_NEW_MS));
+    return;
+  }
   recordMethod(msg.method, msg.params?.sessionId);
 
   switch (msg.method) {
@@ -1062,8 +1067,12 @@ function handle(msg: any) {
         return;
       }
       if (process.env.FAKE_ACP_TEXT_REPLY !== undefined) {
-        out({ jsonrpc: "2.0", method: "session/update", params: { sessionId: msg.params?.sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: process.env.FAKE_ACP_TEXT_REPLY } } } });
-        result(msg.id, { stopReason: "end_turn", _meta: { inputTokens: 12, outputTokens: 4 } });
+        const reply = () => {
+          out({ jsonrpc: "2.0", method: "session/update", params: { sessionId: msg.params?.sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: process.env.FAKE_ACP_TEXT_REPLY } } } });
+          result(msg.id, { stopReason: "end_turn", _meta: { inputTokens: 12, outputTokens: 4 } });
+        };
+        if (process.env.FAKE_ACP_TEXT_REPLY_MS) setTimeout(reply, Number(process.env.FAKE_ACP_TEXT_REPLY_MS));
+        else reply();
         return;
       }
       if (process.env.FAKE_ACP_REPLAY && !(replayed && process.env.FAKE_ACP_REPLAY_REST !== undefined)) {
