@@ -126,7 +126,7 @@ describe("find_files", () => {
     const home = mkdtempSync(join(tmpdir(), "find-home-"));
     const put = (path: string, body: string) => { mkdirSync(dirname(join(home, path)), { recursive: true }); writeFileSync(join(home, path), body); };
     put("Desktop/old stuff/scans 2024/IMG_4471 halyard paddle club card.txt", "member no. HPC-20417");
-    put("Library/Mobile Documents/com~apple~CloudDocs/Trips/oct-weekend.md", "wifi: JuniperHollow_5G / pw: cedar-smoke-1987");
+    put("Library/Mobile Documents/com~apple~CloudDocs/Trips/oct-weekend.md", "host is Marguerite Oyelaran, Quillmoor cabin");
     put("Library/Caches/halyard club card.txt", "cache");
     put(".hidden/halyard club card.txt", "hidden");
     const calls: string[] = [];
@@ -137,7 +137,7 @@ describe("find_files", () => {
     const byName = await findFiles({ query: "club halyard card" }, { platform: "darwin", home, env: process.env, run });
     expect(calls).toEqual(["mdfind", "find"]);
     expect(byName).toEqual({ text: join(home, "Desktop/old stuff/scans 2024/IMG_4471 halyard paddle club card.txt") });
-    const byContent = await findFiles({ query: "juniperhollow", in_content: true }, { platform: "darwin", home, env: process.env, run });
+    const byContent = await findFiles({ query: "quillmoor cabin", in_content: true }, { platform: "darwin", home, env: process.env, run });
     expect(byContent).toEqual({ text: join(home, "Library/Mobile Documents/com~apple~CloudDocs/Trips/oct-weekend.md") });
     const linux = await findFiles({ query: "paddle" }, { platform: "linux", home, env: process.env, run: async (file, args, options) => (file === "locate" ? { code: 0, stdout: "", stderr: "", timedOut: false } : runProcess(file, args, options)) });
     expect(linux.text).toContain("IMG_4471 halyard paddle club card.txt");
