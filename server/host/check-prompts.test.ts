@@ -40,9 +40,15 @@ describe("reading a watch run's answer", () => {
   it("reads quiet as quiet, and anything that is not the JSON asked for as unreadable", () => {
     expect(parseWatchResult('{"quiet": true}', given)).toEqual({ quiet: true });
     expect(parseWatchResult('{"important": []}', given)).toEqual({ quiet: true });
-    expect(parseWatchResult("NOTHING NEW", given)).toBeNull();
+    expect(parseWatchResult("Sure, here is what I found.", given)).toBeNull();
     expect(parseWatchResult('{"important": "m1"}', given)).toBeNull();
     expect(parseWatchResult('{"note": "hi"}', given)).toBeNull();
     expect(parseWatchResult("{not json", given)).toBeNull();
+  });
+
+  it("reads a run with nothing to say (no reply, or NOTHING NEW) as quiet, not as a failed watch", () => {
+    expect(parseWatchResult("NOTHING NEW", given)).toEqual({ quiet: true });
+    expect(parseWatchResult("Checked 12 emails.\n**Nothing new.**", given)).toEqual({ quiet: true });
+    expect(parseWatchResult("", given)).toEqual({ quiet: true });
   });
 });
