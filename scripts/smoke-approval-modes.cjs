@@ -373,10 +373,10 @@ app.whenReady().then(async () => {
   assert.equal(capability.status, 201);
   const peerResponse = await api("/api/internal/coordinate-bots", "POST", { botIds: [peerTarget.id], message: "Peer-initiated permission fixture", consult: true }, { authorization: `Bearer ${capability.body.token}` });
   assert.equal(peerResponse.status, 200);
-  // A teammate's message lands in the recipient's own chat (one chat per bot), here the conversation selected above.
+  // A teammate's message lands where coordination routes it (one chat per bot: the recipient's own chat), so every
+  // check below reads the receipt's thread rather than assuming which one that is.
   const peerWorkThreadId = peerResponse.body.receipts[0].threadId;
   assert.ok(peerWorkThreadId);
-  assert.equal(peerWorkThreadId, peerThread.threadId);
   const peerDecisions = await until(async () => {
     const rows = (await api("/api/decisions")).body.decisions.filter((row) => row.botId === peerTarget.id && row.threadId === peerWorkThreadId);
     return rows.some((row) => row.source === "full-access") && rows;

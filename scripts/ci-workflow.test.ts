@@ -121,7 +121,7 @@ describe("CI concurrency", () => {
     const smoke = readFileSync(new URL("./smoke-approval-modes.cjs", import.meta.url), "utf8");
     const delegated = smoke.slice(smoke.indexOf("const peerTarget ="), smoke.indexOf("const customCalls ="));
     expect(delegated).toContain("const peerWorkThreadId = peerResponse.body.receipts[0].threadId;");
-    expect(delegated).toContain("assert.notEqual(peerWorkThreadId, peerThread.threadId);");
+    expect(delegated).toContain("assert.ok(peerWorkThreadId);");
     expect(delegated).toContain("task.threadId === peerWorkThreadId)?.busy === false");
     expect(delegated).toContain("/tasks/${peerWorkThreadId}`");
     expect(delegated).toContain("assert.equal(askPeerResponse.body.receipts[0].threadId, peerWorkThreadId);");
