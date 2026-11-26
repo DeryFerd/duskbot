@@ -152,10 +152,14 @@ describe("link previews", () => {
     const builds = Array.from({ length: 12 }, (_, n) => previews.get(`https://many.example/${n}`));
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(gates.length).toBe(6);
-    const releaseAll = async () => {
-      while (gates.length) { gates.shift()!(); await new Promise((resolve) => setImmediate(resolve)); }
-    };
-    await releaseAll(); await releaseAll();
-    expect((await Promise.all(builds)).filter(Boolean)).toHaveLength(12);
+    // never more than six held at once; each freed slot starts the next build, whenever its fetch arrives
+    let done = false;
+    const all = Promise.all(builds).finally(() => { done = true; });
+    while (!done) {
+      expect(gates.length).toBeLessThanOrEqual(6);
+      gates.shift()?.();
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    expect((await all).filter(Boolean)).toHaveLength(12);
   });
 });
