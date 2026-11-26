@@ -147,7 +147,7 @@ export function createWarmSummaryHost(deps: WarmSummaryHostDeps) {
     const { state, exchanges } = keptAfterSummary(store.activePath(threadId), result.session, task.handedMessages?.[instanceId]);
     store.setResumeCursor(botId, instanceId, result.session, threadId);
     store.setHandedMessages(botId, threadId, instanceId, state);
-    store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: serverLine(deps.language?.(threadId), "server.warmSummary.summarized"), ok: true } });
+    store.appendMessage(threadId, { role: "bot", kind: "activity", autoSummary: true, tool: { name: serverLine(deps.language?.(threadId), "server.warmSummary.summarized"), ok: true } });
     deps.log?.(`warm summary ${threadId}: moved to its summarized session, keeping ${exchanges} exchange(s) word for word`);
     return { ok: true };
   };

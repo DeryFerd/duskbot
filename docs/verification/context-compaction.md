@@ -153,10 +153,12 @@ the next turn starts small.
 - **Word for word:** the person's last two messages and everything since
   count as not yet seen by the new session. The next turn sends them on the
   existing "not seen yet" path, which is saved with the conversation.
-- **Shown in the chat:** the line "summarized this conversation while it was
-  idle; the latest messages carry on word for word", in the language of the
-  conversation's person (`server.warmSummary.summarized`). dusk bot's fold
-  shows its usual summary note instead.
+- **Not shown in the chat:** the row "summarized this conversation while it
+  was idle; the latest messages carry on word for word"
+  (`server.warmSummary.summarized`) is kept, marked `autoSummary`, and hidden
+  in every mode and from the sidebar preview, as every automatic compaction
+  is; rows from before the mark are known by their words. dusk bot's own fold
+  is silent too.
 - **A turn that starts meanwhile wins:** the summary is abandoned and nothing
   changes. The exception is a turn that would summarize at its start anyway,
   which waits (up to 3 minutes) for the summary already being written rather

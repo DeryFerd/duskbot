@@ -99,7 +99,7 @@ import { MessageBoundary } from "./MessageBoundary";
 import { RichMessageRow, UserLineNote, richRowKind } from "./RichMessageRow"; import { SetupOffer } from "./SetupOffer";
 import { Composer } from "./Composer"; import { ComposerSignInNotice } from "./ComposerSignInNotice"; import { FailedReplyCard, FoldedNoticesContext, foldedNoticeIds, useTrailingRows } from "./FailedReplyCard";
 import { CARD_ACTION, ChatErrorBanner, ChatErrorCard, ChatNotice } from "./ChatErrorBanner";
-import { ThreadContextWarning } from "./ContextWarning"; import { CompactionNote, compactionShown } from "./CompactionNote";
+import { ThreadContextWarning } from "./ContextWarning"; import { CompactionNote, compactionShown } from "./CompactionNote"; import { isAutoSummaryRow } from "@/lib/auto-summary";
 import { UsageAlert, useLimitResetContinue } from "./EngineUsage";
 import { ChatFindBar } from "./ChatFindBar";
 import { QuotedText, ReplyQuote } from "./ReplyQuote"; import { useQuotedMessage } from "@/lib/quoted-messages";
@@ -776,7 +776,7 @@ const noneTransparent = () => false;
 const hiddenSteps = (item: TranscriptItem) => item.kind !== "message";
 
 function hiddenChatRow(message: Message, botId: string, showToolCalls: boolean): boolean {
-  if (message.reaction || message.quietRun || isCancelledTranscriptRow(message)) return true;
+  if (message.reaction || message.quietRun || isAutoSummaryRow(message) || isCancelledTranscriptRow(message)) return true;
   if (message.role === "bot" && message.kind === "text" && !message.attachments?.length && SILENT_LINE.test(message.text ?? "")) return true;
   switch (richRowKind(message)) {
     case "activity":

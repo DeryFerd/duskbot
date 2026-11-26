@@ -2,7 +2,7 @@ import { approvalCardOutcome } from "./ApprovalCard";
 import type { Bot, Group, InstanceInfo, Message } from "@/state/store";
 import type { RoutineRunCardData } from "../../shared/routine-run";
 import { peerLine } from "@/lib/peer-message";
-import { isReceipt } from "@/lib/receipts";
+import { isReceipt } from "@/lib/receipts"; import { isAutoSummaryRow } from "@/lib/auto-summary";
 import { activityPreview, botEngine, failedTurnCause, STATUS_MARKER } from "@/lib/failed-turn";
 import { t } from "@/lib/i18n";
 import { sidebarConnectorPreview, sidebarGoalRunPreview } from "@/lib/sidebar-layout";
@@ -19,7 +19,7 @@ function isAutoApprovalReceipt(message: { kind: string; tool?: { name?: string }
 
 /** The newest message a preview can show. A receipt, auto-approval audit chip, or screen frame says nothing about the conversation on its own. */
 export function lastPreviewable<T extends { kind: string; tool?: { name?: string } }>(messages: readonly T[] | undefined): T | undefined {
-  return messages?.findLast((message) => !isReceipt(message) && message.kind !== "screen" && !isAutoApprovalReceipt(message));
+  return messages?.findLast((message) => !isReceipt(message) && message.kind !== "screen" && !isAutoApprovalReceipt(message) && !isAutoSummaryRow(message));
 }
 
 export function sidebarPreviewMessages(owner: { messages: Message[]; previewMessages?: Message[]; transcriptLoaded?: boolean; transcriptStale?: boolean }): Message[] {
