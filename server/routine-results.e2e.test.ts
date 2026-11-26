@@ -167,6 +167,62 @@ it("runs a routine made in a chat in that chat, not the bot's first thread, the 
   }
 }, 90_000);
 
+it("reports a routine made in a room to that room, as the bot's member line, and to the bot's main chat once the room is deleted", async () => {
+  const fixture = await launchVerificationServer(process.env, undefined, undefined, undefined, { scripted: true });
+  const planPath = join(fixture.info.dataDir, "room-plan.json");
+  const api = async (method: string, path: string, body?: unknown, status = 200) => {
+    const response = await fetch(`${fixture.info.url}${path}`, {
+      method, headers: { "content-type": "application/json", origin: fixture.info.url },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const value = await response.json() as any;
+    expect(response.status, `${method} ${path}: ${JSON.stringify(value)}`).toBe(status);
+    return value;
+  };
+  const cli = (...args: string[]) => runControlDusk([...args, "--url", fixture.info.url]) as Promise<any>;
+  const messages = async (id: string) => (await api("GET", `/api/threads/${id}/messages?limit=100`)).messages as any[];
+  const runTo = async (routineId: string) => {
+    const { run } = await api("POST", `/api/routines/${routineId}/run`, undefined, 201);
+    await expect.poll(async () => (await api("GET", "/api/routines")).runs.find((candidate: any) => candidate.id === run.id)?.status, { timeout: 20_000 }).toBe("completed");
+    return run as { id: string; resultsThreadId?: string };
+  };
+  try {
+    const { bot } = await cli("new-bot", "--name", "Room routine fixture");
+    const { bot: other } = await cli("new-bot", "--name", "Quiet teammate");
+    const main = bot.activeTaskId as string;
+    const { group } = await api("POST", "/api/groups", { name: "Planning room", memberIds: [bot.id, other.id], defaultResponder: { kind: "mentions" } }, 201);
+    await api("PATCH", `/api/groups/${group.id}/setup`, { action: "skip" });
+    writeFileSync(planPath, JSON.stringify({ [bot.id]: { script: [
+      { key: "create", match: ["Report the fixture state monthly."], steps: [{ tool: "create_trigger", arguments: { when: "schedule",
+        name: "Room report", instructions: "Report the fixture state; no external services.",
+        schedule: { type: "cron", expression: "0 9 1 * *", timeZone: "UTC" },
+      } }], reply: "The routine is scheduled." },
+      { key: "run", match: ["Room report"], steps: [], reply: "Fresh room report" },
+      { key: "run-after", match: ["Room report"], steps: [], reply: "Room report, room gone" },
+    ] } }));
+    await api("POST", `/api/groups/${group.id}/messages`, { text: "@Room routine fixture Report the fixture state monthly." }, 202);
+    await expect.poll(async () => (await api("GET", "/api/routines")).routines.find((routine: any) => routine.name === "Room report")?.id, { timeout: 30_000 }).toBeTruthy();
+    const routine = (await api("GET", "/api/routines")).routines.find((candidate: any) => candidate.name === "Room report");
+    expect(routine.resultsThreadId).toBe(group.threadId);
+
+    const first = await runTo(routine.id);
+    expect(first.resultsThreadId).toBe(group.threadId);
+    await expect.poll(async () => (await messages(group.threadId)).findLast((message) => message.automation?.runId === first.id)?.text, { timeout: 15_000 })
+      .toBe("Fresh room report");
+    const line = (await messages(group.threadId)).findLast((message) => message.automation?.runId === first.id);
+    expect(line.from?.botId).toBe(bot.id);
+    expect((await messages(main)).some((message) => message.automation?.runId === first.id)).toBe(false);
+
+    await api("DELETE", `/api/groups/${group.id}`);
+    const after = await runTo(routine.id);
+    expect(after.resultsThreadId).toBe(main);
+    await expect.poll(async () => (await messages(main)).findLast((message) => message.role === "bot" && message.kind === "text")?.text, { timeout: 15_000 })
+      .toBe("Room report, room gone");
+  } finally {
+    await fixture.close();
+  }
+}, 120_000);
+
 async function resultsFixture() {
   const fixture = await launchVerificationServer();
   const { dataDir, url, logPath } = fixture.info;

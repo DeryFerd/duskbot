@@ -1,12 +1,12 @@
-// Where an automation's runs report: the chat a routine chose, else the chat it was made in while that chat is open, else
-// the bot's main chat. On a Cloud home a chat the owner writes in never gets words they did not choose, so it stays
+// Where an automation's runs report: the chat a routine chose, else the chat or room it was made in while that is open,
+// else the bot's main chat. On a Cloud home a chat the owner writes in never gets words they did not choose, so it stays
 // theirs: a routine someone else wrote, and every outside event, report into a chat of their own.
 import { CLOUD_OUTSIDE_KEY } from "./cloud-sharing.ts";
 import type { Routine, RoutineRun } from "./routines.ts";
 import { threadTitleFrom, type Message, type Store, type TaskRecord } from "./store.ts";
 
 export interface AutomationDestinationDeps {
-  store: Pick<Store, "bot" | "createTask" | "messagesFor" | "taskByThread">;
+  store: Pick<Store, "bot" | "createTask" | "groupByThread" | "groupTaskByThread" | "messagesFor" | "roomThreadOf" | "taskByThread">;
   mainThread(botId: string): string | undefined;
   runs(): readonly Pick<RoutineRun, "webhookId" | "botId" | "resultsThreadId">[];
   /** A Team Cloud: a routine reports to the bot's shared chat, never into one person's chat a teammate could write it for. */
@@ -36,16 +36,27 @@ export function createAutomationDestinations(deps: AutomationDestinationDeps) {
     if (threadId) cloud?.opened(threadId, person);
     return threadId;
   };
+  /** The room conversation `threadId` belongs to, while `botId` is still a member and it is not archived. */
+  const openRoom = (botId: string, threadId: string): string | undefined => {
+    const room = store.groupByThread(threadId);
+    if (!room || room.dm || !room.memberIds.includes(botId)) return undefined;
+    const roomThread = store.roomThreadOf(threadId);
+    if (roomThread === room.threadId) return roomThread;
+    const conversation = store.groupTaskByThread(room.id, roomThread);
+    return conversation && conversation.archivedAt === undefined ? roomThread : undefined;
+  };
   // the bot promises a routine made in a chat reports "here in this chat", so it does while that chat is open
   const sourceChat = (routine: Pick<Routine, "id" | "name" | "botId" | "sourceThreadId">): string | undefined => {
     const bot = store.bot(routine.botId);
     if (deps.team || !routine.sourceThreadId || !bot || bot.hidden) return undefined;
     if (cloud && (cloud.opener(routine.id) !== cloud.owner || !cloud.ownersChat(routine.sourceThreadId))) return undefined;
     const task = store.taskByThread(bot.id, routine.sourceThreadId);
-    return task && !task.routineRunId && task.archivedAt === undefined && !legacyResultsThread(routine.name, task) ? task.threadId : undefined;
+    if (task) return !task.routineRunId && task.archivedAt === undefined && !legacyResultsThread(routine.name, task) ? task.threadId : undefined;
+    return openRoom(bot.id, routine.sourceThreadId);
   };
   return {
     sourceChat,
+    openRoom,
     /** The chat of its own an outside event's run reports into on a Cloud: never the person's, and never a wait's, which reports to the chat that set it. */
     eventChat(run: Pick<RoutineRun, "botId" | "routineName" | "resultsThreadId" | "eventSource">): string | undefined {
       const task = cloud && run.eventSource !== "wait" && run.resultsThreadId ? store.taskByThread(run.botId, run.resultsThreadId) : undefined;

@@ -54,6 +54,7 @@ function home(tasks: Array<{ threadId: string; title: string; archivedAt?: numbe
     createTask: () => null,
     messagesFor: () => [],
     taskByThread: (botId: string, threadId: string) => (botId === "bot" ? byThread.get(threadId) : undefined),
+    groupByThread: () => undefined,
   } as unknown as AutomationDestinationDeps["store"];
   return createAutomationDestinations({ store, mainThread: () => "last-written", runs: () => [], cloud: null, team });
 }
@@ -91,5 +92,35 @@ describe("where a routine made in a chat reports", () => {
     expect(world("owner").destinations.routine(owners, false)).toEqual({ threadId: "person-chat" });
     expect(world("owner").destinations.routine({ ...owners, sourceThreadId: "guest-chat" }, false)).toEqual({ threadId: "main", main: true });
     expect(world("p_someone").destinations.sourceChat(owners)).toBeUndefined();
+  });
+});
+
+describe("where a routine made in a room reports", () => {
+  const room = { id: "room", threadId: "room-main", memberIds: ["bot", "other"], tasks: [{ threadId: "room-main" }, { threadId: "room-side" }, { threadId: "room-old", archivedAt: 1 }] };
+  const inRoom = (rooms: Array<typeof room & { dm?: boolean }>) => {
+    const roomOf = (threadId: string) => rooms.find((candidate) => candidate.tasks.some((task) => task.threadId === threadId.replace(/:member:.*$/, "")));
+    const store = {
+      bot: (id: string) => ({ id }),
+      createTask: () => null,
+      messagesFor: () => [],
+      taskByThread: () => undefined,
+      groupByThread: roomOf,
+      roomThreadOf: (threadId: string) => threadId.replace(/:member:.*$/, ""),
+      groupTaskByThread: (groupId: string, threadId: string) => rooms.find((candidate) => candidate.id === groupId)?.tasks.find((task) => task.threadId === threadId),
+    } as unknown as AutomationDestinationDeps["store"];
+    return createAutomationDestinations({ store, mainThread: () => "main", runs: () => [], cloud: null });
+  };
+  const made = (sourceThreadId: string, botId = "bot") => ({ id: "r", name: "Standup", botId, sourceThreadId }) as Routine;
+
+  it("reports to the room conversation it was made in, from a member's own run of it too", () => {
+    expect(inRoom([room]).routine(made("room-main"), false)).toEqual({ threadId: "room-main" });
+    expect(inRoom([room]).routine(made("room-side:member:bot"), false)).toEqual({ threadId: "room-side" });
+  });
+
+  it("falls back to the bot's main chat once the room or its conversation is gone, archived or the bot left", () => {
+    expect(inRoom([room]).routine(made("room-old"), false)).toEqual({ threadId: "main", main: true });
+    expect(inRoom([]).routine(made("room-main"), false)).toEqual({ threadId: "main", main: true });
+    expect(inRoom([room]).routine(made("room-main", "left"), false)).toEqual({ threadId: "main", main: true });
+    expect(inRoom([{ ...room, dm: true }]).routine(made("room-main"), false)).toEqual({ threadId: "main", main: true });
   });
 });
