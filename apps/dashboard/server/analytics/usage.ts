@@ -401,5 +401,6 @@ export const REASON_WORDS: Record<(typeof USAGE_REASONS)[number], string> = {
   rate_limit: "hit rate limits", quota: "ran out of plan usage", auth: "sign-in expired or was refused", timeout: "timed out", network: "network trouble",
   context: "the chat got too long", refused: "the ai refused", crashed: "the engine crashed", tool: "a tool broke", model_not_found: "the model was not found",
   bad_request: "the provider refused the request", provider_down: "the provider had an outage", cli_missing: "the engine is not installed",
-  cli_exit_early: "the engine quit before replying", no_reply: "the ai sent no reply", unknown: "no clear reason",
+  cli_exit_early: "the engine quit before replying", no_reply: "the ai sent no reply", missed: "the computer was off or asleep", held: "held by a limit or cap",
+  not_ready: "the ai could not start", script: "its script failed", restarted: "dusk bot restarted mid-run", unanswered: "nobody answered its question", unknown: "no clear reason",
 };

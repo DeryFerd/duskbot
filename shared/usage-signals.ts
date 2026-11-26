@@ -126,8 +126,26 @@ function cleanToolFailures(value: unknown): UsageToolFailure[] {
 }
 
 export const USAGE_REASONS = ["rate_limit", "quota", "auth", "timeout", "network", "context", "refused", "crashed", "tool", "model_not_found", "bad_request", "provider_down",
-  "cli_missing", "cli_exit_early", "no_reply", "unknown"] as const;
+  "cli_missing", "cli_exit_early", "no_reply", "missed", "held", "not_ready", "script", "restarted", "unanswered", "unknown"] as const;
 export type UsageReason = (typeof USAGE_REASONS)[number];
+/** why a routine run ended without its work, as its runner knew it: `missed` the computer was off or asleep past the
+ * run's window, `held` a plan limit, spend cap or ended watch kept it from starting (not a failure), `not_ready` its AI
+ * could not start, `script` its own script failed, `restarted` dusk bot restarted under it twice, `stalled` and
+ * `run_limit` it ran out of time, `unanswered` nobody answered its question */
+export const ROUTINE_FAILED_FOR = ["missed", "held", "not_ready", "script", "restarted", "stalled", "run_limit", "unanswered"] as const;
+export type RoutineFailedFor = (typeof ROUTINE_FAILED_FOR)[number];
+const REASON_OF_FAILED_FOR: Readonly<Record<RoutineFailedFor, UsageReason>> = {
+  missed: "missed", held: "held", not_ready: "not_ready", script: "script", restarted: "restarted", stalled: "timeout", run_limit: "timeout", unanswered: "unanswered",
+};
+/** a finished routine run's outcome and, when it did not work, why: the runner's own cause first, else its error's words */
+export function runOutcome(run: { status: string; error?: string; failedFor?: RoutineFailedFor }): { outcome: UsageOutcome; reason?: UsageReason } {
+  if (run.status === "completed") return { outcome: "ok" };
+  if (run.failedFor === "held") return { outcome: "cancelled", reason: "held" };
+  if (run.status === "cancelled") return { outcome: "cancelled" };
+  if (run.failedFor && Object.hasOwn(REASON_OF_FAILED_FOR, run.failedFor)) return { outcome: "failed", reason: REASON_OF_FAILED_FOR[run.failedFor] };
+  if (run.status === "missed") return { outcome: "failed", reason: "missed" };
+  return { outcome: "failed", reason: failureOf(run.error).reason };
+}
 /** a failure's code and its short sanitized detail: an HTTP status, a provider's or engine's error code or class, an
  * errno, a cli exit code or signal, joined by ":" (like "http_429:insufficient_quota" or "exit_1"); never message text */
 export interface UsageFailure { reason: UsageReason; detail?: string }
@@ -242,7 +260,7 @@ const AUTH_WORDS = /\bauth(?:enticat|oriz)|sign(?:ed)? ?in\b|log(?:ged)? ?in\b|u
 const REFUSED_WORDS = /refus|content policy|safety|flagged/i;
 const DOWN_WORDS = /overloaded|internal server error|bad gateway|service unavailable|gateway timeout|server (?:error|problem)|temporar(?:y|ily) unavailable|upstream (?:error|outage)/i;
 const TIMEOUT_WORDS = /time ?out|timed out|took too long|stalled|deadline|did not answer in time/i;
-const NETWORK_WORDS = /network|econn|enotfound|socket|fetch failed|unreachable|\bdns\b|offline|could not be reached|connection (?:error|reset|refused|closed)|stream (?:disconnected|closed|error)|disconnected|terminated|error sending request/i;
+const NETWORK_WORDS = /network|econn|enotfound|socket|fetch failed|unreachable|\bdns\b|(?:could not|couldn't|can't|cannot|unable to) resolve (?:host|hostname|name)|name resolution|offline|could not be reached|connection (?:error|reset|refused|closed)|stream (?:disconnected|closed|error)|disconnected|terminated|error sending request/i;
 const MISSING_WORDS = /isn't installed|not installed|isn't on this app's PATH|command not found|CLI not found/i;
 const BAD_REQUEST_WORDS = /invalid request|bad request|malformed|invalid (?:parameter|argument|value)|unsupported (?:parameter|value)|is not supported|unprocessable/i;
 const NO_REPLY_WORDS = /no (?:completion|reply|response)\b|returned no|empty (?:reply|response|completion)|stopped without saying why|didn'?t reply|no free backup model answered/i;

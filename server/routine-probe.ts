@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { RoutineProbe } from "../shared/routines.ts";
+import { failureOf } from "../shared/usage-signals.ts";
 import { writeFileAtomic } from "./atomic.ts";
 import { clean, recordsBlock, recordsText } from "./records-block.ts";
 import type { Routine, RoutineCheckResult, RoutineChecks, RoutineRun } from "./routines.ts";
@@ -24,6 +25,10 @@ const LAST_KEPT = 2_000;
 export const STUCK_AFTER = 3;
 const RETRY_FIRST_MS = 15 * 60_000;
 const RETRY_MAX_MS = 4 * 60 * 60_000;
+/** A script that met a network blip (a Cloud just woke, a DNS hiccup) runs once more after this, before its run fails. */
+export const SCRIPT_RETRY_MS = 15_000;
+const PASSING = new Set(["network", "timeout", "provider_down", "rate_limit"]);
+const passingScriptError = (error: string) => !error.startsWith("The script ran longer than") && PASSING.has(failureOf(error).reason);
 export const NO_SCRIPTS = "Script checks run only on the person's own computer, not here.";
 
 /** What one read found: `value` is what is compared (a hash, a price), `items` a feed's newest item ids. */
@@ -159,6 +164,8 @@ export interface RoutineProbesDeps {
   fetch?: (url: string) => Promise<PublicPage>;
   /** Runs a script check's command; absent, script checks fail with NO_SCRIPTS. */
   script?: (routine: Routine, command: string, dryRun: boolean) => Promise<ScriptResult>;
+  /** Waits before a script's one retry; tests pass a quick one. */
+  pause?: (ms: number) => Promise<void>;
   /** Once per streak, at its STUCK_AFTER-th failed read: the person hears it, so a probe that cannot read never looks
    * quiet for long. */
   failed?(routine: Routine, sentence: string, count: number): void;
@@ -185,7 +192,11 @@ export function createRoutineProbes(deps: RoutineProbesDeps) {
   async function read(routine: Routine, probe: RoutineProbe, dryRun: boolean): Promise<ProbeReading | { error: string } | { asleep: true }> {
     if (probe.kind === "script") {
       if (!deps.script) return { error: NO_SCRIPTS };
-      const result = await deps.script(routine, probe.command ?? "", dryRun);
+      let result = await deps.script(routine, probe.command ?? "", dryRun);
+      if (!result.ok && passingScriptError(result.error)) {
+        await (deps.pause ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms).unref?.())))(SCRIPT_RETRY_MS);
+        result = await deps.script(routine, probe.command ?? "", dryRun);
+      }
       if (!result.ok) return { error: result.error };
       return wakeAsked(result.output) === false ? { asleep: true } : scriptReading(result.output);
     }
