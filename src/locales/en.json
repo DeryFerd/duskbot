@@ -1471,6 +1471,8 @@
   "cloudPower.wake": "Wake it now",
   "cloudAsleep.waking": "Connecting…",
   "cloudAsleep.wakingSend": "Connecting… your message goes out in a moment",
+  "cloudAsleep.wakingUp": "Waking up your cloud, usually under a minute",
+  "cloudAsleep.wakingSlow": "Taking longer than usual. It opens by itself when it's ready.",
   "send.cloudWakeTimeout": "The cloud is taking longer than usual to wake up, so this message wasn't sent. Try again in a minute.",
   "cloudAsleep.held": "Sends in a moment",
   "cloudAsleep.empty": "No chats seen on this computer yet. They show once it's connected.",

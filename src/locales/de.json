@@ -1446,6 +1446,8 @@
   "cloudPower.wake": "Jetzt aufwecken",
   "cloudAsleep.waking": "Verbinden…",
   "cloudAsleep.wakingSend": "Verbindung wird hergestellt… deine Nachricht wird gleich gesendet",
+  "cloudAsleep.wakingUp": "My Cloud wird geweckt, meist in unter einer Minute",
+  "cloudAsleep.wakingSlow": "Dauert länger als üblich. Sie öffnet sich von selbst, sobald sie bereit ist.",
   "send.cloudWakeTimeout": "Die Cloud braucht länger als üblich zum Aufwachen, daher wurde diese Nachricht nicht gesendet. Versuche es in einer Minute erneut.",
   "cloudAsleep.held": "Wird gleich gesendet",
   "cloudAsleep.empty": "Auf diesem Computer wurden noch keine Chats gesehen. Sie erscheinen, sobald die Verbindung steht.",

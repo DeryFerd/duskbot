@@ -38,14 +38,14 @@ const type = (value: string) => act(async () => {
 beforeEach(() => { setLocale("en"); host = document.createElement("div"); document.body.append(host); Object.assign(window, { duskDesktop: {} }); });
 afterEach(async () => { await act(async () => root?.unmount()); root = null; host.remove(); });
 
-it("never shows a sleeping Cloud: opening the screen wakes it once and only says it is connecting", async () => {
+it("never shows a sleeping Cloud: opening the screen wakes it once and says it is waking up, with how long that usually takes", async () => {
   const { bridge } = bridgeOf({ screen: "asleep" });
   await mount(bridge);
   expect(host.querySelector("[data-home-screen]")?.getAttribute("data-home-screen")).toBe("asleep");
   expect(bridge.wake).toHaveBeenCalledTimes(1);
   expect(bridge.wake).toHaveBeenCalledWith("click", null);
-  expect(line()).toBe("Connecting…");
-  expect(host.textContent).not.toMatch(/asleep/i);
+  expect(line()).toBe("Waking up your cloud, usually under a minute");
+  expect(host.textContent).not.toMatch(/asleep|can't reach/i);
   expect([...host.querySelectorAll("ol li div")].map((node) => node.textContent)).toEqual(["find flights to Goa", "Three options under ₹9,000."]);
   await act(async () => { host.querySelector<HTMLButtonElement>("nav button:nth-child(2)")!.click(); });
   expect(host.querySelector("ol li div")?.textContent).toBe("Draft is ready.");
@@ -111,4 +111,14 @@ it("with nothing seen yet a failed wake says so and offers Try again", async () 
   await act(async () => { button.click(); });
   expect(empty.bridge.wake).toHaveBeenCalledTimes(2);
   expect(empty.bridge.wake).toHaveBeenLastCalledWith("click", null);
+});
+
+it("a wake past a minute says it is taking longer than usual, still never Can't reach, and the screen keeps its composer", async () => {
+  const { bridge, push } = bridgeOf({ screen: "asleep", waking: true });
+  await mount(bridge);
+  expect(line()).toBe("Waking up your cloud, usually under a minute");
+  await push({ screen: "asleep", waking: true, slow: true });
+  expect(line()).toBe("Taking longer than usual. It opens by itself when it's ready.");
+  expect(host.textContent).not.toMatch(/can't reach|try again/i);
+  expect(composer()).not.toBeNull();
 });

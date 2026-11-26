@@ -1423,6 +1423,8 @@
   "cloudPower.wake": "Activarla ahora",
   "cloudAsleep.waking": "Conectando…",
   "cloudAsleep.wakingSend": "Conectando… tu mensaje se enviará en un momento",
+  "cloudAsleep.wakingUp": "Despertando My Cloud, suele tardar menos de un minuto",
+  "cloudAsleep.wakingSlow": "Está tardando más de lo habitual. Se abrirá sola cuando esté lista.",
   "send.cloudWakeTimeout": "La nube está tardando más de lo normal en activarse, así que este mensaje no se envió. Vuelve a intentarlo en un minuto.",
   "cloudAsleep.held": "Se envía en un momento",
   "cloudAsleep.empty": "Aún no hay chats en este ordenador. Aparecerán cuando esté conectado.",

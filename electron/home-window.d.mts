@@ -3,9 +3,9 @@
  * team whose Cloud is being opened (absent for My Cloud). */
 export type HomeView = { name?: string } & (
   | { screen: "opening" | "waking" | "moving" }
-  /** My Cloud asleep: its last-seen chats, read-only, until the person types, clicks or sends; `waking` once they did,
-   * `held` the message they sent meanwhile. */
-  | { screen: "asleep"; waking?: true; held?: string }
+  /** My Cloud asleep: its last-seen chats, read-only, until the person types, clicks or sends; `waking` once they did (or
+   * the Admin wakes it), `slow` past a minute of waking, `held` the message they sent meanwhile. */
+  | { screen: "asleep"; waking?: true; slow?: true; held?: string }
   /** The Admin is setting it up (or a brand-new one's name isn't found yet, at `checking`): the step it reports. */
   | { screen: "setup"; step?: import("./cloud-home.mjs").CloudSetupStep; slow?: true }
   | { screen: "offline"; reason?: string }
@@ -65,6 +65,9 @@ export declare const LOOK_MS: number;
 export declare const OPEN_MS: number;
 export declare const RETRY_MS: readonly number[];
 export declare const CONNECT_GRACE_MS: number;
+export declare const WAKE_LOOK_MS: number;
+export declare const WAKE_SLOW_MS: number;
+export declare const WAKE_GIVE_UP_MS: number;
 export declare const QUIET_MS: number;
 export declare const VERSION_EVERY_MS: number;
 export declare const SPLASH_HANDOFF_MS: number;
