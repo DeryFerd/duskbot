@@ -47,6 +47,9 @@ const EXCLUDED = new Set([
   // A Team Cloud's engine homes (engine-homes/layout.ts): CLI login homes, each audience's own transcripts and the held
   // folder, which no admin reads.
   "engine-homes",
+  // The memory-recall embedding model (memory-embed.ts): a checked download fetched again when missing, written through a
+  // .part file that a running download renames under the backup's feet.
+  "models",
   WAITS_FILE,
 ]);
 const EXCLUSION_NOTES = [

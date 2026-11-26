@@ -107,7 +107,7 @@ describe("a Claude login due for renewal", () => {
     expect(claudeRenewalDue(readClaudeStoredLogin(credentials(dir)), now)).toBe(false);
     expect(readClaudeStoredLogin(join(dir, "missing.json"))).toEqual({ state: "none" });
     expect(claudeCredentialsFile({ HOME: dir })).toBe(credentials(dir));
-    expect(claudeCredentialsFile({ HOME: dir, CLAUDE_CONFIG_DIR: "/srv/claude" })).toBe("/srv/claude/.credentials.json");
+    expect(claudeCredentialsFile({ HOME: dir, CLAUDE_CONFIG_DIR: "/srv/claude" })).toBe(join("/srv/claude", ".credentials.json"));
     for (const name of ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]) expect(claudeCredentialsFile({ HOME: dir, [name]: "x" })).toBeNull();
   });
 });

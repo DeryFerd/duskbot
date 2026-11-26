@@ -401,7 +401,8 @@ async function stopCliTree(child: ChildProcess, pid: number, timeoutMs: number):
     };
     const closed = () => done(true);
     child.once("close", closed);
-    timer = setTimeout(() => done(false), timeoutMs);
+    // as on macOS and Linux, the forced stop gets one more second than the grace, so a grace of 0 still sees taskkill finish
+    timer = setTimeout(() => done(false), timeoutMs + 1_000);
     timer.unref?.();
 
     execFile("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true }, (err) => {
