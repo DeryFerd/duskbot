@@ -160,8 +160,7 @@ describe("a bot's page", () => {
     for (const border of [true, false]) {
       await mount(row(htmlPayload({ border })));
       const classes = find("[data-app]")!.className.split(/\s+/);
-      expect(classes).toContain(SIMPLE_BUBBLE_MAX);
-      expect(classes.filter((name) => name.startsWith("max-w-"))).toEqual([SIMPLE_BUBBLE_MAX]);
+      expect(classes.filter((name) => /^(pointer-coarse:)?max-w-/.test(name))).toEqual(SIMPLE_BUBBLE_MAX.split(" "));
     }
   });
 

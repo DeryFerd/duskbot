@@ -65,8 +65,7 @@ describe("a chart result in the chat", () => {
     const { container, unmount } = mount(receipt("wide", "c_w"));
     try {
       const classes = container.querySelector("[data-data-result]")!.className.split(/\s+/);
-      expect(classes).toContain(SIMPLE_BUBBLE_MAX);
-      expect(classes.filter((name) => name.startsWith("max-w-"))).toEqual([SIMPLE_BUBBLE_MAX]);
+      expect(classes.filter((name) => /^(pointer-coarse:)?max-w-/.test(name))).toEqual(SIMPLE_BUBBLE_MAX.split(" "));
     } finally { unmount(); }
   });
 
