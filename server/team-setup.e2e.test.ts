@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
@@ -8,7 +8,7 @@ import { removeTempDir } from "./testing/cleanup.ts";
 it("Clive sets up multi-provider teams at Ask with no card, keeps existing threads through setup and a deletion the person confirms on its card, and adds a specialist it picked itself at once, with an Undo", async () => {
   const gates = mkdtempSync(join(tmpdir(), "dusk-team-setup-gates-"));
   const gate = join(gates, "finish");
-  const fixture = await launchVerificationServer({ FAKE_CLAUDE_MODE: "slow", FAKE_CLAUDE_SLOW_FINISH_GATE: gate }, undefined, undefined, undefined, undefined, ["codex"]);
+  const fixture = await launchVerificationServer({ FAKE_CLAUDE_MODE: "slow", FAKE_CLAUDE_SLOW_FINISH_GATE: gate, FAKE_CLAUDE_DUMP_DIR: gates }, undefined, undefined, undefined, undefined, ["codex"]);
   const evidence: unknown[] = [{ fixture: fixture.info }];
   const api = async (method: string, path: string, body?: unknown, expected = 200, token?: string, fromApp = true) => {
     const response = await fetch(fixture.info.url + path, { method, headers: { "content-type": "application/json",
@@ -104,7 +104,9 @@ it("Clive sets up multi-provider teams at Ask with no card, keeps existing threa
     await finish();
     await api("POST", `/api/bots/${chief.id}/respond`, { threadId: chief.threadId, requestId: deletion.requestId, behavior: "allow" });
     await expect.poll(async () => (await state()).some((bot: any) => bot.id === engineer.id), { timeout: 20_000 }).toBe(false);
-    // the decision resumes Clive once; let that turn settle before the next one starts
+    // the decision resumes Clive once; let that turn start, then settle, before the next one starts
+    const dumps = () => readdirSync(gates).filter((name) => /^dump-\d+\.json$/.test(name)).map((name) => JSON.parse(readFileSync(join(gates, name), "utf8")));
+    await expect.poll(() => dumps().some((dump) => JSON.stringify(dump.prompt ?? "").includes(deletion.requestId)), { timeout: 20_000 }).toBe(true);
     await expect.poll(async () => !(await state()).find((bot: any) => bot.id === chief.id).busy, { timeout: 20_000 }).toBe(true);
     if (existsSync(fixture.fixtureDumpPath)) previousPid = JSON.parse(readFileSync(fixture.fixtureDumpPath, "utf8")).pid;
     expect((await state()).filter((bot: any) => initialBotIds.has(bot.id)).map((bot: any) => bot.id).sort())
@@ -122,8 +124,10 @@ it("Clive sets up multi-provider teams at Ask with no card, keeps existing threa
     const room = (await control("new-channel", "--name", "Chief review", "--members", chief.id)).channel;
     unlinkSync(gate);
     await control("send-channel", "--channel", room.id, "--task", room.activeTaskId, "--text", "@Clive Add a helper for this room.");
-    await expect.poll(() => JSON.parse(readFileSync(fixture.fixtureDumpPath, "utf8")).pid, { timeout: 15_000 }).not.toBe(previousPid);
-    const groupDump = JSON.parse(readFileSync(fixture.fixtureDumpPath, "utf8")); previousPid = groupDump.pid;
+    // the room's own turn: another of Clive's turns (its own chat) may write the shared dump around the same time
+    const roomDump = () => dumps().find((dump) => dump.mcpConfig?.mcpServers?.agents?.env?.DUSK_THREAD_ID === room.activeTaskId) ?? null;
+    await expect.poll(roomDump, { timeout: 15_000 }).not.toBeNull();
+    const groupDump = roomDump(); previousPid = groupDump.pid;
     const roomPick = await api("POST", "/api/internal/create-bot", { name: "RoomHelper", role: "Room helper", instructions: "Help the room.", suggestion: true, greet: false },
       201, groupDump.mcpConfig.mcpServers.agents.env.DUSK_COMMS_TOKEN);
     expect(roomPick).toMatchObject({ state: "applied", applied: true });
