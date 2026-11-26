@@ -257,6 +257,8 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
       DUSK_CLOUD_COMPUTER_IDLE_MS: "1500",
       // the fake daemon speaks the Cua desktop; the bot desktop's own route is covered in bot-desktop.test.ts
       DUSK_VPS_DESKTOP: "cua",
+      // the server runs outside the test runner's env, so it would fetch the 50 MB embedding model on the first turn
+      DUSK_MEMORY_EMBED: "0",
     };
     if (process.env.PATH) env.PATH = process.env.PATH;
     if (process.env.SystemRoot) env.SystemRoot = process.env.SystemRoot;
@@ -403,7 +405,7 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
     const configured = JSON.stringify(container);
     writeFileSync(template, configured);
     writeFileSync(gateFile, "open");
-    rmSync(`${acpDump}.mcp.json`, { force: true });
+    rmSync(`${acpDump}.mcp.${bot.id}.json`, { force: true });
     const offset = readFileSync(dockerLog, "utf8").length;
     try {
       expect((await api("PATCH", `/api/bots/${bot.id}`, {
@@ -417,7 +419,7 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
         const saved = await botById(bot.id);
         return !saved.busy && saved.messages.some((message: any) => message.text?.startsWith("echo: "));
       }, "the turn on the customized VPS");
-      const mounted = JSON.parse(readFileSync(`${acpDump}.mcp.json`, "utf8"));
+      const mounted = JSON.parse(readFileSync(`${acpDump}.mcp.${bot.id}.json`, "utf8"));
       expect(mounted.find((tool: any) => tool.name === "computer")?.args).toContain(CONTAINER_ID);
       const calls = readFileSync(dockerLog, "utf8").slice(offset);
       expect(calls).not.toMatch(/ssh:\/\/production-vps (run|start|stop|rm|pull|build|update) /);
@@ -513,7 +515,7 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
     const hold = join(fixtureDir, "hold-capture");
     const started = join(fixtureDir, "capture-started");
     writeFileSync(gateFile, "open");
-    rmSync(`${acpDump}.mcp.json`, { force: true });
+    rmSync(`${acpDump}.mcp.${bot.id}.json`, { force: true });
     rmSync(started, { force: true });
     writeFileSync(hold, "hold");
     const preview = api("POST", `/api/bots/${bot.id}/computer/screenshot`, {});
@@ -532,7 +534,7 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
         const saved = await botById(bot.id);
         return !saved.busy && saved.messages.some((message: any) => message.text?.startsWith("echo: "));
       }, "the recovered VPS turn");
-      const mounted = JSON.parse(readFileSync(`${acpDump}.mcp.json`, "utf8"));
+      const mounted = JSON.parse(readFileSync(`${acpDump}.mcp.${bot.id}.json`, "utf8"));
       expect(mounted.find((tool: any) => tool.name === "computer")?.args).toContain(CONTAINER_ID);
     } finally {
       rmSync(hold, { force: true });
@@ -609,10 +611,10 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
     const sharedName = vpsContainerName(teamComputerOwner(teamId));
     rmSync(gateFile, { force: true });
     rmSync(askerGate, { force: true });
-    rmSync(`${acpDump}.mcp.json`, { force: true });
-    rmSync(`${askerDump}.mcp.json`, { force: true });
-    const mounted = (dump: string) => {
-      const rows = JSON.parse(readFileSync(`${dump}.mcp.json`, "utf8")) as Array<{ name: string; args: string[]; env: Array<{ name: string; value: string }> }>;
+    rmSync(`${acpDump}.mcp.${first.id}.json`, { force: true });
+    rmSync(`${askerDump}.mcp.${second.id}.json`, { force: true });
+    const mounted = (dump: string, botId: string) => {
+      const rows = JSON.parse(readFileSync(`${dump}.mcp.${botId}.json`, "utf8")) as Array<{ name: string; args: string[]; env: Array<{ name: string; value: string }> }>;
       const computer = rows.find((row) => row.name === "computer")!;
       return { args: computer.args, url: computer.env.find((entry) => entry.name === "DUSK_CONTROL_URL")!.value,
         token: computer.env.find((entry) => entry.name === "DUSK_CONTROL_TOKEN")!.value };
@@ -634,11 +636,11 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
       expect(outside.body.container_name).not.toBe(sharedName);
 
       expect((await api("POST", `/api/bots/${first.id}/messages`, { text: "Use our shared research desktop" })).status).toBe(202);
-      await until(async () => existsSync(`${acpDump}.mcp.json`) && (await botById(first.id))?.busy, "the first shared desktop turn");
-      const firstMount = mounted(acpDump);
+      await until(async () => existsSync(`${acpDump}.mcp.${first.id}.json`) && (await botById(first.id))?.busy, "the first shared desktop turn");
+      const firstMount = mounted(acpDump, first.id);
       expect((await api("POST", `/api/bots/${second.id}/messages`, { text: "Use the same shared research desktop" })).status).toBe(202);
-      await until(async () => existsSync(`${askerDump}.mcp.json`) && (await botById(second.id))?.busy, "the second shared desktop turn");
-      const secondMount = mounted(askerDump);
+      await until(async () => existsSync(`${askerDump}.mcp.${second.id}.json`) && (await botById(second.id))?.busy, "the second shared desktop turn");
+      const secondMount = mounted(askerDump, second.id);
       expect(firstMount.args).toContain("production-vps");
       expect(secondMount.args).toContain("production-vps");
       expect(firstMount.token).not.toBe(secondMount.token);
@@ -726,7 +728,7 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
     const bot = (await api("POST", "/api/bots")).body.bot;
     await api("PATCH", `/api/bots/${bot.id}`, { computer: "cloud", modelSelection: { instanceId: "vps", model: "fake-model" } });
     writeFileSync(gateFile, "open");
-    rmSync(`${acpDump}.mcp.json`, { force: true });
+    rmSync(`${acpDump}.mcp.${bot.id}.json`, { force: true });
     const created = await api("POST", "/api/routines", {
       botId: bot.id, name: "Explicit VPS check", prompt: "Check the VPS desktop.", enabled: false, runOn: "cloud",
       schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.now() + 3_600_000 },
@@ -740,7 +742,7 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
       return completed && ["completed", "failed"].includes(completed.status);
     }, "the explicitly cloud-targeted VPS routine");
     expect(completed.status, JSON.stringify(completed)).toBe("completed");
-    const rows = JSON.parse(readFileSync(`${acpDump}.mcp.json`, "utf8")) as Array<{ name: string; args: string[] }>;
+    const rows = JSON.parse(readFileSync(`${acpDump}.mcp.${bot.id}.json`, "utf8")) as Array<{ name: string; args: string[] }>;
     expect(rows.find((row) => row.name === "computer")?.args).toContain("production-vps");
   }, 30_000);
 
@@ -805,7 +807,7 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
       expect(echo).toContain("persistent volume");
 
       // SAFETY: the fake ACP CLI wrote this dump from session/new's mcpServers; fake-acp-cli.ts pins the shape.
-      const mcpServers = JSON.parse(readFileSync(`${acpDump}.mcp.json`, "utf8")) as Array<{
+      const mcpServers = JSON.parse(readFileSync(`${acpDump}.mcp.${bot.id}.json`, "utf8")) as Array<{
         name: string;
         command: string;
         args?: string[];
@@ -833,11 +835,11 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
 
       expect((await api("PATCH", `/api/bots/${bot.id}`, { computer: "cloud" })).status).toBe(200);
       const explicitThread = (await api("POST", `/api/bots/${bot.id}/tasks`, {})).body.task.threadId;
-      rmSync(`${acpDump}.mcp.json`, { force: true });
+      rmSync(`${acpDump}.mcp.${bot.id}.json`, { force: true });
       const cloudTurn = await api("POST", `/api/bots/${bot.id}/messages`, { threadId: explicitThread, text: "Open Chrome on the VPS and inspect the page" });
       expect(cloudTurn.status, JSON.stringify(cloudTurn.body)).toBe(202);
-      await until(async () => existsSync(`${acpDump}.mcp.json`) && (await botById(bot.id))?.busy === false, "the explicit VPS turn");
-      const explicitTools = JSON.parse(readFileSync(`${acpDump}.mcp.json`, "utf8"));
+      await until(async () => existsSync(`${acpDump}.mcp.${bot.id}.json`) && (await botById(bot.id))?.busy === false, "the explicit VPS turn");
+      const explicitTools = JSON.parse(readFileSync(`${acpDump}.mcp.${bot.id}.json`, "utf8"));
       expect(explicitTools.find((tool: { name: string }) => tool.name === "computer")?.args).toContain("production-vps");
       const threadPreview = await api("GET", `/api/bots/${bot.id}/computer?threadId=${explicitThread}`);
       expect(threadPreview.body).toMatchObject({ surface: "cloud", backend: "vps", ready: true });
@@ -848,7 +850,7 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
       });
       expect(created.status, JSON.stringify(created.body)).toBe(201);
       expect(created.body.routine.runOn).toBe("maus");
-      rmSync(`${acpDump}.mcp.json`, { force: true });
+      rmSync(`${acpDump}.mcp.${bot.id}.json`, { force: true });
       const started = await api("POST", `/api/routines/${created.body.routine.id}/run`);
       expect(started.status, JSON.stringify(started.body)).toBe(201);
       let completed: any;
@@ -856,7 +858,7 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
         completed = (await api("GET", "/api/routines")).body.runs.find((run: any) => run.id === started.body.run.id);
         return completed?.status === "completed";
       }, "the routine on the existing VPS");
-      const routineTools = JSON.parse(readFileSync(`${acpDump}.mcp.json`, "utf8"));
+      const routineTools = JSON.parse(readFileSync(`${acpDump}.mcp.${bot.id}.json`, "utf8"));
       expect(routineTools.find((tool: { name: string }) => tool.name === "computer")?.args).toContain("production-vps");
       const routineMessages = (await api("GET", `/api/threads/${completed.threadId}/messages?limit=100`)).body.messages;
       expect(routineMessages.some((message: any) => message.text?.includes("a sandboxed computer on the user's own VPS"))).toBe(true);
@@ -902,7 +904,7 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
       expect((await api("PATCH", `/api/bots/${bot.id}`, { cloudBackend: "vps" })).status).toBe(200);
       expect((await api("PATCH", `/api/bots/${bot.id}`, { computer: "cloud" })).status).toBe(200);
       const mountedComputer = () => {
-        const servers = JSON.parse(readFileSync(`${acpDump}.mcp.json`, "utf8")) as Array<{ name: string; args?: string[]; env?: Array<{ name: string; value: string }> }>;
+        const servers = JSON.parse(readFileSync(`${acpDump}.mcp.${bot.id}.json`, "utf8")) as Array<{ name: string; args?: string[]; env?: Array<{ name: string; value: string }> }>;
         const computer = servers.find((server) => server.name === "computer");
         expect(computer, "no computer MCP server reached the agent").toBeTruthy();
         const env = (name: string) => computer!.env?.find((entry) => entry.name === name)?.value ?? "";
@@ -919,13 +921,13 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
       const check = (await api("POST", `/api/bots/${bot.id}/tasks`, { title: "Queue check" })).body.task;
       try {
         expect((await api("POST", `/api/bots/${bot.id}/messages`, { threadId: refill.threadId, text: "Refill capacity on the VPS" })).status).toBe(202);
-        await until(async () => existsSync(`${acpDump}.mcp.json`) && await taskBusy(refill.threadId), "the long VPS turn");
+        await until(async () => existsSync(`${acpDump}.mcp.${bot.id}.json`) && await taskBusy(refill.threadId), "the long VPS turn");
         const refillMount = mountedComputer();
         expect(refillMount.args).toContain("production-vps");
-        rmSync(`${acpDump}.mcp.json`, { force: true });
+        rmSync(`${acpDump}.mcp.${bot.id}.json`, { force: true });
 
         expect((await api("POST", `/api/bots/${bot.id}/messages`, { threadId: check.threadId, text: "Check the queue on the VPS" })).status).toBe(202);
-        await until(async () => existsSync(`${acpDump}.mcp.json`) && await taskBusy(check.threadId), "the second VPS turn, while the first still runs");
+        await until(async () => existsSync(`${acpDump}.mcp.${bot.id}.json`) && await taskBusy(check.threadId), "the second VPS turn, while the first still runs");
         const checkMount = mountedComputer();
         expect(checkMount.args).toContain("production-vps");
         expect(checkMount.token).not.toBe(refillMount.token);
@@ -973,11 +975,11 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
     writeFileSync(template, original.replace('"Running":true', '"Running":false'));
     writeFileSync(gateFile, "open");
     rmSync(askerGate, { force: true });
-    rmSync(`${askerDump}.mcp.json`, { force: true });
+    rmSync(`${askerDump}.mcp.${asker.id}.json`, { force: true });
     try {
       expect((await api("POST", `/api/bots/${asker.id}/messages`, { text: "Ask your teammate for the queue summary" })).status).toBe(202);
-      await until(async () => existsSync(`${askerDump}.mcp.json`), "the asker's turn");
-      const agents = (JSON.parse(readFileSync(`${askerDump}.mcp.json`, "utf8")) as Array<{ name: string; env?: Array<{ name: string; value: string }> }>)
+      await until(async () => existsSync(`${askerDump}.mcp.${asker.id}.json`), "the asker's turn");
+      const agents = (JSON.parse(readFileSync(`${askerDump}.mcp.${asker.id}.json`, "utf8")) as Array<{ name: string; env?: Array<{ name: string; value: string }> }>)
         .find((server) => server.name === "agents");
       const token = agents?.env?.find((entry) => entry.name === "DUSK_COMMS_TOKEN")?.value ?? "";
       const sent = await fetch(`${BASE}/api/internal/coordinate-bots`, {
@@ -1074,11 +1076,11 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
 
       // A real turn mounts the computer bridge against the bot's own server.
       expect((await api("PATCH", `/api/bots/${alpha.id}`, { browser: false, modelSelection: { instanceId: "vps", model: "fake-model" } })).status).toBe(200);
-      rmSync(`${acpDump}.mcp.json`, { force: true });
+      rmSync(`${acpDump}.mcp.${alpha.id}.json`, { force: true });
       try {
         expect((await api("POST", `/api/bots/${alpha.id}/messages`, { text: "Check the desk on my own server" })).status).toBe(202);
-        await until(async () => existsSync(`${acpDump}.mcp.json`), "the alpha turn's computer mount");
-        const servers = JSON.parse(readFileSync(`${acpDump}.mcp.json`, "utf8")) as Array<{ name: string; args?: string[] }>;
+        await until(async () => existsSync(`${acpDump}.mcp.${alpha.id}.json`), "the alpha turn's computer mount");
+        const servers = JSON.parse(readFileSync(`${acpDump}.mcp.${alpha.id}.json`, "utf8")) as Array<{ name: string; args?: string[] }>;
         const computer = servers.find((server) => server.name === "computer");
         expect(computer, "no computer MCP server reached the agent").toBeTruthy();
         expect(computer!.args).toContain("alpha-vps");
