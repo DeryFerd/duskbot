@@ -66,8 +66,10 @@ catalog is never listed: without a login or credits those answer with
 `Insufficient balance` (HTTP 402). For the same reason a free turn that stalls
 moves on only through models marked free, never through a paid one
 (`openCodeFreeModelOrder`); a catalog that marks none, from an older CLI that
-lists only free models, is all free. The free models all share one per-IP
-limit, so picking a different one does not buy more free turns.
+lists only free models, is all free. Zen's free limit is a daily count per IP:
+most free models share one count, and a model Zen gives a limit of its own is
+counted apart (keyed by the first two letters of its id), so a turn the limit
+refuses moves on only to free models in another count.
 
 Some models take a limited number of tools per request (OpenCode Zen's free
 models refuse more than 128). When a model refuses a turn for that,
