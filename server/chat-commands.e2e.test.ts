@@ -57,9 +57,9 @@ it("/compact with a focus and /new act on the conversation, never reach the bot 
     const bots = (await f.api("/api/bots?messages=0")).bots;
     const tasks = bots.find((b: any) => b.id === f.bot.id).tasks;
     expect(tasks.filter((t: any) => !t.routineRunId)).toHaveLength(2);
-    // the old chat stays, ends with a line saying a new chat began, and was never sent "/new"
+    // the old chat stays as it was, and was never sent "/new"
     const old = await f.messages(thread);
-    expect(old.at(-1)).toMatchObject({ kind: "activity", tool: { name: expect.stringMatching(/^notice: Started a new chat/) } });
+    expect(old.at(-1)).toMatchObject({ kind: "compaction" });
     expect(old.some((m) => m.role === "user" && m.text === "/new")).toBe(false);
     // a /new in a chat with nothing said yet keeps it
     expect(await f.api(`/api/bots/${f.bot.id}/messages`, { threadId: fresh.threadId, text: "/new" })).toMatchObject({ threadId: fresh.threadId, fresh: false });

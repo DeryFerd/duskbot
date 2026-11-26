@@ -182,7 +182,6 @@
   "server.reports.fixed": "Behoben in {version}. Möchtest du es noch einmal versuchen?",
   "server.questions.notAsked": "Nicht gefragt (Just do it): {question}",
   "server.warmSummary.summarized": "Diese Unterhaltung wurde in einer Pause zusammengefasst; die letzten Nachrichten bleiben wörtlich erhalten",
-  "server.newChat.marker": "Neuer Chat gestartet. Dieser bleibt gespeichert und durchsuchbar",
   "server.runs.didNotFinish": "Diese Ausführung wurde nicht beendet.",
   "server.runs.didNotFinishWhy": "Diese Ausführung wurde nicht beendet: {detail}",
   "server.runs.partlyDoneWhy": "Diese Ausführung wurde teilweise erledigt: {detail}",

@@ -28,9 +28,8 @@ record is newer than the last reply).
 ## /new, /compact and hours away
 
 - **`/new`** starts a fresh conversation for the bot. The chat it was typed in
-  captures what it taught to memory at once (not after its quiet minutes),
-  ends with the line "Started a new chat. This one stays saved and
-  searchable", and stays in the bot's conversations, where `session_search`
+  captures what it taught to memory at once (not after its quiet minutes)
+  and stays in the bot's conversations as it was, where `session_search`
   still finds it. Typed in a chat with nothing said yet, it keeps that chat.
   `/reset` is read the same way.
 - **`/compact [focus]`** summarizes the conversation now, as Compact now does;
@@ -78,8 +77,7 @@ pnpm exec vitest run server/chat-commands.e2e.test.ts server/messengers/telegram
 
 `server/chat-commands.e2e.test.ts` runs the real server with the fake Claude
 Code: `/compact <focus>` and `/new` sent as messages (never reaching the
-engine as words, a retried `/new` making no second chat, the old chat's
-closing line, the new chat's first turn carrying no summary), and a chat
+engine as words, a retried `/new` making no second chat, the new chat's first turn carrying no summary), and a chat
 left alone summarized by the sweep in seconds (`DUSK_IDLE_COMPACT_HOURS`
 0.0005, `DUSK_IDLE_SWEEP_MS`, `DUSK_IDLE_COMPACT_MIN_TOKENS`, test-only), after
 which the next turn starts a fresh session from the summary with the

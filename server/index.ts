@@ -1151,7 +1151,7 @@ function aboutOwnerFor(botId: string, threadId: string): string {
 const heldKey = (botId: string, threadId: string) => `${botId}\n${threadId}`;
 /** Hermes Agent's pre-compression flush: the turns a summary is about to fold are queued for capture first, and the next
  * turn reads memory fresh, with whatever this conversation saved. */
-function beforeCompaction(botId: string, threadId: string): void { memoryUpkeep.flushThread(threadId); releaseHeldMemory(heldKey(botId, threadId)); } const { leftForNewChat, startNewChat } = createNewChat({ store: () => store, flushMemory: (threadId) => memoryUpkeep.flushThread(threadId), language: (threadId) => threadLanguage(threadId) });
+function beforeCompaction(botId: string, threadId: string): void { memoryUpkeep.flushThread(threadId); releaseHeldMemory(heldKey(botId, threadId)); } const { leftForNewChat, startNewChat } = createNewChat({ store: () => store, flushMemory: (threadId) => memoryUpkeep.flushThread(threadId) });
 
 /** About me and the core notes this turn's system prompt carries, held for the conversation so its cached prefix holds. */
 function heldMemoryParts(bot: BotRecord, threadId: string, turnShape: Parameters<typeof memorySystemPrompt>[1] & object): { about: string; core: string } {

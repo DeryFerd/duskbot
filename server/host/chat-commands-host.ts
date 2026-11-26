@@ -1,32 +1,28 @@
 // What /new, /compact and hours-away compaction need from the server (shared/chat-commands.ts, server/idle-compaction.ts):
-// - leftForNewChat / startNewChat: a fresh chat for the bot; the one it left captures its memory now and says so;
+// - leftForNewChat / startNewChat: a fresh chat for the bot; the one it left captures its memory now;
 // - chatAppCompact: /compact from Telegram or Discord, as Compact now;
 // - createAwayCompaction: the sweep, given which conversations qualify and how one is folded.
 import { randomUUID } from "node:crypto";
-import { serverLine } from "../server-lines.ts";
 import type { BotRecord, Message, Store } from "../store.ts";
 import type { UsageTrigger } from "../usage-ledger.ts";
 import { conversationHold, type QuietDeps } from "./warm-summary-host.ts";
 import { createIdleCompaction, IDLE_COMPACT_MIN_TOKENS, idleCompactHours } from "../idle-compaction.ts";
 
-type ChatStore = Pick<Store, "taskByThread" | "groupByThread" | "activePath" | "appendMessage" | "createTask">;
+type ChatStore = Pick<Store, "taskByThread" | "groupByThread" | "activePath" | "createTask">;
 
 export function createNewChat(deps: {
   /** A getter: the server builds this before its store exists. */
   store(): ChatStore;
   /** Captures the thread's waiting memory now (memoryUpkeep.flushThread). */
   flushMemory(threadId: string): void;
-  language(threadId: string): string | undefined;
 }) {
   const said = (threadId: string) => deps.store().activePath(threadId).some((m) => m.role === "user");
   /** `/new` (or New chat with the chat it left): what the old chat taught is captured now rather than after its quiet
-   * minutes, and it ends with a line saying a new chat began. It stays saved, and session_search still finds it. */
+   * minutes. It stays saved as it was, and session_search still finds it. */
   function leftForNewChat(botId: string, fromThreadId: string, newThreadId: string): void {
     const store = deps.store();
     if (fromThreadId === newThreadId || !store.taskByThread(botId, fromThreadId) || store.groupByThread(fromThreadId)) return;
     deps.flushMemory(fromThreadId);
-    if (!said(fromThreadId)) return;
-    store.appendMessage(fromThreadId, { role: "bot", kind: "activity", tool: { name: `notice: ${serverLine(deps.language(fromThreadId), "server.newChat.marker")}`, ok: true } });
   }
   /** `/new` sent as a message (the API, an older app): a fresh conversation for the bot, selected. A chat with nothing
    * said in it yet is already fresh and is kept. `starter`: who opened it, as for New chat on a shared workspace. */
