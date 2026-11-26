@@ -134,8 +134,8 @@ export interface BotMovedTo {
 /** One task = one conversation with its own context, thread and provider
  * session. */
 export interface WireTask extends InboxTask {
-  /** Outstanding handoffs, not an active provider turn. */
-  waitingForTeammates?: boolean;
+  /** Outstanding handoffs, not an active provider turn. compacting: a summary the person waits on is being written. */
+  waitingForTeammates?: boolean; compacting?: true;
   threadId: string;
   title: string;
   createdAt: number;

@@ -2364,7 +2364,7 @@ function clearDirectTurnDispatch(threadId: string, claimId: string): void {
   }
 }
 
-const compactionControllers = new Map<string, { generation: string; controller: AbortController }>();
+const compactionControllers = new Map<string, { generation: string; controller: AbortController; shown?: true }>(); const compactingChanged = (threadId: string) => { const bot = store.botByThread(threadId); if (bot) broadcast({ kind: "bot", bot: wireBot(bot) }); };
 
 function cancelDirectTurnDispatch(botId: string, expectedThreadId?: string): DirectTurnDispatchClaim | null {
   const threadId = expectedThreadId ?? store.bot(botId)?.threadId;
@@ -3120,7 +3120,7 @@ const wireTask = (task: TaskRecord, botModel: ModelSelection, awaiting = threads
   const { snoozedUntil, ...base } = toWireTask(task, botModel);
   const keepWarm = cacheKeepWarmStatus(task.threadId);
   const backup = threadBackup(task, base.modelSelection ?? botModel);
-  const coordinated = { ...base, waitingForTeammates: awaiting.has(task.threadId) && !task.busy, ...(keepWarm ? { cacheKeepWarm: keepWarm } : {}), ...(backup ? { backup } : {}), ...(teamHost.ownTurn(task.threadId) ? { private: true as const } : {}), ...teamMessages.inbox.wire(task.threadId) };
+  const coordinated = { ...base, waitingForTeammates: awaiting.has(task.threadId) && !task.busy, ...(keepWarm ? { cacheKeepWarm: keepWarm } : {}), ...(compactionControllers.get(task.threadId)?.shown ? { compacting: true as const } : {}), ...(backup ? { backup } : {}), ...(teamHost.ownTurn(task.threadId) ? { private: true as const } : {}), ...teamMessages.inbox.wire(task.threadId) };
   const asleep = snoozedUntil === 0 || (snoozedUntil !== undefined && snoozedUntil > Date.now());
   return asleep ? { ...coordinated, snoozedUntil } : coordinated;
 };
@@ -7906,7 +7906,7 @@ async function compactConversation(input: {
   if (!foldedThroughId) return;
   const prefix = JSON.stringify(messages);
   const controller = new AbortController(); idle?.addEventListener("abort", () => controller.abort(), { once: true }); if (idle?.aborted) controller.abort();
-  compactionControllers.set(threadId, { generation, controller });
+  compactionControllers.set(threadId, { generation, controller, ...(idle ? {} : { shown: true as const }) }); if (!idle) compactingChanged(threadId);
   try {
     beforeCompaction(bot.id, threadId); const previous = record && fold.folded[0]?.id === record.id ? { id: record.id, summary: record.summary } : undefined;
     const summary = await draftSummary(fold.folded, { signal: controller.signal, generateText: sideJobs.text("compaction", bot.id, { instance })?.generateText, previous, today: memoryDate(), ...(manual || idle ? { thorough: true, timeoutMs: BACKGROUND_CALL_MS } : {}), ...(focus ? { focus } : {}), archive: supportsWorkspaceFiles(instance.driverKind) ? archiveFoldedTools({ botId: bot.id, threadId, messages, afterId: previous && record?.foldedThroughId, throughId: foldedThroughId, spillDir: threadToolResultsDir(TOOL_RESULTS_DIR, threadId), cwd: task.cwd !== undefined ? task.cwd : bot.cwd, boxed: botBox.enabled() }) : undefined });
@@ -7922,7 +7922,7 @@ async function compactConversation(input: {
         tokensBefore: measurement?.tokens ?? Math.ceil(bytes / 4), by: manual ? "person" : "harness", ...(away ? { awayHours: away.hours } : {}) },
     }, { kind: "compaction.append", key: `${threadId}:${messages.at(-1)?.id}:${fold.firstKeptId}` });
   } finally {
-    if (compactionControllers.get(threadId)?.generation === generation) compactionControllers.delete(threadId);
+    if (compactionControllers.get(threadId)?.generation === generation) { compactionControllers.delete(threadId); if (!idle) compactingChanged(threadId); }
   }
 }
 

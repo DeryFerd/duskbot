@@ -2415,6 +2415,7 @@
   "chat.compacted.person": "Compacted this chat. The whole chat stays here",
   "chat.compacted.away": "Summarized older messages after {hours} hours away. The whole chat stays here",
   "chat.compacted.auto": "Summarized older messages to keep this chat quick. The whole chat stays here",
+  "chat.compacting": "Compacting this chat. This can take a minute",
   "chat.compacted.busy": "Finish or stop the current reply first, then compact",
   "contextWarning.compacting": "Compacting…",
   "contextWarning.busy": "Stop this bot's turn first",
