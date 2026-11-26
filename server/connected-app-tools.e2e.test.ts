@@ -76,15 +76,23 @@ it("a bot given Gmail by its app switch reaches gmail.search_emails by name on C
     await expect.poll(async () => (await api("GET", `/api/threads/${bot.threadId}/messages`)).messages
       .some((message: any) => message.role === "bot" && String(message.text).startsWith("reply to:")), { timeout: 20_000 }).toBe(true);
 
+    // the reply can show before the turn has settled; a message sent then is steered into the Claude turn, never reaching Cline
+    await expect.poll(async () => (await api("GET", "/api/bots")).bots.find((row: any) => row.id === bot.id)?.busy, { timeout: 20_000 }).toBe(false);
     await api("PATCH", `/api/bots/${bot.id}`, { modelSelection: { instanceId: "cline", model: "cline-default" } });
-    await send("Find Ada's mail again", "app-tools-e2e-send-0002");
+    const again = await send("Find Ada's mail again", "app-tools-e2e-send-0002");
+    expect(again.steered, "the second ask starts its own Cline turn").toBeUndefined();
     const mounts = `${join(fixture.info.dataDir, "cline-launch.json")}.mcp.json`;
     // the launch file can be read before the turn's own mounts are in it
     let composio: any;
     await expect.poll(() => {
       try { composio = (JSON.parse(readFileSync(mounts, "utf8")) as any[]).find((entry) => entry.name === "composio"); } catch { return false; }
       return Boolean(composio);
-    }, { timeout: 20_000 }).toBe(true);
+    }, { timeout: 20_000 }).toBe(true).catch(async (error: Error) => {
+      const read = (path: string) => { try { return readFileSync(path, "utf8").slice(-2_000); } catch { return "(none)"; } };
+      const state = await api("GET", "/api/bots");
+      const row = state.bots.find((candidate: any) => candidate.id === bot.id);
+      throw new Error(`${error.message}\nbusy: ${row?.busy}, queued: ${JSON.stringify(state.queued?.[bot.threadId] ?? [])}\nmessages: ${JSON.stringify(row?.messages?.slice(-8).map((m: any) => [m.role, m.kind, String(m.text ?? m.tool?.name ?? "").slice(0, 160)]))}\nmounts: ${read(mounts)}\nserver log: ${read(fixture.info.logPath)}`);
+    });
     const onAcp = await ask(acpBridge(composio), { name: "gmail_search_emails", arguments: { query: "from:ada@example.test" } });
     const plain = (names: string[]) => names.filter((name) => /^(gmail|googlecalendar)[._]/.test(name)).map((name) => name.replace(".", "_")).sort();
     expect(plain(onAcp.names), "the same tools under the same names").toEqual(plain(onClaude.names));
