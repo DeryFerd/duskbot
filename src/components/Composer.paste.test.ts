@@ -155,6 +155,20 @@ describe("what an attach leaves out", () => {
     flushSync(() => card!.querySelector<HTMLButtonElement>("button[aria-label=Dismiss]")!.click());
     expect(container.querySelector("[data-attach-notice]")).toBeNull();
   });
+
+  it("goes once the message is sent", async () => {
+    flushSync(() => root.render(createElement(Composer, { bot })));
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "dataTransfer", { value: { types: ["Files"], files: [new File(["MZ"], "setup.exe", { type: "application/x-msdownload" })] } });
+    window.dispatchEvent(drop);
+    await settle();
+    expect(container.querySelector("[data-attach-notice=warning]")).not.toBeNull();
+    flushSync(() => restoreComposerDraft(`bot:${bot.id}:${bot.threadId}`, { text: "here it is", attachments: [] }));
+    const box = container.querySelector("textarea")!;
+    flushSync(() => box.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+    expect(fixture.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "send", text: "here it is" }));
+    expect(container.querySelector("[data-attach-notice]")).toBeNull();
+  });
 });
 
 describe("an attachment row wider than the composer", () => {

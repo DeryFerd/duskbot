@@ -737,7 +737,7 @@ export const Composer = memo(function Composer({
       directMessageSent(state.instances, bot.modelSelection?.instanceId, busy && (followUp !== "steer" || !canSteer));
     }
     setText("");
-    setAttachments(attachments.filter(attachmentUnsent)); picks.clear();
+    setAttachments(attachments.filter(attachmentUnsent)); picks.clear(); setAttachmentNotice(null);
     onConsumeReply?.(); setSelectionQuote(draftId, null);
     setChannelMode("chat");
     // a click on the round button takes focus, and the button unmounts once the field is empty; grok hands it back
