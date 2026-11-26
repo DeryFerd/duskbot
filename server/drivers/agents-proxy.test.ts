@@ -1444,9 +1444,9 @@ describe("agents-proxy MCP surface", () => {
     expect(lastSessionSearchUrl).toContain("limit=5");
     const text = res.result.content[0].text as string;
     expect(text).toContain("3 matching messages");
-    expect(text).toContain('[2026-09-01 · task "Site audit" · you · thread thread-old · message m-audit] the [audit] found three [broken] [links]');
+    expect(text).toContain('[2026-09-01 · task "Site audit" · you · thread thread-old · message m-audit · link [#Site audit](duskbot://thread/thread-old)] the [audit] found three [broken] [links]');
     expect(text).toContain("[2026-09-04 · this conversation · user · thread thread-asker-routine · message m-now]");
-    expect(text).toContain('[2026-09-02 · task "Vendor follow-up" · @Scout (another bot, not your user) · thread thread-asker · message m-peer]');
+    expect(text).toContain('[2026-09-02 · task "Vendor follow-up" · @Scout (another bot, not your user) · thread thread-asker · message m-peer · link [#Vendor follow-up](duskbot://thread/thread-asker)]');
     expect(text).not.toContain("· user · thread thread-asker ·");
     expect(text).toContain("call session_search with its thread_id and message_id");
 
