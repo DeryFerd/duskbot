@@ -31,6 +31,14 @@ function script(directory: string, name: string, body: string): string {
   return path;
 }
 
+/** A CLI found on PATH by name, its probe faked so it never runs: Windows looks for the .exe. */
+function onPath(directory: string, name: string): string {
+  if (process.platform !== "win32") return script(directory, name, "");
+  const path = join(directory, `${name}.exe`);
+  writeFileSync(path, "");
+  return path;
+}
+
 afterEach(async () => {
   Object.defineProperty(process, "platform", { value: platform });
   setAntigravityVersionProbe(null);
@@ -49,7 +57,7 @@ describe("Antigravity CLI versions", () => {
   it("skips an Antigravity CLI on PATH older than `agy acp`, so the official runtime gets installed instead", async () => {
     if (!resolveAntigravityReleaseAsset()) return;
     const bin = folder();
-    script(bin, "antigravity", "");
+    onPath(bin, "antigravity");
     setAntigravityVersionProbe(async () => "1.3.5");
     vi.spyOn(console, "warn").mockImplementation(() => {});
     await expect(resolveAntigravityRuntime(undefined, { PATH: bin }, folder()))
@@ -58,7 +66,7 @@ describe("Antigravity CLI versions", () => {
 
   it.each([["1.5.16", "1.5.16"], ["1.5.0", "1.5.0"], [null, null]])("uses a CLI on PATH that reports %s", async (reported, version) => {
     const bin = folder();
-    const executable = script(bin, "antigravity", "");
+    const executable = onPath(bin, "antigravity");
     setAntigravityVersionProbe(async () => reported);
     await expect(resolveAntigravityRuntime(undefined, { PATH: bin }, folder()))
       .resolves.toEqual({ executablePath: executable, source: "path", version });

@@ -13,6 +13,7 @@ import type { Store } from "../store.ts";
 import { TurnResources, type TurnOwner } from "../turn-resources.ts";
 import { audienceBrowserSuffix } from "../browser/audience.ts";
 import { chromeLauncher } from "../browser/chrome/launcher.ts";
+import { ChromeEngine } from "../browser/engines.ts";
 import type { CdpSession, Params } from "../browser/cdp/connection.ts";
 import { FileChoosers } from "../browser/cdp/files.ts";
 import { uploadableFiles } from "../browser-upload.ts";
@@ -35,7 +36,10 @@ vi.mock("../browser-processes.ts", async (original) => ({
 
 type Host = ReturnType<typeof createBrowserHost>;
 const hosts: Host[] = [];
-afterEach(async () => { await Promise.all(hosts.splice(0).map((host) => host.browserRuntime.closeAll())); });
+// The new engine counts as able to run here whatever this machine has installed: these check the host's routing, and
+// a runner whose Chrome is missing or policy-managed (the Windows runner) would otherwise answer every call with null.
+beforeEach(() => { vi.spyOn(ChromeEngine.prototype, "summary").mockReturnValue({ kind: "engine", version: "dusk-cdp", chrome: "fixture Chrome" }); });
+afterEach(async () => { vi.mocked(ChromeEngine.prototype.summary).mockRestore(); await Promise.all(hosts.splice(0).map((host) => host.browserRuntime.closeAll())); });
 
 const turn = { threadId: "thread-1", generation: "gen-1" };
 

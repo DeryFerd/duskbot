@@ -100,6 +100,8 @@ describe("this computer belongs to the desktop app's own server", () => {
     await waitForExit(proc, { signal: "SIGTERM" });
   }
   const itHost = process.platform === "linux" ? it.skip : it;
+  // Screen Recording permission is macOS's; its stand-in agent-browser below is a shell script too
+  const itMac = process.platform === "darwin" ? it : it.skip;
 
   beforeAll(() => {
     home = mkdtempSync(join(tmpdir(), "dusk-desktop-computer-"));
@@ -190,7 +192,7 @@ describe("this computer belongs to the desktop app's own server", () => {
     expect((await rows(task.threadId)).filter(line => line === "Open Chrome on this computer.")).toHaveLength(1);
   });
 
-  itHost("a bot on this computer without screen permission still replies, with its browser and no screen tools", async () => {
+  itMac("a bot on this computer without screen permission still replies, with its browser and no screen tools", async () => {
     writeFileAtomic(join(home, "user-data", "cua-connection.json"), JSON.stringify({
       mode: "unavailable", reason: "Screen Recording required for CuaDriver; turn on CuaDriver in System Settings > Privacy & Security",
     }));
@@ -225,7 +227,7 @@ describe("this computer belongs to the desktop app's own server", () => {
     expect(lines).not.toMatch(/can't use this computer yet|failed/i);
   });
 
-  itHost("a bot on Auto on this computer without screen permission can ask for it, with its browser and no screen tools", async () => {
+  itMac("a bot on Auto on this computer without screen permission can ask for it, with its browser and no screen tools", async () => {
     writeFileAtomic(join(home, "user-data", "cua-connection.json"), JSON.stringify({
       mode: "unavailable", reason: "embedded host failed: Accessibility and Screen Recording required; grant access in System Settings and restart dusk bot",
     }));

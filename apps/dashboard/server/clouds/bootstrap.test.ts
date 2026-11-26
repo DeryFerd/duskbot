@@ -109,7 +109,8 @@ it("gives the pool image the same env, link and volume marker", () => {
   expect(prepareCloudHomeVolume(dir, cloudId)).toBe("existing");
 });
 
-it("mounts and grows the data volume before Docker starts, failing closed without exactly one disk", () => {
+// the Cloud server's bootstrap globs a Linux device path; on Windows the fixture folder is a drive path bash cannot glob
+it.skipIf(process.platform === "win32")("mounts and grows the data volume before Docker starts, failing closed without exactly one disk", () => {
   const script = dedicatedUserData({ ...input, image }), dir = temporaryDir();
   const storage = script.split("<<'DUSK_STORAGE'\n")[1].split("DUSK_STORAGE\n")[0].replaceAll("/dev/disk/by-id", dir).replaceAll(" -b ", " -f ");
   const mocks = `sleep(){ :; }

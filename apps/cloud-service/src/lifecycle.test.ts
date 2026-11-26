@@ -713,7 +713,8 @@ it("still fails a wake whose home does not answer when the clock was right", asy
   expect(f.audit.entries(c.id).filter(e => e.action === "clock_set")).toHaveLength(0);
 });
 
-it("the clock check script sets the clock only when it is more than 30 s off", () => {
+// the clock check runs on a Linux Cloud server, here under bash with a Linux PATH
+it.skipIf(process.platform === "win32")("the clock check script sets the clock only when it is more than 30 s off", () => {
   const dir = mkdtempSync(join(tmpdir(), "dusk-clock-"));
   try {
     const fake = join(dir, "date");

@@ -44,7 +44,7 @@ describe("skills for engines with no file tools", () => {
     expect(index).toContain("- weekly-report: Does weekly-report.\n");
     expect(index).not.toContain("SKILL.md");
     expect(index).toContain("you must load it with read_skill (its name) first");
-    expect(host().skillsIndex(bot, undefined, { instanceId: "claude", driverKind: "claudeAgent" })).toContain("weekly-report/SKILL.md");
+    expect(host().skillsIndex(bot, undefined, { instanceId: "claude", driverKind: "claudeAgent" })).toMatch(/weekly-report[\\/]+SKILL\.md/);
   });
 
   it("read_skill returns an enabled skill and its files, one file on request, and nothing it may not read", () => {

@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -9,6 +8,7 @@ import {
 } from "./app-parts.ts";
 import { browserPartPending, browserEngineStatus, resolveAgentBrowserBinary } from "./browser-engine.ts";
 import { createBrowserPartHost, type BrowserPartFrame } from "./host/browser-part.ts";
+import { buildZip } from "./testing/zip-fixture.ts";
 
 const dirs: string[] = [];
 const temp = () => { const dir = mkdtempSync(join(tmpdir(), "dusk-parts-")); dirs.push(dir); return dir; };
@@ -46,19 +46,18 @@ function server(body: Uint8Array, options: { ignoreRange?: boolean; failFirst?: 
   return { fetchImpl: fetchImpl as unknown as typeof fetch, calls };
 }
 
-/** A real zip of a fake browser bundle, as the release ships it. */
+/** A zip of a fake browser bundle laid out as the release ships it, written without a zip tool (Windows has none). */
 function bundleZip(target = "linux-x64"): Uint8Array {
-  const root = temp();
-  const bundle = join(root, "bundle");
-  const chrome = join(bundle, "chrome", "chrome-headless-shell-linux64");
-  mkdirSync(chrome, { recursive: true });
-  mkdirSync(join(bundle, "licenses"));
-  writeFileSync(join(bundle, "agent-browser"), "engine", { mode: 0o755 });
-  writeFileSync(join(chrome, "chrome-headless-shell"), "chrome", { mode: 0o755 });
-  writeFileSync(join(bundle, "licenses", "README.md"), "licenses");
-  writeFileSync(join(bundle, "manifest.json"), JSON.stringify({ target }));
-  execFileSync("zip", ["-qr", join(root, "part.zip"), "."], { cwd: bundle });
-  return readFileSync(join(root, "part.zip"));
+  const chrome = "chrome/chrome-headless-shell-linux64/";
+  return buildZip([
+    { name: "agent-browser", data: "engine", mode: 0o100755 },
+    { name: "chrome/", mode: 0o40755 },
+    { name: chrome, mode: 0o40755 },
+    { name: `${chrome}chrome-headless-shell`, data: "chrome", mode: 0o100755 },
+    { name: "licenses/", mode: 0o40755 },
+    { name: "licenses/README.md", data: "licenses", mode: 0o100644 },
+    { name: "manifest.json", data: JSON.stringify({ target }), mode: 0o100644 },
+  ]);
 }
 
 describe("parts manifest", () => {
