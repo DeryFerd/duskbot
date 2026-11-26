@@ -388,8 +388,14 @@ esac
       }
       const waitArgs = vpsDesktopWaitProbeArgs(CONTAINER_ID, 1_000);
       const waitScript = waitArgs[waitArgs.indexOf("-ec") + 1]!;
+      // the wait runs in the desktop's Linux image, which has coreutils' timeout; a Mac has none, so stand one in
+      let path = process.env.PATH ?? "";
+      try { execFileSync("sh", ["-c", "command -v timeout"], { stdio: "ignore" }); } catch {
+        writeFileSync(join(dir, "timeout"), "#!/bin/sh\nexec perl -MTime::HiRes=ualarm -e 'ualarm(shift() * 1e6); exec @ARGV or exit 127' \"$@\"\n", { mode: 0o700 });
+        path = `${dir}:${path}`;
+      }
       const runWait = (fail: string) => execFileSync("sh", ["-ec", waitScript, "dusk-desktop-probe", driver, `cua-driver ${CUA_DRIVER_VERSION}`, "/run/fixture.sock", waitArgs.at(-1)!], {
-        encoding: "utf8", env: { PATH: process.env.PATH, PROBE_LOG: log, PROBE_FAIL: fail }, stdio: ["ignore", "pipe", "pipe"],
+        encoding: "utf8", env: { PATH: path, PROBE_LOG: log, PROBE_FAIL: fail }, stdio: ["ignore", "pipe", "pipe"],
       });
       writeFileSync(log, "");
       expect(JSON.parse(runWait(""))).toMatchObject({ overall: "ok" });
