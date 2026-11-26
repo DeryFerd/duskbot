@@ -172,6 +172,13 @@ export function requeueForLimit(run: RoutineRun, failure: string, now: number, r
   return true;
 }
 
+/** A run whose AI ended without a word: quiet once it ran a tool or on its second start, else started once more; null
+ * when it did not end silently. */
+export function silentEnd(run: Pick<RoutineRun, "target" | "output" | "retried">, stopReason: string | null | undefined, worked: boolean): "quiet" | "again" | null {
+  if (stopReason !== "empty_turn" || run.target !== "bot" || run.output) return null;
+  return worked || run.retried !== undefined ? "quiet" : "again";
+}
+
 /** The second start's own line, so a run that already did part of its work does not do it twice. */
 export function retryNote(cause: RoutineRetryCause): string {
   return `[dusk bot: this run's first start ${FIRST_START[cause]} before it finished. If it already did part of the work, ` +

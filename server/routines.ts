@@ -6,8 +6,7 @@ import { DATA_DIR } from "./config.ts";
 import type { RuntimeEvent } from "./contracts.ts";
 import { OwnedFile } from "./atomic.ts"; import { saveSoon } from "./save-batch.ts";
 import { redactSecretsInText } from "./redact.ts";
-import { withoutEchoedPrompt } from "../shared/failed-turn.ts";
-import type { RoutineFailedFor } from "../shared/usage-signals.ts";
+import { withoutEchoedPrompt } from "../shared/failed-turn.ts"; import type { RoutineFailedFor } from "../shared/usage-signals.ts";
 import { activeRunsOf, catchUpMsOf, enabledHereOf, missedError, nextDueOf, schedulerDueOf, upcomingOf, wakeHoldOf } from "./routine-due.ts"; import { dropQuietFields, nextTicks, quietPatch, stripOf } from "./routine-quiet.ts";
 import { startDueTimer, type DueTimer } from "./due-timer.ts";
 import type { GroupGoalRunStatus } from "../shared/group-goal-run.ts";
@@ -24,7 +23,7 @@ import {
   routineFailure, routineHostWarning, skipNeedsNotice, supersededBy,
 } from "./routine-execution.ts";
 import {
-  dispatchRefusal, engineFacts, loadOwnerNotices, recoverRun, requeueOnce, wakeBusyWaits, weekRuns, type RoutineAlert, type RoutineFailureFacts, type RoutineOwnerNotice,
+  dispatchRefusal, engineFacts, loadOwnerNotices, recoverRun, requeueOnce, silentEnd, wakeBusyWaits, weekRuns, type RoutineAlert, type RoutineFailureFacts, type RoutineOwnerNotice,
 } from "./routine-recovery.ts";
 import { answeredInChat, matchesAsk, openAsk, settleAsk, stopDue, waitingFor, type RoutineRunAsk } from "./routine-waits.ts";
 import { failsLikeLastOutcome, outcomesNewestFirst } from "./routine-outcomes.ts";
@@ -133,8 +132,7 @@ export interface RoutineRun {
   finishedAt?: number;
   output?: string;
   attention?: string;
-  error?: string; partial?: boolean;
-  /** Why it ended without its work, when the runner itself knows (shared/usage-signals.ts ROUTINE_FAILED_FOR). */ failedFor?: RoutineFailedFor;
+  error?: string; partial?: boolean; failedFor?: RoutineFailedFor;
   /** trigger action=fail: when the run's turn ends well, the run fails with this reason. */ failReason?: string;
   cost?: number | null;
   denials?: string[];
@@ -283,9 +281,7 @@ export class RoutineManager {
   private ownerNotices: RoutineOwnerNotice[] = [];
   /** Why routines are held now (routine-holds.ts): a change between two of these pauses or frees routines. */
   private holds: RoutineHoldCause[] = [];
-  private readonly failureFacts = new Map<string, RoutineFailureFacts>();
-  /** Runs whose turn ran a tool: an AI that worked and then said nothing found nothing to report. */
-  private readonly worked = new Set<string>();
+  private readonly failureFacts = new Map<string, RoutineFailureFacts>(); private readonly worked = new Set<string>();
   /** Saves are refused while unreadable, so an empty state never overwrites the file; malformedAttachments: a saved list failed to load, so no clear may trust attachmentPaths(). */
   private unreadable = false; private malformedAttachments = false;
   private frozenPending = false;
@@ -1050,8 +1046,7 @@ export class RoutineManager {
                 const missed = this.newRun(routine, scheduledFor, false, allocations);
                 missed.status = "missed";
                 missed.finishedAt = now;
-                missed.error = ROUTINE_SKIPPED_WHILE_WAITING;
-                missed.failedFor = "unanswered";
+                Object.assign(missed, { error: ROUTINE_SKIPPED_WHILE_WAITING, failedFor: "unanswered" });
                 scheduledRuns.push(missed);
               }
               routine.skippedRuns = Math.min(Number.MAX_SAFE_INTEGER, (routine.skippedRuns ?? 0) + 1);
@@ -1253,9 +1248,6 @@ export class RoutineManager {
         return cloneRun(run);
       }
       this.waitOrRun(run);
-    } else if (event.type === "item.completed" && event.itemType === "tool") {
-      this.worked.add(run.id);
-      return null;
     } else if (event.type === "item.completed" && event.itemType === "assistant_text") {
       run.output = redactSecretsInText(event.text).trim().slice(0, 2_000);
     } else if (event.type === "runtime.error") {
@@ -1265,17 +1257,9 @@ export class RoutineManager {
       if (this.closing && (!event.ok || event.stopReason === "cancelled" || event.stopReason === "interrupted")) return null;
       if (event.cost != null) run.cost = (run.cost ?? 0) + event.cost;
       if (event.denials?.length) run.denials = [...new Set([...(run.denials ?? []), ...event.denials])];
-      const failReason = run.failReason;
+      const failReason = run.failReason, silent = silentEnd(run, event.stopReason, this.worked.delete(run.id));
       delete run.failReason;
-      // An AI that ends a run without a word has nothing to report once it did the run's work, or on the run's second start.
-      const silent = !event.ok && event.stopReason === "empty_turn" && run.target === "bot" && !run.output, worked = this.worked.delete(run.id);
-      if (silent && !worked && requeueOnce(run, "provider", routineFailure(run.error, event.stopReason), this.now())) {
-        this.failureFacts.delete(run.id);
-        this.saveLater();
-        this.emitRun(run);
-        queueMicrotask(() => this.tickInBackground());
-        return cloneRun(run);
-      }
+      if (silent === "again" && requeueOnce(run, "provider", routineFailure(run.error, event.stopReason), this.now())) { this.failureFacts.delete(run.id); this.saveLater(); this.emitRun(run); queueMicrotask(() => this.tickInBackground()); return cloneRun(run); }
       if (!event.ok && !silent) {
         this.settleFailure(run, routineFailure(run.error, event.stopReason), { ...this.failureFacts.get(run.id), stopReason: event.stopReason });
         return cloneRun(run);
@@ -1287,7 +1271,7 @@ export class RoutineManager {
       if (waitsOnTeammates) this.wait(run, "Waiting for work it handed on to finish");
       else { Object.assign(run, { status: "completed", attention: undefined, finishedAt: this.now() } satisfies Partial<RoutineRun>); this.ownerNotices = this.ownerNotices.filter((notice) => notice.botId !== run.botId); }
       run.error = undefined;
-    } else return null;
+    } else { if (event.type === "item.completed" && event.itemType === "tool") this.worked.add(run.id); return null; }
     this.saveLater();
     this.emitRun(run);
     if (event.type === "turn.completed") queueMicrotask(() => this.tickInBackground());
@@ -1392,9 +1376,7 @@ export class RoutineManager {
   }
 
   private failRun(run: RoutineRun, message: string, status: "failed" | "missed" = "failed", alert?: RoutineAlert | null, failedFor?: RoutineFailedFor) {
-    Object.assign(run, { status, attention: undefined, error: redactSecretsInText(message).slice(0, 500), finishedAt: this.now() } satisfies Partial<RoutineRun>);
-    if (failedFor) run.failedFor = failedFor; else delete run.failedFor;
-    this.worked.delete(run.id);
+    Object.assign(run, { status, attention: undefined, error: redactSecretsInText(message).slice(0, 500), finishedAt: this.now(), failedFor } satisfies Partial<RoutineRun>); this.worked.delete(run.id);
     this.saveLater();
     this.emitRun(run);
     const repeat = failsLikeLastOutcome(this.runs, run) || (run.checkKey !== undefined && outcomesNewestFirst(this.runs, run.routineId, run.id)[0]?.status === "failed");
