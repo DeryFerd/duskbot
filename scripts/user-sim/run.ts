@@ -153,7 +153,7 @@ async function runScenario(s: Scenario, run: number): Promise<Record<string, unk
   };
   const launch = async (): Promise<StressServer> => {
     for (let attempt = 0; ; attempt++) {
-      try { return await launchServer(values.repo!, root, gateway, [values.model!], config, undefined, { env: { NODE_OPTIONS: preload, TZ_SHIFT_FILE: shiftFile, TZ: tz }, ...(codex ? { engine: "codex" as const } : {}) }); }
+      try { return await launchServer(values.repo!, root, gateway, [values.model!], config, undefined, { env: { NODE_OPTIONS: preload, TZ_SHIFT_FILE: shiftFile, TZ: tz, DUSK_IDLE_SWEEP_MS: "20000" }, ...(codex ? { engine: "codex" as const } : {}) }); }
       catch (error) { if (attempt >= 3) throw error; await sleep(2_000 + Math.random() * 5_000); }
     }
   };
@@ -276,7 +276,15 @@ async function runScenario(s: Scenario, run: number): Promise<Record<string, unk
         if (text.includes(DONE)) break;
         watcher.arm(threadId);
         const sent = Date.now();
-        await api.call("POST", `/api/bots/${bot.id}/messages`, { text, threadId, sendId: randomUUID().replaceAll("-", ""), ...(turn === 0 && replyToId ? { replyToId } : {}) });
+        const accepted = await api.call("POST", `/api/bots/${bot.id}/messages`, { text, threadId, sendId: randomUUID().replaceAll("-", ""), ...(turn === 0 && replyToId ? { replyToId } : {}) });
+        // `/new` moves the person to a fresh chat: the conversation goes on there, as it does in the app
+        if (accepted?.command === "new" && typeof accepted.threadId === "string" && accepted.threadId !== threadId) {
+          narration.push({ at: fakeNow(), text: `[${first} starts a new chat with ${botName}]` });
+          threadId = accepted.threadId;
+          lastThread = threadId;
+          record.threadId = threadId;
+          if (key !== "new" && key !== "same" && key !== "main") threads.set(key, threadId);
+        }
         personTurns += 1;
         said.push(`${localTime()} (to ${botName}): ${text.slice(0, 300)}`);
         const state = await waitIdle(api, threadId, TURN_TIMEOUT_MS);

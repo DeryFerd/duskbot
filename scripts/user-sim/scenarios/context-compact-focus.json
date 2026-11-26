@@ -1,0 +1,64 @@
+{
+  "title": "/compact with a focus keeps what was named, and the chat carries on",
+  "world": "founder",
+  "tags": [
+    "compaction"
+  ],
+  "source": "Owner (2026-11-26): add /compact [focus]. Claude Code, Grok Build and Hermes all take a focus after it.",
+  "steps": [
+    {
+      "chat": {
+        "label": "launch",
+        "thread": "launch",
+        "goal": "Work through the product launch plan with the bot over several turns: positioning line, the three pricing tiers, the launch date, and the press list. Then wander into side topics (a tagline brainstorm, a tweet thread outline) so the chat gets long.",
+        "opener": "lets plan the launch. pricing is 3 tiers: starter $9, team $29, scale $99 per month. press list: maya at techpulse, owen at the ledger, rhea at saasweekly. launch date 3 feb. start w a positioning line",
+        "maxTurns": 7
+      }
+    },
+    {
+      "chat": {
+        "label": "compact",
+        "thread": "launch",
+        "goal": "Compact the chat, keeping the pricing tiers and the press list.",
+        "opener": "/compact keep the pricing tiers and the press list exactly",
+        "maxTurns": 1
+      }
+    },
+    {
+      "chat": {
+        "label": "after",
+        "thread": "launch",
+        "goal": "Ask for the three price points and who is on the press list, to paste into a doc.",
+        "opener": "paste-ready: the 3 price points + who's on the press list",
+        "maxTurns": 2
+      }
+    }
+  ],
+  "checks": [
+    {
+      "label": "prices",
+      "said": {
+        "step": "after",
+        "match": "\\$?9\\b[\\s\\S]{0,200}\\$?29\\b[\\s\\S]{0,200}\\$?99\\b"
+      },
+      "recall": true
+    },
+    {
+      "label": "press list",
+      "said": {
+        "step": "after",
+        "match": "maya[\\s\\S]{0,300}owen[\\s\\S]{0,300}rhea|rhea[\\s\\S]{0,300}owen|owen[\\s\\S]{0,300}rhea"
+      },
+      "recall": true
+    },
+    {
+      "label": "outlets",
+      "said": {
+        "step": "after",
+        "match": "techpulse[\\s\\S]{0,300}ledger|ledger[\\s\\S]{0,300}techpulse"
+      },
+      "recall": true
+    }
+  ],
+  "judge": "After Juniper compacts the chat asking to keep the pricing tiers and the press list, the bot gives the exact tiers (Starter $9, Team $29, Scale $99 a month) and the press list (Maya at TechPulse, Owen at The Ledger, Rhea at SaaSWeekly) straight away."
+}

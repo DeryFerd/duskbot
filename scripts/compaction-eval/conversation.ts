@@ -138,3 +138,19 @@ const NOTES = [
 export function shiftNotes(turn: number): string {
   return ["Shift notes:", ...Array.from({ length: 110 }, (_, k) => `- ${NOTES[(turn + k) % NOTES.length]}`)].join("\n");
 }
+
+/** --long only: what the bot learnt and said in the middle of the chat, in plain words with no id, path or number the
+ * fixed parts of a checkpoint would copy. Only a summary that read the middle can carry them. Turn index -> sentence. */
+export const MIDDLE_FACTS: Record<number, string> = {
+  9: "One thing from Tomasz's reply worth keeping: he only checks zone mappings in the morning, before lunch, Rotterdam time, so anything we send him later waits a day.",
+  12: "Also noted from the drivers' rep: drivers want route changes by text message, not by email, because most of them never open the work inbox on the road.",
+  15: "And Ingrid, who leads the night shift, has to sign off on the cutover plan before anything is scheduled; she asked to see it the day before.",
+  18: "Finance came back too: the new zone software is billed per depot per month, so merging duplicates actually lowers the invoice.",
+};
+
+export const MIDDLE_RECALL: Probe[] = [
+  { id: "tomasz-mornings", ask: "When in the day does Tomasz look at mappings?", expect: /morning|before (lunch|noon|midday)/i, early: false },
+  { id: "drivers-sms", ask: "How do the drivers want to hear about route changes?", expect: /\b(sms|text message|texts?)\b/i, early: false },
+  { id: "ingrid-signoff", ask: "Who has to sign off on the cutover plan before it's scheduled?", expect: /ingrid/i, early: false },
+  { id: "billing", ask: "How is the new zone software billed?", expect: /per depot/i, early: false },
+];

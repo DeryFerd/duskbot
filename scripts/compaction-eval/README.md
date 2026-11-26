@@ -13,8 +13,14 @@ model then gets the rebuilt replay plus one new message. It has `send_email`, `r
 fold's archive folder) and an offline `run_command`.
 
 ```
-node --experimental-strip-types scripts/compaction-eval/run.ts --repo /path/to/checkout --label after [--reps 5] [--model gpt-6.2-sol] [--full]
+node --experimental-strip-types scripts/compaction-eval/run.ts --repo /path/to/checkout --label after [--reps 5] [--model gpt-6.2-sol] [--full] [--long]
 ```
+
+`--long` gives every reply about 14 KB of neutral shift notes (the chat is about 620 KB, the size of a real fold at the
+200k threshold) and four facts the bot itself says in plain words in the middle of the chat (turns 9 to 18: when the
+vendor checks mappings, how drivers want news, who signs off the cutover, how the software is billed), with four more
+probes for them. No fixed part of a checkpoint (the person's words, identifiers, the archive) carries those, so only a
+summary that read the middle can. Folds are run as a background fold (`thorough`); a checkout without it ignores that.
 
 - **Recall:** 14 questions, scored by matching the expected answer in the reply. There are 11 facts from the first 12
   turns, 2 from the middle of the task and 1 tool result that only the archive file holds.

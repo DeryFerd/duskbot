@@ -1,0 +1,81 @@
+{
+  "title": "/new in the middle of a task, then picking the task up again in the fresh chat",
+  "world": "founder",
+  "tags": [
+    "compaction",
+    "memory"
+  ],
+  "source": "Ram (2026-11-26): 'whenever I'm working on something new, I want to start with a fresh context' and /new; the old chat must stay searchable.",
+  "steps": [
+    {
+      "chat": {
+        "label": "draft",
+        "thread": "work",
+        "goal": "Get the bot started on the November investor update email. The three points must be: ARR crossed 410k, runway is now 19 months after the bridge round, and we're hiring a head of sales. Let it draft, ask for one tweak, then stop before it's final.",
+        "opener": "start the november investor update pls. 3 points: arr crossed 410k, runway now 19 months after the bridge, hiring a head of sales. short and plain",
+        "maxTurns": 3
+      }
+    },
+    {
+      "chat": {
+        "label": "fresh",
+        "thread": "work",
+        "goal": "Start a fresh chat.",
+        "opener": "/new",
+        "maxTurns": 1
+      }
+    },
+    {
+      "chat": {
+        "label": "side",
+        "thread": "work",
+        "goal": "Ask a quick unrelated question in the fresh chat (a two-line linkedin post idea about remote hiring).",
+        "opener": "quick one: 2 line linkedin post idea about remote hiring",
+        "maxTurns": 1
+      }
+    },
+    {
+      "chat": {
+        "label": "resume",
+        "thread": "work",
+        "goal": "Ask the bot to finish the investor update you started earlier in the other chat, with the same three points, ready to send. Do not repeat the points.",
+        "opener": "ok now finish that investor update from earlier, same 3 points, ready to send",
+        "maxTurns": 2
+      }
+    }
+  ],
+  "checks": [
+    {
+      "label": "arr",
+      "said": {
+        "step": "resume",
+        "match": "410"
+      },
+      "recall": true
+    },
+    {
+      "label": "runway",
+      "said": {
+        "step": "resume",
+        "match": "19 ?months|19-month"
+      },
+      "recall": true
+    },
+    {
+      "label": "head of sales",
+      "said": {
+        "step": "resume",
+        "match": "head of sales"
+      },
+      "recall": true
+    },
+    {
+      "label": "no repeat ask",
+      "said": {
+        "step": "resume",
+        "not": "what (were|are) the (three|3) points|which points"
+      }
+    }
+  ],
+  "judge": "Juniper starts a fresh chat with /new mid-task, asks something unrelated, then asks to finish the investor update. The bot finds the earlier draft (from memory or by searching the earlier chat) and finishes it with all three points (ARR over 410k, 19 months runway after the bridge, hiring a head of sales) without asking him to repeat them."
+}

@@ -1,0 +1,35 @@
+{
+  "title": "A long offsite-planning chat, 7 hours away, then a follow-up that needs an early detail",
+  "world": "founder",
+  "tags": ["compaction", "memory"],
+  "source": "Ram (2026-11-26): Hermes reset his context after 6 hours and searched the old chat when needed; dusk bot should start lean after hours away and still know the details.",
+  "steps": [
+    {
+      "chat": {
+        "label": "plan",
+        "thread": "offsite",
+        "goal": "Plan the team offsite in Lisbon with the bot over a long back-and-forth: venues, a day-by-day agenda, dinner spots, transport from the airport, a packing list for the team. Keep adding small asks so the chat gets long. You already told it the constraints in your first message; do not repeat them.",
+        "opener": "planning our team offsite in lisbon, 12-14 march, 8 ppl, budget 2400 eur all in. constraints: priya is vegan, marco uses a wheelchair so everything has to be step-free. start with 3 venue options pls",
+        "knows": "Venue names the bot suggested are fine to pick from; you lean towards whichever is step-free and central.",
+        "maxTurns": 9
+      }
+    },
+    { "advance": "+7h" },
+    { "settle": { "seconds": 75 } },
+    {
+      "chat": {
+        "label": "back",
+        "thread": "offsite",
+        "goal": "You're back after hours away. Ask for a dinner booking suggestion for the first night that works for the whole group, without restating anyone's needs.",
+        "opener": "back. book-worthy dinner spot for night 1 that works for everyone? dont make me repeat the constraints",
+        "maxTurns": 2
+      }
+    }
+  ],
+  "checks": [
+    { "label": "remembers vegan", "said": { "step": "back", "match": "vegan|plant" }, "recall": true },
+    { "label": "remembers step-free", "said": { "step": "back", "match": "step.?free|wheelchair|accessib|ramp|no stairs|ground.?floor|lift|elevator" }, "recall": true },
+    { "label": "does not ask him to repeat", "said": { "step": "back", "not": "remind me|what (are|were) the (constraints|dietary)|any dietary" } }
+  ],
+  "judge": "After hours away, Juniper asks for a first-night dinner spot. The bot suggests one that has vegan options for Priya and is step-free for Marco's wheelchair, without asking him to repeat those needs, and keeps the 12-14 March Lisbon plan straight."
+}

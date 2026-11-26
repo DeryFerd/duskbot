@@ -25,6 +25,66 @@ From 80% of a known window, the bot's 1:1 header shows the figure with a
 **Compact now** button that calls this route (hidden again once a compaction
 record is newer than the last reply).
 
+## /new, /compact and hours away
+
+- **`/new`** starts a fresh conversation for the bot. The chat it was typed in
+  captures what it taught to memory at once (not after its quiet minutes),
+  ends with the line "Started a new chat. This one stays saved and
+  searchable", and stays in the bot's conversations, where `session_search`
+  still finds it. Typed in a chat with nothing said yet, it keeps that chat.
+  `/reset` is read the same way.
+- **`/compact [focus]`** summarizes the conversation now, as Compact now does;
+  the words after it go to the summary writer as what to keep in full
+  (`POST /api/bots/:id/compact` takes the same as `focus`, at most 1,000
+  characters). `/compress` is read the same way.
+- **Where:** the composer's `/` menu lists both on desktop and phone (direct
+  chats, not rooms). Sent as a whole message through
+  `POST /api/bots/:id/messages` (an older app, a script) they act the same
+  way and answer `{ ok, threadId, command }`, where `threadId` is the new chat
+  after `/new`; a repeated `sendId` answers alike and starts nothing twice.
+  Telegram and Discord read them (shared/chat-commands.ts), and Telegram's
+  command menu lists them unless the bot's owner set commands of their own in
+  BotFather.
+- **Hours away** (server/idle-compaction.ts): a direct conversation the
+  person has not written in for `context.idleCompactHours` hours (6 by
+  default; `0` turns it off, as does `autoCompact: false`;
+  `DUSK_IDLE_COMPACT_HOURS` wins) is summarized in the background once its
+  context is 32k tokens or more. The clock is the person's own last message
+  (`askedAt`): a routine's post or a teammate's report does not keep a chat
+  awake. A sweep runs a minute after start and every 5 minutes, at most 3
+  summaries each, for absences that began in the last 3 days, never while
+  the bot is busy, a message is queued, a teammate works on the chat, a
+  wait has fired, or one of the bot's routines runs or is due (the same
+  checks as warm summaries, `conversationHold`). A turn that starts drops
+  the summary being written. Once per absence; a chat already summarized
+  since the person's last message is skipped. The summary row carries
+  `awayHours`.
+- **Shown in the chat:** a 1:1 chat shows one quiet line where it was
+  summarized: "Compacted this chat", "Summarized older messages after 6
+  hours away" or "Summarized older messages to keep this chat quick", each
+  ending "The whole chat stays here".
+- **Threshold:** 80% of the model's window, never past 200,000 tokens unless
+  `context.compactAt` names one (a 1M model used to fold at 800k).
+- **Reading a long chat:** a fold off the person's time (asked for, warm, or
+  hours away) gives the summary writer up to 160 KB per call, oldest first,
+  carrying the checkpoint so far, at most 8 calls of 90 s each; a fold at a
+  turn's start still reads one call of 60 KB in 20 s. The summary frame tells
+  the bot the whole chat is saved and `session_search` finds an exact detail.
+
+```sh
+pnpm exec vitest run server/idle-compaction.test.ts server/compaction-summary.test.ts server/context-budget.test.ts server/context-rebuild.test.ts
+pnpm exec vitest run server/chat-commands.e2e.test.ts server/messengers/telegram.test.ts src/components/Composer.chat-commands.test.ts
+```
+
+`server/chat-commands.e2e.test.ts` runs the real server with the fake Claude
+Code: `/compact <focus>` and `/new` sent as messages (never reaching the
+engine as words, a retried `/new` making no second chat, the old chat's
+closing line, the new chat's first turn carrying no summary), and a chat
+left alone summarized by the sweep in seconds (`DUSK_IDLE_COMPACT_HOURS`
+0.0005, `DUSK_IDLE_SWEEP_MS`, `DUSK_IDLE_COMPACT_MIN_TOKENS`, test-only), after
+which the next turn starts a fresh session from the summary with the
+session_search pointer and the last two exchanges word for word.
+
 ## What a summary holds
 
 A summary is a checkpoint (`server/compaction-summary.ts`):
