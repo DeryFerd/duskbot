@@ -91,6 +91,9 @@ export function auditLayout(options: AuditOptions = {}): LayoutIssue[] {
         if (child.matches('[role="menu"], [role="listbox"], .popover-surface, .menu-surface, [role="dialog"]:not([aria-modal="true"])')) continue;
         // a resize grip straddles its pane's edge on purpose, a transparent strip to drag
         if (style.cursor.endsWith("resize") && (parse(style.backgroundColor)?.a ?? 0) === 0) continue;
+        // a popover's click-catcher (fixed, no fill, no edge, nothing inside) takes the press outside it and paints nothing
+        if (style.position === "fixed" && !child.children.length && !child.textContent?.trim() && (parse(style.backgroundColor)?.a ?? 0) === 0
+          && style.backgroundImage === "none" && style.boxShadow === "none" && parseFloat(style.borderTopWidth) + parseFloat(style.borderLeftWidth) === 0) continue;
         const box = child.getBoundingClientRect();
         if (box.width > 0 && box.height > 0) {
           const t = Math.max(box.top, clip.top), b = Math.min(box.bottom, clip.bottom);
