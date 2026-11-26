@@ -21,6 +21,8 @@ const link = generateKeyPairSync("ed25519");
 const linkPublic = link.publicKey.export({ type: "spki", format: "der" }).toString("base64");
 const MAC: RequestAuth = { kind: "session", via: "bearer", scopes: ["admin", "client"], session: { id: "s1", tokenHash: "x".repeat(64), label: "Mac", scopes: ["admin", "client"], createdAt: 0, lastSeenAt: 0, expiresAt: Infinity } };
 const turn = { botId: "nova", threadId: "t1", generation: "g1" };
+// the Mac's zsh, or plain sh where the suite runs off a Mac (a Linux runner has no zsh)
+const SHELL = existsSync("/bin/zsh") ? "/bin/zsh" : "/bin/sh";
 
 let cleanups: Array<() => unknown> = [];
 afterEach(async () => {
@@ -50,7 +52,7 @@ async function pair(mode: "auto" | "ask" | "never", answer: (reason: string) => 
   const app = createCloudMac({
     fetch: (input: string, init?: RequestInit) => fetch(input, init), name: () => "Sid's MacBook", home,
     prefs: { read: () => prefs, write: (value: unknown) => { prefs = value; } },
-    cloud: () => ({ origin: base, awake: true }), linkKey: async () => linkPublic,
+    cloud: () => ({ origin: base, awake: true }), linkKey: async () => linkPublic, shell: SHELL,
     ...(options.screen ? { screen: options.screen } : {}),
   });
   await app.sync();
