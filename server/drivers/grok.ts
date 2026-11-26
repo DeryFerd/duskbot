@@ -1,6 +1,7 @@
 // xAI API driver over the OpenAI chat-completions contract, with the shared retry policy.
 import type { ModelCatalog, ProviderDriver } from "../contracts.ts";
 import { createOpenAIChatRuntime } from "./openai-chat.ts";
+import { requireHttpsOrThisNetwork } from "./openai-compat.ts";
 import { xaiEffortLevels } from "./api-effort.ts";
 
 const DRIVER_KIND = "grok";
@@ -40,9 +41,11 @@ export interface GrokConfig {
 function decodeConfig(raw: unknown): GrokConfig {
   const config = (raw ?? {}) as Record<string, unknown>;
   if (config.tools !== undefined && typeof config.tools !== "boolean") throw new Error("tools must be a boolean");
+  const url = typeof config.url === "string" && config.url ? config.url : DEFAULT_URL;
+  requireHttpsOrThisNetwork(url, "Grok");
   return {
     ...(config.tools !== undefined ? { tools: config.tools as boolean } : {}),
-    url: typeof config.url === "string" ? config.url : DEFAULT_URL,
+    url,
     apiKeyEnv: typeof config.apiKeyEnv === "string" ? config.apiKeyEnv : "XAI_API_KEY",
   };
 }

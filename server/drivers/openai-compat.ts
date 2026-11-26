@@ -39,6 +39,15 @@ export function onThisNetwork(url: string): boolean {
   }
   return /^f[cd][0-9a-f]{2}:/i.test(host);
 }
+
+/** Security: a provider key travels in an Authorization header on every turn, so it only crosses plain http to this
+ * machine or this network; every other address has to be https. */
+export function requireHttpsOrThisNetwork(url: string, label: string): void {
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { throw new Error(`${label} needs a full web address, starting with https://.`); }
+  if (parsed.protocol === "https:" || (parsed.protocol === "http:" && onThisNetwork(url))) return;
+  throw new Error(`${label} requires HTTPS, except for an address on this machine or this network.`);
+}
 const DEFAULT_MODELS: ModelCatalog = {
   default: "meta-llama/llama-3.3-70b-instruct",
   options: [

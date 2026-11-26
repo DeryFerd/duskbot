@@ -58,6 +58,23 @@ describe("MinimaxDriver", () => {
       .toEqual({ url: "https://example.test/v1" });
   });
 
+  it("takes the MiniMax key only over https, or plain http to this machine or this network", () => {
+    expect(() => decodeMinimaxConfig({ url: "http://gateway.example.test/v1" })).toThrow("requires HTTPS");
+    expect(decodeMinimaxConfig({ url: "http://192.168.1.20:8080" }).url).toBe("http://192.168.1.20:8080/v1");
+    expect(decodeMinimaxConfig({ url: "http://127.0.0.1:11434" }).url).toBe("http://127.0.0.1:11434/v1");
+    process.env.MINIMAX_BASE_URL = "http://gateway.example.test/v1";
+    expect(() => decodeMinimaxConfig({})).toThrow("requires HTTPS");
+  });
+
+  it("keeps the mmx-cli's key and address only when its address can carry the key", () => {
+    const dir = join(home, ".mmx");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "config.json"), JSON.stringify({ api_key: "mmx-fake", base_url: "http://192.168.1.20:8080" }));
+    expect(loadLocalMiniMaxConfig()).toMatchObject({ apiKey: "mmx-fake", url: "http://192.168.1.20:8080/v1" });
+    writeFileSync(join(dir, "config.json"), JSON.stringify({ api_key: "mmx-fake", base_url: "http://gateway.example.test/v1" }));
+    expect(loadLocalMiniMaxConfig()).toMatchObject({ apiKey: "", url: "https://api.minimax.io/v1" });
+  });
+
   it("reads the official mmx-cli config and honors its region and model", () => {
     const dir = join(home, ".mmx");
     mkdirSync(dir);

@@ -235,6 +235,13 @@ it("grok preserves an explicit tools-off connection and rejects ambiguous flags"
   expect(() => GrokDriver.decodeConfig({ tools: "false" })).toThrow("tools must be a boolean");
 });
 
+it("takes the Grok key only over https, or plain http to this machine or this network", () => {
+  expect(() => GrokDriver.decodeConfig({ url: "http://gateway.example.test/v1" })).toThrow("requires HTTPS");
+  expect(GrokDriver.decodeConfig({ url: "https://gateway.example.test/v1" }).url).toBe("https://gateway.example.test/v1");
+  expect(GrokDriver.decodeConfig({ url: "http://127.0.0.1:11434/v1" }).url).toBe("http://127.0.0.1:11434/v1");
+  expect(GrokDriver.decodeConfig({ url: "http://192.168.1.20:8080/v1" }).url).toBe("http://192.168.1.20:8080/v1");
+});
+
 it("offers the chat models xAI lists for the key, in its order, with our known details", () => {
   expect(grokModelsFrom({ data: [{ id: "grok-5" }, { id: "grok-4.7" }, { id: "grok-imagine-image" }, { id: "grok-5" }, { id: 7 }] })).toEqual({
     default: "grok-4.7",
