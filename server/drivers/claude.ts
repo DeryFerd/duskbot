@@ -900,6 +900,14 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
 
     const effortByControl = () => claudeEffortByControl(cliVersionChecked, cliVersion);
     const applyEffort = (s: Session, threadId: string, effort: string | undefined) => applyClaudeEffort(s, effort, (msg) => appendNative(threadId, { dir: "out", source: "claude.sdk.message", msg }));
+    /** A turn's prompt still on its way to the CLI: a steer waits for it, so the words never arrive ahead of the prompt. */
+    const prompting = new Map<string, Promise<boolean>>();
+    const writePrompt = (s: Session, threadId: string, effort: string | undefined, message: ClaudeUserMessage): Promise<boolean> => {
+      const written = (async () => (await applyEffort(s, threadId, effort)) && (await writeUser(s, threadId, message)))();
+      prompting.set(threadId, written);
+      void written.finally(() => { if (prompting.get(threadId) === written) prompting.delete(threadId); });
+      return written;
+    };
 
     const authRecovery = claudeAuthRecovery((event: RuntimeEvent) => {
       for (const l of Array.from(listeners)) l(event);
@@ -1182,7 +1190,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
         live.volatile = volatile;
         const running = live.turn;
         // A warm process can exit just as the next turn is written; its close resumes this turn.
-        if (!(await applyEffort(live, threadId, turn.effort) && await writeUser(live, threadId, message)) && !running?.stopRequested) closeSession(threadId, "stdin write failed");
+        if (!(await writePrompt(live, threadId, turn.effort, message)) && !running?.stopRequested) closeSession(threadId, "stdin write failed");
         if (mcpConfigPath) {
           try {
             rmSync(dirname(mcpConfigPath), { recursive: true, force: true });
@@ -1859,7 +1867,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
       emit({ ...base(threadId, turnId), type: "turn.started" });
 
       // Prompt over stdin, never argv (ARG_MAX); stdin stays open for steers and the next turn.
-      if (!(await applyEffort(session, threadId, turn.effort)) || !(await writeUser(session, threadId, halves.stable !== null && halves.volatile.trim() ? claudeUserMessage(withVolatileNote(turn.text, halves.volatile, true), turn.images) : promptMsg))) {
+      if (!(await writePrompt(session, threadId, turn.effort, halves.stable !== null && halves.volatile.trim() ? claudeUserMessage(withVolatileNote(turn.text, halves.volatile, true), turn.images) : promptMsg))) {
         if (!session.turn?.stopRequested) settle(false, "stdin_write_failed");
         closeSession(threadId, "stdin write failed");
       }
@@ -1868,6 +1876,8 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
     };
 
     const steer = async (threadId: string, text: string, images?: readonly ClaudeImage[]): Promise<SteerOutcome> => {
+      const prompt = prompting.get(threadId);
+      if (prompt) await prompt;
       const s = sessions.get(threadId);
       if (!s || !s.turn || s.turn.settled || s.closing || s.child.exitCode !== null) return "refused";
       const turn = s.turn;
