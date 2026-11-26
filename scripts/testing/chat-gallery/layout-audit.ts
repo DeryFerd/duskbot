@@ -169,6 +169,10 @@ export function auditLayout(options: AuditOptions = {}): LayoutIssue[] {
       return Array.from(element.querySelectorAll("*")).some((child) => {
         const box = child.getBoundingClientRect();
         if (box.width === 0 || box.height === 0 || !visible(child) || hiddenByAncestor(child)) return false;
+        // what a scroller inside scrolls past its own edge is that scroller's to show (and judged there), not this box's to cut
+        for (let node = child.parentElement; node && node !== element; node = node.parentElement) {
+          if (/auto|scroll/.test(getComputedStyle(node)[axis === "x" ? "overflowX" : "overflowY"])) return false;
+        }
         return axis === "x" ? box.right > edge.right + 2 || box.left < edge.left - 2 : box.bottom > edge.bottom + 2 || box.top < edge.top - 2;
       }) || Array.from(element.childNodes).some((node) => node.nodeType === 3 && (node.textContent ?? "").trim());
     };
@@ -266,6 +270,8 @@ export function auditLayout(options: AuditOptions = {}): LayoutIssue[] {
   if (options.touch) {
     for (const control of controls) {
       if (control.matches("input[type=text], input[type=password], input[type=email], textarea, a[href]:not([role])") && control.closest(".chat-md, p")) continue;
+      // a scroller that takes the keyboard only so its lines can be scrolled is no target a thumb presses
+      if (control.matches("[tabindex='0']:not(button, a[href], input, textarea, select, [role])") && /auto|scroll/.test(getComputedStyle(control).overflowY + getComputedStyle(control).overflowX)) continue;
       // what a screen-reader-only input's label draws is what a thumb hits
       // a label takes the tap for the control it holds
       let hit: Element = control.closest("label") ?? (readerOnly(control) ? control.parentElement ?? control : control);
