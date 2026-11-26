@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 const spawnSync = vi.hoisted(() => vi.fn((file: string) => ({ status: 0, stdout: file === "osascript" ? "/Applications/Google Chrome.app\n" : "" })));
@@ -87,7 +88,7 @@ describe("which Chrome the bots' browser runs", () => {
     expect(chromeForTestingPin("linux", "arm64")).toMatchObject({ version: CHROME_FOR_TESTING_VERSION, platform: "linux-arm64", sha256: expect.stringMatching(/^[0-9a-f]{64}$/u) });
     expect(resolveChromePlan(host("linux", []), managed)).toEqual({ kind: "download", pin: chromeForTestingPin("linux", "arm64") });
     const pin = chromeForTestingPin("linux", "arm64")!;
-    expect(chromeForTestingExecutable("/data", pin)).toBe(`/data/tools/chrome/${CHROME_FOR_TESTING_VERSION}/linux-arm64/chrome-linux-arm64/chrome`);
+    expect(chromeForTestingExecutable("/data", pin)).toBe(join("/data", "tools", "chrome", CHROME_FOR_TESTING_VERSION, "linux-arm64", "chrome-linux-arm64", "chrome"));
     expect(resolveChromePlan(host("linux", [chromeForTestingExecutable("/data", pin)]), managed)).toEqual({ kind: "chrome", chrome: { path: chromeForTestingExecutable("/data", pin), source: "downloaded" }, fallback: null });
     // a Chrome already there comes first, and an engine someone named still picks its own
     expect(resolveChromePlan(host("linux", ["/opt/google/chrome/chrome"]), managed)).toMatchObject({ kind: "chrome", chrome: { source: "installed" } });

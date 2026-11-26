@@ -30,7 +30,7 @@ export function realEngine(command: unknown, args: readonly unknown[], fixtures:
   if (probe(words.slice(1)) || probe(text.trim().split(/\s+/).slice(1))) return null;
   for (const [index, word] of words.entries()) {
     const name = basename(word).toLowerCase().replace(/\.(?:exe|cmd|bat)$/, "");
-    const engine = index === 0 && REAL_ENGINES.has(name) ? name : PACKAGES.exec(word)?.[0] ?? null;
+    const engine = index === 0 && REAL_ENGINES.has(name) ? name : PACKAGES.exec(word)?.[0].replaceAll("\\", "/") ?? null;
     if (!engine) continue;
     // one that is not there cannot run (a runner with no engines installed fails it as before)
     const target = word.includes(sep) ? word : onPath(word, path);

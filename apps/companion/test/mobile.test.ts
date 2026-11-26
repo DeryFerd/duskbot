@@ -383,7 +383,8 @@ describe("mobile HTTP forwarding", () => {
     let seen: IncomingMessage | undefined;
     const app = await fixture((req, res) => { seen = req; res.end("ok"); });
     app.mobile.remember(TOKEN, "phone");
-    const path = join(stateFile(), "..", "origin.sock");
+    // Windows listens on a named pipe, never a socket file
+    const path = process.platform === "win32" ? `\\\\.\\pipe\\dusk-mobile-test-${randomBytes(6).toString("hex")}` : join(stateFile(), "..", "origin.sock");
     const managed = createServer(gzipTunnelReplies(app.handler));
     servers.push(managed);
     managed.on("connection", (socket) => sockets.add(socket));

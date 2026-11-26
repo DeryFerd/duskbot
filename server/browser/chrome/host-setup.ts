@@ -12,7 +12,7 @@
 
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute, posix } from "node:path";
 
 export const SETUP_COMMAND = "sudo duskbot browser setup";
 
@@ -20,7 +20,7 @@ export const SETUP_COMMAND = "sudo duskbot browser setup";
  * their paths so the command works as printed. */
 export function sudoCommand(args: string, execPath = process.execPath, script: string | undefined = process.argv[1]): string {
   const word = (value: string) => /^[\w@%+=:,./-]+$/u.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
-  return script ? `sudo ${word(execPath)} ${word(resolve(script))} ${args}` : `sudo duskbot ${args}`;
+  return script ? `sudo ${word(execPath)} ${word(posix.resolve(script))} ${args}` : `sudo duskbot ${args}`;
 }
 
 /** What Chrome prints before aborting when it cannot sandbox itself. */

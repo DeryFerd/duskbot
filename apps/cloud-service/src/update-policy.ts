@@ -4,7 +4,7 @@
 // version by writing a newly signed file at DUSK_UPDATE_POLICY_FILE: it is read again whenever the file changes, and a
 // file that does not verify is ignored (the last good one stays).
 import { createHash } from "node:crypto";
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { parsePolicy, type UpdatePolicy } from "../../../shared/update-guard.ts";
 import { signRelease, verifyRelease, type ReleaseKey } from "./release-signing.ts";
 
@@ -31,19 +31,20 @@ export function verifyPolicy(doc: unknown, keys: readonly ReleaseKey[]): UpdateP
 
 /** DUSK_UPDATE_POLICY_FILE, verified, re-read when it changes; null with no file */
 export function createPolicySource(file: string | null | undefined, keys: readonly ReleaseKey[], log: (line: string) => void = line => console.warn(line)) {
-  let held: { mtime: number; doc: SignedPolicy; policy: UpdatePolicy } | null = null, refused = 0;
+  // keyed on the file's text, not its mtime: a rewrite within the clock's tick (Windows, a fast writer) keeps the mtime
+  let held: { text: string; doc: SignedPolicy; policy: UpdatePolicy } | null = null, refused: string | null = null;
   function current() {
     if (!file) return null;
-    let mtime: number;
-    try { mtime = statSync(file).mtimeMs; } catch { return held; }
-    if (held?.mtime === mtime || refused === mtime) return held;
+    let text: string;
+    try { text = readFileSync(file, "utf8"); } catch { return held; }
+    if (held?.text === text || refused === text) return held;
     try {
-      const doc = JSON.parse(readFileSync(file, "utf8")) as SignedPolicy;
+      const doc = JSON.parse(text) as SignedPolicy;
       const policy = verifyPolicy(doc, keys);
       if (held && policy.serial < held.policy.serial) throw new Error("an older serial");
-      held = { mtime, doc: { body: doc.body, signature: doc.signature }, policy };
+      held = { text, doc: { body: doc.body, signature: doc.signature }, policy };
     } catch (error) {
-      refused = mtime;
+      refused = text;
       log(`updates: ALERT the update policy at DUSK_UPDATE_POLICY_FILE was not taken (${error instanceof Error ? error.message : String(error)}); the last good one stays`);
     }
     return held;

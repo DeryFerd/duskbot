@@ -66,7 +66,8 @@ async function pair(mode: "auto" | "ask" | "never", answer: (reason: string) => 
   return { mac, app, home, asked, run, base, dir };
 }
 
-describe("cloud bots use this Mac", () => {
+// mac_exec runs a shell (zsh on a Mac, sh on a Linux runner); Windows has neither, and the feature is for a Mac
+describe.skipIf(process.platform === "win32")("cloud bots use this Mac", () => {
   it("Auto: ordinary work just runs on the Mac, a risky command asks first, and No stops it", async () => {
     let allow = true;
     const { mac, home, asked, run } = await pair("auto", () => (allow ? null : "The person said no."));

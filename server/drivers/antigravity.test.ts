@@ -37,7 +37,7 @@ import {
   resolveAntigravityReleaseAsset,
   type AntigravityReleaseAsset,
 } from "./antigravity-release.ts";
-import { installAntigravityRuntime, resolveAntigravityRuntime } from "./antigravity-runtime.ts";
+import { installAntigravityRuntime, resolveAntigravityRuntime, setAntigravityVersionProbe } from "./antigravity-runtime.ts";
 import * as antigravityTemp from "./antigravity-temp.ts";
 import { VERIFICATION_TEMP_KEY, antigravityTempDir, sweepAntigravityTemp } from "./antigravity-temp.ts";
 import {
@@ -589,8 +589,12 @@ describe("official Antigravity runtime", () => {
     const officialExecutable = join(fake.directory, process.platform === "win32" ? "agy.exe" : "antigravity");
     copyFileSync(fake.executable, officialExecutable);
     if (process.platform !== "win32") chmodSync(officialExecutable, 0o755);
-    const runtime = await resolveAntigravityRuntime(legacyPath, { PATH: fake.directory }, fake.directory);
-    expect(runtime).toMatchObject({ executablePath: officialExecutable, source: "path" });
+    // the fake is a node script, which Windows cannot start as agy.exe, so its version is answered there
+    if (process.platform === "win32") setAntigravityVersionProbe(async () => null);
+    try {
+      const runtime = await resolveAntigravityRuntime(legacyPath, { PATH: fake.directory }, fake.directory);
+      expect(runtime).toMatchObject({ executablePath: officialExecutable, source: "path" });
+    } finally { setAntigravityVersionProbe(null); }
   });
 
   it("explains the official setup when a legacy CLI has no replacement installed", async () => {

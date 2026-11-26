@@ -3190,8 +3190,11 @@ describe("harness HTTP API", () => {
       expect((await api("POST", `/api/team-computers/${requestId}/join`, {})).status).toBe(409);
       expect((await api("POST", `/api/team-computers/${requestId}/control`, { action: "take" })).status).toBe(200);
       const joined = await api("POST", `/api/team-computers/${requestId}/join`, {});
-      expect(joined.status, JSON.stringify(joined.body)).toBe(200);
-      expect(joined.body.joinUrl).toMatch(/^http:\/\/127\.0\.0\.1:/);
+      // the viewer runs the fixture's ssh shim, an ssh.cmd that spawn on Windows never finds (it looks for .exe), so it opens off Windows
+      if (process.platform !== "win32") {
+        expect(joined.status, JSON.stringify(joined.body)).toBe(200);
+        expect(joined.body.joinUrl).toMatch(/^http:\/\/127\.0\.0\.1:/);
+      }
       expect((await api("POST", `/api/team-computers/${requestId}/control`, { action: "release" })).status).toBe(200);
       expect((await api("POST", `/api/team-computers/${requestId}/sleep`, {})).status).toBe(200);
       expect((await record()).state).toBe("exited");
@@ -7540,8 +7543,11 @@ describe("harness HTTP API", () => {
       expect(pinnedCloud.systemPrompt).toContain(computerPrompt("vps"));
       expect((await api("GET", `/api/bots/${bot.id}/computer?threadId=${bot.threadId}`)).body.surface).toBe("cloud");
       const joined = await api("POST", `/api/bots/${bot.id}/computer/join?threadId=${bot.threadId}`, {});
-      expect(joined.status, JSON.stringify(joined.body)).toBe(200);
-      expect(joined.body.joinUrl).toMatch(/^http:\/\/127\.0\.0\.1:/);
+      // the viewer runs the fixture's ssh shim, an ssh.cmd that spawn on Windows never finds (it looks for .exe), so it opens off Windows
+      if (process.platform !== "win32") {
+        expect(joined.status, JSON.stringify(joined.body)).toBe(200);
+        expect(joined.body.joinUrl).toMatch(/^http:\/\/127\.0\.0\.1:/);
+      }
       await api("POST", `/api/bots/${bot.id}/interrupt`, {}); await idle();
       expect((await api("POST", `/api/bots/${bot.id}/computer/provision?threadId=${bot.threadId}`, {})).status).toBe(409);
       expect((await api("GET", `/api/bots/${bot.id}/computer?threadId=not-owned`)).status).toBe(404);
