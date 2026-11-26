@@ -720,9 +720,7 @@ export type Action =
       rememberCommand?: boolean; edits?: import("../../shared/email-review").EmailEdits | import("../../shared/message-review").MessageEdits;
       onError?: (message: string) => void;
     }
-  | { type: "newTask"; botId: string; projectId?: string; cwd?: string; onCreated?: () => void; onError?: (message: string) => void;
-      /** `/new`: the chat it was typed in, which then captures its memory and says a new chat began. */
-      from?: string }
+  | { type: "newTask"; botId: string; projectId?: string; cwd?: string; onCreated?: () => void; onError?: (message: string) => void; from?: string } // from: /new's chat
   | { type: "switchTask"; botId: string; threadId: string; whole?: true; cached?: CachedTranscript }
   | { type: "switchTaskFailed"; botId: string; threadId: string }
   | { type: "taskSwitched"; bot: Bot }

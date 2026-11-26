@@ -46,6 +46,8 @@ export const TURN_INPUT_BYTES = 60_000;
  * characters. A longer folded part is read in several calls, oldest first, each carrying the checkpoint so far. */
 export const BACKGROUND_INPUT_BYTES = 160_000;
 const BACKGROUND_MAX_CALLS = 8;
+/** One such call's limit; Hermes Agent gives its summarizer 120 s. */
+export const BACKGROUND_CALL_MS = 90_000;
 const FOCUS_BYTES = 600;
 
 export function checkpointPrompt(history: readonly ReplayEntry[], today?: string, options: { focus?: string; inputBytes?: number } = {}): string {
