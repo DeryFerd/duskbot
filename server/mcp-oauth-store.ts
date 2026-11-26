@@ -86,10 +86,7 @@ export class McpOAuthStore {
   // Read through on every call: another process may have changed the file.
   private read(): StoreFile {
     try {
-      const raw = readFileSync(this.file);
-      const key = this.key(false);
-      const text = raw[0] === 0x7b ? raw.toString("utf8") : key ? decryptBrowserState(raw, key) : "";
-      const parsed = fileSchema.safeParse(JSON.parse(text));
+      const parsed = fileSchema.safeParse(JSON.parse(fileText(readFileSync(this.file), this.key(false))));
       if (parsed.success) return parsed.data;
     } catch {
     }
@@ -104,7 +101,20 @@ export class McpOAuthStore {
 
 /** The whole file as JSON, opened with its key: for tests and moves that look at it from outside the store. */
 export function openMcpOAuthFile(file: string): { servers: Record<string, any> } {
-  const raw = readFileSync(file);
-  if (raw[0] === 0x7b) return JSON.parse(raw.toString("utf8"));
-  return JSON.parse(decryptBrowserState(raw, readFileSync(`${file}.key`, "utf8").trim()));
+  let key: string | null = null;
+  try { key = readFileSync(`${file}.key`, "utf8").trim(); } catch {}
+  return JSON.parse(fileText(readFileSync(file), key));
+}
+
+/** The sealed file opened with its key; plain JSON only when it does not open, as an old unsealed file. A sealed file
+ * starts with a random nonce, so one in 256 starts with "{" too: the first byte alone cannot tell them apart. */
+function fileText(raw: Buffer, key: string | null): string {
+  if (key) {
+    try {
+      return decryptBrowserState(raw, key);
+    } catch (error) {
+      if (raw[0] !== 0x7b) throw error;
+    }
+  }
+  return raw[0] === 0x7b ? raw.toString("utf8") : "";
 }

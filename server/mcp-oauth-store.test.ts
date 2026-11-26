@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { McpOAuthStore } from "./mcp-oauth-store.ts";
+import { encryptBrowserState } from "./browser-sites.ts";
+import { McpOAuthStore, openMcpOAuthFile } from "./mcp-oauth-store.ts";
 
 const URL_A = "https://mcp.example.com/mcp";
 let dir: string;
@@ -35,6 +36,23 @@ describe("McpOAuthStore", () => {
     store.put("docs", { url: URL_A, state: "needs-sign-in" });
     store.delete("docs");
     expect(store.get("docs", URL_A)).toBeUndefined();
+  });
+
+  it("opens a sealed file whose random nonce happens to start with a brace", () => {
+    const key = "ab".repeat(32);
+    const text = JSON.stringify({ servers: { docs: { url: URL_A, state: "signed-in", tokens: { access: "at" } } } });
+    let sealed = encryptBrowserState(text, key);
+    while (sealed[0] !== 0x7b) sealed = encryptBrowserState(text, key);
+    writeFileSync(`${file}.key`, `${key}\n`, { mode: 0o600 });
+    writeFileSync(file, sealed, { mode: 0o600 });
+    expect(new McpOAuthStore(file).get("docs", URL_A)?.state).toBe("signed-in");
+    expect(openMcpOAuthFile(file).servers.docs.state).toBe("signed-in");
+  });
+
+  it("still reads an old unsealed file beside a key", () => {
+    writeFileSync(`${file}.key`, `${"cd".repeat(32)}\n`, { mode: 0o600 });
+    writeFileSync(file, JSON.stringify({ servers: { docs: { url: URL_A, state: "needs-sign-in" } } }), { mode: 0o600 });
+    expect(new McpOAuthStore(file).get("docs", URL_A)?.state).toBe("needs-sign-in");
   });
 
   it("reads a corrupt file as empty and leaves it until the next write", () => {
