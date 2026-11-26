@@ -1,16 +1,23 @@
 // What `claude auth status --json` says about the account a Claude instance runs on.
 import type { ProviderSnapshot } from "../contracts.ts";
 import { execCli } from "../procs.ts";
+import { claudeCredentialsFile, claudeRenewalDue, readClaudeStoredLogin } from "./claude-stored-login.ts";
+
+export type ClaudeAuthStatus = { authenticated?: boolean; account?: ProviderSnapshot["account"]; renewalDue?: true };
 
 /** Whether `claude` is signed in, per the CLI's own `auth status`: credential storage varies by
  * platform (Keychain, a JSON file) and presence checks accept stale credentials. Only `loggedIn: false`
  * means signed out. A check that timed out (a Keychain prompt left open) or gave no readable status
- * says nothing, so `authenticated` is left out. */
+ * says nothing, so `authenticated` is left out. A file login due for renewal is not asked about: `auth status`
+ * would renew it and can exit before saving the new tokens (claude-stored-login.ts), so it counts as signed in
+ * (`renewalDue`) until a turn renews it. */
 export function claudeAuthStatus(
   cli: string,
   env: NodeJS.ProcessEnv,
   run: typeof execCli = execCli,
-): Promise<{ authenticated?: boolean; account?: ProviderSnapshot["account"] }> {
+  now = Date.now(),
+): Promise<ClaudeAuthStatus> {
+  if (claudeRenewalDue(readClaudeStoredLogin(claudeCredentialsFile(env)), now)) return Promise.resolve({ authenticated: true, renewalDue: true });
   return new Promise((resolve) => {
     run(cli, ["auth", "status", "--json"], { timeout: 8000, maxBuffer: 65_536, env }, (error, stdout) => {
       if ((error as { killed?: boolean } | null)?.killed) return resolve({});

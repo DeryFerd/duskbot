@@ -13,7 +13,8 @@ import { writeFileAtomicIfChanged } from "../atomic.ts";
 import { augmentedPath } from "../env-path.ts";
 import { brokerSocketPath, cliVersionReader, describeSpawnFailure, execCli, killCliTree, lentBotFolders, readOnlyBotFolders, spawnCli } from "../procs.ts";
 import { conversationLanguage, serverLine } from "../server-lines.ts";
-import { claudeAuthStatus } from "./claude-auth-status.ts";
+import { claudeAuthStatus, type ClaudeAuthStatus } from "./claude-auth-status.ts";
+import { killClaudeTree } from "./claude-stored-login.ts";
 import { projectMcpServers } from "./claude-project-mcp.ts";
 import { botSettingsFor, withBotSettings } from "./claude-bot-settings.ts";
 import { claudeBilling, claudeCallUsage } from "./claude-billing.ts";
@@ -841,7 +842,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
     const sessionIdle = sessionIdlePolicy("CLAUDE");
 
     const stopSession = (session: Session) => {
-      void killCliTree(session.child).then((stopped) => {
+      void killClaudeTree(session.child, environment()).then((stopped) => {
         if (stopped) void session.finishClose?.();
       });
     };
@@ -1888,7 +1889,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
     };
 
     const login = new ClaudeLoginController({ cli: config.cli, environment, onAuthenticated: async () => { await refreshModels(); } });
-    let lastAuth: Awaited<ReturnType<typeof claudeAuthStatus>> = {};
+    let lastAuth: Omit<ClaudeAuthStatus, "renewalDue"> = {};
 
     const snapshot = async (): Promise<ProviderSnapshot> => {
       const env = environment();
@@ -1901,8 +1902,8 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
       const update = claudeCliUpdate(version, config.cli);
       const warning = claudeInheritWarning(env);
       if (config.requireApiKey && !input.environment.ANTHROPIC_API_KEY) return { state: "unavailable", version, reason: NO_ANTHROPIC_KEY };
-      const probed: typeof lastAuth = config.requireApiKey ? { authenticated: true } : await claudeAuthStatus(config.cli, env);
-      const auth = probed.authenticated === undefined ? lastAuth : (lastAuth = probed);
+      const probed: ClaudeAuthStatus = config.requireApiKey ? { authenticated: true } : await claudeAuthStatus(config.cli, env);
+      const auth = probed.renewalDue ? { ...lastAuth, authenticated: true } : probed.authenticated === undefined ? lastAuth : (lastAuth = probed);
       return { state: "available", version, ...auth, ...claudeBilling(env, auth.account), ...(update ? { update } : {}), ...(warning ? { warning } : {}) };
     };
 
@@ -1931,11 +1932,11 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
           else resolve(stdout.trim());
         };
         const onAbort = () => {
-          killCliTree(child);
+          void killClaudeTree(child, env);
           finish(new Error("Claude review aborted"));
         };
         const timer = setTimeout(() => {
-          killCliTree(child);
+          void killClaudeTree(child, env);
           finish(new Error("Claude review timed out"));
         }, timeoutMs ?? BACKGROUND_CALL_TIMEOUT_MS);
         timer.unref?.();
@@ -1944,7 +1945,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
         child.stdout.on("data", (chunk: string) => {
           stdout += chunk;
           if (stdout.length > 1_000_000) {
-            killCliTree(child);
+            void killClaudeTree(child, env);
             finish(new Error("Claude review output exceeded 1 MB"));
           }
         });
