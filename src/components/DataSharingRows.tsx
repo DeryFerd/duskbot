@@ -18,7 +18,7 @@ export function DataSharingRows() {
       <SettingRow icon="chart" title={t("settings.dataSharing.improve")} subtitle={<>
         {t("settings.dataSharing.improveHint")}{" "}
         <button type="button" role="link" data-privacy-link="" onClick={() => void openExternalLink(PRIVACY_SUMMARY_URL)}
-          className="rounded-sm text-current no-underline underline-offset-2 hover:underline focus-visible:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+          className="relative rounded-sm text-current no-underline underline-offset-2 before:absolute before:-inset-y-1 before:inset-x-0 hover:underline focus-visible:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
           {t("settings.dataSharing.whatsShared")}
         </button>
         {signals.askUsage && <span className="block">{t("settings.dataSharing.improveAsk")}</span>}

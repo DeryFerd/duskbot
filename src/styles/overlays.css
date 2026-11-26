@@ -222,8 +222,9 @@
   transform: translateX(-50%);
 }
 [dir="rtl"] .ui-toast { transform: translateX(50%); }
-/* its close: 18px at 5px corners, 70% ink, full on hover over a currentColor/16 fill */
+/* its close: 18px at 5px corners, 70% ink, full on hover over a currentColor/16 fill; a thumb gets 34px of it */
 .ui-toast-close {
+  position: relative;
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
@@ -238,6 +239,7 @@
   opacity: 0.7;
   cursor: pointer;
 }
+.ui-toast-close::before { content: ""; position: absolute; inset: -8px; }
 .ui-toast-close:hover:where(:not(html[data-mobile-app] *)) { opacity: 1; background: color-mix(in srgb, currentColor 16%, transparent); }
 .ui-toast-close:focus-visible { opacity: 1; outline: none; outline-offset: 1px; }
 
