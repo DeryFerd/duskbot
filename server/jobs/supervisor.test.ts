@@ -59,7 +59,10 @@ describe.skipIf(process.platform === "win32")("background job supervisor", () =>
     await expect.poll(() => supervisor.get(job.id, "bot-a")!.starts, { timeout: 5_000 }).toBeGreaterThanOrEqual(CRASH_STREAK + 1);
     expect(crashing).toHaveLength(1);
     expect(crashing[0]!.tail).toContain("boom");
-    expect(supervisor.get(job.id, "bot-a")).toMatchObject({ state: "running", lastExit: expect.stringMatching(/exit 3|^$/) });
+    // between runs it says how the last one ended; a restart clears that until the new run ends
+    const now = supervisor.get(job.id, "bot-a")!;
+    expect(now.state).toBe("running");
+    expect([undefined, "exit 3"]).toContain(now.lastExit);
     expect(supervisor.logs(job.id, "bot-a")).toContain("exit 3; starting again in");
     expect([1, 2, 3, 10, 30].map((n) => restartDelay(n))).toEqual([1_000, 2_000, 4_000, 300_000, 300_000]);
   });
