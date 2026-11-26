@@ -14,6 +14,10 @@ describe("compaction note", () => {
     const markup = renderToStaticMarkup(createElement(CompactionNote, { message: compacted("person") }));
     expect(markup).toMatch(/^<div role="status" data-transcript-note="" data-compaction-note="person" data-event-line="" class="[^"]*justify-center/);
     expect(markup).toContain("Compacted this chat. The whole chat stays here");
-    expect(renderToStaticMarkup(createElement(CompactionNote, { message: compacted("harness", 7) }))).toContain("after 7 hours away");
+  });
+
+  it("shows nothing for an automatic summary: the size threshold, hours away", () => {
+    expect(renderToStaticMarkup(createElement(CompactionNote, { message: compacted("harness") }))).toBe("");
+    expect(renderToStaticMarkup(createElement(CompactionNote, { message: compacted("harness", 7) }))).toBe("");
   });
 });

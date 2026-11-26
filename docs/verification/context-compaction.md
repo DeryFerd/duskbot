@@ -58,10 +58,14 @@ record is newer than the last reply).
   the summary being written. Once per absence; a chat already summarized
   since the person's last message is skipped. The summary row carries
   `awayHours`.
-- **Shown in the chat:** a 1:1 chat shows one quiet line where it was
-  summarized: "Compacted this chat", "Summarized older messages after 6
-  hours away" or "Summarized older messages to keep this chat quick", each
-  ending "The whole chat stays here".
+- **Shown in the chat:** only a compaction the person ran (`/compact`,
+  Compact now) shows, as one centered line, "Compacted this chat. The whole
+  chat stays here". Automatic ones (the size threshold, hours away) are
+  silent: their record is kept for the replay, search and debugging, never
+  rendered. While a compaction the person waits on runs, the chat's working
+  line reads "Compacting this chat. This can take a minute" (the wire task's
+  `compacting`); a message sent meanwhile queues, and Stop ends it with no
+  late summary.
 - **Threshold:** 80% of the model's window, never past 200,000 tokens unless
   `context.compactAt` names one (a 1M model used to fold at 800k).
 - **Reading a long chat:** a fold off the person's time (asked for, warm, or

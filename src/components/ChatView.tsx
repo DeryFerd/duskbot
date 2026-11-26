@@ -99,7 +99,7 @@ import { MessageBoundary } from "./MessageBoundary";
 import { RichMessageRow, UserLineNote, richRowKind } from "./RichMessageRow"; import { SetupOffer } from "./SetupOffer";
 import { Composer } from "./Composer"; import { ComposerSignInNotice } from "./ComposerSignInNotice"; import { FailedReplyCard, FoldedNoticesContext, foldedNoticeIds, useTrailingRows } from "./FailedReplyCard";
 import { CARD_ACTION, ChatErrorBanner, ChatErrorCard, ChatNotice } from "./ChatErrorBanner";
-import { ThreadContextWarning } from "./ContextWarning"; import { CompactionNote } from "./CompactionNote";
+import { ThreadContextWarning } from "./ContextWarning"; import { CompactionNote, compactionShown } from "./CompactionNote";
 import { UsageAlert, useLimitResetContinue } from "./EngineUsage";
 import { ChatFindBar } from "./ChatFindBar";
 import { QuotedText, ReplyQuote } from "./ReplyQuote"; import { useQuotedMessage } from "@/lib/quoted-messages";
@@ -782,7 +782,7 @@ function hiddenChatRow(message: Message, botId: string, showToolCalls: boolean):
     case "activity":
       return Boolean(message.peerResume) || (!message.dataResult && !isStatusActivity(message) && quietRow(message, showToolCalls));
     case "compaction":
-      return !message.compaction;
+      return !compactionShown(message);
     case "digest":
     case "screen":
       return !showToolCalls;

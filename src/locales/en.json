@@ -2413,8 +2413,6 @@
   "contextWarning.threadHint": "{name}'s context is {percent}% full. Compact now summarizes older messages into a short note; the whole conversation stays here.",
   "contextWarning.compactNow": "Compact now",
   "chat.compacted.person": "Compacted this chat. The whole chat stays here",
-  "chat.compacted.away": "Summarized older messages after {hours} hours away. The whole chat stays here",
-  "chat.compacted.auto": "Summarized older messages to keep this chat quick. The whole chat stays here",
   "chat.compacting": "Compacting this chat. This can take a minute",
   "chat.compacted.busy": "Finish or stop the current reply first, then compact",
   "contextWarning.compacting": "Compacting…",
