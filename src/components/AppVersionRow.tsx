@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 
-import { appVersion } from "@/lib/app-links";
+import { appVersion, openExternalLink } from "@/lib/app-links";
 import { t } from "@/lib/i18n";
 
 import type { AppUpdateBridge, AppUpdateState } from "../../electron/app-update.mjs";
@@ -42,6 +42,17 @@ export function AppVersionRow({ fallback, bridge = ownBridge() }: { fallback: Re
       void bridge.restart().then(ok => { if (!ok) setRestarting(false); }, () => setRestarting(false));
     };
     return <NavRow data-settings-open="app-update" title={title} hint={t("appUpdate.ready", { version: ready })} value={restarting ? t("settings.updates.restartingShort") : t("appUpdate.restart")} drill={false} disabled={restarting} onClick={restart} />;
+  }
+  // an update this app can't install by itself says what to do, as the sidebar does, never "the latest version"
+  if (update.available && update.blocked === "move") {
+    return <NavRow data-settings-open="app-update" title={title} hint={t("appUpdate.moveHint", { app: productName() })} value={t("appUpdate.move")} drill={false} onClick={() => void bridge.move?.()} />;
+  }
+  if (update.manual) {
+    const open = () => void (bridge.open ? bridge.open() : openExternalLink("https://dusk.bot/download"));
+    return <NavRow data-settings-open="app-update" title={title} hint={t("appUpdate.manualHint", { version: update.manual.version })} value={t("appUpdate.manual", { version: update.manual.version })} drill={false} onClick={open} />;
+  }
+  if (update.available && update.retrying) {
+    return <NavRow data-settings-open="app-update" title={title} hint={`${t("appUpdate.retrying")} · ${t("appUpdate.retryingHint")}`} value={t("common.checking")} drill={false} disabled onClick={() => {}} />;
   }
   if (update.available && (update.progress != null || update.checking)) {
     const percent = update.progress == null ? null : Math.round(update.progress * 100);
