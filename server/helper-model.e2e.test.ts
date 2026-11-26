@@ -153,6 +153,8 @@ posixOnly("the helper model, through the real server", () => {
     expect((await api("GET", `/api/bots/${bot.id}/memory/upkeep`)).body).toMatchObject({ enabled: true, modelSteps: true });
     await turn(bot, "Just so you know, I'm vegetarian.");
     // the turns themselves stay the Pi engine's, booked to whoever asked
+    // the ledger is appended after the turn settles, so it is read once the row lands
+    await waitFor(() => ledger(bot.id).some((row) => row.threadId === bot.threadId), "the Pi turn to be booked");
     expect(ledger(bot.id)).toContainEqual(expect.objectContaining({ driverKind: "piAgent", threadId: bot.threadId, trigger: { kind: "owner" } }));
 
     expect(await compacted(bot)).toContain(`Checkpoint written by a helper model (may be incomplete):\n${SUMMARY}`);
