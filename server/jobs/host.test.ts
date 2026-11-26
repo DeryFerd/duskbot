@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { cpuTimeMs, JOB_MESSAGES, jobTurnRefusal } from "./host.ts";
 import { envNameRefusal } from "./launch.ts";
-import { apiBase, messagesOf, noteFor, wanted } from "./telegram-watch.ts";
+import { apiBase, messagesOf, notesFor, wanted } from "./telegram-watch.ts";
 import { jobsFixture, PERSON_TURN } from "./testing.ts";
 
 const fixtures: Array<{ close(): Promise<void> }> = [];
@@ -105,8 +105,10 @@ describe("telegram_watch", () => {
     expect(messages.filter((m) => wanted(m, ["deals"], []))).toHaveLength(2);
     expect(messages.filter((m) => wanted(m, [], ["loi"]))).toHaveLength(1);
     expect(messages.filter((m) => wanted(m, ["-11"], []))).toHaveLength(1);
-    expect(noteFor(messages)).toMatch(/^New Telegram messages \(3\), each with all this watch knows of it: chat, sender, time, message id and text:\n\[Brand deals\] Ana \(2023-11-14 22:13 UTC, message 42\): Acme signed the LOI\n\[Friends\] bo \(2023-11-14 22:14 UTC\): lunch\?/);
-    expect(noteFor(messages, 120)).toContain("[more messages were left out]");
+    const [note] = notesFor(updates as never, [], []);
+    expect(note!.text).toMatch(/^New Telegram messages \(3\), each with all this watch knows of it: chat, sender, time, message id and text:\n\[Brand deals\] Ana \(2023-11-14 22:13 UTC, message 42\): Acme signed the LOI\n\[Friends\] bo \(2023-11-14 22:14 UTC\): lunch\?/);
+    expect(note!.offset).toBe(4);
+    expect(notesFor(updates as never, ["friends"], []).map((one) => one.offset)).toEqual([3]);
   });
   it("talks to a test Bot API only on loopback, Telegram otherwise", () => {
     expect(apiBase({ DUSK_TELEGRAM_API_URL: "http://127.0.0.1:9123" })).toBe("http://127.0.0.1:9123");

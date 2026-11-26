@@ -47,7 +47,8 @@ export async function startFakeTelegram(options: { token: string; bot?: { id: nu
     if (!match) return reply(404, { ok: false, error_code: 404, description: "Not Found" });
     const [, token, method] = match;
     if (token !== options.token) return reply(401, { ok: false, error_code: 401, description: "Unauthorized" });
-    const { params, file } = await body(req);
+    const read = await body(req), file = read.file;
+    const params = { ...Object.fromEntries(url.searchParams), ...read.params };
     calls.push({ method: method!, token: token!, params, ...(file ? { file } : {}) });
     switch (method) {
       case "getMe": return ok({ ...bot, is_bot: true });

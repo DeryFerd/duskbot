@@ -13,7 +13,7 @@ import { sendJobNote } from "./dusk-notify.ts";
 export interface TelegramMessage { chat: string; chatId: number; id?: number; from: string; text: string; at: number }
 
 /** Telegram's Bot API (https://core.telegram.org/bots/api), the fields this reads. */
-interface Update {
+export interface Update {
   update_id: number;
   message?: RawMessage; edited_message?: RawMessage; channel_post?: RawMessage; edited_channel_post?: RawMessage;
 }
@@ -44,14 +44,42 @@ export function wanted(message: TelegramMessage, chats: readonly string[], keywo
   return !keywords.length || keywords.some((word) => lower(message.text).includes(lower(word)));
 }
 
-export function noteFor(messages: readonly TelegramMessage[], limit = 3_800): string {
-  const lines = messages.map((m) => `[${m.chat}] ${m.from} (${new Date(m.at).toISOString().slice(0, 16).replace("T", " ")} UTC${m.id === undefined ? "" : `, message ${m.id}`}): ${m.text.replace(/\s+/g, " ").trim()}`);
-  let note = `New Telegram messages (${messages.length}), each with all this watch knows of it: chat, sender, time, message id and text:\n`;
-  for (const line of lines) {
-    if (note.length + line.length + 1 > limit) { note += "[more messages were left out]"; break; }
-    note += `${line}\n`;
+/** One note to hand the bot, and the getUpdates offset that is safe to save once it is delivered. */
+export interface WatchNote { text: string; offset: number }
+
+const header = (count: number) => `New Telegram messages (${count}), each with all this watch knows of it: chat, sender, time, message id and text:\n`;
+
+/** Every wanted message of one poll as notes of at most `limit` characters, none left out: a message too long for one
+ *  note goes out in parts. A note's offset never passes an update whose text is not in it or in an earlier note. */
+export function notesFor(updates: readonly Update[], chats: readonly string[], keywords: readonly string[], limit = 3_800): WatchNote[] {
+  const pieces: Array<{ line: string; done: number | null }> = [];
+  for (const update of updates) {
+    const messages = messagesOf([update]).filter((message) => wanted(message, chats, keywords));
+    for (const [index, m] of messages.entries()) {
+      const last = index === messages.length - 1;
+      const label = `[${m.chat}] ${m.from} (${new Date(m.at).toISOString().slice(0, 16).replace("T", " ")} UTC${m.id === undefined ? "" : `, message ${m.id}`}`;
+      const text = m.text.replace(/\s+/g, " ").trim();
+      const room = limit - header(9_999).length - label.length - " (part 999 of 999): ".length;
+      if (label.length + 3 + text.length + header(9_999).length <= limit || room < 1) {
+        pieces.push({ line: `${label}): ${text}`, done: last ? update.update_id + 1 : null });
+        continue;
+      }
+      const parts = Math.ceil(text.length / room);
+      for (let part = 0; part < parts; part++) {
+        pieces.push({ line: `${label}, part ${part + 1} of ${parts}): ${text.slice(part * room, (part + 1) * room)}`, done: last && part === parts - 1 ? update.update_id + 1 : null });
+      }
+    }
   }
-  return note.trim();
+  const notes: WatchNote[] = [];
+  let lines: string[] = [], offset = 0;
+  const flush = () => { if (lines.length) notes.push({ text: (header(lines.length) + lines.join("\n")).trim(), offset }); lines = []; };
+  for (const piece of pieces) {
+    if (lines.length && header(lines.length + 1).length + [...lines, piece.line].join("\n").length > limit) flush();
+    lines.push(piece.line);
+    if (piece.done !== null) offset = piece.done;
+  }
+  flush();
+  return notes;
 }
 
 /** A GET through HTTPS_PROXY when one is set (the bot box's egress gate), straight out otherwise. */
@@ -157,12 +185,14 @@ async function main(): Promise<void> {
     pause = 1_000;
     const updates = answer.result ?? [];
     if (!updates.length) continue;
-    const fresh = messagesOf(updates).filter((message) => wanted(message, chats, keywords));
-    if (fresh.length) {
-      const sent = await sendJobNote(noteFor(fresh), false);
-      // Not taken (dusk bot restarting, too many at once): the same updates are read again on the next poll.
-      if (!sent.ok) { console.error(`dusk-notify: ${sent.body}`); await new Promise((resolve) => setTimeout(resolve, 15_000)); continue; }
+    let taken = true;
+    for (const note of notesFor(updates, chats, keywords)) {
+      const sent = await sendJobNote(note.text, false);
+      // Not taken (dusk bot restarting, too many at once): what was not delivered is read again on the next poll.
+      if (!sent.ok) { taken = false; console.error(`dusk-notify: ${sent.body}`); break; }
+      if (note.offset > (state.offset ?? 0)) { state.offset = note.offset; save(); }
     }
+    if (!taken) { await new Promise((resolve) => setTimeout(resolve, 15_000)); continue; }
     state.offset = updates[updates.length - 1]!.update_id + 1;
     save();
   }
