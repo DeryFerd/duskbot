@@ -377,7 +377,7 @@ export const Composer = memo(function Composer({
       label: "/setup",
       description: t("composer.command.setupDesc"),
     });
-    if (builtIns && !group && bot) available.push(...chatCommandRows());
+    if (builtIns && (group ? !group.dm : bot)) available.push(...chatCommandRows(Boolean(group)));
     return slashMenuRows(available, skillSlashCommands(slashSkills), slash.query, slashMoreOpen, () => ({
       label: t("composer.commands.more"), description: t("composer.commands.moreHint"),
     }));
@@ -443,7 +443,7 @@ export const Composer = memo(function Composer({
   const pickCommand = (command: ComposerSlashCommand | undefined) => {
     if (!slash || !command) return;
     // More opens in place: the highlight stays on its row, now the first of the other tools' skills
-    if (command.kind === "more") { setSlashMoreAt(slash.start); return; } if (command.kind === "command" && command.id === "new" && !text.slice(slash.end).trim()) { setDismissedSlashAt(slash.start); if (bot) startNewChat(bot.id, threadId, dispatch, clearField); return; }
+    if (command.kind === "more") { setSlashMoreAt(slash.start); return; } if (command.kind === "command" && command.id === "new" && !text.slice(slash.end).trim()) { setDismissedSlashAt(slash.start); const target = group ? { groupId: group.id } : bot ? { botId: bot.id } : null; if (target) startNewChat(target, threadId, dispatch, clearField); return; }
     const spaceAfter = /^\s/.test(text.slice(slash.end)) ? "" : " ";
     const replacement = command.kind === "skill" ? `${command.label}${spaceAfter}`
       : command.id === "learn" ? "/learn " : command.id === "setup" ? "/setup " : command.id === "compact" ? "/compact " : command.id === "new" ? "/new" : "";
@@ -671,7 +671,8 @@ export const Composer = memo(function Composer({
     keep: (rest) => { editText(rest); setCaret(rest.length); }, focus: () => requestAnimationFrame(() => inputRef.current?.focus()) }); const clearField = () => { editText(""); setCaret(0); };
   const send = (followUp: FollowUp | undefined = followUpFor(false)) => {
     if (locked || attachmentPending || unsentUpload) return;
-    if (!group && bot && !attachments.length && !replyTo && !quote && runChatCommand({ text, botId: bot.id, threadId, busy, dispatch, clear: clearField, restore: editText })) return;
+    const chatTarget = group ? (group.dm ? null : { groupId: group.id }) : bot ? { botId: bot.id } : null;
+    if (chatTarget && !attachments.length && !replyTo && !quote && runChatCommand({ text, target: chatTarget, threadId, busy, dispatch, clear: clearField, restore: editText })) return;
     if (
       attachments.some((attachment) => attachment.kind === "image") &&
       !imageTargetsSupport(effectiveText, effectiveChannelMode)

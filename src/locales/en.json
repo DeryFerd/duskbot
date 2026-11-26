@@ -2703,6 +2703,7 @@
   "composer.command.learnDesc": "Draft a reusable skill from this conversation",
   "composer.command.setupDesc": "Have this bot interview you and set itself up",
   "composer.command.newDesc": "Start a fresh chat. Memory carries over",
+  "composer.command.newRoomDesc": "Start a fresh conversation in this room",
   "composer.command.compactDesc": "Summarize this chat. Add what to keep",
   "composer.command.skillTag": "Skill",
   "composer.busy.team": "The team",

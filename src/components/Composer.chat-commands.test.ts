@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Bot } from "@/state/store";
+import type { Bot, Group } from "@/state/store";
 import { restoreComposerDraft } from "@/lib/drafts";
 
 const ENGINE = "claude-3f0c2b1e-9d1a-4c55-8a51-0a3a6f1e2b7c";
@@ -117,5 +117,24 @@ describe("/new and /compact in the composer", () => {
     enter();
     expect(actions().some((action) => action.type === "newTask")).toBe(false);
     expect(actions().find((action) => action.type === "send")).toMatchObject({ text: "/new ideas for the launch" });
+  });
+
+  it("in a room, /new opens a new room conversation and /compact is not offered", () => {
+    const room: Group = { id: "room", threadId: "room-thread", name: "Launch", memberIds: [bot.id], defaultResponder: { kind: "member", botId: bot.id },
+      bulletin: "", unread: false, createdAt: 1, setupCompletedAt: 1, messages: [] };
+    flushSync(() => root.render(createElement(Composer, { group: room, members: [bot] })));
+    flushSync(() => restoreComposerDraft("group:room:room-thread", { text: "/", attachments: [] }));
+    input().setSelectionRange(1, 1);
+    flushSync(() => input().dispatchEvent(new KeyboardEvent("keyup", { key: "/", bubbles: true })));
+    const labels = options().map((option) => option.querySelector(".truncate")?.textContent);
+    expect(labels).toContain("/new");
+    expect(labels).not.toContain("/compact");
+    flushSync(() => restoreComposerDraft("group:room:room-thread", { text: "/new", attachments: [] }));
+    input().setSelectionRange(4, 4);
+    flushSync(() => input().dispatchEvent(new KeyboardEvent("keyup", { key: "w", bubbles: true })));
+    enter();
+    expect(actions()).toContainEqual({ type: "newGroupTask", groupId: "room" });
+    expect(actions().some((action) => action.type === "sendGroup")).toBe(false);
+    restoreComposerDraft("group:room:room-thread", { text: "", attachments: [] });
   });
 });
