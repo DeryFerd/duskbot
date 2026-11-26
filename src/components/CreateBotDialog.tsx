@@ -14,6 +14,7 @@ import { t } from "@/lib/i18n";
 import { upperFirst } from "@/lib/lower-first";
 import { cn } from "@/lib/cn";
 import { MausAvatar, type MausAvatarHandle } from "./Avatar";
+import { focusComposerWhenShown } from "./AskCard";
 import { Icon } from "./Icon";
 import { hoverGaze } from "./mascot-engine";
 import { BodyRing } from "./mascot-view";
@@ -95,14 +96,19 @@ function CreateBotForm({ section, onClose }: { section?: string; onClose: () => 
     setError(null);
     setCreating(true);
     dispatch({ type: "newBot", section, look: { name: name.trim(), color, mascotBody: body },
-      onCreated: () => onClose(), onError: (message) => { setCreating(false); setError(message); } });
+      // the new chat's box takes the keyboard from this closing dialog, however long the bot took to make
+      onCreated: () => { if (dialog.current?.contains(document.activeElement)) (document.activeElement as HTMLElement).blur(); onClose(); focusComposerWhenShown(); }, onError: (message) => { setCreating(false); setError(message); } });
   };
 
   const busy = useRef(false);
   busy.current = creating;
   const leave = () => { if (!busy.current) onClose(); };
+  // focus goes back to what had it when the dialog opened; taken once, as the key effect below re-runs on each render
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return () => { if (opener?.isConnected && !dialog.current?.contains(opener)) opener.focus(); };
+  }, []);
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const root = dialog.current;
       if (!root) return;
@@ -117,10 +123,7 @@ function CreateBotForm({ section, onClose }: { section?: string; onClose: () => 
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     };
     window.addEventListener("keydown", onKey, true);
-    return () => {
-      window.removeEventListener("keydown", onKey, true);
-      if (opener?.isConnected) opener.focus();
-    };
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [onClose]);
 
   return (

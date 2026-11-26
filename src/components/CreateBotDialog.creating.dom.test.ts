@@ -3,7 +3,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const fixture = vi.hoisted(() => ({ actions: [] as Array<{ type: string; onError?: (message: string) => void }>, otherBotPending: false }));
+const fixture = vi.hoisted(() => ({ actions: [] as Array<{ type: string; onError?: (message: string) => void; onCreated?: () => void }>, otherBotPending: false }));
 vi.mock("@/state/store", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/state/store")>();
   const dispatch = (action: { type: string }) => { fixture.actions.push(action); };
@@ -64,4 +64,17 @@ it("Escape still closes the dialog while a bot from somewhere else is being made
   await act(async () => { openCreateBot(); });
   await act(async () => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
   expect(dialog()).toBeNull();
+});
+
+it("puts the keyboard in the new bot's chat box once it is made, however long that took", async () => {
+  const made = await startCreating();
+  const composer = document.createElement("div");
+  composer.dataset.tour = "composer";
+  const box = document.createElement("textarea");
+  composer.append(box);
+  document.body.append(composer);
+  dialog()!.querySelector<HTMLInputElement>("input")!.focus();
+  await act(async () => { made.onCreated!(); });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 100)); });
+  expect(document.activeElement).toBe(box);
 });
