@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import { Agent, fetch as loopbackFetch } from "undici";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createLinkService } from "../src/app.mjs";
@@ -26,6 +27,9 @@ async function until(check) {
     await delay(10);
   }
 }
+// the app reaches its proxy (vps-<id>.localhost) through Chromium, which always resolves *.localhost to loopback; node's
+// resolver on Windows does not, so the phone here connects to loopback by itself and keeps the name in Host
+const loopback = new Agent({ connect: { lookup: (_name, options, done) => (options?.all ? done(null, [{ address: "127.0.0.1", family: 4 }]) : done(null, "127.0.0.1", 4)) } });
 const json = (res, body) => { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(body)); };
 
 it("refuses control before reading its data and filters a request path without its query", async () => {
@@ -323,7 +327,7 @@ describe("phone relay hub", () => {
     const proxy = createTunnelProxy({ base, id: info.channel, route: `${base}/v1/channels/${info.channel}`, key: info.key.toString("base64url"), token: info.token, replyTimeoutMs: 5000 });
     proxies.push(proxy);
     const origin = new URL(await proxy.start());
-    return { proxy, port: origin.port, host: origin.host, get: (path, init = {}) => fetch(`${origin.origin}${path}`, { ...init, signal: AbortSignal.timeout(8000) }) };
+    return { proxy, port: origin.port, host: origin.host, get: (path, init = {}) => loopbackFetch(`${origin.origin}${path}`, { ...init, dispatcher: loopback, signal: AbortSignal.timeout(8000) }) };
   }
   const post = (info, frames) => fetch(`${base}/v1/channels/${info.channel}/to-vps`, { method: "POST", headers: { authorization: `Bearer ${info.token}`, "content-type": "application/json" }, body: JSON.stringify({ frames }) });
 

@@ -33,7 +33,9 @@ put_command
   return { stdout, cli, home, wrapper: await readFile(cli, "utf8") };
 }
 
-describe("the duskbot command an install puts on the PATH", () => {
+// POSIX only: install.sh is the Linux server installer, run here under sh with stub commands on a POSIX PATH; Windows
+// has neither, and no server runs it there.
+describe.skipIf(process.platform === "win32")("the duskbot command an install puts on the PATH", () => {
   it("runs the server account's own build as that account", async () => {
     const { stdout, cli, home, wrapper } = await putCommand();
     expect(stdout).toContain("duskbot now runs from any login on this server");

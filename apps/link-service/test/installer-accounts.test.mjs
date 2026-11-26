@@ -61,7 +61,9 @@ ${body}
 
 const read = (path) => readFile(path, "utf8");
 
-describe("the installer's units", () => {
+// POSIX only: install.sh is the Linux server installer, run here under sh with stub commands on a POSIX PATH; Windows
+// has neither, and no server runs it there.
+describe.skipIf(process.platform === "win32")("the installer's units", () => {
   it("runs the server hardened, out of the docker group, with every turn boxed and docker only through the gate", async () => {
     const dir = await fixture("server_unit; helper_units; handoff_script");
     const server = await read(join(dir, "units", "duskbot.service"));
@@ -133,7 +135,7 @@ sh "$LIB/engine-handoff.sh"`);
   });
 });
 
-describe("the installer's account split on an older install", () => {
+describe.skipIf(process.platform === "win32")("the installer's account split on an older install", () => {
   const older = `
 SVC_USER=$OLD_SVC_USER; SVC_HOME=$ROOT/home/$SVC_USER; DATA=$SVC_HOME/.duskbot
 mkdir -p "$SVC_HOME/.config/${LEGACY.linkConfigDir}" "$SVC_HOME/.config/${LEGACY.devName}" "$SVC_HOME/.ssh" "$DATA/workspaces/b1" "$SVC_HOME/.codex/sessions/2026" "$SVC_HOME/.claude/projects/p"
@@ -187,7 +189,7 @@ do_user > "$ROOT/out2" 2>&1 || { cat "$ROOT/out2" >&2; exit 1; }`);
   });
 });
 
-describe("sh install.sh --repair", () => {
+describe.skipIf(process.platform === "win32")("sh install.sh --repair", () => {
   let lastDir;
   async function repair(linked) {
     const dir = await mkdtemp(join(tmpdir(), "omb-install-repair-"));

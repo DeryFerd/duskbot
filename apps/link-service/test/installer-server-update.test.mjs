@@ -73,7 +73,9 @@ update_server
   return { out, log, read, dir, npm: log.filter(l => l.startsWith("as_user npm install")) };
 }
 
-describe("root's server update (install.sh --update-server)", () => {
+// POSIX only: install.sh is the Linux server installer, run here under sh with stub commands on a POSIX PATH; Windows
+// has neither, and no server runs it there.
+describe.skipIf(process.platform === "win32")("root's server update (install.sh --update-server)", () => {
   it("installs a newer signed staged build while nothing runs, restarts, and settles once its self-test passes", async () => {
     const r = await updateRound();
     expect(r.npm).toHaveLength(1);

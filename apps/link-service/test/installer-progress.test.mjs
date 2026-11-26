@@ -87,7 +87,9 @@ verified_download "$2" "$TMP/archive" "$3" "$4" 5 fixture
   }
 }
 
-describe("installer progress and repair", () => {
+// POSIX only: install.sh is the Linux server installer, run here under sh with stub commands on a POSIX PATH; Windows
+// has neither, and no server runs it there.
+describe.skipIf(process.platform === "win32")("installer progress and repair", () => {
   it("reports actual bytes and quiet time without treating a heartbeat as progress", async () => {
     const events = await fixture(`
 now_ms() { cat "$TMP/clock"; }

@@ -212,8 +212,8 @@ describe("Add your VPS", () => {
     expect(heartbeat.steps.find((step) => step.id === "app").progress).toEqual({ kind: "download", receivedBytes: 25, totalBytes: 100 });
 
     // the agent finishes the setup on the server and keeps the tunnel open
-    await run(process.execPath, [agentPath, "link"], { env: { ...process.env, HOME: home, LINK_BASE: base, LINK_ID: id, LINK_TOKEN: vpsToken, LINK_MODE: "relay", LINK_NAME: "oracle-arm", LINK_SERVER_PORT: String(vpsPort) } });
-    tunnelChild = spawn(process.execPath, [agentPath, "tunnel"], { env: { ...process.env, HOME: home, CODEX_HOME: join(home, ".codex"), LINK_SERVER_PORT: String(vpsPort) }, stdio: "ignore" });
+    await run(process.execPath, [agentPath, "link"], { env: { ...process.env, HOME: home, USERPROFILE: home, LINK_BASE: base, LINK_ID: id, LINK_TOKEN: vpsToken, LINK_MODE: "relay", LINK_NAME: "oracle-arm", LINK_SERVER_PORT: String(vpsPort) } });
+    tunnelChild = spawn(process.execPath, [agentPath, "tunnel"], { env: { ...process.env, HOME: home, USERPROFILE: home, CODEX_HOME: join(home, ".codex"), LINK_SERVER_PORT: String(vpsPort) }, stdio: "ignore" });
 
     const linked = await until(() => link.view().stage === "linked" && link.view());
     expect(linked.server).toMatchObject({ id: "env-1", name: "oracle-arm" });
@@ -276,9 +276,9 @@ describe("Add your VPS", () => {
       const token = /\/i\/([a-z2-7]{10}-[a-z2-7]{26})\)/.exec((await link.start()).command)[1];
       const [id, secret] = token.split("-");
       await post(`/v1/sessions/${id}/claim`, vpsTokenOf(secret), {});
-      await run(process.execPath, [agentPath, "link"], { env: { ...process.env, HOME: home, LINK_BASE: base, LINK_ID: id, LINK_TOKEN: vpsTokenOf(secret), LINK_MODE: "relay", LINK_NAME: "oracle-arm", LINK_SERVER_PORT: String(vpsPort) } });
+      await run(process.execPath, [agentPath, "link"], { env: { ...process.env, HOME: home, USERPROFILE: home, LINK_BASE: base, LINK_ID: id, LINK_TOKEN: vpsTokenOf(secret), LINK_MODE: "relay", LINK_NAME: "oracle-arm", LINK_SERVER_PORT: String(vpsPort) } });
       tunnelChild?.kill();
-      tunnelChild = spawn(process.execPath, [agentPath, "tunnel"], { env: { ...process.env, HOME: home, LINK_SERVER_PORT: String(vpsPort) }, stdio: "ignore" });
+      tunnelChild = spawn(process.execPath, [agentPath, "tunnel"], { env: { ...process.env, HOME: home, USERPROFILE: home, LINK_SERVER_PORT: String(vpsPort) }, stdio: "ignore" });
       await until(() => store.read()?.links?.some((entry) => entry.id === id));
       return id;
     };

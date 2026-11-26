@@ -34,7 +34,9 @@ ${body}
 }
 const parsed = (args) => sourced('parse_ways "$@"; printf "%s|%s\\n" "$WANT" "$ARGS_WANT"', ["abcdefghij-abcdefghijklmnopqrstuvwxyz", ...args]);
 
-describe("the line's way", () => {
+// POSIX only: install.sh is the Linux server installer, run here under sh with stub commands on a POSIX PATH; Windows
+// has neither, and no server runs it there.
+describe.skipIf(process.platform === "win32")("the line's way", () => {
   it("takes each way after the token", async () => {
     expect((await parsed([])).stdout.trim()).toBe("|");
     expect((await parsed(["--tailscale"])).stdout.trim()).toBe("tailscale|tailscale");

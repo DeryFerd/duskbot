@@ -64,7 +64,9 @@ migrate_legacy > "$ROOT/again"
   return root;
 }
 
-it("moves an install from before the rename to the new names, keeping its bots, link and site", async () => {
+// POSIX only: install.sh is the Linux server installer, run here under sh with stub commands on a POSIX PATH; Windows
+// has neither, and no server runs it there.
+it.skipIf(process.platform === "win32")("moves an install from before the rename to the new names, keeping its bots, link and site", async () => {
   const root = await oldServer();
   const at = (...parts) => join(root, ...parts);
   const calls = await readFile(at("calls"), "utf8");
