@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { antigravityProfileDirectory } from "../drivers/antigravity-acp.ts";
@@ -111,7 +112,11 @@ linuxBox("a required box runs engines in their own home", () => {
   afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
   it("HOME is the engine home; the server's HOME, data folder, keys and link files are not there; sign-ins are, settings read-only", () => {
-    const root = mkdtempSync(join(tmpdir(), "dusk-required-box-"));
+    // a server's HOME is never under /tmp, which the box replaces with its own: the code roots in HOME must sit elsewhere
+    // to be put back, so this one is outside the temp folder (on Linux that is /tmp)
+    const scratch = fileURLToPath(new URL("../../.dusk-scratch/", import.meta.url));
+    mkdirSync(scratch, { recursive: true });
+    const root = mkdtempSync(join(scratch, "required-box-"));
     dirs.push(root);
     const serverHome = join(root, "home"), data = join(serverHome, ".duskbot");
     const runner = new BoxRunner({
