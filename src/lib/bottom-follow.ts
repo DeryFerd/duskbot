@@ -56,6 +56,9 @@ export function useBottomFollowResize(
       hold.current?.();
     });
     observer.observe(transcript);
+    // the view getting shorter moves its end under the composer just as a taller transcript does: a phone's bottom inset
+    // settling after the chat opened (a cold start into it), or its navigation bar changing
+    observer.observe(scroller);
     return () => observer.disconnect();
   }, [followingRef, observeKey, scrollRef, transcriptRef]);
 }
