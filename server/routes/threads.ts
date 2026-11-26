@@ -3,7 +3,7 @@ import { basename, join } from "node:path";
 import type { WireBot, WireGroup } from "../../shared/wire.ts";
 import {
   ATTACHMENTS_DIR, attachmentStorageUsage, clearAttachments, deleteAttachment, extensionForMime, FILE_MAX_BYTES, IMAGE_MAX_BYTES, imageMimeOf,
-  parseAudioRange, readAttachment, saveFile, saveImageUpload, validateAttachmentUploadId, type SavedAttachment,
+  parseAudioRange, readAttachment, saveFile, saveImageUpload, heifUploadAsPicture, validateAttachmentUploadId, type SavedAttachment,
 } from "../attachments.ts";
 import { deliveredCopy } from "../bot-attachment.ts";
 import { attachmentImageSize } from "../media-size.ts";
@@ -453,7 +453,9 @@ export function createThreadRoutes(deps: ThreadRouteDeps): RouteHandler {
         const saved = await saveFile(chunks, name, rawType ?? "", { uploadId, expectedBytes: declaredLength });
         deps.uploads.note(auth, basename(saved.path));
         deps.attached?.(saved.mime, saved.bytes);
-        return json(res, 201, saved);
+        const picture = await heifUploadAsPicture(saved);
+        if (picture) deps.uploads.note(auth, basename(picture.path));
+        return json(res, 201, picture ?? saved);
       } catch (error) {
         req.resume();
         throw error;

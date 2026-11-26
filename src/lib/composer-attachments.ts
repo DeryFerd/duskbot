@@ -388,6 +388,23 @@ export function optimisticImageAttachment(file: File): ImageAttachment | null {
   };
 }
 
+/** Bytes that claim to be a picture but no browser can draw (cut short, or another file renamed): turned away before
+ * upload, from every way in (picker, paste, drop, a phone's share), so none lands in the chat as an empty block. */
+export async function refuseUndrawableImage(file: Blob): Promise<void> {
+  // the server imports this module without the DOM's types
+  const decode = (globalThis as { createImageBitmap?: (blob: Blob) => Promise<{ width: number; height: number; close?: () => void }> }).createImageBitmap;
+  if (typeof decode !== "function") return;
+  let bitmap: { width: number; height: number; close?: () => void };
+  try {
+    bitmap = await decode(file);
+  } catch {
+    throw Object.assign(new Error("the picture is damaged"), { status: 400 });
+  }
+  const empty = !bitmap.width || !bitmap.height;
+  bitmap.close?.();
+  if (empty) throw Object.assign(new Error("the picture is damaged"), { status: 400 });
+}
+
 export async function imageAttachmentFromFile(
   file: File,
   optimistic?: Pick<ImageAttachment, "id" | "previewUrl">,
@@ -395,6 +412,7 @@ export async function imageAttachmentFromFile(
 ): Promise<ImageAttachment | null> {
   if (!isImageFile(file)) return null;
   if (file.size > IMAGE_MAX_BYTES) throw new AttachmentTooLargeError(file.name, IMAGE_MAX_BYTES);
+  await refuseUndrawableImage(file);
   const bytes = new Uint8Array(await file.arrayBuffer());
   const uploadId = newUploadId();
   const saved = await uploadWithRetry<{ path: string; mime: string; bytes: number; media?: MediaSize }>(
@@ -439,11 +457,12 @@ export function pendingFileAttachment(file: Pick<File, "name" | "type" | "size">
 }
 
 /** Copied into the private store so the companion route never sees an arbitrary Finder path. */
-export async function fileAttachmentFromFile(file: File, transfer?: UploadTransfer & { id?: string }): Promise<FileAttachment | null> {
+export async function fileAttachmentFromFile(file: File, transfer?: UploadTransfer & { id?: string }): Promise<FileAttachment | ImageAttachment | null> {
   const mime = uploadableFileMime(file);
   if (!mime) return null;
+  if (isImageFile({ type: mime })) await refuseUndrawableImage(file);
   const uploadId = newUploadId();
-  const saved = await uploadWithRetry<{ path: string; name: string; bytes: number }>(
+  const saved = await uploadWithRetry<{ path: string; name: string; bytes: number; mime?: string }>(
     `/api/files?name=${encodeURIComponent(file.name)}&uploadId=${encodeURIComponent(uploadId)}`,
     {
       method: "POST",
@@ -452,6 +471,10 @@ export async function fileAttachmentFromFile(file: File, transfer?: UploadTransf
     },
     transfer,
   );
+  // an iPhone (HEIC) photo the server turned into a JPEG comes back as a picture
+  if (saved.mime && isImageFile({ type: saved.mime }) && !isImageFile({ type: mime })) {
+    return { kind: "image", id: transfer?.id ?? newId(), path: saved.path, name: saved.name || file.name, size: saved.bytes, mime: saved.mime };
+  }
   const attachment = fileAttachment(saved.name || file.name, saved.path, saved.bytes);
   return transfer?.id ? { ...attachment, id: transfer.id } : attachment;
 }

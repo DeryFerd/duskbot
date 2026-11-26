@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { pendingFileAttachment, type FileAttachment } from "./composer-attachments";
 import { appendDraftAttachments, getDraftAttachments, setDraftAttachments } from "./drafts";
 import { retryPlacedUpload, sendPlacedUpload } from "./placed-upload";
@@ -96,6 +96,42 @@ describe("an upload placed in the draft", () => {
     const { uploadFailure } = await import("./intake-files");
     expect(uploadFailure("scan.pdf", error)).toBe("scan.pdf wasn't attached: it's damaged, or it isn't the kind of file its name says.");
     expect(uploadFailure("notes.pdf", new TypeError("Failed to fetch"))).toBe("notes.pdf didn't upload. Check your connection, then retry it or remove it.");
+  });
+
+  it("turns away a picture no browser can draw before uploading it, however it came in, and takes its tile off", async () => {
+    const routes = routeUploads();
+    stop = routes.stop;
+    const { optimisticImageAttachment } = await import("./composer-attachments");
+    const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])], "cut.png", { type: "image/png" });
+    globalThis.URL.createObjectURL ??= () => "blob:x";
+    const tile = optimisticImageAttachment(file)!;
+    setDraftAttachments(undefined, "bot:e:t", []);
+    appendDraftAttachments("bot:e:t", [tile]);
+    const decode = vi.fn(async () => { throw new Error("InvalidStateError: The source image could not be decoded."); });
+    vi.stubGlobal("createImageBitmap", decode);
+    try {
+      const error = await sendPlacedUpload("bot:e:t", tile, file).catch((caught: unknown) => caught);
+      expect(decode).toHaveBeenCalledWith(file);
+      expect(error).toMatchObject({ status: 400 });
+      expect(routes.pending).toHaveLength(0);
+      expect(draft("bot:e:t")).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("brings an iPhone photo back as a picture when the server turned it into a JPEG", async () => {
+    const routes = routeUploads();
+    stop = routes.stop;
+    const file = new File([new Uint8Array(64)], "IMG_0042.HEIC", { type: "image/heic" });
+    const tile = pendingFileAttachment(file)!;
+    setDraftAttachments(undefined, "bot:f:t", []);
+    appendDraftAttachments("bot:f:t", [tile]);
+    const sent = sendPlacedUpload("bot:f:t", tile, file);
+    await Promise.resolve();
+    routes.pending[0]!.resolve(new Response(JSON.stringify({ path: "/a/0f0e0d0c-0b0a-4908-8706-050403020100.jpg", name: "IMG_0042.jpg", bytes: 900, mime: "image/jpeg" }), { status: 201 }));
+    await sent;
+    expect(draft("bot:f:t")).toEqual([expect.objectContaining({ kind: "image", id: tile.id, name: "IMG_0042.jpg", mime: "image/jpeg" })]);
   });
 
   it("stops quietly when its tile is removed mid-upload", async () => {

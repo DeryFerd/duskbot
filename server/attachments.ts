@@ -10,7 +10,8 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { link, open, unlink } from "node:fs/promises";
+import { link, mkdtemp, open, readFile, rm, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { FILE_MAX_BYTES } from "../shared/upload-limits.ts";
 import { DATA_DIR } from "./config.ts";
@@ -748,6 +749,26 @@ export function saveAudio(bytes: Buffer, mime: string): SavedAttachment {
 }
 
 /** Takes the per-id lock, so an image and a document with one caller-supplied UUID cannot commit with different extensions. */
+/** An iPhone (HEIC/HEIF) photo as the JPEG picture an engine and the chat can show, or null when it is not one or no
+ * converter on this machine reads it (server/attached-media.ts). The original upload stays as it was. */
+export async function heifUploadAsPicture(saved: SavedFile): Promise<SavedFile | null> {
+  if (!/\.(?:heic|heif)$/i.test(saved.path)) return null;
+  const { heifAsJpeg } = await import("./attached-media.ts");
+  const folder = await mkdtemp(join(tmpdir(), "dusk-heif-"));
+  try {
+    const jpeg = await heifAsJpeg(saved.path, folder);
+    if (!jpeg) return null;
+    const bytes = await readFile(jpeg);
+    if (!bytes.byteLength || bytes.byteLength > IMAGE_MAX_BYTES || imageMimeOf(bytes) !== "image/jpeg") return null;
+    const picture = await saveImageUpload(bytes, "image/jpeg");
+    return { ...picture, name: saved.name.replace(/\.(?:heic|heif)$/i, ".jpg") };
+  } catch {
+    return null;
+  } finally {
+    await rm(folder, { recursive: true, force: true });
+  }
+}
+
 export async function saveImageUpload(
   bytes: Buffer,
   mime: string,

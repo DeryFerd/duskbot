@@ -64,6 +64,7 @@ const {
   sanitizeSharedFileName,
   saveAudio,
   saveFile,
+  heifUploadAsPicture,
   saveImage,
   saveImageUpload,
   validateAttachmentUploadId,
@@ -305,6 +306,23 @@ describe("aggregate attachment storage", () => {
     })(), "last-byte.txt", "text/plain");
     expect(saved.bytes).toBe(1);
     expect(() => saveImage(Buffer.from("b"), "image/png")).not.toThrow();
+  });
+
+  it.skipIf(process.platform !== "darwin")("turns an iPhone photo into a JPEG picture beside its original", async () => {
+    const { execFileSync } = await import("node:child_process");
+    const png = join(DATA_ROOT, "dot.png");
+    realWriteFileSync(png, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==", "base64"));
+    const heicPath = join(DATA_ROOT, "dot.heic");
+    execFileSync("/usr/bin/sips", ["-s", "format", "heic", png, "--out", heicPath], { stdio: "ignore" });
+    const heic = readFileSync(heicPath);
+    const saved = await saveFile((async function* () { yield heic; })(), "IMG_0042.HEIC", "image/heic");
+    const picture = await heifUploadAsPicture(saved);
+    expect(picture).toMatchObject({ name: "IMG_0042.jpg", mime: "image/jpeg" });
+    expect(picture!.path.endsWith(".jpg")).toBe(true);
+    expect(readFileSync(picture!.path).subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
+    expect(existsSync(saved.path)).toBe(true);
+    const pdf = await saveFile((async function* () { yield Buffer.from("%PDF-1.4"); })(), "a.pdf", "application/pdf");
+    expect(await heifUploadAsPicture(pdf)).toBeNull();
   });
 
   it("keeps an iPhone photo as a file and refuses bytes that are not one", async () => {

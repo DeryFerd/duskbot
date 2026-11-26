@@ -8,11 +8,11 @@ import { SEND_KEYS, type SendKey } from "@/lib/send-key";
 import type { ApprovalModeSelector } from "./ApprovalModeSelector";
 import type { ModelPicker } from "./ModelPicker";
 
-const fixture = vi.hoisted(() => ({ dispatch: vi.fn(), instances: [] as unknown[], config: undefined as unknown }));
+const fixture = vi.hoisted(() => ({ dispatch: vi.fn(), instances: [] as unknown[], config: undefined as unknown, pendingQueued: {} as Record<string, unknown[]> }));
 vi.mock("@/state/store", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/state/store")>();
   return { ...original, api: vi.fn(async () => ({})), useStore: () => ({
-    state: { ...original.initialState, instances: fixture.instances, config: fixture.config ?? original.initialState.config },
+    state: { ...original.initialState, instances: fixture.instances, config: fixture.config ?? original.initialState.config, pendingQueued: fixture.pendingQueued },
     dispatch: fixture.dispatch,
   }) };
 });
@@ -326,6 +326,21 @@ describe("a message sent while a one-to-one bot works", () => {
     type(textarea(), "c");
     flushSync(() => sendButton().click());
     expect(followUps()).toEqual(["steer", "queue", "steer"]);
+  });
+
+  it("an Enter in the empty box does nothing, even pressed twice right after a message queued", () => {
+    fixture.instances = [steers];
+    render(createElement(Composer, { bot: working }));
+    type(textarea(), "first");
+    press(textarea());
+    fixture.pendingQueued = { selected: [{ queueId: "q1", text: "first" }, { queueId: "q2", text: "second" }] };
+    render(createElement(Composer, { bot: { ...working } }));
+    fixture.dispatch.mockClear();
+    press(textarea());
+    press(textarea());
+    expect(fixture.dispatch.mock.calls.map(([action]) => action.type)).not.toContain("steerQueued");
+    expect(sends()).toEqual([]);
+    fixture.pendingQueued = {};
   });
 
   it("leaves an idle bot and a room's queue as they were", () => {

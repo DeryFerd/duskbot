@@ -95,8 +95,6 @@ import { useThreadRefs } from "./ThreadRefs";
 import {
   QueuedComposerMessages,
   composerCanSteerQueuedMessages,
-  doubleEnterSteerWindowExpiresAt,
-  doubleEnterSteersQueue,
 } from "./ComposerQueuedMessages";
 import { liveCallEnabled, voiceCallsEnabled, skillAuthoringEnabled } from "@/lib/feature-flags";
 import { mentionChoicesForQuery, mentionQueryAt } from "@/lib/mentions"; import { mentionPicksFor, restoreMentionPicks } from "@/lib/mention-picks";
@@ -508,18 +506,6 @@ export const Composer = memo(function Composer({
     if (group) dispatch({ type: "cancelGroupQueued", groupId: group.id, threadId, queueId, onCancelled });
     else if (bot) dispatch({ type: "cancelQueued", botId: bot.id, threadId, queueId, onCancelled });
   };
-  const steerAgainUntilRef = useRef(0);
-  const prevPendingCountRef = useRef(pendingCount);
-  useEffect(() => {
-    const expiresAt = doubleEnterSteerWindowExpiresAt(
-      prevPendingCountRef.current,
-      pendingCount,
-      busy,
-      canSteer,
-    );
-    if (expiresAt !== null) steerAgainUntilRef.current = expiresAt;
-    prevPendingCountRef.current = pendingCount;
-  }, [pendingCount, busy, canSteer]);
   useEffect(() => {
     if (!busy || pendingCount === 0) {
       setSteering(false);
@@ -1105,14 +1091,6 @@ export const Composer = memo(function Composer({
             if (markdown) { e.preventDefault(); applyTextEdit(field, markdown); setCaret(markdown.caret); return; }
             if (sendsMessage(e.nativeEvent, sendKey)) {
               e.preventDefault();
-              if (
-                canSteer &&
-                doubleEnterSteersQueue(steerAgainUntilRef.current, Date.now(), pendingCount, hasContent)
-              ) {
-                steerAgainUntilRef.current = 0;
-                steerQueued();
-                return;
-              }
               send(followUpFor(alternateSend(e.nativeEvent, sendKey)));
             }
           }}
