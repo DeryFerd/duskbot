@@ -5921,7 +5921,7 @@ function waitForLocalVmUpdate(target: LocalVmTarget, threadId: string, isCurrent
 const activeVpsThreads = new Map<string, Set<string>>();
 const pendingVpsMounts = new Map<string, { generation: string; ownerId: string; alias: string }>(); const computerRelay = createComputerRelay({ lists: new ComputerToolLists(join(DATA_DIR, "vps-computer-tools.json")) });
 async function prepareVpsTurn<T>(owner: TurnOwner, ownerId: string, alias: string, prepare: () => Promise<T>): Promise<T> {
-  if (remoteComputerLifecycleBusyOwners.has(ownerId)) throw Object.assign(new Error("This VPS computer is being changed; wait for it to finish"), { status: 409 });
+  if (!await lifecycleSettles([ownerId], () => activeInternalGenerationByThread.get(owner.threadId) === owner.generation)) throw Object.assign(new Error("This VPS computer is being changed; wait for it to finish"), { status: 409 });
   const pending = { generation: owner.generation, ownerId, alias };
   pendingVpsMounts.set(owner.threadId, pending);
   try { return await prepare(); }
