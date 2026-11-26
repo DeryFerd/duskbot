@@ -304,7 +304,7 @@ function ManagedEngineSetup({ instance, signInOnly, autoStart = false, onAutoSta
 }) {
   const { refreshInstances, refreshModels } = useStore();
   const [busy, setBusy] = useState<"install" | "signin" | "complete" | "check" | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ from: "install" | "signin" | "complete" | "check"; text: string } | null>(null);
   const [flow, setFlow] = useState<{ flowId: string; authorizationUrl: string } | null>(null);
   const [callbackUrl, setCallbackUrl] = useState("");
   const autoStarted = useRef(false);
@@ -320,7 +320,7 @@ function ManagedEngineSetup({ instance, signInOnly, autoStart = false, onAutoSta
     setBusy(kind);
     setError(null);
     try { await action(); }
-    catch (cause) { setError(friendlyError(cause)); }
+    catch (cause) { setError({ from: kind, text: friendlyError(cause) }); }
     finally { setBusy(null); }
   };
 
@@ -388,7 +388,7 @@ function ManagedEngineSetup({ instance, signInOnly, autoStart = false, onAutoSta
         <p className="mt-1.5 text-center text-[11px] text-ink-tertiary">
           {t("engineSetup.downloadNote", { mb: Math.ceil(managed.downloadBytes / 1024 / 1024) })}
         </p>
-        {error && <p className="mt-2 min-w-0 text-[12px] text-danger [overflow-wrap:anywhere]">{error}</p>}
+        {error?.from === "install" && <p className="mt-2 min-w-0 text-[12px] text-danger [overflow-wrap:anywhere]">{error.text}</p>}
       </div>
     );
   }
@@ -460,7 +460,7 @@ function ManagedEngineSetup({ instance, signInOnly, autoStart = false, onAutoSta
           </details>
         </>
       )}
-      {error && <p className="min-w-0 text-[12px] text-danger [overflow-wrap:anywhere]">{error}</p>}
+      {error && <p className="min-w-0 text-[12px] text-danger [overflow-wrap:anywhere]">{error.text}</p>}
     </div>
   );
 }
