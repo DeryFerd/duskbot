@@ -437,3 +437,16 @@ describe("the wait's own timer", () => {
     } finally { vi.useRealTimers(); }
   });
 });
+
+describe("keeping the computer awake for a waiting turn", () => {
+  it("names when the soonest waiting turn carries on, and nothing once none waits", async () => {
+    const h = harness();
+    expect(h.hold.soonestWake()).toBeUndefined();
+    h.hold.hold({ botId: "kai", threadId: "t1", engine: "claude", engineName: "Claude", resetsAt: START + 2 * HOUR });
+    h.hold.hold({ botId: "kai", threadId: "t2", engine: "claude", engineName: "Claude", resetsAt: START + HOUR });
+    expect(h.hold.soonestWake()).toBe(START + HOUR + AFTER_RESET_MS);
+    h.hold.cancel("t2");
+    h.hold.cancel("t1");
+    expect(h.hold.soonestWake()).toBeUndefined();
+  });
+});

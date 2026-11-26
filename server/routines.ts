@@ -260,7 +260,7 @@ export interface RoutineManagerOptions {
   heldAfterWake?: () => boolean; held?: (run: RoutineRun) => string | null; decorate?: (routine: Routine) => Partial<Routine>; /** How much earlier than its time a run may start (a Cloud home folding an "around" run into its wake). */ earlyMs?: (routine: Routine) => number;
 }
 
-const WAKE_HORIZON_MS = 60 * 60_000;
+export const WAKE_HORIZON_MS = 60 * 60_000;
 export const ROUTINE_RESTARTED = "dusk bot restarted while this routine was running";
 const MAX_RUNS = 2_000;
 export class RoutineManager {

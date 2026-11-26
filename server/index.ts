@@ -452,7 +452,7 @@ import { addHeldSecretScrubber, redactSecretsInText, scrubHeldSecrets } from "./
 import * as vps from "./vps-computer.ts";
 import { BoxDiskNotes, clearBoxScratch } from "./box-scratch.ts";
 import { vpsConfigForBot, vpsSshAliasForBot } from "./vps-hosts.ts";
-import { ROUTINE_RESTARTED, RoutineManager, type RoutineRun, type RoutineRunOn, type RoutineRunTrigger } from "./routines.ts"; import { routineRunsFor } from "./routine-run-window.ts"; import { batchSaves, flushDeferredSaves } from "./save-batch.ts";
+import { withHeldTurn } from "./routine-due.ts"; import { ROUTINE_RESTARTED, RoutineManager, WAKE_HORIZON_MS, type RoutineRun, type RoutineRunOn, type RoutineRunTrigger } from "./routines.ts"; import { routineRunsFor } from "./routine-run-window.ts"; import { batchSaves, flushDeferredSaves } from "./save-batch.ts";
 import { BROWSER_UPLOAD_TOOL, browserRuntimeEnv } from "./browser-runtime.ts"; import { BATCH_TOOL } from "./browser/tools.ts";
 import { BrowserUploadRefusal, uploadableFiles } from "./browser-upload.ts";
 import { listSignedInSites, signOutOfSites } from "./browser-sites.ts";
@@ -16009,7 +16009,7 @@ const handleRequestInner = async (req: IncomingMessage, res: ServerResponse) => 
       return json(res, 201, { routine });
     }
     if (path === "/api/routines/wake" && method === "POST") { if (!ownerOrAdmin(auth)) return json(res, 403, { error: "forbidden" }); const answer = wakeGate.answer(await readBody(req)); return json(res, answer.status, answer.body); } if (path === "/api/routines/wake" && method === "GET") {
-      return json(res, 200, moveFreeze.frozen() ? { hold: false } : { ...routines!.wakeHold(), routines: routines!.enabledHere() });
+      return json(res, 200, moveFreeze.frozen() ? { hold: false } : { ...withHeldTurn(routines!.wakeHold(), limitHold.soonestWake(), Date.now(), WAKE_HORIZON_MS), routines: routines!.enabledHere() });
     }
     let routineMatch = path.match(/^\/api\/routines\/([\w-]+)\/run$/);
     if (routineMatch && method === "POST") {

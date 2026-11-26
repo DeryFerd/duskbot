@@ -306,6 +306,12 @@ export function createLimitHold(deps: LimitHoldDeps) {
       return turn;
     },
 
+    /** When the soonest waiting turn carries on, for the desktop's keep-awake. */
+    soonestWake(): number | undefined {
+      const due = [...turns.values()].filter((turn) => !turn.resuming).map((turn) => turn.wakeAt);
+      return due.length ? Math.min(...due) : undefined;
+    },
+
     /** Ends the wait: the person pressed Stop, sent another message, or chose another way on. */
     cancel(threadId: string): boolean {
       return Boolean(drop(threadId));
