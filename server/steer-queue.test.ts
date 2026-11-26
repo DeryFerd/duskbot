@@ -815,12 +815,12 @@ describe("steer-queue e2e (fake ACP fleet)", () => {
         instances: {
           steer: {
             driver: "grokAgent",
-            environment: { FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: drainGate },
+            environment: { FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: drainGate, FAKE_ACP_ECHO_QUOTED: "1" },
             config: { cli: FAKE_CLI, fullAuto: true },
           },
           steerEarly: {
             driver: "grokAgent",
-            environment: { FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: earlyGate },
+            environment: { FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: earlyGate, FAKE_ACP_ECHO_QUOTED: "1" },
             config: { cli: FAKE_CLI, fullAuto: true },
           },
           steerReceipt: {
@@ -835,13 +835,14 @@ describe("steer-queue e2e (fake ACP fleet)", () => {
               FAKE_ACP_MODE: "echo-gated",
               FAKE_ACP_GATE_FILE: stopGate,
               FAKE_ACP_RPC_DUMP: stopRpcDump,
+              FAKE_ACP_ECHO_QUOTED: "1",
             },
             config: { cli: FAKE_CLI, fullAuto: true },
           },
           // One gate holds the room's turn open while a 1:1 message arrives.
           steerRoom: {
             driver: "grokAgent",
-            environment: { FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: roomGate, FAKE_ACP_RPC_APPEND_FILE: roomRpcAppend },
+            environment: { FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: roomGate, FAKE_ACP_RPC_APPEND_FILE: roomRpcAppend, FAKE_ACP_ECHO_QUOTED: "1" },
             config: { cli: FAKE_CLI, fullAuto: true },
           },
         },
@@ -966,7 +967,7 @@ describe("steer-queue e2e (fake ACP fleet)", () => {
       const replies = echoes(snapshot);
       expect(replies).toHaveLength(2);
       expect(replies[0].text).toContain("first task please");
-      expect(replies[1].text).toContain("steer two\n\nsteer three");
+      expect(replies[1].text).toContain("> steer two\n> \n> steer three");
       expect(replies[1].text).not.toContain("authenticated outside event");
       expect(replies[1].text).not.toContain("[The user rewound");
       const userTexts = snapshot.messages.filter((m: any) => m.role === "user").map((m: any) => m.text);
