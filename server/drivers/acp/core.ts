@@ -144,8 +144,7 @@ export interface AcpSupport {
   /** A turn the engine fails with JSON-RPC -32603 or a non-standard failing stop reason before any reply, step, tool
    * or question reached the person runs once more on a new process, unseen; a second failure shows as usual. */
   retryUntouchedFailureOnce?: boolean;
-  /** Plain words for a failure the shared engine wording does not know; undefined keeps the engine's text. */
-  describeFailure?(message: string): string | undefined;
+  /** Plain words for a failure the shared engine wording does not know; undefined keeps the engine's text. */ describeFailure?(message: string): string | undefined;
   /** False when this engine cannot run memory upkeep's one-shot text call cleanly; oneShotFolder holds a one-shot's folder. */
   backgroundText?: false; oneShotFolder?(): Promise<string>;
   /** Mutate the child env in place. `instanceEnvironment` tells a key put there on purpose from one
