@@ -8,12 +8,17 @@ import {
 } from "./app-parts.ts";
 import { browserPartPending, browserEngineStatus, resolveAgentBrowserBinary } from "./browser-engine.ts";
 import { createBrowserPartHost, type BrowserPartFrame } from "./host/browser-part.ts";
+import { hostTimeout } from "./testing/host-timeout.ts";
 import { buildZip } from "./testing/zip-fixture.ts";
 
 const dirs: string[] = [];
 const temp = () => { const dir = mkdtempSync(join(tmpdir(), "dusk-parts-")); dirs.push(dir); return dir; };
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
+/** Setting a part up unzips it with a real child process and checks it, which takes over vitest's 1 s default wait on a
+ * busy Windows runner, so the wait is the host's own test budget. */
+const landsReady = (downloader: { state(name: "browser"): { phase: string } | null }) =>
+  vi.waitFor(() => expect(downloader.state("browser")?.phase).toBe("ready"), { timeout: hostTimeout(10_000), interval: 20 });
 const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
 function spec(bytes: Uint8Array, over: Partial<PartSpec> = {}): PartSpec {
@@ -176,7 +181,7 @@ describe("createPartsDownloader", () => {
     });
     downloader.start();
     expect(await downloader.ready("browser")).toBe(false);
-    await vi.waitFor(() => expect(downloader.state("browser")?.phase).toBe("ready"));
+    await landsReady(downloader);
     expect(await downloader.ready("browser")).toBe(true);
     expect(states).toContain("failed");
     expect(states.at(-1)).toBe("ready");
@@ -228,7 +233,7 @@ describe("createPartsDownloader", () => {
     }) as unknown as typeof fetch;
     const downloader = createPartsDownloader({ manifest: { v: 1, parts: [spec(zip, { url: github })] }, root, platform: "linux", fetchImpl, retryMs: [10] });
     downloader.start();
-    await vi.waitFor(() => expect(downloader.state("browser")?.phase).toBe("ready"));
+    await landsReady(downloader);
     expect(asked).toEqual([[github, null], [mirror, `bytes=${cut}-`]]);
     downloader.stop();
   });
@@ -239,7 +244,7 @@ describe("createPartsDownloader", () => {
     const { fetchImpl, calls } = server(zip, { cutAt: Math.floor(zip.length * 0.8) });
     const downloader = createPartsDownloader({ manifest: { v: 1, parts: [spec(zip)] }, root, platform: "linux", fetchImpl, retryMs: [10] });
     downloader.start();
-    await vi.waitFor(() => expect(downloader.state("browser")?.phase).toBe("ready"));
+    await landsReady(downloader);
     expect(calls).toEqual([null, `bytes=${Math.floor(zip.length * 0.8)}-`]);
     downloader.stop();
   });
@@ -256,7 +261,7 @@ describe("createPartsDownloader", () => {
         onChange: (_name, state) => { if (state.phase === "failed") throw new Error("listener broke"); },
       });
       downloader.start();
-      await vi.waitFor(() => expect(downloader.state("browser")?.phase).toBe("ready"));
+      await landsReady(downloader);
       await new Promise((resolve) => setTimeout(resolve, 20));
       expect(unhandled).not.toHaveBeenCalled();
       downloader.stop();
