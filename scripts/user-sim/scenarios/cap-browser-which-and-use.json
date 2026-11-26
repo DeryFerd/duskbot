@@ -1,0 +1,23 @@
+{
+  "title": "Say which browser it uses and actually use it",
+  "world": "student",
+  "tags": ["capability", "browser"],
+  "source": "complaints #5 (@Go12oct): \"I could not find which browser it's using\" and uninstalled.",
+  "computer": true,
+  "steps": [
+    {
+      "chat": {
+        "label": "open",
+        "goal": "Find out which browser the bot uses and see it work: have it open the Wikipedia page for Hyde Park, London in its own browser and tell you how big the park is.",
+        "opener": "which browser do you even use? open the wikipedia page for hyde park in london in it and tell me how big the park is",
+        "maxTurns": 3
+      }
+    }
+  ],
+  "checks": [
+    { "label": "used its browser", "tool": { "step": "open", "match": "^browser_" }, "min": 1 },
+    { "label": "named the browser", "said": { "step": "open", "match": "chrom" } },
+    { "label": "the size", "said": { "step": "open", "match": "14[0-9] ?(ha|hectare)|35[0-9] ?acre" } }
+  ],
+  "judge": "Pip says plainly which browser it uses (its own Chrome running in the background, that she can watch), opens the Hyde Park Wikipedia page in it and gives the size (about 142 hectares / 350 acres). No excuses, no 'I can't browse'."
+}

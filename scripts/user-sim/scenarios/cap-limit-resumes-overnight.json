@@ -1,0 +1,25 @@
+{
+  "title": "Hit the AI's usage limit at night and carry on by itself after the reset",
+  "world": "student",
+  "tags": ["capability", "limit"],
+  "source": "complaints lower tier (@chainnotsaw_man): stopped at the session limit overnight and did not continue after the reset.",
+  "start": "tue 23:20",
+  "limit": { "until": "@+1d 02:00", "message": "You've hit your usage limit. Your limit resets at 2:00 AM." },
+  "steps": [
+    {
+      "chat": {
+        "label": "ask",
+        "goal": "Before bed, ask for a short polite message to your landlord Mr Haddad asking whether the new lease has a break clause after 6 months. You go to sleep right after sending it and don't wait.",
+        "opener": "before i sleep: write me a short polite msg to mr haddad asking if the new lease has a break clause after 6 months. ill send it tmrw",
+        "maxTurns": 1
+      }
+    },
+    { "advance": "+1d 08:10", "label": "morning" },
+    { "settle": { "seconds": 150 } }
+  ],
+  "checks": [
+    { "label": "finished on its own", "proactive": { "match": "haddad|break clause|6 months|six months" }, "min": 1 },
+    { "label": "the draft arrived by morning", "said": { "match": "break clause" } }
+  ],
+  "judge": "The AI was at its usage limit when Aisha asked. Pip says once that it will pick this up when the limit resets, then, after the 2am reset and without Aisha asking again, posts the short polite message to Mr Haddad about the break clause, so it is waiting for her in the morning."
+}

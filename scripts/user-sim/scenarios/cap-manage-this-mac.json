@@ -1,0 +1,41 @@
+{
+  "title": "Uninstall an app and check free disk space on this Mac",
+  "world": "student",
+  "tags": ["capability", "computer"],
+  "source": "complaints #5 (@Go12oct, @baanditeagle): asked it to uninstall an app, it had the permissions and still couldn't; \"can't manage computers\".",
+  "computer": true,
+  "seed": {
+    "files": {
+      "Applications/Loomly Clipper.app/Contents/Info.plist": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist version=\"1.0\"><dict><key>CFBundleName</key><string>Loomly Clipper</string><key>CFBundleIdentifier</key><string>co.loomly.clipper</string><key>CFBundleShortVersionString</key><string>3.4.1</string></dict></plist>\n",
+      "Applications/Loomly Clipper.app/Contents/MacOS/Loomly Clipper": "#!/bin/sh\necho loomly\n",
+      "Library/Application Support/Loomly Clipper/settings.json": "{\"hotkey\":\"cmd+shift+L\",\"lastSync\":\"2026-09-02\"}\n",
+      "Applications/Notion Calendar.app/Contents/Info.plist": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist version=\"1.0\"><dict><key>CFBundleName</key><string>Notion Calendar</string></dict></plist>\n"
+    }
+  },
+  "steps": [
+    {
+      "chat": {
+        "label": "uninstall",
+        "goal": "Get Loomly Clipper off your Mac, you never use it. If the bot asks to confirm, say yes. Keep your other apps.",
+        "opener": "can you uninstall loomly clipper from my mac? never use it",
+        "maxTurns": 3
+      }
+    },
+    {
+      "chat": {
+        "label": "disk",
+        "goal": "Find out how much free space is left on this Mac's disk.",
+        "opener": "how much space have i got left on this thing",
+        "maxTurns": 2
+      }
+    }
+  ],
+  "checks": [
+    { "label": "app removed", "gone": { "path": "Applications/Loomly Clipper.app" } },
+    { "label": "other app kept", "file": { "path": "Applications/Notion Calendar.app/Contents/Info.plist" } },
+    { "label": "said it is gone", "said": { "step": "uninstall", "match": "uninstall|removed|deleted|trash|gone" } },
+    { "label": "free space number", "said": { "step": "disk", "match": "\\d+(\\.\\d+)? ?(GB|GiB|TB|G\\b|gigabytes)" } },
+    { "label": "ran a command", "tool": { "match": "run_command|shell" }, "min": 1 }
+  ],
+  "judge": "Pip finds Loomly Clipper in Aisha's Applications folder, removes it (to the Trash or deleted) with its support files, leaves her other apps alone, and confirms. Then it checks the disk and gives the free space as a number. It never says it cannot manage the Mac."
+}
