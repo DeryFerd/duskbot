@@ -10,6 +10,7 @@ import { parse as parseYaml } from "yaml";
 import type { ModelCatalog } from "../../contracts.ts";
 import { harnessHome } from "../../env-path.ts";
 import { resolveCli } from "../../procs.ts";
+import { conversationLanguage, serverLine } from "../../server-lines.ts";
 import { decodeInjectId, hostApiKey, INJECT_SEP, localHost, mergeLocalInject } from "../local-inject.ts";
 import { createAcpDriver, type AcpSupport } from "./core.ts";
 
@@ -395,18 +396,23 @@ export async function configureHermesSession({ request, sessionId, turn, env, cu
     console.warn(`Hermes: session/set_model ${target} failed on ${sessionId}: ${err.message}`);
     if (err.code !== -32602) throw new Error(`Hermes rejected model "${target}" via session/set_model: ${err.message}`);
   }
+  const language = conversationLanguage(turn.threadId);
   const fallback = picked && configured && !sameHermesModel(configured, picked) ? configured : null;
   if (fallback && !sameHermesModel(currentModelId, fallback)) {
     try {
       await setModel(fallback);
     } catch (e) {
       console.warn(`Hermes: fallback set_model ${fallback} failed on ${sessionId}: ${(e as Error).message}`);
-      noticeOnce(sessionId, `Hermes can't run ${hermesModelName(target)} anymore, so this chat stays on ${currentModelId ? hermesModelName(currentModelId) : "its current model"}. Pick another model to stop seeing this.`, notice);
+      noticeOnce(sessionId, currentModelId
+        ? serverLine(language, "server.hermes.modelGoneStays", { model: hermesModelName(target), running: hermesModelName(currentModelId) })
+        : serverLine(language, "server.hermes.modelGoneDefault", { model: hermesModelName(target) }), notice);
       return;
     }
   }
   const running = fallback ?? currentModelId;
-  noticeOnce(sessionId, `Hermes can't run ${hermesModelName(target)} anymore, so this chat uses ${running ? hermesModelName(running) : "Hermes' default model"}. Pick another model to stop seeing this.`, notice);
+  noticeOnce(sessionId, running
+    ? serverLine(language, "server.hermes.modelGone", { model: hermesModelName(target), running: hermesModelName(running) })
+    : serverLine(language, "server.hermes.modelGoneDefault", { model: hermesModelName(target) }), notice);
 }
 
 const support: AcpSupport = {

@@ -6334,6 +6334,9 @@
   "server.freeModel.emptyNext": "Wciąż nad tym pracuję: inny darmowy model przejmuje, żebyś dostał odpowiedź.",
   "server.freeModel.limit": "Bezpłatny model zapasowy wykorzystał na razie limit bezpłatnych odpowiedzi, dlatego ta wiadomość nie otrzymała odpowiedzi. Połącz własne AI, np. Claude lub ChatGPT, aby kontynuować, lub wyślij wiadomość ponownie później.",
   "server.freeModel.noReply": "Żaden bezpłatny model zapasowy nie odpowiedział, dlatego ta wiadomość nie otrzymała odpowiedzi. Wyślij ją ponownie za minutę lub połącz własne AI, np. Claude lub ChatGPT, aby mieć pewność odpowiedzi.",
+  "server.hermes.modelGone": "Hermes nie może już uruchomić {model}, więc ten czat używa {running}. Wybierz inny model, aby ten komunikat zniknął.",
+  "server.hermes.modelGoneStays": "Hermes nie może już uruchomić {model}, więc ten czat zostaje przy {running}. Wybierz inny model, aby ten komunikat zniknął.",
+  "server.hermes.modelGoneDefault": "Hermes nie może już uruchomić {model}, więc ten czat używa domyślnego modelu Hermesa. Wybierz inny model, aby ten komunikat zniknął.",
   "settings.simple.language.partial": "Na razie przetłumaczona jest tylko część aplikacji.",
   "botPanel.closePanel": "Zamknij panel",
   "chat.setupCard.close": "Zamknij pytanie"

@@ -5319,6 +5319,9 @@
   "server.freeModel.emptyNext": "Hâlâ üzerinde: yanıt alman için başka bir ücretsiz model devralıyor.",
   "server.freeModel.limit": "Ücretsiz yedek model şimdilik ücretsiz yanıt hakkını doldurdu, bu yüzden bu mesaja yanıt verilmedi. Devam etmek için Claude veya ChatGPT gibi kendi AI'nızı bağlayın ya da mesajı daha sonra yeniden gönderin.",
   "server.freeModel.noReply": "Şu anda hiçbir ücretsiz yedek model yanıt vermedi, bu yüzden bu mesaja yanıt verilmedi. Bir dakika sonra yeniden gönderin ya da güvenilir yanıtlar için Claude veya ChatGPT gibi kendi AI'nızı bağlayın.",
+  "server.hermes.modelGone": "Hermes artık {model} modelini çalıştıramıyor, bu yüzden bu sohbet {running} kullanıyor. Bu mesajı bir daha görmemek için başka bir model seç.",
+  "server.hermes.modelGoneStays": "Hermes artık {model} modelini çalıştıramıyor, bu yüzden bu sohbet {running} ile devam ediyor. Bu mesajı bir daha görmemek için başka bir model seç.",
+  "server.hermes.modelGoneDefault": "Hermes artık {model} modelini çalıştıramıyor, bu yüzden bu sohbet Hermes'in varsayılan modelini kullanıyor. Bu mesajı bir daha görmemek için başka bir model seç.",
   "settings.simple.language.partial": "Şimdilik uygulamanın yalnızca bir kısmı çevrildi.",
   "botPanel.closePanel": "Paneli kapat",
   "chat.setupCard.close": "Soruyu kapat"

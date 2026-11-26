@@ -6745,5 +6745,8 @@
   "server.freeModel.emptyNext": "계속 진행 중이에요. 답장을 받을 수 있도록 다른 무료 모델이 이어받고 있어요.",
   "server.freeModel.limit": "무료 백업 모델의 무료 답변을 모두 사용하여 이 메시지에는 답변하지 못했습니다. 계속하려면 Claude나 ChatGPT 같은 사용자의 AI를 연결하거나, 나중에 다시 보내 주세요.",
   "server.freeModel.noReply": "방금은 응답한 무료 백업 모델이 없어 이 메시지에는 답변하지 못했습니다. 1분 후에 다시 보내 주시거나, Claude나 ChatGPT 같은 사용자의 AI를 연결하여 안정적인 답변을 받아 보세요.",
+  "server.hermes.modelGone": "Hermes에서 더 이상 {model}을(를) 실행할 수 없어서 이 채팅은 {running}을(를) 사용합니다. 이 메시지가 보이지 않게 하려면 다른 모델을 선택하세요.",
+  "server.hermes.modelGoneStays": "Hermes에서 더 이상 {model}을(를) 실행할 수 없어서 이 채팅은 {running}에 그대로 있습니다. 이 메시지가 보이지 않게 하려면 다른 모델을 선택하세요.",
+  "server.hermes.modelGoneDefault": "Hermes에서 더 이상 {model}을(를) 실행할 수 없어서 이 채팅은 Hermes 기본 모델을 사용합니다. 이 메시지가 보이지 않게 하려면 다른 모델을 선택하세요.",
   "botPanel.closePanel": "패널 닫기"
 }

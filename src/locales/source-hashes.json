@@ -9965,7 +9965,10 @@
       "settings.dataSharing.event.created": "361297dbc4dcb7c19d9f166eb7e2a64206ed789d611ecda0ca4767f5af343a00",
       "settings.dataSharing.event.file_made": "ae3976c946b2506cde9f94ed25431df5129532cc2ebee64c0e98fde3993d828f",
       "settings.dataSharing.event.browser_download_failed": "67ce42499be4b3f10a3273eca47a3aac44c67a3b40609c0c9bf772de5a88425f",
-      "settings.dataSharing.notesDeletes": "b03387974da41de2461338de9b9badf3cecdc8003cfbeba89933d5fbdffa19f1"
+      "settings.dataSharing.notesDeletes": "b03387974da41de2461338de9b9badf3cecdc8003cfbeba89933d5fbdffa19f1",
+      "server.hermes.modelGone": "d25f10272bce1450e326a8ebd282c4537da2be40c191f427cee464d14f7db37e",
+      "server.hermes.modelGoneStays": "e6e3d2e0027ed651d2637721233961cc1b7aef409bbdd4de975a3723ae913c65",
+      "server.hermes.modelGoneDefault": "a32ce069a203206491fb6d6b5415bbb19c908434295af7ac65c4c9c8c799cad9"
     },
     "es": {
       "updates.updated": "da0fcccdc519425a9c333fda0838bbdd50d67fb0266194753bd1044abd0ecbb4",
@@ -19910,7 +19913,10 @@
       "settings.dataSharing.event.created": "361297dbc4dcb7c19d9f166eb7e2a64206ed789d611ecda0ca4767f5af343a00",
       "settings.dataSharing.event.file_made": "ae3976c946b2506cde9f94ed25431df5129532cc2ebee64c0e98fde3993d828f",
       "settings.dataSharing.event.browser_download_failed": "67ce42499be4b3f10a3273eca47a3aac44c67a3b40609c0c9bf772de5a88425f",
-      "settings.dataSharing.notesDeletes": "b03387974da41de2461338de9b9badf3cecdc8003cfbeba89933d5fbdffa19f1"
+      "settings.dataSharing.notesDeletes": "b03387974da41de2461338de9b9badf3cecdc8003cfbeba89933d5fbdffa19f1",
+      "server.hermes.modelGone": "d25f10272bce1450e326a8ebd282c4537da2be40c191f427cee464d14f7db37e",
+      "server.hermes.modelGoneStays": "e6e3d2e0027ed651d2637721233961cc1b7aef409bbdd4de975a3723ae913c65",
+      "server.hermes.modelGoneDefault": "a32ce069a203206491fb6d6b5415bbb19c908434295af7ac65c4c9c8c799cad9"
     },
     "fr": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -23408,7 +23414,10 @@
       "botPanel.backupModel.automaticHint": "ee96c57278a21c25efd33cce44c9a20f227c589ab6fe8a72fbcb8f5e17e042ef",
       "botPanel.backupModel.none": "9cb4bac0d495d846359f5d5575e7b7e361b86570903c36a3ffa240e5c4d7f346",
       "keys.row.removeTitle": "224c2f1b26cfc4cfffa129528669b42909ca19739462554fdc46145abb196043",
-      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500"
+      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500",
+      "server.hermes.modelGone": "d25f10272bce1450e326a8ebd282c4537da2be40c191f427cee464d14f7db37e",
+      "server.hermes.modelGoneStays": "e6e3d2e0027ed651d2637721233961cc1b7aef409bbdd4de975a3723ae913c65",
+      "server.hermes.modelGoneDefault": "a32ce069a203206491fb6d6b5415bbb19c908434295af7ac65c4c9c8c799cad9"
     },
     "hi": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -26904,7 +26913,10 @@
       "botPanel.backupModel.automaticHint": "ee96c57278a21c25efd33cce44c9a20f227c589ab6fe8a72fbcb8f5e17e042ef",
       "botPanel.backupModel.none": "9cb4bac0d495d846359f5d5575e7b7e361b86570903c36a3ffa240e5c4d7f346",
       "keys.row.removeTitle": "224c2f1b26cfc4cfffa129528669b42909ca19739462554fdc46145abb196043",
-      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500"
+      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500",
+      "server.hermes.modelGone": "d25f10272bce1450e326a8ebd282c4537da2be40c191f427cee464d14f7db37e",
+      "server.hermes.modelGoneStays": "e6e3d2e0027ed651d2637721233961cc1b7aef409bbdd4de975a3723ae913c65",
+      "server.hermes.modelGoneDefault": "a32ce069a203206491fb6d6b5415bbb19c908434295af7ac65c4c9c8c799cad9"
     },
     "it": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -33085,7 +33097,10 @@
       "botPanel.backupModel.automaticHint": "ee96c57278a21c25efd33cce44c9a20f227c589ab6fe8a72fbcb8f5e17e042ef",
       "botPanel.backupModel.none": "9cb4bac0d495d846359f5d5575e7b7e361b86570903c36a3ffa240e5c4d7f346",
       "keys.row.removeTitle": "224c2f1b26cfc4cfffa129528669b42909ca19739462554fdc46145abb196043",
-      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500"
+      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500",
+      "server.hermes.modelGone": "d25f10272bce1450e326a8ebd282c4537da2be40c191f427cee464d14f7db37e",
+      "server.hermes.modelGoneStays": "e6e3d2e0027ed651d2637721233961cc1b7aef409bbdd4de975a3723ae913c65",
+      "server.hermes.modelGoneDefault": "a32ce069a203206491fb6d6b5415bbb19c908434295af7ac65c4c9c8c799cad9"
     },
     "ja": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -39452,7 +39467,10 @@
       "botPanel.backupModel.automaticHint": "ee96c57278a21c25efd33cce44c9a20f227c589ab6fe8a72fbcb8f5e17e042ef",
       "botPanel.backupModel.none": "9cb4bac0d495d846359f5d5575e7b7e361b86570903c36a3ffa240e5c4d7f346",
       "keys.row.removeTitle": "224c2f1b26cfc4cfffa129528669b42909ca19739462554fdc46145abb196043",
-      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500"
+      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500",
+      "server.hermes.modelGone": "d25f10272bce1450e326a8ebd282c4537da2be40c191f427cee464d14f7db37e",
+      "server.hermes.modelGoneStays": "e6e3d2e0027ed651d2637721233961cc1b7aef409bbdd4de975a3723ae913c65",
+      "server.hermes.modelGoneDefault": "a32ce069a203206491fb6d6b5415bbb19c908434295af7ac65c4c9c8c799cad9"
     },
     "ko": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -46202,7 +46220,10 @@
       "botPanel.backupModel.automaticHint": "ee96c57278a21c25efd33cce44c9a20f227c589ab6fe8a72fbcb8f5e17e042ef",
       "botPanel.backupModel.none": "9cb4bac0d495d846359f5d5575e7b7e361b86570903c36a3ffa240e5c4d7f346",
       "keys.row.removeTitle": "224c2f1b26cfc4cfffa129528669b42909ca19739462554fdc46145abb196043",
-      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500"
+      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500",
+      "server.hermes.modelGone": "d25f10272bce1450e326a8ebd282c4537da2be40c191f427cee464d14f7db37e",
+      "server.hermes.modelGoneStays": "e6e3d2e0027ed651d2637721233961cc1b7aef409bbdd4de975a3723ae913c65",
+      "server.hermes.modelGoneDefault": "a32ce069a203206491fb6d6b5415bbb19c908434295af7ac65c4c9c8c799cad9"
     },
     "pl": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -52543,7 +52564,10 @@
       "botPanel.backupModel.automaticHint": "ee96c57278a21c25efd33cce44c9a20f227c589ab6fe8a72fbcb8f5e17e042ef",
       "botPanel.backupModel.none": "9cb4bac0d495d846359f5d5575e7b7e361b86570903c36a3ffa240e5c4d7f346",
       "keys.row.removeTitle": "224c2f1b26cfc4cfffa129528669b42909ca19739462554fdc46145abb196043",
-      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500"
+      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500",
+      "server.hermes.modelGone": "d25f10272bce1450e326a8ebd282c4537da2be40c191f427cee464d14f7db37e",
+      "server.hermes.modelGoneStays": "e6e3d2e0027ed651d2637721233961cc1b7aef409bbdd4de975a3723ae913c65",
+      "server.hermes.modelGoneDefault": "a32ce069a203206491fb6d6b5415bbb19c908434295af7ac65c4c9c8c799cad9"
     },
     "pt-br": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -58759,7 +58783,10 @@
       "botPanel.backupModel.automaticHint": "ee96c57278a21c25efd33cce44c9a20f227c589ab6fe8a72fbcb8f5e17e042ef",
       "botPanel.backupModel.none": "9cb4bac0d495d846359f5d5575e7b7e361b86570903c36a3ffa240e5c4d7f346",
       "keys.row.removeTitle": "224c2f1b26cfc4cfffa129528669b42909ca19739462554fdc46145abb196043",
-      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500"
+      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500",
+      "server.hermes.modelGone": "d25f10272bce1450e326a8ebd282c4537da2be40c191f427cee464d14f7db37e",
+      "server.hermes.modelGoneStays": "e6e3d2e0027ed651d2637721233961cc1b7aef409bbdd4de975a3723ae913c65",
+      "server.hermes.modelGoneDefault": "a32ce069a203206491fb6d6b5415bbb19c908434295af7ac65c4c9c8c799cad9"
     },
     "ru": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -65107,7 +65134,10 @@
       "botPanel.backupModel.automaticHint": "ee96c57278a21c25efd33cce44c9a20f227c589ab6fe8a72fbcb8f5e17e042ef",
       "botPanel.backupModel.none": "9cb4bac0d495d846359f5d5575e7b7e361b86570903c36a3ffa240e5c4d7f346",
       "keys.row.removeTitle": "224c2f1b26cfc4cfffa129528669b42909ca19739462554fdc46145abb196043",
-      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500"
+      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500",
+      "server.hermes.modelGone": "d25f10272bce1450e326a8ebd282c4537da2be40c191f427cee464d14f7db37e",
+      "server.hermes.modelGoneStays": "e6e3d2e0027ed651d2637721233961cc1b7aef409bbdd4de975a3723ae913c65",
+      "server.hermes.modelGoneDefault": "a32ce069a203206491fb6d6b5415bbb19c908434295af7ac65c4c9c8c799cad9"
     },
     "tr": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -70433,7 +70463,10 @@
       "botPanel.backupModel.automaticHint": "ee96c57278a21c25efd33cce44c9a20f227c589ab6fe8a72fbcb8f5e17e042ef",
       "botPanel.backupModel.none": "9cb4bac0d495d846359f5d5575e7b7e361b86570903c36a3ffa240e5c4d7f346",
       "keys.row.removeTitle": "224c2f1b26cfc4cfffa129528669b42909ca19739462554fdc46145abb196043",
-      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500"
+      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500",
+      "server.hermes.modelGone": "d25f10272bce1450e326a8ebd282c4537da2be40c191f427cee464d14f7db37e",
+      "server.hermes.modelGoneStays": "e6e3d2e0027ed651d2637721233961cc1b7aef409bbdd4de975a3723ae913c65",
+      "server.hermes.modelGoneDefault": "a32ce069a203206491fb6d6b5415bbb19c908434295af7ac65c4c9c8c799cad9"
     },
     "uk": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -74233,7 +74266,10 @@
       "botPanel.backupModel.automaticHint": "ee96c57278a21c25efd33cce44c9a20f227c589ab6fe8a72fbcb8f5e17e042ef",
       "botPanel.backupModel.none": "9cb4bac0d495d846359f5d5575e7b7e361b86570903c36a3ffa240e5c4d7f346",
       "keys.row.removeTitle": "224c2f1b26cfc4cfffa129528669b42909ca19739462554fdc46145abb196043",
-      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500"
+      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500",
+      "server.hermes.modelGone": "d25f10272bce1450e326a8ebd282c4537da2be40c191f427cee464d14f7db37e",
+      "server.hermes.modelGoneStays": "e6e3d2e0027ed651d2637721233961cc1b7aef409bbdd4de975a3723ae913c65",
+      "server.hermes.modelGoneDefault": "a32ce069a203206491fb6d6b5415bbb19c908434295af7ac65c4c9c8c799cad9"
     },
     "vi": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -79559,7 +79595,10 @@
       "botPanel.backupModel.automaticHint": "ee96c57278a21c25efd33cce44c9a20f227c589ab6fe8a72fbcb8f5e17e042ef",
       "botPanel.backupModel.none": "9cb4bac0d495d846359f5d5575e7b7e361b86570903c36a3ffa240e5c4d7f346",
       "keys.row.removeTitle": "224c2f1b26cfc4cfffa129528669b42909ca19739462554fdc46145abb196043",
-      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500"
+      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500",
+      "server.hermes.modelGone": "d25f10272bce1450e326a8ebd282c4537da2be40c191f427cee464d14f7db37e",
+      "server.hermes.modelGoneStays": "e6e3d2e0027ed651d2637721233961cc1b7aef409bbdd4de975a3723ae913c65",
+      "server.hermes.modelGoneDefault": "a32ce069a203206491fb6d6b5415bbb19c908434295af7ac65c4c9c8c799cad9"
     },
     "zh": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -86473,7 +86512,10 @@
       "botPanel.backupModel.automaticHint": "ee96c57278a21c25efd33cce44c9a20f227c589ab6fe8a72fbcb8f5e17e042ef",
       "botPanel.backupModel.none": "9cb4bac0d495d846359f5d5575e7b7e361b86570903c36a3ffa240e5c4d7f346",
       "keys.row.removeTitle": "224c2f1b26cfc4cfffa129528669b42909ca19739462554fdc46145abb196043",
-      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500"
+      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500",
+      "server.hermes.modelGone": "d25f10272bce1450e326a8ebd282c4537da2be40c191f427cee464d14f7db37e",
+      "server.hermes.modelGoneStays": "e6e3d2e0027ed651d2637721233961cc1b7aef409bbdd4de975a3723ae913c65",
+      "server.hermes.modelGoneDefault": "a32ce069a203206491fb6d6b5415bbb19c908434295af7ac65c4c9c8c799cad9"
     },
     "zh-tw": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -91377,7 +91419,10 @@
       "botPanel.backupModel.automaticHint": "ee96c57278a21c25efd33cce44c9a20f227c589ab6fe8a72fbcb8f5e17e042ef",
       "botPanel.backupModel.none": "9cb4bac0d495d846359f5d5575e7b7e361b86570903c36a3ffa240e5c4d7f346",
       "keys.row.removeTitle": "224c2f1b26cfc4cfffa129528669b42909ca19739462554fdc46145abb196043",
-      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500"
+      "keys.row.removeBody": "0adcd185fcce42bda8c21cc209717debcefb113ef60dd0f2cea06bed63990500",
+      "server.hermes.modelGone": "d25f10272bce1450e326a8ebd282c4537da2be40c191f427cee464d14f7db37e",
+      "server.hermes.modelGoneStays": "e6e3d2e0027ed651d2637721233961cc1b7aef409bbdd4de975a3723ae913c65",
+      "server.hermes.modelGoneDefault": "a32ce069a203206491fb6d6b5415bbb19c908434295af7ac65c4c9c8c799cad9"
     }
   }
 }

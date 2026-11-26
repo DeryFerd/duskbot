@@ -6210,6 +6210,9 @@
   "server.freeModel.emptyNext": "Ainda nisso: outro modelo gratuito está assumindo para você receber uma resposta.",
   "server.freeModel.limit": "O modelo reserva gratuito esgotou as respostas gratuitas por enquanto, e por isso esta mensagem ficou sem resposta. Conecte sua própria AI, como Claude ou ChatGPT, para continuar, ou envie a mensagem novamente mais tarde.",
   "server.freeModel.noReply": "Nenhum modelo reserva gratuito respondeu agora, e por isso esta mensagem ficou sem resposta. Envie-a novamente em um minuto ou conecte sua própria AI, como Claude ou ChatGPT, para ter respostas confiáveis.",
+  "server.hermes.modelGone": "O Hermes não consegue mais usar {model}, então este chat usa {running}. Escolha outro modelo para parar de ver este aviso.",
+  "server.hermes.modelGoneStays": "O Hermes não consegue mais usar {model}, então este chat continua em {running}. Escolha outro modelo para parar de ver este aviso.",
+  "server.hermes.modelGoneDefault": "O Hermes não consegue mais usar {model}, então este chat usa o modelo padrão do Hermes. Escolha outro modelo para parar de ver este aviso.",
   "settings.simple.language.partial": "Por enquanto, só parte do app está traduzida.",
   "botPanel.closePanel": "Fechar painel"
 }

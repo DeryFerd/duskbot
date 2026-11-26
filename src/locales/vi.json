@@ -5319,6 +5319,9 @@
   "server.freeModel.emptyNext": "Vẫn đang xử lý: một mô hình miễn phí khác đang tiếp nhận để bạn nhận được trả lời.",
   "server.freeModel.limit": "Mô hình dự phòng miễn phí đã hết lượt trả lời miễn phí trong lúc này, nên tin nhắn này chưa có phản hồi. Hãy kết nối AI của riêng bạn, như Claude hoặc ChatGPT, để tiếp tục, hoặc gửi lại tin nhắn sau.",
   "server.freeModel.noReply": "Hiện chưa có mô hình dự phòng miễn phí nào trả lời, nên tin nhắn này chưa có phản hồi. Hãy gửi lại sau ít phút, hoặc kết nối AI của riêng bạn, như Claude hoặc ChatGPT, để có phản hồi ổn định.",
+  "server.hermes.modelGone": "Hermes không còn chạy được {model}, nên cuộc trò chuyện này dùng {running}. Hãy chọn mô hình khác để không thấy thông báo này nữa.",
+  "server.hermes.modelGoneStays": "Hermes không còn chạy được {model}, nên cuộc trò chuyện này vẫn dùng {running}. Hãy chọn mô hình khác để không thấy thông báo này nữa.",
+  "server.hermes.modelGoneDefault": "Hermes không còn chạy được {model}, nên cuộc trò chuyện này dùng mô hình mặc định của Hermes. Hãy chọn mô hình khác để không thấy thông báo này nữa.",
   "settings.simple.language.partial": "Hiện mới chỉ dịch được một phần ứng dụng.",
   "botPanel.closePanel": "Đóng bảng",
   "chat.setupCard.close": "Đóng câu hỏi"

@@ -6909,5 +6909,8 @@
   "server.freeModel.emptyNext": "仍在处理：另一个免费模型正在接手，确保你能收到回复。",
   "server.freeModel.limit": "免费备用模型的免费回复次数暂时已用完,因此这条消息没有得到回复。请连接你自己的 AI(例如 Claude 或 ChatGPT)以继续使用,或稍后重新发送。",
   "server.freeModel.noReply": "刚才没有任何免费备用模型作出回复,因此这条消息没有得到回复。请一分钟后重新发送,或连接你自己的 AI(例如 Claude 或 ChatGPT),以获得稳定可靠的回复。",
+  "server.hermes.modelGone": "Hermes 已无法运行 {model}，所以此聊天改用 {running}。选择其他模型即可不再看到此提示。",
+  "server.hermes.modelGoneStays": "Hermes 已无法运行 {model}，所以此聊天继续使用 {running}。选择其他模型即可不再看到此提示。",
+  "server.hermes.modelGoneDefault": "Hermes 已无法运行 {model}，所以此聊天改用 Hermes 的默认模型。选择其他模型即可不再看到此提示。",
   "botPanel.closePanel": "关闭面板"
 }

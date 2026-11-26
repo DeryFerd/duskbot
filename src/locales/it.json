@@ -6174,6 +6174,9 @@
   "server.freeModel.emptyNext": "Ci sto ancora lavorando: un altro modello gratuito se ne occupa così ricevi una risposta.",
   "server.freeModel.limit": "Il modello di riserva gratuito ha esaurito per ora le risposte gratuite, quindi questo messaggio non ha ricevuto risposta. Collega la tua AI, come Claude o ChatGPT, per continuare, oppure invia di nuovo il messaggio più tardi.",
   "server.freeModel.noReply": "Nessun modello di riserva gratuito ha risposto in questo momento, quindi questo messaggio non ha ricevuto risposta. Invialo di nuovo tra un minuto, oppure collega la tua AI, come Claude o ChatGPT, per avere risposte su cui poter contare.",
+  "server.hermes.modelGone": "Hermes non può più usare {model}, quindi questa chat usa {running}. Scegli un altro modello per non vedere più questo avviso.",
+  "server.hermes.modelGoneStays": "Hermes non può più usare {model}, quindi questa chat resta su {running}. Scegli un altro modello per non vedere più questo avviso.",
+  "server.hermes.modelGoneDefault": "Hermes non può più usare {model}, quindi questa chat usa il modello predefinito di Hermes. Scegli un altro modello per non vedere più questo avviso.",
   "settings.simple.language.partial": "Per ora solo una parte dell'app è tradotta.",
   "botPanel.closePanel": "Chiudi pannello",
   "chat.setupCard.close": "Chiudi domanda"
