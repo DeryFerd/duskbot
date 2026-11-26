@@ -331,6 +331,28 @@ test("a connection that goes quiet is given up after the stall time and resumed,
   rmSync(dir, { recursive: true, force: true });
 });
 
+test("a link that keeps dropping but keeps moving finishes in one check, on either source, instead of running out of tries", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "dusk-flaky-"));
+  const zip = Buffer.alloc(40_000, 4);
+  const asked = [], waits = [];
+  // each try sends 3000 more bytes, then the connection drops: fourteen tries for the whole file
+  const flaky = (url) => (init) => {
+    const from = Number(/^bytes=(\d+)-$/.exec(init?.headers?.range ?? "")?.[1] ?? 0);
+    asked.push([url, from]);
+    const end = Math.min(from + 3000, zip.length);
+    if (end === zip.length) return served(zip, init);
+    const stream = new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(zip.subarray(from, end))); setTimeout(() => controller.error(new TypeError("terminated")), 2); } });
+    return new Response(stream, { status: from ? 206 : 200, headers: from ? { "content-range": `bytes ${from}-${zip.length - 1}/${zip.length}` } : { "content-length": String(zip.length) } });
+  };
+  const sources = ["https://a.test/z", "https://b.test/z"], routes = new Map(sources.map((url) => [url, flaky(url)]));
+  await resumableDownload({ sources, file: join(dir, "z.zip"), sha256: sha(zip), wait: async (ms) => { waits.push(ms); }, fetchImpl: async (url, init) => routes.get(url)(init) });
+  assert.equal(readFileSync(join(dir, "z.zip")).equals(zip), true);
+  assert.equal(asked.length, 14);
+  assert.deepEqual(new Set(asked.map(([url]) => url)), new Set(sources), "a try that broke goes on from the other source");
+  assert.ok(waits.every((ms) => ms === 2_000), "a try that got bytes waits only the shortest time");
+  rmSync(dir, { recursive: true, force: true });
+});
+
 test("a mac that wakes mid-download goes on at once from where it got", async () => {
   const zip = Buffer.alloc(30_000, 5);
   const url = zipUrl("1.1.0", "DuskBot-1.1.0-arm64.zip");
