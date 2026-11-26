@@ -1178,8 +1178,7 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
   const mountDue = useReached(!turnBusy ? null : turnStartedAt && messages.length > 0 ? turnStartedAt + mountDelay : 0);
   // notes from another AI being brought in: the import's own steps are this bot's working row until its summary lands
   const importing = useNotesWork(bot.id);
-  // a summary the person waits on (/compact, or the fold before their turn) is this chat's working line: no reply is written meanwhile
-  const compacting = Boolean(bot.busy && bot.tasks?.find((task) => task.threadId === bot.threadId)?.compacting);
+  const compacting = Boolean(bot.busy && bot.tasks?.find((task) => task.threadId === bot.threadId)?.compacting); // a summary the person waits on is the working line
   const presenceVisible = !stopCut && (hold.typing || (waiting && mountDue) || teammatesWorking || Boolean(importing) || networkWait || compacting);
   // while the turn runs its notices are the working row's to say, not the chat's too; once it ends, what it left is one
   // card above the composer
