@@ -112,7 +112,7 @@ describe("the server's identity", () => {
     const dir = mkdtempSync(join(tmpdir(), "dusk-seal-identity-"));
     try {
       const first = loadSealIdentity(dir);
-      expect(statSync(join(dir, SEAL_IDENTITY_FILE)).mode & 0o777).toBe(0o600);
+      if (process.platform !== "win32") expect(statSync(join(dir, SEAL_IDENTITY_FILE)).mode & 0o777).toBe(0o600);
       expect(sealIdentityOf(loadSealIdentity(dir))).toBe(sealIdentityOf(first));
       // a new start makes a new sealing key, signed by the same identity
       expect(createCardSealer({ identity: loadSealIdentity(dir) }).identity()).toBe(sealIdentityOf(first));

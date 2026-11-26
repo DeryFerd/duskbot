@@ -56,9 +56,9 @@ describe("saved secrets at rest", () => {
     expect(disk.includes(CANARY)).toBe(false);
     expect(disk.includes("OpenRouter")).toBe(false);
     for (const name of readdirSync(dataDir)) expect(readFileSync(join(dataDir, name)).includes(CANARY)).toBe(false);
-    expect(statSync(join(dataDir, SAVED_SECRETS_FILE)).mode & 0o777).toBe(0o600);
-    expect(statSync(keyFile).mode & 0o777).toBe(0o600);
-    expect(statSync(join(keyFile, "..")).mode & 0o777).toBe(0o700);
+    if (process.platform !== "win32") expect(statSync(join(dataDir, SAVED_SECRETS_FILE)).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(keyFile).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(join(keyFile, "..")).mode & 0o777).toBe(0o700);
 
     // the same key opens it again; the value is found only for a bot it was saved for
     const again = new SavedSecretStore({ dataDir, key: fileSavedSecretsKey(dataDir, keyFile) });
@@ -73,7 +73,7 @@ describe("saved secrets at rest", () => {
     new SavedSecretStore({ dataDir, key: fileSavedSecretsKey(dataDir, keyFile) }).save({ label: "Key", botId: "b", value: CANARY });
     chmodSync(keyFile, 0o644);
     fileSavedSecretsKey(dataDir, keyFile).get();
-    expect(statSync(keyFile).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(keyFile).mode & 0o777).toBe(0o600);
 
     writeFileSync(keyFile, `${randomBytes(32).toString("hex")}\n`, { mode: 0o600 });
     const other = new SavedSecretStore({ dataDir, key: fileSavedSecretsKey(dataDir, keyFile) });

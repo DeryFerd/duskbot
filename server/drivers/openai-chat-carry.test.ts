@@ -104,7 +104,7 @@ describe("createCarriedWork", () => {
       const again = createCarriedWork({ file });
       expect(again.take("t", resume)).toEqual(step);
       expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({});
-      expect(statSync(file).mode & 0o777).toBe(0o600);
+      if (process.platform !== "win32") expect(statSync(file).mode & 0o777).toBe(0o600);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

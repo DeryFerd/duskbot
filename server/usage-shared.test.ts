@@ -24,7 +24,7 @@ describe("what this workspace shared", () => {
     expect(again.notes).toEqual([{ id: "session001", kind: "big", at: NOW - 100, text: null }, { id: "frust00001", kind: "bad", at: NOW - 5000, text: "gmail would not connect." }]);
     expect(again.counts).toEqual([{ kind: "turns", count: 3, last: now }, { kind: "runs", count: 1, last: NOW }, { kind: "setup", count: 1, last: NOW }, { kind: "events", count: 1, last: NOW, names: ["engine_sign_in"] }]);
     expect(again.removing).toBe(false);
-    expect(statSync(path).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(path).mode & 0o777).toBe(0o600);
   });
   it("lets go of what the account service no longer keeps either", () => {
     let now = NOW;

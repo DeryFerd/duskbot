@@ -103,7 +103,7 @@ describe("mobile session registry", () => {
       v: 1,
       sessions: [{ hash: createHash("sha256").update(TOKEN).digest("hex"), deviceId: "phone-1", createdAt: expect.any(Number) }],
     });
-    expect(statSync(file).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(file).mode & 0o777).toBe(0o600);
     const loaded = createMobileSessions({ file });
     expect(loaded.has(TOKEN)).toBe(true);
     expect(loaded.list()).toEqual([{ deviceId: "phone-1", createdAt: expect.any(Number) }]);

@@ -59,7 +59,7 @@ describe("a bot's own mail address", () => {
     const registration = h.registered[0]!;
     expect(registration.url).toMatch(/^https:\/\/home\.example\/hooks\/mail\/mb_/);
     const path = new URL(registration.url).pathname;
-    expect((statSync(join(h.dir, "bot-mail.json")).mode & 0o777).toString(8)).toBe("600");
+    if (process.platform !== "win32") expect((statSync(join(h.dir, "bot-mail.json")).mode & 0o777).toString(8)).toBe("600");
 
     const check = await h.post(path, registration.secret, {}, { "x-dusk-mail-check": "n1" });
     expect(await check.json()).toEqual({ check: createHmac("sha256", registration.secret).update("n1").digest("hex") });

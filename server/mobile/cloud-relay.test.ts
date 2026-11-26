@@ -63,7 +63,7 @@ it("a dusk cloud makes its own relay tunnel with the grant the account service s
   relay.grant(grant());
   expect((await relay.ready(15_000)).status).toBe("ready");
   expect(service.store.tunnels.size).toBe(1);
-  expect(statSync(join(dir, "phone-relay.json")).mode & 0o777).toBe(0o600);
+  if (process.platform !== "win32") expect(statSync(join(dir, "phone-relay.json")).mode & 0o777).toBe(0o600);
 
   // the phone's own session from the account sign-in, not a pairing: the place has a relay and no channel for it yet
   const pairing = sessions.openPairing({ scopes: ["client"], label: "Pixel" });

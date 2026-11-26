@@ -38,7 +38,7 @@ it("opens once a token for this machine verifies, keeps it across a restart, and
   expect(e.gate("/api/bots")).not.toBeNull();
   expect(e.accept(token())).toMatchObject({ ok: true });
   expect(e.gate("/api/bots")).toBeNull();
-  expect(statSync(join(dataDir, "cloud-entitlement")).mode & 0o777).toBe(0o600);
+  if (process.platform !== "win32") expect(statSync(join(dataDir, "cloud-entitlement")).mode & 0o777).toBe(0o600);
   expect(made().gate("/api/bots")).toBeNull();
   advance(3_600_000 + 5 * 60_000);
   expect(made().gate("/api/bots")).not.toBeNull();

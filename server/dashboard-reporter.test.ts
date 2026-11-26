@@ -105,7 +105,7 @@ describe("dashboard reporter", () => {
     const carrying = f.reports.find((report) => report.results?.some((result) => result.id === command.id))!;
     expect(carrying.devices).toEqual(expect.any(Object)); expect(activity).toHaveBeenCalledOnce(); expect(devices).toHaveBeenCalledTimes(2); expect(plans).toHaveBeenCalledTimes(2); expect(f.reports[1].plans).toBeUndefined();
     expect(reporter.status()).toMatchObject({ connected: true, url: f.base, workspaceId: "workspace", lastReportAt: expect.any(Number), lastError: null });
-    const file = join(f.dir, "dashboard-link.json"); expect(statSync(file).mode & 0o777).toBe(0o600);
+    const file = join(f.dir, "dashboard-link.json"); if (process.platform !== "win32") expect(statSync(file).mode & 0o777).toBe(0o600);
     const saved = JSON.parse(readFileSync(file, "utf8")); expect(saved).toMatchObject({ v: 1, url: f.base, workspaceId: "workspace", claimed: true });
     expect(createPublicKey({ key: Buffer.from(saved.publicKey, "base64"), format: "der", type: "spki" }).asymmetricKeyType).toBe("ed25519");
     await reporter.link(f.base); expect(f.enrollKeys[1]).toBe(f.enrollKeys[0]);

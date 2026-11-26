@@ -30,7 +30,7 @@ it("a loopback service signs with a development key of its own, kept 0600 beside
   const d = dir();
   const signer = entitlementSignerFromEnv({}, { dataDir: d, loopback: true, now: () => NOW, required: false })!;
   expect(signer.kid).toBe("dev-local");
-  expect(statSync(join(d, "entitlement-dev-key")).mode & 0o777).toBe(0o600);
+  if (process.platform !== "win32") expect(statSync(join(d, "entitlement-dev-key")).mode & 0o777).toBe(0o600);
   const again = entitlementSignerFromEnv({}, { dataDir: d, loopback: true, now: () => NOW, required: false })!;
   expect(again.sign(cloud).split(".")[1]).toBe("dev-local");
   expect(entitlementPublicKey(parseEntitlementSigner(generateEntitlementSigner("x").env)).kid).toBe("x");
