@@ -25,6 +25,7 @@ import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { startFakeHttpMcp } from "./testing/fake-http-mcp-server.ts";
 import { startFakeOAuth } from "./testing/fake-oauth-server.ts";
 import { freePortBlock, withFreeSignInPort } from "./testing/ports.ts";
+import { hostTimeout } from "./testing/host-timeout.ts";
 import { openSse } from "./testing/sse.ts";
 import { STARTER_COLORS } from "./bot-look.ts";
 import { DEFAULT_BOT_BODY } from "../shared/body-migration.ts";
@@ -6376,7 +6377,7 @@ describe("harness HTTP API", () => {
           frame.kind === "notify" &&
           frame.notification?.kind === "routine-failed" &&
           frame.notification?.botId === bot.id,
-        5_000,
+        hostTimeout(5_000),
       );
       const buzzes = stream.frames.filter(
         (frame: { kind?: string; notification?: { kind?: string; botId?: string } }) =>
