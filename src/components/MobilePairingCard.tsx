@@ -317,7 +317,11 @@ export function MobilePairingCard({ remote, cloudHome = false, email, direct, ch
         approval.current = "approved";
         approvedAt.current = Date.now();
         firstGrant.current = grant;
-      } else if ((!codesInCloud && !(await requireUserPresence())) || generation.current !== epoch) return;
+      } else if (!codesInCloud && !(await requireUserPresence())) {
+        // a check that did not pass (cancelled, failed or timed out) says so with another try, never a placeholder that waits
+        if (generation.current === epoch) setError(t("settings.phone.notConfirmed"));
+        return;
+      } else if (generation.current !== epoch) return;
       const body = await mintWithRetries(epoch);
       if (!body || generation.current !== epoch) return;
       if (!codesInCloud) baseline.current = (devices ?? []).map((device) => device.id);

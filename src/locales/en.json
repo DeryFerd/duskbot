@@ -8828,6 +8828,7 @@
   "settings.phone.signInDeclined": "Your phone can still link without signing in. It can sign in on its own afterwards.",
   "settings.phone.plainQr": "Show QR without sign-in",
   "settings.phone.includeSignIn": "Include sign-in",
+  "settings.phone.notConfirmed": "Confirm it's you to show the code.",
   "settings.phone.logInToConnect": "To connect your phone, log in to dusk bot",
   "settings.phone.signInFirst": "Sign in to link your phone. The QR then signs your phone in to the same account as it links.",
   "settings.phone.signInFirstSub": "Your phone signs in when it scans, no separate login.",

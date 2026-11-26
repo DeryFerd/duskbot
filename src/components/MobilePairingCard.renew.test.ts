@@ -18,6 +18,7 @@ vi.mock("motion/react", async (original) => {
 
 import { AUTO_RENEWALS, MINT_RETRY_MS, MobilePairingCard, RENEW_BEFORE_MS } from "./MobilePairingCard";
 import { ServerPairingCard } from "./ServerPairingCard";
+import { requireUserPresence } from "@/lib/user-presence";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 let host: HTMLDivElement, root: Root, minted: number;
@@ -392,6 +393,24 @@ describe("no way for a phone to reach this workspace", () => {
     expect(host.querySelector("[data-pairing-unreachable]")?.textContent).toContain("duskbot setup");
     expect(host.querySelector("[data-pairing-unreachable]")?.textContent).not.toContain("npx");
     expect(host.querySelector("[data-phone-access-copy]")).not.toBeNull();
+  });
+});
+
+describe("the presence check before a plain QR", () => {
+  // Windows Hello (or Touch ID) cancelled, failed or timed out: the card says so and offers another try, never a QR
+  // placeholder that waits for a phone forever
+  it("a check that did not pass leaves a way to try again, and the next pass shows the QR", async () => {
+    vi.mocked(requireUserPresence).mockResolvedValueOnce(false);
+    await mount({ remote: false });
+    await flush();
+    expect(minted).toBe(0);
+    const notice = host.querySelector("[data-pairing-failed]");
+    expect(notice?.textContent).toContain("Confirm it's you to show the code.");
+    expect(notice?.querySelector("button")?.textContent).toBe("Try again");
+    await click("[data-pairing-failed] button");
+    await flush();
+    expect(host.querySelector("[data-pairing-failed]")).toBeNull();
+    expect(host.querySelector("[data-phone-qr]")?.getAttribute("data-phone-qr")).toBe("https://dusk.bot/m/pair#m=offer1&c=ABCDEFGH0001");
   });
 });
 
