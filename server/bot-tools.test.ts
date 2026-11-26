@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { openSync, readFileSync } from "node:fs";
+import { devNull } from "node:os";
 import { describe, expect, it } from "vitest";
 
 import { BOT_APT_PACKAGES, BOT_MEDIA_PACKAGES, BOT_PYTHON_PACKAGES, BOT_TOOLS_LOG, BOT_TOOLS_VERSION, botToolsScript, startBotTools } from "./bot-tools.ts";
@@ -13,7 +14,7 @@ function fakeRun(systemd: boolean, failLog = false) {
     run: {
       hasSystemd: () => systemd,
       spawn: (command: string, args: string[]) => { calls.push({ command, args }); },
-      openLog: () => { if (failLog) throw new Error("read-only file system"); return openSync("/dev/null", "a"); },
+      openLog: () => { if (failLog) throw new Error("read-only file system"); return openSync(devNull, "a"); },
     },
   };
 }

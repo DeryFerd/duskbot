@@ -40,7 +40,8 @@ function files(dir: string): Record<string, number> {
   return out;
 }
 
-it("restores a managed Cloud's backup into a fresh home that opens every Vault item, its keys owner-only", () => {
+// a managed Cloud runs on Linux (HOME, tar --numeric-owner, POSIX modes), so this runs where those exist
+it.skipIf(process.platform === "win32")("restores a managed Cloud's backup into a fresh home that opens every Vault item, its keys owner-only", () => {
   // the server's environment on a managed home never takes another config folder or key file
   expect(serverEnvironmentAllowed("XDG_CONFIG_HOME")).toBe(false);
   expect(serverEnvironmentAllowed("DUSK_SAVED_SECRETS_KEY_FILE")).toBe(false);

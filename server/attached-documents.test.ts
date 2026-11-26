@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { ATTACHED_TEXT_MAX_CHARS, DOCUMENT_INLINE_CHARS, prepareAttachedDocuments, withAttachedDocuments } from "./attached-documents.ts";
@@ -26,7 +26,7 @@ describe("attached documents in the turn", () => {
     const path = upload(".pdf", pdfFixture(["Invoice INV-2291", "Total due: 57,820"]));
     const result = await read(`summarise this in 3 bullets\n\n${tag(path, "invoice.pdf")}`);
     expect(result.text).toMatch(/^summarise this in 3 bullets\n\n<attached-file [^\n]+\/>\n<attached-file-text name="invoice.pdf">\n[\s\S]*Total due: 57,820[\s\S]*<\/attached-file-text>$/);
-    expect(existsSync(join(cacheDir, `${path.split("/").at(-1)}.txt`))).toBe(true);
+    expect(existsSync(join(cacheDir, `${basename(path)}.txt`))).toBe(true);
   });
 
   it("reads Word, Excel and PowerPoint uploads", async () => {

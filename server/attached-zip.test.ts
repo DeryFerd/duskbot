@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { withAttachedDocuments } from "./attached-documents.ts";
@@ -31,7 +31,7 @@ describe("an attached zip", () => {
       { name: "ramxcodes-voice/.DS_Store", data: "junk" },
     ]));
     const result = await withAttachedDocuments(`unzip ramxcodes-voice.zip and attach the intro\n\n${tag(zip, "ramxcodes-voice.zip")}`, { vision: false, imageRoom: 10, attachmentsDir, cacheDir });
-    const folder = join(cacheDir, `${zip.split("/").at(-1)}-files`);
+    const folder = join(cacheDir, `${basename(zip)}-files`);
     expect(result.text).toContain(`${tag(zip, "ramxcodes-voice.zip")}\n<attached-zip-files path="${folder}" name="ramxcodes-voice.zip">\nramxcodes-voice/intro.wav (2.0 KB)\nramxcodes-voice/notes.md (8 B)\n</attached-zip-files>\n[ramxcodes-voice.zip is unpacked in that folder (2 files).`);
     expect(readFileSync(join(folder, "ramxcodes-voice", "notes.md"), "utf8")).toBe("# takes\n");
     expect(existsSync(join(folder, "__MACOSX"))).toBe(false);
@@ -65,7 +65,7 @@ describe("an attached zip", () => {
     expect(() => plannedMembers([{ ...huge, name: "a.bin" }, { ...huge, name: "b.bin" }])).toThrow(ZipUnpackError);
     const lying = upload(buildZip([{ name: "small.txt", data: "a".repeat(100_000), declaredBytes: 10 }]));
     await expect(unpackAttachedZip(lying, cacheDir)).rejects.toThrow(ZipUnpackError);
-    expect(readdirSync(cacheDir).filter((name) => name.startsWith(lying.split("/").at(-1)!))).toEqual([]);
+    expect(readdirSync(cacheDir).filter((name) => name.startsWith(basename(lying)))).toEqual([]);
     const notZip = upload(Buffer.from("PK\x03\x04 this is not really a zip"));
     const result = await withAttachedDocuments(tag(notZip, "broken.zip"), { vision: false, imageRoom: 10, attachmentsDir, cacheDir });
     expect(result.text).toContain("[broken.zip could not be unpacked: it is not a zip this can open");
