@@ -1,6 +1,7 @@
 // the production policy and rails on InstaBox's prices: starts cost nothing, a resume keeps memory, compute is the only
 // cash. Pause/resume loops, routines across pauses and recovery from faults, seeded so a failure reproduces.
 import { describe, expect, it } from "vitest";
+import { hostTimeout } from "../../../../server/testing/host-timeout.ts";
 import { INSTABOX_RAILS, instaboxCostProfile } from "../instabox.ts";
 import { DAY, HOUR, MINUTE } from "./cost.ts";
 import { MIX, PERSONAS } from "./personas.ts";
@@ -70,5 +71,6 @@ describe("InstaBox: the policy on free starts and memory-keeping pauses", () => 
         expect(u.maxStartsHour, `seed ${seed} ${u.id}`).toBeLessThanOrEqual(RAILS.maxStartsPerHour);
       }
     }
-  });
+    // twelve nine-day fleets under faults: about 20 s of CPU on a laptop, over 40 s beside three other files on a runner
+  }, hostTimeout(90_000));
 });
