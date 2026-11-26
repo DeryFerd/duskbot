@@ -6420,8 +6420,8 @@ async function teamComputersPayload(): Promise<TeamComputersPayload> {
 
 const LIFECYCLE_SETTLE_MS = 60_000;
 /** A short lifecycle action (sleep, wake, restart) ends within a minute: a turn waits it out instead of failing at once. */
-async function lifecycleSettles(owners: string[], current: () => boolean): Promise<boolean> {
-  const until = Date.now() + LIFECYCLE_SETTLE_MS;
+async function lifecycleSettles(owners: string[], current: () => boolean, ms = LIFECYCLE_SETTLE_MS): Promise<boolean> {
+  const until = Date.now() + ms;
   while (owners.some(owner => remoteComputerLifecycleBusyOwners.has(owner))) {
     if (!current()) throw new DirectTurnSetupCancelled("Turn ended while its computer was being changed");
     if (Date.now() >= until) return false;
@@ -8650,7 +8650,7 @@ async function beginTurn(
   if (providerInstancesChanging.has(bot.modelSelection.instanceId)) {
     throw Object.assign(new Error("this provider account is being updated: try again shortly"), { status: 409, code: "settling" });
   }
-  if (remoteComputerLifecycleBusyOwners.has(botId)) {
+  if (remoteComputerLifecycleBusyOwners.has(botId) && (answer.incident || !await lifecycleSettles([botId], () => true, 15_000))) {
     const changing = "this bot's cloud computer is being changed: wait for it to finish";
     if (!answer.incident) throw Object.assign(new Error(changing), { status: 409, code: "settling" });
     computerSkipped ??= changing;
@@ -16585,7 +16585,7 @@ const handleRequestInner = async (req: IncomingMessage, res: ServerResponse) => 
         if (early) return json(res, 200, early);
       }
       if (computerProviderConfigTransitions.has("vps")) return json(res, 409, { error: providerTransitionMessage("vps") });
-      if (remoteComputerLifecycleBusyOwners.has(ownerId) || remoteComputerLifecycleBusyOwners.has(bot.id)) return json(res, 409, { error: "This VPS computer is being changed; wait for it to finish" });
+      if (!await lifecycleSettles([ownerId, bot.id], () => true, 15_000)) return json(res, 409, { error: "This VPS computer is being changed; wait for it to finish" });
       if (action === "exec") return json(res, 409, { error: "Use the bot's scoped computer tools for this VPS console" });
       if (shared && action === "remove") return json(res, 409, { error: "Manage this shared computer from the Team map" });
       if (shared && action === "join" && url.searchParams.get("viewer") !== "proxy" && !computerControl.snapshot(botComputerControlKey(bot)).held) return json(res, 409, { error: "Take control before opening this shared desktop" });
