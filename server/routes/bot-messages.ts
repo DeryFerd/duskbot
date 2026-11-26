@@ -8,6 +8,7 @@ import { isPersistentQuestionCard } from "../../shared/ask-question.ts";
 import { normalizeReaction, reactionAnswer } from "../../shared/reactions.ts";
 import type { WidgetAction } from "../../shared/widget.ts";
 import { parseFollowUp } from "../../shared/follow-up.ts";
+import { compactFocus, COMPACT_FOCUS_MAX, parseChatCommand } from "../../shared/chat-commands.ts";
 import type { ResolvedSender } from "../../shared/wire.ts";
 import { admit } from "../admission.ts";
 import { dismissQuestionCard } from "../card-dismissal.ts";
@@ -72,10 +73,12 @@ export interface BotMessageRouteDeps {
   cloudHome: boolean;
   DirectSendRefused: abstract new (...args: never[]) => { readonly status: number; readonly body: Record<string, unknown> };
   acceptDirectSend(input: DirectSendInput, guardedStart?: (currentAtStart: BotRecord) => Promise<DirectSendReceipt>): Promise<DirectSendReceipt>;
+  /** `/new` sent as a message (the API, older apps): a fresh conversation for the bot; null when none could be made. */
+  startNewChat?(botId: string, fromThreadId: string, auth: RequestAuth): { threadId: string; fresh: boolean } | null;
   directSendRefusal(botId: string, threadId: string): { status: number; body: Record<string, unknown> } | null;
   startTurn(botId: string, text: string, opts?: {
     threadId?: string; replyTo?: Message; sendId?: string; sender?: ResolvedSender; trigger?: UsageTrigger; relayed?: boolean;
-    dataContext?: DataContext; compactOnly?: boolean; cardContinuation?: boolean; editedMessageId?: string;
+    dataContext?: DataContext; compactOnly?: boolean; compactFocus?: string; cardContinuation?: boolean; editedMessageId?: string;
   }): Promise<Message>;
   usageTriggerFor(auth: RequestAuth): UsageTrigger;
   /** A bot just made writes its first message; `template` is the ready-made bot it came from. */
@@ -166,6 +169,8 @@ const guardedSendSchema = z.object({
 }).strict().refine((send) => (send.text === undefined) !== (send.reaction === undefined));
 
 export function createBotMessageRoutes(deps: BotMessageRouteDeps): RouteHandler {
+  /** A retried /new or /compact (same sendId) answers as the first did instead of starting a second. */
+  const commandReceipts = new Map<string, { ok: true; threadId: string; command: "new" | "compact"; fresh?: boolean }>();
   const {
     store, registry, handoffs, liveTurn, phoneSecretSubmissions, directTurnDispatchClaims, groupSpeakers,
     desktopManaged: DESKTOP_MANAGED, cloudHome: CLOUD_HOME, DirectSendRefused,
@@ -238,6 +243,32 @@ export function createBotMessageRoutes(deps: BotMessageRouteDeps): RouteHandler 
       const notYours = cloudGuestSendRefusal(auth, threadId);
       if (notYours) return json(res, 403, { error: notYours });
       if (body.mode !== undefined && body.mode !== "chat" && body.mode !== "goal") return json(res, 400, { error: "mode must be chat or goal" });
+      // `/new` and `/compact [focus]` act on the conversation instead of reaching the bot (shared/chat-commands.ts)
+      const command = !guarded && !pressed && !fromAnApp && !pointing && !voiceCall && body.mode !== "goal" ? parseChatCommand(typed) : null;
+      if (command) {
+        if (!store.taskByThread(bot.id, threadId)) return json(res, 404, { error: "no such conversation" });
+        const refusedHere = cloudThreadRefusal(auth, threadId);
+        if (refusedHere) return json(res, 403, { error: refusedHere });
+        const commandSendId = parseSendId(body.sendId);
+        const replayed = commandSendId ? commandReceipts.get(commandSendId) : undefined;
+        if (replayed) return json(res, 202, replayed);
+        let receipt: { ok: true; threadId: string; command: "new" | "compact"; fresh?: boolean };
+        if (command.kind === "new") {
+          const started = deps.startNewChat?.(bot.id, threadId, auth);
+          if (!started) return json(res, 500, { error: "couldn't start a new chat" });
+          receipt = { ok: true, threadId: started.threadId, command: "new", fresh: started.fresh };
+        } else {
+          await startTurn(bot.id, "Summarize conversation context", {
+            threadId, compactOnly: true, cardContinuation: true, trigger: usageTriggerFor(auth), ...(command.focus ? { compactFocus: command.focus } : {}),
+          });
+          receipt = { ok: true, threadId, command: "compact" };
+        }
+        if (commandSendId) {
+          commandReceipts.set(commandSendId, receipt);
+          if (commandReceipts.size > 200) commandReceipts.delete(commandReceipts.keys().next().value!);
+        }
+        return json(res, 202, receipt);
+      }
       if (body.mode === "goal") {
         if (guarded || pressed || fromAnApp || pointing) return json(res, 400, { error: "a goal is a plain typed message" });
         if (!store.taskByThread(bot.id, threadId)) return json(res, 404, { error: "no such conversation" });
@@ -496,8 +527,10 @@ export function createBotMessageRoutes(deps: BotMessageRouteDeps): RouteHandler 
       const bot = requestedTaskBot(m[1], body?.threadId);
       const notYours = cloudThreadRefusal(auth, bot.threadId);
       if (notYours) return json(res, 403, { error: notYours });
+      const focus = compactFocus(body?.focus);
+      if (focus === null) return json(res, 400, { error: `focus must be text of at most ${COMPACT_FOCUS_MAX} characters` });
       await startTurn(bot.id, "Summarize conversation context", {
-        threadId: bot.threadId, compactOnly: true, cardContinuation: true, trigger: usageTriggerFor(auth),
+        threadId: bot.threadId, compactOnly: true, cardContinuation: true, trigger: usageTriggerFor(auth), ...(focus ? { compactFocus: focus } : {}),
       });
       return json(res, 202, { ok: true, threadId: bot.threadId });
     }

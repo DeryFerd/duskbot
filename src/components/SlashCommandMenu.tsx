@@ -1,5 +1,5 @@
 import { useRef, type RefObject } from "react";
-import { BookOpen, ChevronDown, Sparkles, Target, Wand2 } from "../icons";
+import { BookOpen, ChevronDown, Shrink, Sparkles, SquarePen, Target, Wand2 } from "../icons";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { ComposerSlashCommand } from "@/lib/composer-commands";
@@ -57,6 +57,10 @@ export function SlashCommandMenu({ listRef, motion, commands, highlight, onPick,
               <Target size={15} aria-hidden="true" />
             ) : command.id === "setup" ? (
               <Wand2 size={15} aria-hidden="true" />
+            ) : command.id === "new" ? (
+              <SquarePen size={15} aria-hidden="true" />
+            ) : command.id === "compact" ? (
+              <Shrink size={15} aria-hidden="true" />
             ) : (
               <BookOpen size={15} aria-hidden="true" />
             )}

@@ -673,7 +673,8 @@ import { createThreadRoutes } from "./routes/threads.ts";
 import { createWebhookRoutes } from "./routes/webhooks.ts";
 import { withBrowserFallback, withScopeHint } from "./connector-scope-hint.ts";
 import { connectorRequestItems } from "./connector-request-items.ts";
-import { onThreadSeen, personAsks as personAskAt, sawThread } from "./thread-presence.ts"; import { createWarmSummaryHost, HARNESS_IDLE_FRACTION } from "./host/warm-summary-host.ts";
+import { onThreadSeen, personAsks as personAskAt, sawThread } from "./thread-presence.ts"; import { conversationHold, createWarmSummaryHost, HARNESS_IDLE_FRACTION, type QuietDeps } from "./host/warm-summary-host.ts";
+import { createIdleCompaction, IDLE_COMPACT_MIN_TOKENS, idleCompactHours } from "./idle-compaction.ts";
 
 let recheckRemoteViewers = () => {};
 const PORT = harnessPort(), WEBHOOK_PORT = Number(process.env.DUSK_WEBHOOK_PORT || PORT + 1);
@@ -1152,6 +1153,27 @@ const heldKey = (botId: string, threadId: string) => `${botId}\n${threadId}`;
 /** Hermes Agent's pre-compression flush: the turns a summary is about to fold are queued for capture first, and the next
  * turn reads memory fresh, with whatever this conversation saved. */
 function beforeCompaction(botId: string, threadId: string): void { memoryUpkeep.flushThread(threadId); releaseHeldMemory(heldKey(botId, threadId)); }
+
+/** `/new` (or New chat with the chat it left): what the old chat taught is captured now rather than after its quiet
+ * minutes, and it ends with a line saying a new chat began. It stays saved, and session_search still finds it. */
+function leftForNewChat(botId: string, fromThreadId: string, newThreadId: string): void {
+  if (fromThreadId === newThreadId || !store.taskByThread(botId, fromThreadId) || store.groupByThread(fromThreadId)) return;
+  memoryUpkeep.flushThread(fromThreadId);
+  if (!store.activePath(fromThreadId).some((m) => m.role === "user")) return;
+  store.appendMessage(fromThreadId, { role: "bot", kind: "activity", tool: { name: `notice: ${serverLine(threadLanguage(fromThreadId), "server.newChat.marker")}`, ok: true } });
+}
+
+/** `/new` typed anywhere but the app's composer (the API, a chat app): a fresh conversation for the bot, selected.
+ * A chat with nothing said in it yet is already fresh and is kept. */
+function startNewChat(botId: string, fromThreadId: string, auth: RequestAuth): { threadId: string; fresh: boolean } | null {
+  if (!store.activePath(fromThreadId).some((m) => m.role === "user")) return { threadId: fromThreadId, fresh: false };
+  const task = store.createTask(botId, undefined, true);
+  if (!task) return null;
+  // who opened it decides who may answer its cards on a shared workspace, as for New chat
+  if (auth.kind === "session") threadStarters.set(task.threadId, actorKey(auth));
+  leftForNewChat(botId, fromThreadId, task.threadId);
+  return { threadId: task.threadId, fresh: true };
+}
 
 /** About me and the core notes this turn's system prompt carries, held for the conversation so its cached prefix holds. */
 function heldMemoryParts(bot: BotRecord, threadId: string, turnShape: Parameters<typeof memorySystemPrompt>[1] & object): { about: string; core: string } {
@@ -3024,7 +3046,7 @@ const routineHolds = CLOUD_HOME ? createRoutineHoldsHost({ dataDir: DATA_DIR, st
   appsConnected: async () => composio.configured(cfg) ? Object.values(await composio.connectedServices(cfg)).some((service) => service.connected) : false }) : null;
 const skillsHost = createSkillsLibraryHost({ store, cfg, appendSkillRequestCard, engineConfig: (instanceId) => instanceConfigs(cfg)[instanceId], instanceOf: (instanceId) => { const instance = registry.get(instanceId); return instance ? { instanceId, driverKind: instance.driverKind } : undefined; } });
 const { listBotSkills, readBotSkillFile } = skillsHost; const cloudConnections = createCloudConnectionsHost({ cloudHome: CLOUD_HOME, ownHome: ownHome.owner, config: () => cfg, environmentId: ENVIRONMENT_ID, mcpOAuth, dataDir: DATA_DIR, connectorSync: () => connectorSyncRef, settingsSync: () => settingsSyncRef, vault: () => ({ secrets: () => savedSecrets.movable(), files: () => secretCards.movableFiles() }), email: { accounts: () => emailService.store.list(), adopt: (accounts) => emailService.adopt(accounts) }, stayedNotices: { bots: () => store.bots, language: (threadId) => threadLanguage(threadId), say: (threadId, text, kind) => { store.appendMessage(threadId, kind === "line" ? { role: "bot", kind: "text", text } : { role: "bot", kind: "activity", tool: { name: `notice: ${text}`, ok: true } }); }, notify: (text, bot, threadId) => notify(buildNoticeNotification(bot, threadId, text)) }, engines: async () => selectableInstances(await registry.describe()).filter((instance) => readyToRun(instance, selectionContext)).map((instance) => instance.instanceId) });
-const emailHost = createEmailHost({ attachableRoots: (botId) => [join(workspaceDir(botId), "files")], service: emailService, dataDir: DATA_DIR, bot: (id) => store.bot(id), inRoom: (threadId) => Boolean(store.groupByThread(threadId)), appendMessage: (threadId, message) => { store.appendMessage(threadId, message as Parameters<typeof store.appendMessage>[1]); }, appAllowed: () => managedPolicy.appAllowed("email"), onChange: (listener) => store.onChange(listener as never), markOutside: (threadId) => outsideLineage.mark(threadId) }); const slackHost = createSlackHost({ dataDir: DATA_DIR, key: savedSecretsKey ?? fileSavedSecretsKey(DATA_DIR), bot: (id) => { const bot = store.bot(id); return bot ? { id: bot.id, name: bot.name, description: bot.description, color: bot.color, ...(bot.avatarUrl ? { avatarUrl: bot.avatarUrl } : {}) } : null; }, onStoreChange: (listener) => store.onChange(listener), messages: (threadId) => store.messagesFor(threadId), createThread: (botId, title) => store.createTask(botId, title, false, undefined, undefined, "ask")?.threadId ?? null, threadExists: (botId, threadId) => Boolean(store.taskByThread(botId, threadId)), send: async ({ botId, threadId, text, sendId, person, context }) => { outsideLineage.mark(threadId); const receipt = await acceptDirectSend({ botId, threadId, text, sendId, sender: { name: person.name }, trigger: { kind: "user", ...(person.email ? { email: person.email } : {}), label: person.name }, personPresent: false, relayed: true, ...(context ? { app: { context } } : {}) }); return { queued: "queued" in receipt, steered: "steered" in receipt && receipt.steered === true }; }, react: (threadId, messageId, person, emoji) => void store.setReaction(threadId, messageId, relayedPersonKey(person), { emoji, name: person.name, at: Date.now() }), markOutside: (threadId) => outsideLineage.mark(threadId) }); addHeldSecretScrubber((text) => slackHost.scrub(text)); const messengerHost = createMessengerHost({ dataDir: DATA_DIR, key: savedSecretsKey ?? fileSavedSecretsKey(DATA_DIR), bot: (id) => { const bot = store.bot(id); return bot ? { id: bot.id, name: bot.name } : null; }, onStoreChange: (listener) => store.onChange(listener), messages: (threadId) => store.messagesFor(threadId), createThread: (botId, title) => store.createTask(botId, title, false, undefined, undefined, "ask")?.threadId ?? null, threadExists: (botId, threadId) => Boolean(store.taskByThread(botId, threadId)), saveAttachment: saveSlackAttachment, readAttachment: readSlackAttachment, answerCard: (threadId, requestId, reply) => respondToCard({ auth: LOOPBACK_ADMIN, threadId, requestId, ...reply }), send: async ({ botId, threadId, text, sendId, person, outside }) => { if (outside) outsideLineage.mark(threadId); await acceptDirectSend({ botId, threadId, text, sendId, ...messengerSendAs(outside, person.name) }); }, hookBase: () => (CLOUD_HOME && WEBHOOK_PUBLIC_URL?.startsWith("https://") ? WEBHOOK_PUBLIC_URL.replace(/\/+$/, "") : null), arrived: () => cloudPower?.arrived("/hooks", {}), toolRefusal: (botId, threadId) => cloudGuestDriven(threadId) || botApiThread(threadId) ? "Only the bot's owner connects its chat apps, and this conversation is not theirs." : routines?.isActiveThread(threadId) || isUnattended(botId, threadId) ? "An automation run can't change the bot's chat apps; only a conversation with the person can." : null, sendRefusal: (_botId, threadId) => cloudGuestDriven(threadId) || botApiThread(threadId) ? "Only the bot's owner's own conversations message them on chat apps, and this conversation is not theirs." : null }); addHeldSecretScrubber((text) => messengerHost.scrub(text));
+const emailHost = createEmailHost({ attachableRoots: (botId) => [join(workspaceDir(botId), "files")], service: emailService, dataDir: DATA_DIR, bot: (id) => store.bot(id), inRoom: (threadId) => Boolean(store.groupByThread(threadId)), appendMessage: (threadId, message) => { store.appendMessage(threadId, message as Parameters<typeof store.appendMessage>[1]); }, appAllowed: () => managedPolicy.appAllowed("email"), onChange: (listener) => store.onChange(listener as never), markOutside: (threadId) => outsideLineage.mark(threadId) }); const slackHost = createSlackHost({ dataDir: DATA_DIR, key: savedSecretsKey ?? fileSavedSecretsKey(DATA_DIR), bot: (id) => { const bot = store.bot(id); return bot ? { id: bot.id, name: bot.name, description: bot.description, color: bot.color, ...(bot.avatarUrl ? { avatarUrl: bot.avatarUrl } : {}) } : null; }, onStoreChange: (listener) => store.onChange(listener), messages: (threadId) => store.messagesFor(threadId), createThread: (botId, title) => store.createTask(botId, title, false, undefined, undefined, "ask")?.threadId ?? null, threadExists: (botId, threadId) => Boolean(store.taskByThread(botId, threadId)), send: async ({ botId, threadId, text, sendId, person, context }) => { outsideLineage.mark(threadId); const receipt = await acceptDirectSend({ botId, threadId, text, sendId, sender: { name: person.name }, trigger: { kind: "user", ...(person.email ? { email: person.email } : {}), label: person.name }, personPresent: false, relayed: true, ...(context ? { app: { context } } : {}) }); return { queued: "queued" in receipt, steered: "steered" in receipt && receipt.steered === true }; }, react: (threadId, messageId, person, emoji) => void store.setReaction(threadId, messageId, relayedPersonKey(person), { emoji, name: person.name, at: Date.now() }), markOutside: (threadId) => outsideLineage.mark(threadId) }); addHeldSecretScrubber((text) => slackHost.scrub(text)); const messengerHost = createMessengerHost({ dataDir: DATA_DIR, key: savedSecretsKey ?? fileSavedSecretsKey(DATA_DIR), bot: (id) => { const bot = store.bot(id); return bot ? { id: bot.id, name: bot.name } : null; }, onStoreChange: (listener) => store.onChange(listener), messages: (threadId) => store.messagesFor(threadId), createThread: (botId, title) => store.createTask(botId, title, false, undefined, undefined, "ask")?.threadId ?? null, threadExists: (botId, threadId) => Boolean(store.taskByThread(botId, threadId)), saveAttachment: saveSlackAttachment, readAttachment: readSlackAttachment, answerCard: (threadId, requestId, reply) => respondToCard({ auth: LOOPBACK_ADMIN, threadId, requestId, ...reply }), send: async ({ botId, threadId, text, sendId, person, outside }) => { if (outside) outsideLineage.mark(threadId); await acceptDirectSend({ botId, threadId, text, sendId, ...messengerSendAs(outside, person.name) }); }, compact: async (botId, threadId, focus) => { if (threadBusy(botId, threadId)) return "busy"; try { await startTurn(botId, "Summarize conversation context", { threadId, compactOnly: true, cardContinuation: true, trigger: messengerSendAs(false, "").trigger, ...(focus ? { compactFocus: focus } : {}) }); return "started"; } catch (error) { const status = (error as { status?: unknown }).status; if (status !== 409) console.warn(`chat app /compact failed: ${error instanceof Error ? error.message : String(error)}`); return status === 409 ? "busy" : "failed"; } }, leftConversation: (botId, threadId) => leftForNewChat(botId, threadId, ""), hookBase: () => (CLOUD_HOME && WEBHOOK_PUBLIC_URL?.startsWith("https://") ? WEBHOOK_PUBLIC_URL.replace(/\/+$/, "") : null), arrived: () => cloudPower?.arrived("/hooks", {}), toolRefusal: (botId, threadId) => cloudGuestDriven(threadId) || botApiThread(threadId) ? "Only the bot's owner connects its chat apps, and this conversation is not theirs." : routines?.isActiveThread(threadId) || isUnattended(botId, threadId) ? "An automation run can't change the bot's chat apps; only a conversation with the person can." : null, sendRefusal: (_botId, threadId) => cloudGuestDriven(threadId) || botApiThread(threadId) ? "Only the bot's owner's own conversations message them on chat apps, and this conversation is not theirs." : null }); addHeldSecretScrubber((text) => messengerHost.scrub(text));
 const phoneHost = createPhones({
   dataDir: DATA_DIR, shared: Boolean(CLOUD_TEAM), cloudHome: Boolean(CLOUD_HOME), cloudOwnerKey: CLOUD_OWNER_KEY,
   loopbackTrust: LOOPBACK.trust, sharedMembership, store, sessions, routines: () => routines, ownerOrAdmin, cloudOwnerSession,
@@ -5532,6 +5554,8 @@ const cacheKeepWarm = createCacheKeepWarm({
 });
 cacheKeepWarmStatus = (threadId) => cacheKeepWarm.status(threadId);
 // Warm summaries (server/host/warm-summary-host.ts): a long conversation is summarized while it is idle, not at its next turn.
+const quietDeps: QuietDeps = { queued: hasQueuedSteeredMessages, coordinator, waits: () => botWaits, routines: () => routines, memoryShort: () => engineMemory.headroom() < 0.3,
+  busy: (botId, threadId) => threadBusy(botId, threadId) || botHasActiveTurn(botId) };
 const warmSummaries = createWarmSummaryHost({ store, instance: (id) => registry.get(id), queued: hasQueuedSteeredMessages, coordinator, waits: () => botWaits, routines: () => routines,
   enabled: () => cfg.context?.autoCompact !== false && process.env.DUSK_WARM_SUMMARY !== "0", memoryShort: () => engineMemory.headroom() < 0.3,
   nativeCompactAt: (id) => { const instance = registry.get(id), at = instance ? nativeCompactTokens(instance) : undefined; return at && Number.isFinite(at) ? at : undefined; },
@@ -5540,6 +5564,37 @@ const warmSummaries = createWarmSummaryHost({ store, instance: (id) => registry.
     if (bot && instance && model?.startsWith(`${instanceId}:`)) await compactConversation({ bot, threadId, generation: `idle:${randomUUID()}`, instance, model: model.slice(instanceId.length + 1), excludedIds: new Set(), manual: false, idle });
     return latestCompaction(store.activePath(threadId))?.id !== before; } });
 onThreadSeen((threadId) => warmSummaries.sawThread(threadId));
+// Hours away (server/idle-compaction.ts): a long chat the person left is summarized in the background before they return.
+const warmSummarized = (threadId: string) => { const last = warmSummaries.state(threadId)?.last; return last?.outcome === "summarized" ? last.at : undefined; };
+// DUSK_IDLE_SWEEP_MS and DUSK_IDLE_COMPACT_MIN_TOKENS are a test fixture's: a sweep in seconds, a floor a fake engine reaches.
+const idleCompactMinTokens = Number(process.env.DUSK_IDLE_COMPACT_MIN_TOKENS) > 0 ? Number(process.env.DUSK_IDLE_COMPACT_MIN_TOKENS) : IDLE_COMPACT_MIN_TOKENS;
+const idleCompaction = createIdleCompaction({
+  now: () => Date.now(), log: (line) => console.info(line), ...(Number(process.env.DUSK_IDLE_SWEEP_MS) > 0 ? { sweepMs: Number(process.env.DUSK_IDLE_SWEEP_MS) } : {}),
+  hours: () => cfg.context?.autoCompact === false ? 0 : idleCompactHours(cfg.context?.idleCompactHours, process.env.DUSK_IDLE_COMPACT_HOURS),
+  candidates: (askedBefore) => store.bots.flatMap((bot) => (bot.tasks ?? []).flatMap((task) => {
+    if (task.askedAt === undefined || task.askedAt > askedBefore || task.routineRunId || task.archivedAt !== undefined || task.openedBy !== undefined) return [];
+    if (store.groupByThread(task.threadId)) return [];
+    const folded = latestCompaction(store.activePath(task.threadId))?.at, warm = warmSummarized(task.threadId);
+    const compactedAt = Math.max(folded ?? -1, warm ?? -1);
+    return [{ botId: bot.id, threadId: task.threadId, askedAt: task.askedAt, ...(compactedAt >= 0 ? { compactedAt } : {}) }];
+  })),
+  hold: (target) => warmSummaries.state(target.threadId)?.running ? "the warm summary is running" : conversationHold(quietDeps, target, Date.now())?.reason ?? null,
+  compact: async ({ botId, threadId }, signal) => {
+    const bot = store.projectBotForTask(botId, threadId), task = store.taskByThread(botId, threadId);
+    if (!bot || !task) return false;
+    // the engine and model of the last measured turn; an engine that reports no context size: the conversation's own
+    const measured = task.lastInstanceId && task.lastContextModel?.startsWith(`${task.lastInstanceId}:`) ? task.lastInstanceId : undefined;
+    const selection = (botForThread(botId, threadId) ?? bot).modelSelection;
+    const instanceId = measured ?? selection.instanceId, model = measured ? task.lastContextModel!.slice(measured.length + 1) : selection.model;
+    const instance = registry.get(instanceId);
+    if (!instance || !model) return false;
+    const before = latestCompaction(store.activePath(threadId))?.id;
+    await compactConversation({ bot, threadId, generation: `away:${randomUUID()}`, instance, model, excludedIds: new Set(), manual: false, idle: signal,
+      away: { hours: idleCompactHours(cfg.context?.idleCompactHours, process.env.DUSK_IDLE_COMPACT_HOURS), minTokens: idleCompactMinTokens } });
+    return latestCompaction(store.activePath(threadId))?.id !== before;
+  },
+});
+idleCompaction.start();
 onConfigSaved((before, after) => {
   if (JSON.stringify(before.cacheKeepWarm ?? null) !== JSON.stringify(after.cacheKeepWarm ?? null)) setImmediate(() => cacheKeepWarm.refresh());
 });
@@ -5552,7 +5607,7 @@ bus.subscribe((event: RuntimeEvent) => {
       keepWarmContext.delete(event.threadId);
       const bot = keepWarmBotFor(event.threadId);
       if (bot && event.providerInstanceId) keepWarmTargets.set(event.threadId, { threadId: event.threadId, botId: bot.id, instanceId: event.providerInstanceId });
-      cacheKeepWarm.noteTurnStarted(event.threadId); warmSummaries.turnStarted(event.threadId);
+      cacheKeepWarm.noteTurnStarted(event.threadId); warmSummaries.turnStarted(event.threadId); idleCompaction.turnStarted(event.threadId);
     } else if (event.type === "turn.completed") {
       const target = keepWarmTargets.get(event.threadId);
       const contextTokens = keepWarmContext.get(event.threadId);
@@ -7840,7 +7895,7 @@ function markTaskContextExternallyUpdated(bot: BotRecord, threadId: string): voi
 
 function latestCompaction(messages: readonly Message[]) {
   const record = messages.findLast(message => message.kind === "compaction" && message.compaction);
-  return record?.compaction ? { ...record.compaction, id: record.id } : undefined;
+  return record?.compaction ? { ...record.compaction, id: record.id, at: record.at } : undefined;
 }
 
 function directContext(bot: BotRecord, threadId: string, messages: Message[]): ContextMessage[] {
@@ -7867,12 +7922,19 @@ function peerReplayText(m: Message, name: string, text: string): string {
 }
 const { lineLabels, personPrompt, routineRunNote } = createLineLabels({ sharedChat: (threadId) => sharedMembership() && !store.groupByThread(threadId) && audienceMember(teamHost.audienceOf(threadId)) === null, userName: userNameFor, teamRole: (key) => (teamOwners.people?.list() ?? []).find((one) => personKey({ id: "", email: one.email }) === key)?.role, routineName: (threadId) => { const run = routines?.runForThread(threadId); return routines?.listRoutines().find((one) => one.id === run?.routineId)?.name; } });
 
+/** One summary call's limit when the fold is off the person's time; Hermes Agent gives its summarizer 120 s. */
+const COMPACTION_BACKGROUND_TIMEOUT_MS = 90_000;
+
 async function compactConversation(input: {
   bot: BotRecord; threadId: string; generation: string;
   instance: NonNullable<ReturnType<typeof registry.get>>; model: string;
   excludedIds: ReadonlySet<string>; manual: boolean; idle?: AbortSignal;
+  /** `/compact <focus>`: what the person wants the summary to keep. */
+  focus?: string;
+  /** Hours away (server/idle-compaction.ts): fold whatever the size from `minTokens` up, not at the usual threshold. */
+  away?: { hours: number; minTokens: number };
 }): Promise<void> {
-  const { bot, threadId, generation, instance, model, excludedIds, manual, idle } = input;
+  const { bot, threadId, generation, instance, model, excludedIds, manual, idle, focus, away } = input;
   const task = store.taskByThread(bot.id, threadId);
   if (!task || (!manual && cfg.context?.autoCompact === false)) return;
   const messages = store.activePath(threadId);
@@ -7896,7 +7958,9 @@ async function compactConversation(input: {
     store.patchTask(bot.id, threadId, { contextFloor: floor });
   }
   const nativeCompactAt = nativeCompactTokens(instance);
-  if (!manual && !shouldCompact({ contextTokens: measurement?.tokens, estimatedBytes: bytes,
+  if (away) {
+    if ((measurement?.tokens ?? Math.ceil(bytes / 4)) < away.minTokens) return;
+  } else if (!manual && !shouldCompact({ contextTokens: measurement?.tokens, estimatedBytes: bytes,
     budget: compactBudget(window, cfg.context?.compactAt, nativeCompactAt) * (idle ? HARNESS_IDLE_FRACTION : 1), floor, window, nativeCompactAt })) return;
   const fold = manual ? { folded: history, firstKeptId: "" } : foldPoint(history);
   if (!fold) return;
@@ -7909,7 +7973,10 @@ async function compactConversation(input: {
   compactionControllers.set(threadId, { generation, controller });
   try {
     beforeCompaction(bot.id, threadId); const previous = record && fold.folded[0]?.id === record.id ? { id: record.id, summary: record.summary } : undefined;
-    const summary = await draftSummary(fold.folded, { signal: controller.signal, generateText: sideJobs.text("compaction", bot.id, { instance })?.generateText, previous, today: memoryDate(), archive: supportsWorkspaceFiles(instance.driverKind) ? archiveFoldedTools({ botId: bot.id, threadId, messages, afterId: previous && record?.foldedThroughId, throughId: foldedThroughId, spillDir: threadToolResultsDir(TOOL_RESULTS_DIR, threadId), cwd: task.cwd !== undefined ? task.cwd : bot.cwd, boxed: botBox.enabled() }) : undefined });
+    // off the person's time (asked for, idle, hours away): the helper may read the whole folded part, in several calls
+    const thorough = manual || Boolean(idle);
+    const summary = await draftSummary(fold.folded, { signal: controller.signal, generateText: sideJobs.text("compaction", bot.id, { instance })?.generateText, previous, today: memoryDate(),
+      ...(thorough ? { thorough, timeoutMs: COMPACTION_BACKGROUND_TIMEOUT_MS } : {}), ...(focus ? { focus } : {}), archive: supportsWorkspaceFiles(instance.driverKind) ? archiveFoldedTools({ botId: bot.id, threadId, messages, afterId: previous && record?.foldedThroughId, throughId: foldedThroughId, spillDir: threadToolResultsDir(TOOL_RESULTS_DIR, threadId), cwd: task.cwd !== undefined ? task.cwd : bot.cwd, boxed: botBox.enabled() }) : undefined });
     if (!idle && !directTurnClaimIsCurrent(bot.id, generation, threadId)) throw new DirectTurnSetupCancelled("context summarization stopped");
     controller.signal.throwIfAborted();
     if (prefix !== JSON.stringify(store.activePath(threadId).slice(0, messages.length))) {
@@ -7919,7 +7986,7 @@ async function compactConversation(input: {
     store.appendMessage(threadId, {
       role: "bot", kind: "compaction",
       compaction: { summary, firstKeptId: fold.firstKeptId, foldedThroughId,
-        tokensBefore: measurement?.tokens ?? Math.ceil(bytes / 4), by: manual ? "person" : "harness" },
+        tokensBefore: measurement?.tokens ?? Math.ceil(bytes / 4), by: manual ? "person" : "harness", ...(away ? { awayHours: away.hours } : {}) },
     }, { kind: "compaction.append", key: `${threadId}:${messages.at(-1)?.id}:${fold.firstKeptId}` });
   } finally {
     if (compactionControllers.get(threadId)?.generation === generation) compactionControllers.delete(threadId);
@@ -8607,6 +8674,8 @@ async function beginTurn(
     app?: { context?: string; fromApp?: Message["fromApp"]; pointed?: Message["pointed"] };
     onDispatchError?: (message: string) => void;
     compactOnly?: boolean;
+    /** With compactOnly: `/compact <focus>`, what the summary must keep. */
+    compactFocus?: string;
     automaticRecoveryAttempted?: boolean;
     automaticRecoveryIndex?: number;
     onTurnSettled?: () => void;
@@ -8852,7 +8921,8 @@ async function beginTurn(
       }
       await warmSummaries.beforeTurn(threadId, () => directTurnClaimIsCurrent(bot.id, dispatchClaimId, threadId));
       await compactConversation({ bot, threadId, generation: dispatchClaimId, instance, model,
-        excludedIds: new Set([userMessage.id, ...(opts?.excludeMessageIds ?? [])]), manual: opts?.compactOnly === true });
+        excludedIds: new Set([userMessage.id, ...(opts?.excludeMessageIds ?? [])]), manual: opts?.compactOnly === true,
+        ...(opts?.compactOnly && opts.compactFocus ? { focus: opts.compactFocus } : {}) });
       if (!directTurnClaimIsCurrent(bot.id, dispatchClaimId, threadId)) throw new DirectTurnSetupCancelled("turn stopped during context setup");
       if (opts?.compactOnly) {
         clearDirectTurnDispatch(threadId, dispatchClaimId);
@@ -13268,7 +13338,7 @@ ROUTES.push(createStopLineRoutes()); ROUTES.push(createUpdateRoutes(() => update
 const orgInstallStatuses = () => orgLibrary?.installStatuses() ?? new Map();
 ROUTES.push(createBotPresetRoutes({ presets: presetStore, orgStatuses: orgInstallStatuses })); ROUTES.push(createWorkspaceBannerRoutes({ changed: () => broadcast({ kind: "config", ...configStatus() }) }));
 // `routines` is assigned at boot, so it is read per request.
-ROUTES.push(createBotMessageRoutes({ typedOverHeldCards: (threadId) => { outboundRequests.replied(threadId); xAccountCards.replied(threadId); routines?.personWrote(threadId); },
+ROUTES.push(createBotMessageRoutes({ startNewChat, typedOverHeldCards: (threadId) => { outboundRequests.replied(threadId); xAccountCards.replied(threadId); routines?.personWrote(threadId); },
   store, registry, introduceBot, handoffs, liveTurn: (threadId) => liveTurns.running(threadId), phoneSecretSubmissions, directTurnDispatchClaims, groupSpeakers,
   routines: () => routines,
   fromPhone: phones.fromPhone, notePhoneSend: phones.noteSend,
@@ -13432,7 +13502,7 @@ ROUTES.push(createChannelRoutes({
   rejectDeletedThreadSkillStages,
 }));
 const taskRoutes = createTaskRoutes({
-  store, threadRead: teamMessages.seen,
+  store, threadRead: teamMessages.seen, leftForNewChat,
   cloudHome: Boolean(CLOUD_HOME),
   desktopManaged: DESKTOP_MANAGED,
   routines: () => routines,
@@ -16841,7 +16911,7 @@ const gracefulShutdown = createGracefulShutdown({
       botWaits.stop(); jobs.stop();
       memoryUpkeep.stop();
       importDistill.stop();
-      cacheKeepWarm.dispose(); warmSummaries.dispose();
+      cacheKeepWarm.dispose(); warmSummaries.dispose(); idleCompaction.dispose();
       skillReview.stop();
       webhookIngress?.server.close(); void messengerHost.stop();
       tunnelListener?.close(); stopCloudHomeConnectedApps();

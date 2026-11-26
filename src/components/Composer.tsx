@@ -6,7 +6,7 @@ import { CARD_ACTION, ChatErrorCard } from "./ChatErrorBanner";
 import { OpenVoiceSettings } from "./OpenVoiceSettings";
 import { isValidElement, memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { Mic } from "../icons";
-import { useStore, visibleMessages, currentTaskBot, type Bot, type Group, type InstanceInfo, type Message } from "@/state/store";
+import { api, useStore, visibleMessages, currentTaskBot, type Bot, type Group, type InstanceInfo, type Message } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { usePhoneLayout } from "@/lib/use-media-query";
 import { phoneOffline } from "@/mobile/network";
@@ -110,6 +110,8 @@ import {
   type ComposerSlashCommand,
 } from "@/lib/composer-commands";
 import { useSlashSkills } from "@/lib/use-slash-skills";
+import { parseChatCommand } from "../../shared/chat-commands";
+import { friendlyError } from "@/lib/plain-error";
 import { randomUuid } from "@/lib/random-uuid";
 import { noteSendLaunch } from "./bubble-entrance";
 
@@ -378,6 +380,11 @@ export const Composer = memo(function Composer({
       label: "/setup",
       description: t("composer.command.setupDesc"),
     });
+    // a fresh chat and a summary now: the bot's conversation, not a room's
+    if (builtIns && !group && bot) {
+      available.push({ kind: "command", id: "new", label: "/new", description: t("composer.command.newDesc") });
+      available.push({ kind: "command", id: "compact", label: "/compact", description: t("composer.command.compactDesc") });
+    }
     return slashMenuRows(available, skillSlashCommands(slashSkills), slash.query, slashMoreOpen, () => ({
       label: t("composer.commands.more"), description: t("composer.commands.moreHint"),
     }));
@@ -444,9 +451,10 @@ export const Composer = memo(function Composer({
     if (!slash || !command) return;
     // More opens in place: the highlight stays on its row, now the first of the other tools' skills
     if (command.kind === "more") { setSlashMoreAt(slash.start); return; }
+    if (command.kind === "command" && command.id === "new" && !text.slice(slash.end).trim()) { setDismissedSlashAt(slash.start); startNewChat(); return; }
     const spaceAfter = /^\s/.test(text.slice(slash.end)) ? "" : " ";
     const replacement = command.kind === "skill" ? `${command.label}${spaceAfter}`
-      : command.id === "learn" ? "/learn " : command.id === "setup" ? "/setup " : "";
+      : command.id === "learn" ? "/learn " : command.id === "setup" ? "/setup " : command.id === "compact" ? "/compact " : command.id === "new" ? "/new" : "";
     const next = replaceComposerSlashTrigger(text, slash, replacement);
     editText(next.text);
     setCaret(next.caret);
@@ -681,8 +689,25 @@ export const Composer = memo(function Composer({
   };
   const keyGate = useKeyGate({ text, reset: `${threadId}\n${effectiveText}`, messages: group ? undefined : bot?.messages, botName: bot?.name ?? group?.name ?? "",
     keep: (rest) => { editText(rest); setCaret(rest.length); }, focus: () => requestAnimationFrame(() => inputRef.current?.focus()) });
+  // `/new` and `/compact [focus]` act on the chat instead of being sent (shared/chat-commands.ts)
+  const startNewChat = () => {
+    if (!bot) return;
+    editText(""); setCaret(0);
+    dispatch({ type: "newTask", botId: bot.id, from: threadId });
+  };
+  const chatCommand = (): boolean => {
+    const command = !group && bot && !attachments.length && !replyTo && !quote ? parseChatCommand(text) : null;
+    if (!command || !bot) return false;
+    if (command.kind === "new") { startNewChat(); return true; }
+    if (busy) { dispatch({ type: "error", message: t("chat.compacted.busy") }); return true; }
+    editText(""); setCaret(0);
+    void api(`/api/bots/${bot.id}/compact`, { method: "POST", body: JSON.stringify({ threadId, ...(command.focus ? { focus: command.focus } : {}) }) })
+      .catch((cause) => { editText(text); dispatch({ type: "error", message: friendlyError(cause) }); });
+    return true;
+  };
   const send = (followUp: FollowUp | undefined = followUpFor(false)) => {
     if (locked || attachmentPending || unsentUpload) return;
+    if (chatCommand()) return;
     if (
       attachments.some((attachment) => attachment.kind === "image") &&
       !imageTargetsSupport(effectiveText, effectiveChannelMode)

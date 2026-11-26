@@ -11,6 +11,7 @@ export async function startFakeTelegram(options: { token: string; bot?: { id: nu
   const files = new Map<string, { path: string; bytes: Buffer; mime: string }>();
   const waiters = new Set<() => void>();
   let nextUpdate = 1, nextMessage = 100, webhook = { url: "", secret: "" };
+  let commands: Array<{ command: string; description: string }> = [];
 
   async function body(req: IncomingMessage): Promise<{ params: Record<string, unknown>; file?: FakeTelegramCall["file"] }> {
     const chunks: Buffer[] = [];
@@ -53,6 +54,8 @@ export async function startFakeTelegram(options: { token: string; bot?: { id: nu
       case "getWebhookInfo": return ok({ url: webhook.url, pending_update_count: 0 });
       case "setWebhook": webhook = { url: String(params.url), secret: String(params.secret_token ?? "") }; return ok(true);
       case "deleteWebhook": webhook = { url: "", secret: "" }; return ok(true);
+      case "getMyCommands": return ok(commands);
+      case "setMyCommands": commands = Array.isArray(params.commands) ? params.commands as Array<{ command: string; description: string }> : []; return ok(true);
       case "getUpdates": {
         if (webhook.url) return reply(409, { ok: false, error_code: 409, description: "Conflict: can't use getUpdates method while webhook is active" });
         const offset = Number(params.offset ?? 0);

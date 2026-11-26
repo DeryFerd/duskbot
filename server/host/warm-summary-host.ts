@@ -62,6 +62,27 @@ export interface WarmSummaryHostDeps {
   log?(line: string): void;
 }
 
+export type QuietDeps = Pick<WarmSummaryHostDeps, "busy" | "memoryShort" | "queued" | "coordinator" | "waits" | "routines">;
+
+/** Why a conversation must not be summarized in the background right now, or null. `retry`: it may pass in minutes (a
+ * busy bot, a routine running or due); otherwise only the next turn changes it. Shared with server/idle-compaction.ts. */
+export function conversationHold(deps: QuietDeps, { botId, threadId }: { botId: string; threadId: string }, now: number): { reason: string; retry: boolean } | null {
+  if (deps.busy(botId, threadId)) return { reason: "the bot is busy", retry: true };
+  if (deps.memoryShort()) return { reason: "memory is short", retry: true };
+  if (deps.queued(botId, threadId)) return { reason: "a message is waiting for this conversation", retry: false };
+  if (deps.coordinator.activeDirect(threadId) || deps.coordinator.awaitingTeammateThreads().has(threadId)) {
+    return { reason: "a teammate is working on this conversation's request", retry: false };
+  }
+  if (deps.waits()?.all().some((w) => w.botId === botId && w.threadId === threadId && w.followUp !== undefined && w.ending?.status === "fired")) {
+    return { reason: "a wait has fired and will carry on here", retry: false };
+  }
+  const routines = deps.routines();
+  if (routines && wakeHoldOf(routines.listRoutines().filter((r) => r.botId === botId), routines.listRuns().filter((r) => r.botId === botId), now, WARM_SUMMARY_RETRY_MS).hold) {
+    return { reason: "a routine of this bot is running or about to run", retry: true };
+  }
+  return null;
+}
+
 /** The steps still open in the newest plan the bot wrote in this conversation. */
 export function openPlanSteps(messages: readonly Message[]): string[] {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -144,22 +165,7 @@ export function createWarmSummaryHost(deps: WarmSummaryHostDeps) {
       if (at === undefined || contextTokens === undefined || contextTokens < Math.min(WARM_SUMMARY_MIN_TOKENS, at / 2)) return null;
       return { way: "native", soon: contextTokens >= at * NATIVE_SOON_FRACTION };
     },
-    hold: ({ botId, threadId }) => {
-      if (deps.busy(botId, threadId)) return { reason: "the bot is busy", retry: true };
-      if (deps.memoryShort()) return { reason: "memory is short", retry: true };
-      if (deps.queued(botId, threadId)) return { reason: "a message is waiting for this conversation", retry: false };
-      if (deps.coordinator.activeDirect(threadId) || deps.coordinator.awaitingTeammateThreads().has(threadId)) {
-        return { reason: "a teammate is working on this conversation's request", retry: false };
-      }
-      if (deps.waits()?.all().some((w) => w.botId === botId && w.threadId === threadId && w.followUp !== undefined && w.ending?.status === "fired")) {
-        return { reason: "a wait has fired and will carry on here", retry: false };
-      }
-      const routines = deps.routines();
-      if (routines && wakeHoldOf(routines.listRoutines().filter((r) => r.botId === botId), routines.listRuns().filter((r) => r.botId === botId), now(), WARM_SUMMARY_RETRY_MS).hold) {
-        return { reason: "a routine of this bot is about to run", retry: true };
-      }
-      return null;
-    },
+    hold: (target) => conversationHold(deps, target, now()),
     run: async (target, plan, control) => {
       if (plan.way === "native") return native(target, control);
       return await deps.fold(target, control.signal) ? { ok: true } : { ok: false, reason: "the conversation does not need a summary yet", skip: true };

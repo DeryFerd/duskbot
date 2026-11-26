@@ -477,6 +477,8 @@ export interface WireMessage extends HelperIntroField, SetupCardFields, WaitLine
     foldedThroughId: string;
     tokensBefore: number;
     by: "person" | "harness";
+    /** Written after the person had been away this many hours (server/idle-compaction.ts). */
+    awayHours?: number;
   };
   /** Renderers receive only the allowlisted /api/attachments URL. `file`
    * entries are opened through the message-scoped file route, never by path. */

@@ -39,6 +39,9 @@ async function fixture(options: { dataDir?: string; fake?: FakeTelegram; hookBas
   const sent: Sent[] = [];
   const answers: Array<{ threadId: string; requestId: string; reply: { behavior: string; message?: string } }> = [];
   let threadCount = 0;
+  const compacted: Array<{ botId: string; threadId: string; focus: string }> = [];
+  const left: string[] = [];
+  const state: { compactOutcome: "started" | "busy" | "failed" } = { compactOutcome: "started" };
   const change = (threadId: string) => { for (const listener of listeners) listener({ type: "message", threadId }); };
   const host: MessengerHost = createMessengerHost({
     dataDir, key: { get: () => keyValue, peek: () => keyValue },
@@ -63,6 +66,8 @@ async function fixture(options: { dataDir?: string; fake?: FakeTelegram; hookBas
       return { ok: true };
     },
     hookBase: () => options.hookBase ?? null,
+    compact: async (botId, threadId, focus) => { compacted.push({ botId, threadId, focus }); return state.compactOutcome; },
+    leftConversation: (_botId, threadId) => { left.push(threadId); },
     settleMs: 10,
     log: () => {},
   });
@@ -79,7 +84,7 @@ async function fixture(options: { dataDir?: string; fake?: FakeTelegram; hookBas
     change(threadId);
     return message;
   };
-  return { fake, host, sent, threads, titles, reply, dataDir, answers, card, change };
+  return { fake, host, sent, threads, titles, reply, dataDir, answers, card, change, compacted, left, state };
 }
 
 async function claimed() {
@@ -129,10 +134,35 @@ describe("Telegram chat channel", () => {
     f.fake.message({ from: OWNER, text: "and now?" });
     const second = await until(() => f.sent[1]);
     expect(second.threadId).toBe(turn.threadId);
+    f.fake.message({ from: OWNER, text: "/compact keep the cat photo details" });
+    await until(() => f.fake.sent().find((call) => String(call.params.text).startsWith("Compacting this conversation")));
+    expect(f.compacted).toEqual([{ botId: "bot-nova", threadId: turn.threadId, focus: "keep the cat photo details" }]);
     f.fake.message({ from: OWNER, text: "/new" });
-    await until(() => f.fake.sent().find((call) => call.params.text === "Started a new conversation."));
+    await until(() => f.fake.sent().find((call) => String(call.params.text).startsWith("Started a new conversation. Memory carries over")));
+    // the chat it left captures its memory now and stays saved
+    expect(f.left).toEqual([turn.threadId]);
     f.fake.message({ from: OWNER, text: "fresh" });
     expect((await until(() => f.sent[2])).threadId).not.toBe(turn.threadId);
+    // /compact and /new reached no turn as words
+    expect(f.sent.map((one) => one.text)).not.toContain("/new");
+    expect(f.sent.some((one) => one.text.startsWith("/compact"))).toBe(false);
+    // Telegram's / menu offers both
+    expect((await until(() => f.fake.sent("setMyCommands")[0])).params.commands).toEqual([
+      { command: "new", description: expect.stringMatching(/fresh conversation/) },
+      { command: "compact", description: expect.stringMatching(/Summarize/) },
+    ]);
+  });
+
+  it("says when /compact has nothing to compact or the bot is mid-reply", async () => {
+    const f = await claimed();
+    f.fake.message({ from: OWNER, text: "/compact" });
+    await until(() => f.fake.sent().find((call) => call.params.text === "There's nothing to compact yet."));
+    f.fake.message({ from: OWNER, text: "hi" });
+    await until(() => f.sent[0]);
+    f.state.compactOutcome = "busy";
+    f.fake.message({ from: OWNER, text: "/compact" });
+    await until(() => f.fake.sent().find((call) => String(call.params.text).startsWith("I'm in the middle of a reply")));
+    expect(f.sent).toHaveLength(1);
   });
 
   it("answers in a group only when mentioned, as outside work, and lets a group in when the owner adds the bot", async () => {

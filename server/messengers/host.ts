@@ -25,8 +25,13 @@ import {
 const PAIR_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const MAX_PAIR_MISSES = 20;
 const HOOK_BODY_MAX = 1024 * 1024;
+/** What Telegram's command menu lists; the bridge reads them (server/messengers/bridge.ts). */
+export const TELEGRAM_COMMANDS: ReadonlyArray<{ command: string; description: string }> = [
+  { command: "new", description: "Start a fresh conversation. Memory carries over" },
+  { command: "compact", description: "Summarize this conversation. Add what to keep" },
+];
 
-export interface MessengerHostDeps extends Pick<MessengerBridgeDeps, "createThread" | "threadExists" | "messages" | "saveAttachment" | "readAttachment"> {
+export interface MessengerHostDeps extends Pick<MessengerBridgeDeps, "createThread" | "threadExists" | "messages" | "saveAttachment" | "readAttachment" | "compact" | "leftConversation"> {
   dataDir: string;
   key: SavedSecretsKey;
   bot(botId: string): { id: string; name: string } | null;
@@ -98,6 +103,7 @@ export function createMessengerHost(deps: MessengerHostDeps) {
   const bridge = createMessengerBridge({
     state, log, transport: (platform) => transports[platform], link, bot: deps.bot,
     createThread: deps.createThread, threadExists: deps.threadExists, send: deps.send, messages: deps.messages, answerCard: deps.answerCard,
+    ...(deps.compact ? { compact: deps.compact } : {}), ...(deps.leftConversation ? { leftConversation: deps.leftConversation } : {}),
     onChange: deps.onStoreChange, saveAttachment: deps.saveAttachment, readAttachment: deps.readAttachment,
     ...(deps.settleMs !== undefined ? { settleMs: deps.settleMs } : {}),
     claim: (botId, platform, owner) => {
@@ -166,10 +172,24 @@ export function createMessengerHost(deps: MessengerHostDeps) {
     runners.delete(runKey(botId, platform));
   }
 
+  /** Telegram's / menu offers /new and /compact, unless the bot's owner set its own commands in BotFather. */
+  async function offerTelegramCommands(token: string): Promise<void> {
+    try {
+      const current = await telegram.call<Array<{ command?: string }>>(token, "getMyCommands");
+      const ours = new Set(TELEGRAM_COMMANDS.map((one) => one.command));
+      if (Array.isArray(current) && current.some((one) => !ours.has(String(one.command)))) return;
+      if (Array.isArray(current) && current.length === TELEGRAM_COMMANDS.length) return;
+      await telegram.call(token, "setMyCommands", { commands: TELEGRAM_COMMANDS });
+    } catch {
+      // the menu is a nicety: typing /new or /compact works without it
+    }
+  }
+
   async function startTelegram(botId: string, explicit: boolean): Promise<void> {
     stopRunner(botId, "telegram");
     const one = link(botId, "telegram");
     if (!one) return;
+    void offerTelegramCommands(one.token);
     const base = deps.hookBase();
     if (base) {
       const secret = one.webhookSecret ?? randomBytes(32).toString("base64url");
