@@ -106,7 +106,7 @@ test("14. a moved computer whose home is a Cloud of the account that waits: its 
   assert.deepEqual(ids(rows), [LOCAL_ID, "a1"]);
   assert.equal(rows[1].account, A);
   const home = railPlaces({ saved: list([myCloud("https://a.test", "a1")]), home: "https://a.test", mine: "https://a.test", state: signedIn(A), accounts: [waits(B, [myCloud("https://b.test", "b1")])] });
-  assert.deepEqual(ids(home), ["a1", "b1"], "home on the account in use: as today, no This computer, and the other account's Clouds beside it");
+  assert.deepEqual(ids(home), [LOCAL_ID, "a1", "b1"], "home on the account in use: This computer first, as in the Server menu, and the other account's Clouds beside it");
 });
 
 test("an account whose sign-in ended keeps its rows, and says so", () => {

@@ -53,7 +53,9 @@ const frameOff = params.get("frame") === "off", framePending = params.has("frame
 const team = params.has("team");
 const teamName = params.get("teamname") ?? "Acme team";
 const place = (id: string, name: string, extra: Partial<RailPlace> = {}): RailPlace => ({ id, name, color: null, kind: "cloud", opens: true, ...extra });
+const HERE = place("local", "This computer", { kind: "computer" });
 const FEW: RailPlace[] = [
+  HERE,
   place("home", "My Cloud", { color: "blue", active: true }),
   place("a", "Client A", { color: "teal" }),
   place("b", "Bakery", { color: "orange", attention: true }),
@@ -62,6 +64,7 @@ const FEW: RailPlace[] = [
   place("mini", "Mac mini", { kind: "server" }),
 ];
 const SERVERS: RailPlace[] = [
+  HERE,
   place("home", "My Cloud", { color: "blue", active: true }),
   place("a", "Client A", { color: "teal" }),
   place("acme", teamName, { kind: "team", color: "purple" }),
@@ -73,7 +76,7 @@ const MANY = [...FEW, ...["Delta", "Echo Studio", "Fable", "Gamma Ltd", "Harbor"
 const member = params.has("member");
 const onTeam = team || member;
 const computer = params.get("place") === "computer";
-const COMPUTER: RailPlace[] = [place("local", "This computer", { kind: "computer" }), place("vps", "Office", { kind: "server" })];
+const COMPUTER: RailPlace[] = [HERE, place("vps", "Office", { kind: "server" })];
 const SWATCH: Record<string, CloudSwatch> = { blue: "blue", teal: "green", yellow: "amber", red: "rose", purple: "violet" };
 const COLOR: Record<CloudSwatch, PlaceLook["color"]> = { blue: "blue", green: "teal", amber: "yellow", rose: "red", violet: "purple", slate: null };
 const tint = params.get("look") ?? (computer ? "none" : onTeam ? "purple" : "blue");

@@ -52,21 +52,21 @@ const unlisted = (entry, { clouds, home, mine }) => Array.isArray(clouds) && (en
   && !clouds.some(cloud => cloud.origin === entry.origin);
 
 /**
- * The circles, in the Server menu's order: This computer while it is a place (before the move made My Cloud home, `home`
- * null), My Cloud, the person's other Clouds and their teams' Clouds in the session's order, then servers saved by hand.
+ * The circles, in the Server menu's order: This computer (active once My Cloud is home, `home`, only while the window
+ * shows it: `localShown`), My Cloud, the person's other Clouds and their teams' Clouds in the session's order, then servers saved by hand.
  * A server of theirs that signed in with their account comes next: one saved here already is that saved place (online
  * or not), one not connected to this app yet shows how to connect it, and one only reachable on its own network has
  * nothing to open. A Cloud of theirs the Admin is still making (no address yet) is there too: it opens its own screen (its
  * checkout or its setup), never an address. My Cloud's saved place leaves once the session's list doesn't have it (removed
- * from the list). Fewer than RAIL_MIN_PLACES places in all, This computer counted while it is one: no rail at all, the window
+ * from the list). Fewer than RAIL_MIN_PLACES places in all, This computer counted: no rail at all, the window
  * as it was, unless the person has a Cloud of their own: then its one circle is the rail, for the ＋ that buys another.
  * `offers(entry)`: a server connected by hand whose menu offers Make … my home (own-home-main.mjs). `cloudMoves(entry)`: a server
  * of the person's own whose menu offers moving it to dusk cloud (vps-cloud-move-main.mjs). `waiting(id)`: inbox lines
  * wait in that place, and the window shows another (place-inbox-watch.mjs). `accounts`: the other accounts signed in on this
  * device, each with its places as they were kept: grouped by account after these (withAccounts).
- * @param {{ saved: { environments: any[], activeId: string }, home?: string | null, mine?: string | null, state?: any, offers?: (entry: any) => boolean, cloudMoves?: (entry: any) => boolean, waiting?: (id: string) => boolean, accounts?: any[] }} input
+ * @param {{ saved: { environments: any[], activeId: string }, home?: string | null, localShown?: boolean, mine?: string | null, state?: any, offers?: (entry: any) => boolean, cloudMoves?: (entry: any) => boolean, waiting?: (id: string) => boolean, accounts?: any[] }} input
  */
-export function railPlaces({ saved, home = null, mine = null, state = null, offers = () => false, cloudMoves = () => false, waiting = () => false, accounts = [] }) {
+export function railPlaces({ saved, home = null, localShown = false, mine = null, state = null, offers = () => false, cloudMoves = () => false, waiting = () => false, accounts = [] }) {
   const connected = state?.status === "connected" ? state : null;
   const clouds = Array.isArray(connected?.clouds) ? connected.clouds : [];
   const order = entry => { const at = clouds.findIndex(cloud => cloud.origin === entry.origin); return at === -1 ? clouds.length : at; };
@@ -84,8 +84,9 @@ export function railPlaces({ saved, home = null, mine = null, state = null, offe
       ...(cloud.origin ? { pairs: true } : { ownNetwork: true }), ...serverState(cloud, connected?.latestVersion ?? null) }));
   const places = [...remote, ...servers, ...making];
   const computer = environments.savedPlace(saved, environments.LOCAL_ID), color = computer.color ?? null;
-  const all = home ? places : [{ id: computer.id, name: computer.name, color, kind: "computer", opens: true, paint: railPaint(placeLook(computer), color),
-    ...(saved.activeId === environments.LOCAL_ID ? { active: true } : {}), ...(waiting(computer.id) ? { attention: true } : {}) }, ...places];
+  const here = home ? localShown : saved.activeId === environments.LOCAL_ID;
+  const all = [{ id: computer.id, name: computer.name, color, kind: "computer", opens: true, paint: railPaint(placeLook(computer), color),
+    ...(here ? { active: true } : {}), ...(waiting(computer.id) ? { attention: true } : {}) }, ...places];
   if (accounts.length) return withAccounts(all, { saved, accounts, email: state?.account?.email ?? null });
   return all.length < (clouds.some(ownCloud) ? 1 : RAIL_MIN_PLACES) ? [] : all;
 }

@@ -24,9 +24,10 @@ const session = (over = {}) => ({ status: "connected", account: { id: "acct-1" }
   teams: [{ id: "team-acme", name: "Acme", role: "member", machine: { status: "ready", origin: TEAM } }],
   clouds: parseCloudList([PRIMARY, entry(), entry({ id: "c-team", name: "Acme", color: "amber", teamId: "team-acme", role: "member", origin: TEAM })]), ...over });
 
-test("the rail: My Cloud, the person's Clouds and teams' Clouds in the session's order, then servers saved by hand; names, colours and states, never an address", () => {
+test("the rail: This computer, My Cloud, the person's Clouds and teams' Clouds in the session's order, then servers saved by hand; names, colours and states, never an address", () => {
   const places = railPlaces({ saved: saved(), home: HOME, mine: HOME, state: session() });
   assert.deepEqual(places, [
+    { id: "local", name: "This computer", color: null, kind: "computer", opens: true, paint: { swatch: null } },
     { id: "home", name: "Studio", color: "purple", kind: "cloud", opens: true, paint: { swatch: "violet" }, active: true },
     { id: "a", name: "Client A", color: "teal", kind: "cloud", opens: true, paint: { swatch: "green" } },
     { id: "acme", name: "Acme", color: "yellow", kind: "team", opens: true, paint: { swatch: "amber", locked: "member" } },
@@ -39,20 +40,24 @@ test("the rail: My Cloud, the person's Clouds and teams' Clouds in the session's
   assert.equal(before.length, 5);
   const teal = railPlaces({ saved: { ...saved("local"), localColor: "teal" }, home: null, mine: HOME, state: session() })[0];
   assert.deepEqual([teal.color, teal.paint], ["teal", { swatch: "green" }], "its circle takes the colour this app keeps for it");
-  assert.equal(railPlaces({ saved: { ...saved("home"), localColor: "teal" }, home: HOME, mine: HOME, state: session() }).some(place => place.kind === "computer"), false,
-    "once My Cloud is home, this computer is no circle, whatever its colour");
+  const home = railPlaces({ saved: { ...saved("home"), localColor: "teal" }, home: HOME, mine: HOME, state: session() });
+  assert.deepEqual(home[0], { id: "local", name: "This computer", color: "teal", kind: "computer", opens: true, paint: { swatch: "green" } },
+    "once My Cloud is home, this computer is still the first circle, as in the Server menu, so the way back is one tap");
+  assert.equal(home.filter(place => place.active).map(place => place.id).join(), "home");
+  const back = railPlaces({ saved: saved("home"), home: HOME, localShown: true, mine: HOME, state: session() });
+  assert.equal(back[0].active, true, "the window on this computer's page: its circle is the one lit");
 });
 
 test("a Cloud of your own is a rail even alone, for its ＋; otherwise one place, or none: no rail, the window as it was", () => {
   const alone = { activeId: "home", environments: [{ id: "home", kind: "remote", name: "My Cloud", origin: HOME, home: true }] };
-  assert.deepEqual(railPlaces({ saved: alone, home: HOME, mine: HOME, state: session({ teams: [], clouds: parseCloudList([PRIMARY]) }) }).map(place => place.id), ["home"],
-    "My Cloud alone, after the move: its circle, so the ＋ that buys another is there");
-  assert.deepEqual(railPlaces({ saved: alone, home: HOME, mine: HOME, state: null }), [], "signed out of Cloud: one saved place is no rail");
+  assert.deepEqual(railPlaces({ saved: alone, home: HOME, mine: HOME, state: session({ teams: [], clouds: parseCloudList([PRIMARY]) }) }).map(place => place.id), ["local", "home"],
+    "My Cloud alone, after the move: this computer and My Cloud, two circles");
+  assert.deepEqual(railPlaces({ saved: alone, home: HOME, mine: HOME, state: null }).map(place => place.id), ["local", "home"], "signed out of Cloud: this computer and its home are two places");
   assert.deepEqual(railPlaces({ saved: alone, home: null, mine: HOME, state: session({ teams: [], clouds: parseCloudList([PRIMARY]) }) }).map(place => place.id), ["local", "home"],
     "before the move, This computer and My Cloud are two places: two circles");
   assert.deepEqual(railPlaces({ saved: { activeId: "local", environments: [] }, state: null }), []);
   const two = railPlaces({ saved: { activeId: "home", environments: [alone.environments[0], { id: "vps", kind: "remote", name: "Office", origin: VPS }] }, home: HOME, mine: HOME, state: null });
-  assert.deepEqual(two.map(place => place.id), ["home", "vps"], "a server saved by hand is a place");
+  assert.deepEqual(two.map(place => place.id), ["local", "home", "vps"], "a server saved by hand is a place");
   const typed = { activeId: "local", environments: [{ id: "vps", kind: "remote", name: "Office", origin: VPS }] };
   assert.deepEqual(railPlaces({ saved: typed, home: null, state: null }).map(place => place.id), ["local", "vps"], "This computer and one server: two circles");
   assert.deepEqual(railPlaces({ saved: { activeId: "local", environments: [] }, home: null, state: null }), [], "This computer alone: no rail");
@@ -90,10 +95,10 @@ test("a server of the person's own that signed in with their account: one saved 
     { id: "signed-in:s-mini", name: "Mac mini", color: null, kind: "server", opens: false, paint: { swatch: null }, ownNetwork: true, server: true, offline: true, lastSeenAt: 1_761_000_000_000 },
     { id: "signed-in:s-render", name: "Render VPS", color: "red", kind: "server", opens: false, paint: { swatch: "rose" }, pairs: true, server: true, offline: true, lastSeenAt: 1_761_000_100_000 },
   ]);
-  assert.equal(places.length, 6, "one circle per server");
+  assert.equal(places.length, 7, "this computer, and one circle per server");
   for (const origin of [VPS, RENDER]) assert.equal(JSON.stringify(places).includes(origin), false, origin);
   const alone = { activeId: "home", environments: [{ id: "home", kind: "remote", name: "My Cloud", origin: HOME, home: true }] };
-  assert.equal(railPlaces({ saved: alone, home: HOME, mine: HOME, state: session({ teams: [], clouds: parseCloudList([PRIMARY, clouds[2]]) }) }).length, 2, "it counts as a place");
+  assert.equal(railPlaces({ saved: alone, home: HOME, mine: HOME, state: session({ teams: [], clouds: parseCloudList([PRIMARY, clouds[2]]) }) }).length, 3, "it counts as a place");
   assert.equal(places.some(place => place.update), false, "no newest release named (the Admin doesn't follow releases): no reminder");
   const behind = parseCloudList([PRIMARY, entry({ id: "s-mini", name: "Mac mini", runsOn: "server", managed: false, status: "ready", origin: null, version: "0.1.118" }),
     entry({ id: "s-new", name: "New box", runsOn: "server", managed: false, status: "ready", origin: null, version: "0.1.130" }),
@@ -124,7 +129,7 @@ function rail(over = {}) {
 
 test("the rail's channels: the list only for the rail's own page, a circle only by an id main listed, ＋ only its fixed choices", async () => {
   const r = rail();
-  assert.deepEqual((await r.call("workspaces:places")).places.map(place => place.id), ["home", "a", "acme", "vps"]);
+  assert.deepEqual((await r.call("workspaces:places")).places.map(place => place.id), ["local", "home", "a", "acme", "vps"]);
   r.w.lists = false;
   assert.deepEqual(await r.call("workspaces:places"), { places: [], add: { cloud: false, link: false, address: false, organization: false }, beside: true },
     "a place's page, this computer's and a Cloud's included, learns only that the rail stands beside it");
