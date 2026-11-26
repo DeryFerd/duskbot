@@ -604,13 +604,13 @@ export function ModelPicker({
   const shownName = unanswered ?? modelName(shownInstance, answering.model);
   const shownOption = shownInstance?.models.options.find((option) => option.id === answering.model);
   // beside the engine's mark the family is said once, as the menu's rows say it
-  const chipName = unanswered ?? (shownInstance && shownOption && !isFreeModel(shownInstance)
-    ? shortModelLabel(shownOption.label, providerName(shownInstance)) : shownName);
+  const chipName = (unanswered ?? (shownInstance && shownOption && !isFreeModel(shownInstance)
+    ? shortModelLabel(shownOption.label, providerName(shownInstance)) : shownName)) || t("model.choose");
   const composerTrigger = composer && (
     <button
       {...triggerProps}
       data-composer-model=""
-      aria-label={`${t("model.simple.model")}, ${shownName}`}
+      aria-label={`${t("model.simple.model")}, ${shownName || t("model.choose")}`}
       className={cn(
         "composer-press relative flex min-w-0 shrink items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
         composer.phone

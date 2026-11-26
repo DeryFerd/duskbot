@@ -150,4 +150,12 @@ describe("a ChatGPT plan account that can't sign in here", () => {
     await settle();
     expect(document.querySelector("[data-model-picker-content]")?.textContent).toContain("GPT-6 Sol");
   });
+
+  it("a bot with no model yet (no AI connected) asks to choose one instead of an empty pill", async () => {
+    fixture.instances = [];
+    flushSync(() => root.render(createElement(ComposerModelChip, { bot: { ...scout, modelSelection: { instanceId: "", model: "" } }, phone: false, typing: false })));
+    await settle();
+    expect(chip().getAttribute("aria-label")).toBe("Model, Choose model");
+    expect(chip().textContent).toContain("Choose model");
+  });
 });
