@@ -91,6 +91,14 @@ async function withRecoveryFixture(
     await expect.poll(async () => {
       try { return (await fetch(url + "/api/health", { signal: AbortSignal.timeout(1_000) })).ok; } catch { return false; }
     }, { timeout: 20_000 }).toBe(true);
+    // The server listens before it has read its engines' model lists (startup-model-catalog.ts). That read starts the
+    // primary fixture too, so the failure is armed only once it is done: an initialize armed under it is held by the
+    // gate, and the new bot waits on that read past the client's timeout.
+    await expect.poll(async () => {
+      const { instances } = await api("GET", "/api/instances") as { instances: any[] };
+      return ["opencodeGo", "secondary"].every((id) => instances.find((instance) => instance.instanceId === id)?.models.options
+        .some((option: any) => option.id === primary.model));
+    }, { timeout: 20_000 }).toBe(true);
     // A later start listens before Codex lists its models (startup-model-catalog.ts), and a recovery backup must be
     // a model the engine offers.
     if (options.codexBackup) await expect.poll(async () => {
