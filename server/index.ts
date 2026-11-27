@@ -157,7 +157,7 @@ import {
   type LocalVmTarget,
   type Runtime,
 } from "./container-computer.ts";
-import { attachForTurn, saveBotAttachment } from "./bot-attachment.ts";
+import { attachForTurn, saveBotAttachment, savedScreenAttachment } from "./bot-attachment.ts";
 import {
   cacheUntilConfigChanges,
   ensureDirs,
@@ -14487,17 +14487,17 @@ const handleRequestInner = async (req: IncomingMessage, res: ServerResponse) => 
         if (body.screen === true) {
           try {
             const outcome = await attachForTurn(internalCapability, MAX_ATTACHED_FILES_PER_TURN, {
-              save: () => screenNow(threadId),
+              save: async () => savedScreenAttachment(await screenNow(threadId)),
               stillLive: () => internalCapabilityIsActive(internalCapability) && connectorThread(from.id, threadId) !== null,
-              publish: (frame) => {
-                store.appendMessage(threadId, { role: "bot", kind: "screen", png: frame.png, mime: frame.mime,
+              publish: (saved) => {
+                store.appendMessage(threadId, { role: "bot", kind: "text", text: "", attachments: [saved.attachment],
                   ...(source.group ? { from: { botId: from.id, name: from.name, color: from.color } } : {}) });
               },
-              discard: () => {},
+              discard: (saved) => deleteAttachment(saved.attachment.path),
             });
             if (outcome.status === "limit") return json(res, 429, { error: `You already attached ${MAX_ATTACHED_FILES_PER_TURN} files this turn. Show only the screens that matter.` });
             if (outcome.status === "ended") return json(res, 409, { error: "This turn ended before the screenshot could be posted, so nothing was posted." });
-            return json(res, 200, { ok: true, name: "screenshot", bytes: Math.floor(outcome.saved.png.length * 3 / 4) });
+            return json(res, 200, { ok: true, name: "screenshot", bytes: outcome.saved.bytes });
           } catch (error) {
             return json(res, 409, { error: error instanceof Error ? error.message : String(error) });
           }
