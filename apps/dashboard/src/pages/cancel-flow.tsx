@@ -303,7 +303,7 @@ export function CancelFlow({ open, onClose, catalog }: { open: boolean; onClose(
   const footer = step === "done"
     ? <><Button onClick={() => void restart()} disabled={busy !== null}>{busy === "restart" ? "resuming" : "resume my plan"}</Button><Button variant="primary" onClick={onClose}>done</Button></>
     : step === "confirm"
-      ? <><Button variant="danger" onClick={() => void stop()} disabled={busy !== null}>{busy === "cancel" ? "cancelling" : keepsLicense ? "cancel dusk cloud" : "cancel subscription"}</Button>{keepButton}</>
+      ? <><Button onClick={() => void stop()} disabled={busy !== null}>{busy === "cancel" ? "cancelling" : keepsLicense ? "cancel dusk cloud" : "cancel subscription"}</Button>{keepButton}</>
       : <><Button onClick={next} disabled={busy !== null}>continue to cancel</Button>{keepButton}</>;
   const dots = step === "done" ? null : <Dots steps={steps} at={step} />;
   const pad = "px-7 max-sm:px-5";

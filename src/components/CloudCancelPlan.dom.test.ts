@@ -111,6 +111,7 @@ describe("the cancel sheet", () => {
     expect([step(), title(), dots()]).toEqual(["confirm", "Cancel your plan", "5/5"]);
     expect(text()).toContain(`Your plan ends on ${day(END)}, not today.`);
     expect(foot()).toEqual(["Cancel subscription", "Keep my plan"]);
+    expect(sheet()!.querySelector("[data-cloud-cancel-confirm]")?.className).toBe("ui-button");
     expect(document.activeElement?.textContent).toBe("Keep my plan");
     expect(sheet()!.querySelector("[data-cloud-cancel-next]")).toBeNull();
     await click(sheet()!.querySelector("[data-cloud-cancel-confirm]"));

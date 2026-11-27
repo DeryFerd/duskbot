@@ -353,7 +353,7 @@ export function CloudCancelSheet({ renewal, actions, offers = {}, onClose }: { r
               <p className={body}>{at ? t(renewal.trial ? "cloudCancel.confirmTrialOn" : "cloudCancel.confirmPlanOn", { date: day(at) }) : t("cloudCancel.accessNoDate")}</p>
               {alert}
               <div className="mt-6 flex flex-wrap justify-end gap-2">
-                <button type="button" data-cloud-cancel-confirm className="ui-button border-transparent bg-danger text-white hover:brightness-110" disabled={busy} onClick={cancel}>
+                <button type="button" data-cloud-cancel-confirm className="ui-button" disabled={busy} onClick={cancel}>
                   {t(busy ? "cloudCancel.cancelling" : "cloudCancel.cancelSubscription")}</button>
                 {keepButton}
               </div>

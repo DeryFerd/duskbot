@@ -256,6 +256,7 @@ test("missing a feature: tell us and we'll reply, the note goes into the mail", 
 test("switching: what you'd lose, confirm and cancel with the survey; done shows the access date over the night scene and resumes", async () => {
   await open(plus);
   await toReason();
+  const lightButton = button("continue to cancel")!.className;
   await type("going elsewhere");
   await pick("i'm switching to something else");
   await onward();
@@ -266,6 +267,8 @@ test("switching: what you'd lose, confirm and cancel with the survey; done shows
   expect(text()).toContain("your dusk cloud's files are kept until 12 Jan 2027");
   expect(button("keep my plan")?.className).toContain("bg-primary");
   expect(footer()).toEqual(["cancel subscription", "keep my plan"]);
+  // the cancel is as quiet as continue to cancel was: the light button, never red
+  expect(button("cancel subscription")?.className).toBe(lightButton);
   await click("cancel subscription");
   expect(spies.cancel).toHaveBeenCalledWith({ answer: "switching", offer: "losses", improve: "going elsewhere" });
   expect(title()).toBe("your plan is cancelled");
