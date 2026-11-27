@@ -345,6 +345,78 @@ describe("connect flow stages", () => {
   });
 });
 
+describe("what the server is told when a sign-in ends early", () => {
+  const cancels = (calls: Array<{ path: string; body: string }>) => calls.filter((call) => call.path.endsWith("/auth/cancel")).map((call) => JSON.parse(call.body));
+  const recording = (routes: Record<string, Route>) => {
+    const sent: Array<{ path: string; body: string }> = [];
+    const wrapped: Record<string, Route> = {};
+    for (const [key, route] of Object.entries(routes)) wrapped[key] = (init) => { sent.push({ path: key, body: init?.body ?? "" }); return route(init); };
+    return { sent, routes: wrapped };
+  };
+
+  it("a cancel while the sign-in is still opening stops the start on the server, so its helper does not sit there for 15 minutes", async () => {
+    const { sent, routes } = recording({ "POST /api/instances/codex/auth/start": never, "POST /api/instances/codex/auth/cancel": () => ({ ok: true }) });
+    const { flow } = harness([[codex({ state: "available", authenticated: false })]], routes);
+    flow.start({ tile: "chatgpt", candidates: ["codex"] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(flow.state.stage).toBe("opening");
+    flow.cancel();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cancels(sent)).toEqual([{ flowId: "", pending: true }]);
+  });
+
+  it("a sign-in the app lost track of is told as lost, one that ran out as timed out, a person's cancel plainly", async () => {
+    const lost = recording({ "POST /api/instances/codex/auth/start": () => device, "GET /api/instances/codex/auth/status": () => Promise.reject(new TypeError("unreachable")), "POST /api/instances/codex/auth/cancel": () => ({ ok: true }) });
+    const one = harness([[codex({ state: "available", authenticated: false })]], lost.routes);
+    one.flow.start({ tile: "chatgpt", candidates: ["codex"] });
+    await vi.advanceTimersByTimeAsync(POLL_MS * LOST_AFTER + 10);
+    expect(cancels(lost.sent)).toEqual([{ flowId: "f1", why: "lost" }]);
+
+    const slow = recording({ "POST /api/instances/codex/auth/start": () => device, "GET /api/instances/codex/auth/status": () => ({ auth: { phase: "waiting" } }), "POST /api/instances/codex/auth/cancel": () => ({ ok: true }) });
+    const two = harness([[codex({ state: "available", authenticated: false })]], slow.routes);
+    two.flow.start({ tile: "chatgpt", candidates: ["codex"] });
+    await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUTS.waiting + POLL_MS);
+    expect(cancels(slow.sent)).toEqual([{ flowId: "f1", why: "timeout" }]);
+
+    const person = recording({ "POST /api/instances/codex/auth/start": () => device, "GET /api/instances/codex/auth/status": () => ({ auth: { phase: "waiting" } }), "POST /api/instances/codex/auth/cancel": () => ({ ok: true }) });
+    const three = harness([[codex({ state: "available", authenticated: false })]], person.routes);
+    three.flow.start({ tile: "chatgpt", candidates: ["codex"] });
+    await vi.advanceTimersByTimeAsync(0);
+    three.flow.cancel();
+    expect(cancels(person.sent)).toEqual([{ flowId: "f1" }]);
+  });
+
+  it("the browser sign-in this computer can't take back (its port is taken) is stopped as a retry, not a cancel", async () => {
+    const loop = { authorizationUrl: "https://auth.openai.com/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback", port: 1455, path: "/auth/callback" };
+    const { sent, routes } = recording({
+      "POST /api/instances/codex/auth/start": (init) => JSON.parse(init?.body ?? "{}").browser ? { sameMachine: false, auth: { phase: "waiting", flowId: "b1", authorizationUrl: loop.authorizationUrl, loopback: loop } } : device,
+      "POST /api/instances/codex/auth/cancel": () => ({ ok: true }),
+      "GET /api/instances/codex/auth/status": () => ({ auth: { phase: "waiting" } }),
+    });
+    const relay = { open: async () => false, next: () => new Promise<string | null>(() => {}), done: async () => {}, close: async () => {} };
+    const { flow } = harness([[codex({ state: "available", authenticated: false })]], routes, { relay });
+    flow.start({ tile: "chatgpt", candidates: ["codex"] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(flow.state).toMatchObject({ stage: "waiting", kind: "device" });
+    expect(cancels(sent)).toEqual([{ flowId: "b1", why: "retry" }]);
+  });
+});
+
+describe("a sign-in page the browser did not open", () => {
+  it("says so until Open opens it", async () => {
+    let opens = 0;
+    const { flow } = harness([[{ instanceId: "claude", driverKind: "claudeAgent", snapshot: { state: "available", authenticated: false }, authentication: { method: "paste-code" } }]], {
+      "POST /api/instances/claude/auth/start": () => ({ auth: { phase: "waiting", flowId: "c1", authorizationUrl: "https://claude.com/cai/oauth/authorize?code=true" } }),
+      "GET /api/instances/claude/auth/status": () => ({ auth: { phase: "waiting" } }),
+    }, { open: async () => ++opens > 1 });
+    flow.start({ tile: "claude", candidates: ["claude"] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(flow.state).toMatchObject({ stage: "waiting", kind: "paste", opened: false });
+    await expect(flow.openAgain()).resolves.toBe(true);
+    expect(flow.state).toMatchObject({ stage: "waiting", kind: "paste", opened: true });
+  });
+});
+
 describe("an AI installed by its vendor's own script (Cursor)", () => {
   const cursor = (snapshot: ConnectInstance["snapshot"]): ConnectInstance => ({
     instanceId: "cursor", driverKind: "cursorAgent", snapshot, authentication: { method: "device-code" }, install: { server: { script: true } },

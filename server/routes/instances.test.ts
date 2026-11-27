@@ -103,6 +103,27 @@ describe("engine sign-in routes", () => {
   });
 });
 
+describe("ending a sign-in early", () => {
+  it("books a person's cancel, a lost one and a retried one each as what it was, and stops a start whose link has not come yet", async () => {
+    const outcomes: string[] = [];
+    const { sign, call } = await serve({ providerAuthSessions: new ProviderAuthSessions({ outcome: (_id, outcome) => outcomes.push(outcome) }) });
+    await call("POST", "/api/instances/a/auth/start", {});
+    await call("POST", "/api/instances/a/auth/cancel", { flowId: "flow-1" });
+    sign.start.flowId = "flow-2";
+    await call("POST", "/api/instances/a/auth/start", {});
+    await call("POST", "/api/instances/a/auth/cancel", { flowId: "flow-2", why: "lost" });
+    sign.start.flowId = "flow-3";
+    await call("POST", "/api/instances/a/auth/start", {});
+    await call("POST", "/api/instances/a/auth/cancel", { flowId: "flow-3", why: "retry" });
+    sign.start.flowId = "flow-4";
+    await call("POST", "/api/instances/a/auth/start", {});
+    expect(outcomes).toEqual(["started", "cancelled", "started", "failed", "started"]);
+    // the app did not have this flow's id yet when the person cancelled
+    await call("POST", "/api/instances/a/auth/cancel", { flowId: "", pending: true });
+    expect(outcomes).toEqual(["started", "cancelled", "started", "failed", "started", "cancelled"]);
+  });
+});
+
 describe("starting a sign-in", () => {
   it("records the provider as the person's choice, so one only found on this computer is used once signed in", async () => {
     const chosen: string[] = [];

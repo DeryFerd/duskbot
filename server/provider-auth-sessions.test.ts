@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { BoxFenceError } from "./bot-box/plan.ts";
 import { ProviderAuthSessions } from "./provider-auth-sessions.ts";
+import { failureReason } from "../shared/usage-signals.ts";
 import type { ProviderAuthenticationStart } from "./contracts.ts";
 
 function fixture() {
@@ -74,6 +75,61 @@ describe("how a sign-in went, for usage signals", () => {
       sessions.sawSignedIn("codex");
       expect(outcomes).toEqual(["codex started"]);
     } finally { vi.useRealTimers(); }
+  });
+});
+
+describe("what a sign-in that did not finish is counted as", () => {
+  const counted = () => {
+    const outcomes: string[] = [];
+    const sessions = new ProviderAuthSessions({ outcome: (id, outcome, error) => outcomes.push(`${id} ${outcome}${outcome === "failed" ? ` ${failureReason(error instanceof Error ? error.message : String(error ?? ""))}` : ""}`) });
+    return { sessions, outcomes };
+  };
+
+  it("a person's cancel is cancelled; the app losing track is a network failure; a wait that ran out is expired", async () => {
+    const { instance } = fixture();
+    const { sessions, outcomes } = counted();
+    await sessions.start(instance, "owner");
+    await sessions.cancel("codex", "owner", "random-flow");
+    instance.startAuthentication.mockResolvedValueOnce({ phase: "waiting", flowId: "two", authorizationUrl: null, expiresAt: null });
+    await sessions.start(instance, "owner");
+    await sessions.cancel("codex", "owner", "two", "lost");
+    instance.startAuthentication.mockResolvedValueOnce({ phase: "waiting", flowId: "three", authorizationUrl: null, expiresAt: null });
+    await sessions.start(instance, "owner");
+    await sessions.cancel("codex", "owner", "three", "timeout");
+    expect(outcomes).toEqual(["codex started", "codex cancelled", "codex started", "codex failed network", "codex started", "codex expired"]);
+  });
+
+  it("a flow the app stops to try another way at once is one attempt: one start, the next flow's outcome", async () => {
+    const { instance, auth } = fixture();
+    const { sessions, outcomes } = counted();
+    await sessions.start(instance, "owner");
+    await sessions.cancel("codex", "owner", "random-flow", "retry");
+    instance.startAuthentication.mockResolvedValueOnce({ ...auth, flowId: "device" });
+    await sessions.start(instance, "owner");
+    instance.getAuthentication.mockResolvedValueOnce({ ...auth, flowId: "device", phase: "succeeded" } as never);
+    await sessions.status("codex", "owner", "device");
+    expect(outcomes).toEqual(["codex started", "codex succeeded"]);
+  });
+
+  it("a start the person stopped before its link came stops the provider, counts nothing, and a new start right after is not refused", async () => {
+    const { instance, auth } = fixture();
+    const { sessions, outcomes } = counted();
+    let ready!: (value: ProviderAuthenticationStart) => void;
+    instance.startAuthentication.mockImplementationOnce(() => new Promise((resolve) => { ready = resolve; }));
+    const first = sessions.start(instance, "owner");
+    first.catch(() => {});
+    await sessions.abandon("codex", "owner");
+    const again = sessions.start(instance, "owner");
+    ready(auth);
+    await expect(first).rejects.toMatchObject({ status: 409 });
+    await expect(again).resolves.toMatchObject({ phase: "waiting" });
+    expect(instance.cancelAuthentication).toHaveBeenCalledOnce();
+    expect(instance.startAuthentication).toHaveBeenCalledTimes(2);
+    expect(outcomes).toEqual(["codex started"]);
+    await sessions.abandon("codex", "owner");
+    expect(outcomes).toEqual(["codex started", "codex cancelled"]);
+    await sessions.abandon("codex", "other");
+    expect(instance.cancelAuthentication).toHaveBeenCalledTimes(2);
   });
 });
 
