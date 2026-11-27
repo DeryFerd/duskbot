@@ -6104,6 +6104,5 @@
   "server.hermes.modelGoneDefault": "Hermes non può più usare {model}, quindi questa chat usa il modello predefinito di Hermes. Scegli un altro modello per non vedere più questo avviso.",
   "settings.simple.language.partial": "Per ora solo una parte dell'app è tradotta.",
   "botPanel.closePanel": "Chiudi pannello",
-  "chat.setupCard.close": "Chiudi domanda",
-  "settings.planBilling.title": "Piano e fatturazione"
+  "chat.setupCard.close": "Chiudi domanda"
 }

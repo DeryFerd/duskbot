@@ -6290,6 +6290,5 @@
   "server.hermes.modelGoneDefault": "Hermes は {model} を使えなくなったため、このチャットは Hermes の既定のモデルを使います。このメッセージを消すには別のモデルを選んでください。",
   "settings.simple.language.partial": "今のところ、アプリの一部だけが翻訳されています。",
   "botPanel.closePanel": "パネルを閉じる",
-  "chat.setupCard.close": "質問を閉じる",
-  "settings.planBilling.title": "プランとお支払い"
+  "chat.setupCard.close": "質問を閉じる"
 }

@@ -6264,6 +6264,5 @@
   "server.hermes.modelGoneDefault": "Hermes nie może już uruchomić {model}, więc ten czat używa domyślnego modelu Hermesa. Wybierz inny model, aby ten komunikat zniknął.",
   "settings.simple.language.partial": "Na razie przetłumaczona jest tylko część aplikacji.",
   "botPanel.closePanel": "Zamknij panel",
-  "chat.setupCard.close": "Zamknij pytanie",
-  "settings.planBilling.title": "Plan i płatności"
+  "chat.setupCard.close": "Zamknij pytanie"
 }

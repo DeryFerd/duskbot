@@ -3419,6 +3419,5 @@
   "server.hermes.modelGoneDefault": "Hermes अब {model} नहीं चला सकता, इसलिए यह चैट Hermes का डिफ़ॉल्ट मॉडल इस्तेमाल करती है। यह संदेश हटाने के लिए कोई दूसरा मॉडल चुनें।",
   "settings.simple.language.partial": "अभी ऐप का सिर्फ़ कुछ हिस्सा ही अनुवादित है।",
   "botPanel.closePanel": "पैनल बंद करें",
-  "chat.setupCard.close": "सवाल बंद करें",
-  "settings.planBilling.title": "प्लान और बिलिंग"
+  "chat.setupCard.close": "सवाल बंद करें"
 }

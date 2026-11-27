@@ -5061,7 +5061,6 @@
   "settings.simple.billing.ownAi": "봇은 모델에서 연결한 AI 계정을 써요. 한도는 제공자마다 요금제에서 정해요.",
   "settings.simple.billing.limits": "모든 한도 보기",
   "settings.simple.billing.plan": "요금제",
-  "settings.planBilling.title": "요금제 및 결제",
   "settings.simple.computer.bots": "봇의 컴퓨터",
   "settings.simple.computer.devices": "내 기기",
   "settings.simple.computer.pair": "휴대폰이나 컴퓨터 페어링",

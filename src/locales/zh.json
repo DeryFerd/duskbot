@@ -5192,7 +5192,6 @@
   "settings.simple.billing.ownAi": "你的机器人使用你在「模型」下连接的 AI 账户。每个提供方的方案各有自己的限额。",
   "settings.simple.billing.limits": "查看全部限额",
   "settings.simple.billing.plan": "方案",
-  "settings.planBilling.title": "方案与账单",
   "settings.simple.computer.bots": "机器人的电脑",
   "settings.simple.computer.devices": "你的设备",
   "settings.simple.computer.pair": "配对手机或电脑",

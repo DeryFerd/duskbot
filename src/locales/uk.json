@@ -3723,6 +3723,5 @@
   "server.hermes.modelGoneDefault": "Hermes більше не може запускати {model}, тому цей чат використовує модель Hermes за замовчуванням. Виберіть іншу модель, щоб це повідомлення більше не з'являлося.",
   "settings.simple.language.partial": "Поки що перекладено лише частину застосунку.",
   "botPanel.closePanel": "Закрити панель",
-  "chat.setupCard.close": "Закрити питання",
-  "settings.planBilling.title": "Тариф і оплата"
+  "chat.setupCard.close": "Закрити питання"
 }

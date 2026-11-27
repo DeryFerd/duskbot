@@ -3421,6 +3421,5 @@
   "server.hermes.modelGoneDefault": "Hermes ne peut plus utiliser {model}, donc cette discussion utilise le modèle par défaut de Hermes. Choisis un autre modèle pour ne plus voir ce message.",
   "settings.simple.language.partial": "Pour l'instant, seule une partie de l'app est traduite.",
   "botPanel.closePanel": "Fermer le panneau",
-  "chat.setupCard.close": "Fermer la question",
-  "settings.planBilling.title": "Forfait et facturation"
+  "chat.setupCard.close": "Fermer la question"
 }

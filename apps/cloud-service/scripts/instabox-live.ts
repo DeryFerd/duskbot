@@ -286,7 +286,6 @@ try {
     views: async () => (await dashboardCall("GET", "/v1/clouds")).clouds as CloudDesktopView[],
     power: async (id, action) => { await dashboardCall("POST", `/v1/clouds/${id}/power`, { action }); },
     grant: async () => client.pairHome() as Promise<{ origin: string; code: string; expiresAt: number }>,
-    // cancelling is on the account website, as a person does it there
     cancel: async () => {
       const { subscriptions } = await dashboardCall("GET", "/v1/billing/overview") as { subscriptions: Array<{ id: string }> };
       await dashboardCall("POST", `/v1/billing/subscriptions/${subscriptions[0]!.id}/cancel`, { survey: { answer: "other", improve: "live test" } });

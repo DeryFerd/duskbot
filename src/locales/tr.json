@@ -5249,6 +5249,5 @@
   "server.hermes.modelGoneDefault": "Hermes artık {model} modelini çalıştıramıyor, bu yüzden bu sohbet Hermes'in varsayılan modelini kullanıyor. Bu mesajı bir daha görmemek için başka bir model seç.",
   "settings.simple.language.partial": "Şimdilik uygulamanın yalnızca bir kısmı çevrildi.",
   "botPanel.closePanel": "Paneli kapat",
-  "chat.setupCard.close": "Soruyu kapat",
-  "settings.planBilling.title": "Plan ve faturalandırma"
+  "chat.setupCard.close": "Soruyu kapat"
 }

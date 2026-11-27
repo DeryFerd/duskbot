@@ -4827,6 +4827,5 @@
   "server.hermes.modelGoneDefault": "Hermes 已無法執行 {model}，所以這個聊天改用 Hermes 的預設模型。選擇其他模型即可不再看到這則提示。",
   "settings.simple.language.partial": "目前只有部分介面已翻譯。",
   "botPanel.closePanel": "關閉面板",
-  "chat.setupCard.close": "關閉問題",
-  "settings.planBilling.title": "方案與帳單"
+  "chat.setupCard.close": "關閉問題"
 }

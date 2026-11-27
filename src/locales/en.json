@@ -6647,7 +6647,6 @@
   "settings.simple.billing.ownAi": "Your bots use the AI accounts you connected under models. Each provider's plan sets its own limits.",
   "settings.simple.billing.limits": "See all limits",
   "settings.simple.billing.plan": "Plan",
-  "settings.planBilling.title": "Plan & billing",
   "settings.simple.computer.bots": "Your bots' computers",
   "settings.simple.computer.devices": "Your devices",
   "settings.simple.computer.pair": "Pair a phone or computer",

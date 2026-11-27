@@ -6139,6 +6139,5 @@
   "server.hermes.modelGoneStays": "O Hermes não consegue mais usar {model}, então este chat continua em {running}. Escolha outro modelo para parar de ver este aviso.",
   "server.hermes.modelGoneDefault": "O Hermes não consegue mais usar {model}, então este chat usa o modelo padrão do Hermes. Escolha outro modelo para parar de ver este aviso.",
   "settings.simple.language.partial": "Por enquanto, só parte do app está traduzida.",
-  "botPanel.closePanel": "Fechar painel",
-  "settings.planBilling.title": "Plano e cobrança"
+  "botPanel.closePanel": "Fechar painel"
 }

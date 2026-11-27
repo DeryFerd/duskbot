@@ -5249,6 +5249,5 @@
   "server.hermes.modelGoneDefault": "Hermes không còn chạy được {model}, nên cuộc trò chuyện này dùng mô hình mặc định của Hermes. Hãy chọn mô hình khác để không thấy thông báo này nữa.",
   "settings.simple.language.partial": "Hiện mới chỉ dịch được một phần ứng dụng.",
   "botPanel.closePanel": "Đóng bảng",
-  "chat.setupCard.close": "Đóng câu hỏi",
-  "settings.planBilling.title": "Gói và thanh toán"
+  "chat.setupCard.close": "Đóng câu hỏi"
 }
