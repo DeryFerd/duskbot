@@ -9,7 +9,12 @@ import { friendlyError } from "@/lib/plain-error";
 import { Icon } from "../Icon";
 import { Loader2 } from "../../icons";
 import { ModalLayer } from "../ui/ModalLayer";
-import { confirmCancelCls, formBodyCls, formFooterCls, formHeaderCls, formSheetCls, formTitleCls, mdDangerCls, mdPrimaryCls, rowHintCls, textFieldCls, useDialogKeys } from "../ui/GrokDialog";
+import { useDialogKeys } from "../ui/GrokDialog";
+import { SIMPLE_BUTTONS, SIMPLE_CARD } from "../SettingsPrimitives";
+import { compactBackdropStyle, compactSheetStyle } from "../compact-settings-sheet";
+import "../../styles/settings.css";
+
+const HINT = "m-0 px-2.5 text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary";
 
 /** the words the person types; main checks them again (electron/start-fresh.mjs CONFIRM_PHRASE) */
 export const START_FRESH_PHRASE = "start fresh";
@@ -63,15 +68,15 @@ function StepMark({ status }: { status: StartFreshStep["status"] }) {
 
 function Steps({ steps }: { steps: StartFreshStep[] }) {
   return (
-    <ul className="m-0 flex list-none flex-col gap-0.5 rounded-[14px] bg-ink/4 p-1.5" aria-live="polite">
+    <ul className={cn(SIMPLE_CARD, "m-0 list-none")} aria-live="polite">
       {steps.map((step) => {
         const hint = stepHint(step);
         return (
-          <li key={step.id} data-start-fresh-step={step.id} data-status={step.status} className="flex items-start gap-2.5 rounded-[10px] px-2 py-1.5">
+          <li key={step.id} data-start-fresh-step={step.id} data-status={step.status} className="flex items-start gap-2.5 rounded-lg px-2 py-1.5">
             <span className="mt-px flex"><StepMark status={step.status} /></span>
             <span className="flex min-w-0 flex-col">
-              <span className="truncate text-[13px] leading-[18px] text-ink">{stepTitle(step)}</span>
-              {hint && <span className={cn("text-[12px] leading-4", step.status === "failed" ? "text-danger" : "text-ink/56")}>{hint}</span>}
+              <span className="truncate text-[13px] leading-[18px] tracking-[0.015em] text-ink">{stepTitle(step)}</span>
+              {hint && <span className={cn("text-[13px] leading-[18px] tracking-[0.015em]", step.status === "failed" ? "text-danger" : "text-ink-secondary")}>{hint}</span>}
             </span>
           </li>
         );
@@ -115,78 +120,86 @@ export function StartFreshDialog({ bridge, onClose }: { bridge: Bridge; onClose:
 
   return (
     <ModalLayer>
-      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-        <div aria-hidden="true" data-modal-scrim className="ui-dialog-scrim absolute inset-0" onMouseDown={() => { if (closable) onClose(); }} />
+      <div data-settings-sheet data-settings-look="simple" className="settings-scrim z-[60]">
+        <div aria-hidden="true" data-modal-scrim className="settings-backdrop" style={compactBackdropStyle} onMouseDown={() => { if (closable) onClose(); }} />
         <div ref={sheet} role="alertdialog" aria-modal="true" aria-labelledby="start-fresh-title" aria-describedby="start-fresh-warning" tabIndex={-1}
-          data-start-fresh-dialog={phase} style={{ maxWidth: "min(440px, calc(100vw - 32px))" }} className={formSheetCls}>
-          <header className={formHeaderCls}>
-            <h2 id="start-fresh-title" className={formTitleCls}>{title}</h2>
+          data-start-fresh-dialog={phase} style={compactSheetStyle(480)} className="settings-dialog">
+          <section className="settings-panel min-h-0">
             {closable && (
-              <button type="button" aria-label={t("common.close")} onClick={onClose} className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-ink/68 transition-[color,background-color] duration-[120ms] ease-[ease] hover:bg-ink/6 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus">
-                <Icon name="close" size={16} />
+              <button type="button" aria-label={t("common.close")} onClick={onClose} className="settings-close">
+                <Icon name="close" size={14} />
               </button>
             )}
-          </header>
-          <div className={cn(formBodyCls, "flex flex-col gap-3", phase === "running" ? "pb-4" : "pb-1")}>
-            {phase === "idle" ? (
-              <>
-                <p id="start-fresh-warning" className="m-0 flex items-start gap-2 rounded-[10px] bg-danger/10 px-3 py-2.5 text-[14px] font-medium leading-5 text-danger">
-                  <span className="mt-0.5 flex shrink-0"><Icon name="exclamation-circle" size={16} /></span>
-                  {t("startFresh.warning")}
-                </p>
-                <div>
-                  <p className={cn(rowHintCls, "m-0 mb-1.5")}>{t("startFresh.lead")}</p>
-                  <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-[13px] leading-[18px] text-ink marker:text-ink/40">
-                    <li>{t("startFresh.list.bots")}</li>
-                    <li>{t("startFresh.list.local")}</li>
-                    <li>{t("startFresh.list.signOut")}</li>
-                  </ul>
-                </div>
-                <p data-start-fresh-keeps="" className={cn(rowHintCls, "m-0")}>
-                  {t("startFresh.keeps")}{" "}{t("startFresh.deleteAccountLead")}{" "}
-                  <button type="button" data-start-fresh-delete-account="" onClick={openAccountDeletion}
-                    className="cursor-pointer rounded-[4px] font-medium text-ink underline underline-offset-2 hover:text-ink/80 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus">{t("startFresh.deleteAccount")}</button>
-                </p>
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-[13px] leading-[18px] text-ink/68">{t("startFresh.typeLabel", { phrase: START_FRESH_PHRASE })}</span>
-                  <input data-autofocus data-start-fresh-input value={typed} onChange={(event) => setTyped(event.target.value)} autoComplete="off" spellCheck={false}
-                    placeholder={START_FRESH_PHRASE} aria-label={t("startFresh.typeLabel", { phrase: START_FRESH_PHRASE })}
-                    onKeyDown={(event) => { if (event.key === "Enter" && ready && !asking) void act(() => bridge.run(typed)); }}
-                    className={cn(textFieldCls, "bg-ink/6 focus:bg-ink/8")} />
-                </label>
-              </>
-            ) : (
-              <>
-                {phase === "partial" && <p id="start-fresh-warning" className={cn(rowHintCls, "m-0")}>{t("startFresh.partialBody")}</p>}
-                {(phase === "done" || phase === "restarting") && <p id="start-fresh-warning" className={cn(rowHintCls, "m-0")}>{t("startFresh.doneBody")}</p>}
-                {view && <Steps steps={view.steps} />}
-              </>
-            )}
-            {error && <p role="alert" className="m-0 text-[12px] leading-4 text-danger">{error}</p>}
-          </div>
-          {phase !== "running" && <div className={formFooterCls}>
-            {phase === "idle" && (
-              <>
-                <button type="button" onClick={onClose} disabled={asking} className={confirmCancelCls}>{t("startFresh.cancel")}</button>
-                <button type="button" data-start-fresh-confirm disabled={!ready || asking} onClick={() => void act(() => bridge.run(typed))} className={cn(mdDangerCls, "gap-1.5")}>
-                  {asking && <Loader2 size={14} className="animate-spin" />}{t("startFresh.confirm")}
+            <header className="settings-pane-header">
+              <h2 id="start-fresh-title" className="settings-pane-title">{title}</h2>
+            </header>
+            <div className="settings-scroll">
+              <div className={cn("settings-pane", SIMPLE_BUTTONS)} style={{ gap: 16, paddingBottom: 12 }}>
+                {phase === "idle" ? (
+                  <>
+                    <p id="start-fresh-warning" className="m-0 flex items-start gap-2 px-2.5 text-[13px] leading-[18px] tracking-[0.015em] text-danger">
+                      <span className="mt-px flex shrink-0"><Icon name="exclamation-circle" size={16} /></span>
+                      {t("startFresh.warning")}
+                    </p>
+                    <div className="flex flex-col gap-1.5">
+                      <p className={HINT}>{t("startFresh.lead")}</p>
+                      <div className={cn(SIMPLE_CARD, "px-3 py-2.5")}>
+                        <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-[13px] leading-[18px] tracking-[0.015em] text-ink marker:text-ink/40">
+                          <li>{t("startFresh.list.bots")}</li>
+                          <li>{t("startFresh.list.local")}</li>
+                          <li>{t("startFresh.list.signOut")}</li>
+                        </ul>
+                      </div>
+                    </div>
+                    <p data-start-fresh-keeps="" className={HINT}>
+                      {t("startFresh.keeps")}{" "}{t("startFresh.deleteAccountLead")}{" "}
+                      <button type="button" data-start-fresh-delete-account="" onClick={openAccountDeletion}
+                        className="cursor-pointer rounded-[4px] text-ink underline underline-offset-2 hover:text-ink/80 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus">{t("startFresh.deleteAccount")}</button>
+                    </p>
+                    <label className="flex flex-col gap-1.5">
+                      <span className="px-3 text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary">{t("startFresh.typeLabel", { phrase: START_FRESH_PHRASE })}</span>
+                      <span className={SIMPLE_CARD}>
+                        <input data-autofocus data-start-fresh-input value={typed} onChange={(event) => setTyped(event.target.value)} autoComplete="off" spellCheck={false}
+                          placeholder={START_FRESH_PHRASE} aria-label={t("startFresh.typeLabel", { phrase: START_FRESH_PHRASE })}
+                          onKeyDown={(event) => { if (event.key === "Enter" && ready && !asking) void act(() => bridge.run(typed)); }}
+                          className="h-[34px] w-full rounded-lg border border-transparent bg-transparent px-2 text-[13px] leading-[18px] tracking-[0.015em] text-ink outline-none placeholder:text-ink-secondary" />
+                      </span>
+                    </label>
+                  </>
+                ) : (
+                  <>
+                    {phase === "partial" && <p id="start-fresh-warning" className={HINT}>{t("startFresh.partialBody")}</p>}
+                    {(phase === "done" || phase === "restarting") && <p id="start-fresh-warning" className={HINT}>{t("startFresh.doneBody")}</p>}
+                    {view && <Steps steps={view.steps} />}
+                  </>
+                )}
+                {error && <p role="alert" className="m-0 px-3 text-[13px] leading-[18px] text-danger">{error}</p>}
+              </div>
+            </div>
+            {phase !== "running" && <div className={cn("flex shrink-0 items-center justify-end gap-2 px-6 pb-5 pt-1", SIMPLE_BUTTONS)}>
+              {phase === "idle" && (
+                <>
+                  <button type="button" onClick={onClose} disabled={asking} className="ui-button">{t("startFresh.cancel")}</button>
+                  <button type="button" data-start-fresh-confirm disabled={!ready || asking} onClick={() => void act(() => bridge.run(typed))} className="ui-button ui-button-danger">
+                    {asking && <Loader2 size={14} className="animate-spin" />}{t("startFresh.confirm")}
+                  </button>
+                </>
+              )}
+              {phase === "partial" && (
+                <>
+                  <button type="button" data-start-fresh-finish disabled={asking} onClick={() => void act(() => bridge.finish())} className="ui-button">{t("startFresh.finishAnyway")}</button>
+                  <button type="button" data-start-fresh-retry disabled={asking} onClick={() => void act(() => bridge.retry())} className="ui-button ui-button-primary">
+                    {asking && <Loader2 size={14} className="animate-spin" />}{t("startFresh.retry")}
+                  </button>
+                </>
+              )}
+              {(phase === "done" || phase === "restarting") && (
+                <button type="button" data-start-fresh-restart data-autofocus disabled={asking || phase === "restarting"} onClick={() => void act(() => bridge.finish())} className="ui-button ui-button-primary">
+                  {phase === "restarting" && <Loader2 size={14} className="animate-spin" />}{phase === "restarting" ? t("startFresh.restarting") : t("startFresh.restart")}
                 </button>
-              </>
-            )}
-            {phase === "partial" && (
-              <>
-                <button type="button" data-start-fresh-finish disabled={asking} onClick={() => void act(() => bridge.finish())} className={confirmCancelCls}>{t("startFresh.finishAnyway")}</button>
-                <button type="button" data-start-fresh-retry disabled={asking} onClick={() => void act(() => bridge.retry())} className={cn(mdPrimaryCls, "gap-1.5")}>
-                  {asking && <Loader2 size={14} className="animate-spin" />}{t("startFresh.retry")}
-                </button>
-              </>
-            )}
-            {(phase === "done" || phase === "restarting") && (
-              <button type="button" data-start-fresh-restart data-autofocus disabled={asking || phase === "restarting"} onClick={() => void act(() => bridge.finish())} className={cn(mdPrimaryCls, "gap-1.5")}>
-                {phase === "restarting" && <Loader2 size={14} className="animate-spin" />}{phase === "restarting" ? t("startFresh.restarting") : t("startFresh.restart")}
-              </button>
-            )}
-          </div>}
+              )}
+            </div>}
+          </section>
         </div>
       </div>
     </ModalLayer>
