@@ -31,7 +31,7 @@ import { carriedSteps, carriedWorkFile, chatLimitFacts, sharedCarriedWork } from
 import { CORRECTIVE_ROUND, CORRECTIVE_ROUNDS, announcesAction, ownsFailure, withoutRepeats, claimsUnmadeChange, effectfulCall, leakedReasoning, leakedToolSyntax, LeakHoldback, NUDGE_ANNOUNCED_ACTION, REASONING_AGAIN, NUDGE_CLAIMED_CHANGE, retryAttempts, retryDelay, withRetryAfter } from "./openai-chat-habits.ts";
 import { plainFailureMessage } from "./engine-errors.ts"; import { toolFailureMessage } from "./tool-failure.ts"; import { chosenEffort, withModelEfforts, type ModelEffort } from "./api-effort.ts";
 import { refusesRequestSize, RequestTooLargeError, sizeChange, smallerResend } from "./chat-size-limit.ts";
-import { requestTooLargeMessage } from "../../shared/request-too-large.ts"; import { thrownCode } from "../../shared/usage-signals.ts"; import { failureCodeOf, inPlainWords, noReplyError, nudgeOnce, unfinishedReply } from "./openai-chat-final.ts";
+import { requestTooLargeMessage } from "../../shared/request-too-large.ts"; import { thrownCode, toolErrorClass } from "../../shared/usage-signals.ts"; import { failureCodeOf, inPlainWords, noReplyError, nudgeOnce, unfinishedReply } from "./openai-chat-final.ts";
 import { toolSchemaProfileFor } from "../tool-schema-profile.ts";
 import { adaptToolWire, answeredWithoutTools, messagesOnWire, refusedToolName, refusesToolSchema, refusesToolsInWords, STRICT_RESEND, ToolSchemaRefusedError, TOOLS_REFUSED, toolsOnWire, toolWiresFor, wantsStrictToolSchemas } from "./chat-tool-wire.ts";
 import { classifyContinuable, writeTurnHandoff } from "../turn-continuation.ts";
@@ -865,7 +865,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
             full: () => (turn.approvalModeNow?.() ?? turn.approvalMode) === "full", covered: approval.covered, execute: executeCall })) {
             for (const { call, result, text, title, skipRepeatCount } of results) {
               const repeatNote = skipRepeatCount ? undefined : repeats.noteAfter(call.function.name, call.function.arguments, result), shown = skipRepeatCount ? text : repeats.shown({ id: call.id, name: call.function.name, args: call.function.arguments }, result, text, messages);
-              toolsRan += 1; if (!result.ok) { toolFailed = true; toolFailedEver = true; failedCalls.push(title); failedChange ||= call.function.name === ASK_USER_TOOL || effectfulCall(call.function.name, call.function.arguments); } else { okCalls += 1; if (effectfulCall(call.function.name, call.function.arguments)) effectful += 1; } gates.ran(call.function.name, call.function.arguments, result.ok, text, title);
+              toolsRan += 1; if (!result.ok && toolErrorClass(text) !== "exit_code") { toolFailed = true; toolFailedEver = true; failedCalls.push(title); failedChange ||= call.function.name === ASK_USER_TOOL || effectfulCall(call.function.name, call.function.arguments); } else { okCalls += 1; if (result.ok && effectfulCall(call.function.name, call.function.arguments)) effectful += 1; } gates.ran(call.function.name, call.function.arguments, result.ok, text, title);
               messages.push({ role: "tool", tool_call_id: call.id, content: repeats.record(call.id, JSON.stringify({ ok: result.ok, result: repeatNote ? `${shown}\n\n${repeatNote}` : shown })) });
               screenshotParts.push(...chatToolImages(call.id, result.images));
             }

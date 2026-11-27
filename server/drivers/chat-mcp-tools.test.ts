@@ -1290,7 +1290,7 @@ describe("vm_exec on a turn with no Local VM or VPS desktop", () => {
     const ran = await session.execute("agents_vm_exec", direct, new AbortController().signal);
     expect(ran.ok).toBe(true);
     expect(ran.text).toContain("ran:ls ~/Downloads:120");
-    expect(ran.text).toMatch(/^No Local VM or VPS desktop in this turn, so this ran with shell_run_command/);
+    expect(ran.text).toMatch(/^exit code 0\n[^]*\(No Local VM or VPS desktop in this turn, so this ran with shell_run_command/);
     expect((await session.execute("agents_use_tool", searched, new AbortController().signal)).text).toContain("ran:git status:default");
     expect(calls(shell).map((call) => call.params?.name)).toEqual(["run_command", "run_command"]);
     expect(calls(agents)).toEqual([]);

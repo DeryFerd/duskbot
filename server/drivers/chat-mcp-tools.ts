@@ -819,7 +819,8 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
       const { name, args } = onShell(calledName, calledArgs);
       if (name !== calledName) {
         const result = await run(registered.get(name)!, args, callSignal);
-        return { ...result, text: `No Local VM or VPS desktop in this turn, so this ran with ${name} on this computer, in your working folder. Use ${name} for commands here.\n${result.text}` };
+        // after the result, so its first line stays the command's exit code
+        return { ...result, text: `${result.text}\n(No Local VM or VPS desktop in this turn, so this ran with ${name} on this computer, in your working folder. Use ${name} for commands here.)` };
       }
       const listedAs = directoryNames.get(name);
       if (!listedAs) return run(registered.get(name)!, args, callSignal);

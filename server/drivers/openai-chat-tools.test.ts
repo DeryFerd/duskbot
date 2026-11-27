@@ -90,6 +90,11 @@ createInterface({ input: process.stdin }).on("line", async (line) => {
       reply(request.id, { isError: true, content: [{ type: "text", text: "Synthetic tool failed before writing." }] });
       return;
     }
+    if (name === "exited" || name === "missing") {
+      const text = name === "exited" ? "exit code 1\\n(no output)" : "exit code 127\\n--- stderr ---\\nsh: rg: command not found";
+      reply(request.id, { isError: true, content: [{ type: "text", text }] });
+      return;
+    }
     if (name === "broken") {
       process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: request.id, error: { code: -32000, message: "fixture transport refusal" } }) + "\\n");
       return;
@@ -435,6 +440,22 @@ describe("bounded action announcement recovery", () => {
     // This fixture is on this machine, so the model is sent back twice to fix the call before the turn ends on it.
     expect(f.requests).toHaveLength(4);
     expect(f.effects()).toEqual([]);
+  });
+
+  it("ends ok after a command that ran and exited non-zero, and still fails on one that could not run", async () => {
+    const run = async (tool: string) => {
+      process.env.FIXTURE_EXTRA_TOOLS = "exited,missing";
+      try {
+        const f = await fixture((_body, response, round) => round === 1
+          ? sse(response, [chunk({ tool_calls: [toolCall(tool)] }, "tool_calls")])
+          : answer(response, "Here is the summary."));
+        await f.start({ approvalMode: "full" });
+        return await f.completed();
+      } finally { delete process.env.FIXTURE_EXTRA_TOOLS; }
+    };
+    // grep with no match, a test run being checked: the model read the exit code and answered
+    expect(await run("audit_exited")).toMatchObject({ ok: true });
+    expect(await run("audit_missing")).toMatchObject({ ok: false, stopReason: "tool_error" });
   });
 
   it("ends ok on a final reply that says which step failed, partly done on one that does not, and no other stop", async () => {
