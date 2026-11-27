@@ -56,9 +56,26 @@ const VIEWS: Array<{ name: string; query: string; ready: string; width?: number;
   { name: "frame-off-simple", query: "chrome=1&frame=off&mode=simple", ready: RAIL_READY },
   { name: "frame-off-icons", query: "chrome=1&frame=off&density=icons", ready: RAIL_READY },
   { name: "frame-off-windows", query: "chrome=1&frame=off&platform=win32", ready: RAIL_READY },
+  // a narrow window with the frame off: the bot list's button and the chat's header clear the traffic lights
+  { name: "frame-off-narrow", query: "frame=off&place=computer", ready: "document.querySelector('main')", width: 700 },
+  // a toast after Give feedback in a window narrow enough that the sidebar and the chat share it: over the chat only
+  { name: "frame-off-feedback-toast", query: "frame=off&place=computer", ready: "document.querySelector('[data-sidebar-bot-row], [data-sidebar-hero]')", width: 900, act: sendFeedback },
+  { name: "frame-off-narrow-simple", query: "frame=off&place=computer&mode=simple", ready: "document.querySelector('main')", width: 700 },
   { name: "frame-setting", query: "chrome=1&settings=frame", ready: `${RAIL_READY} && document.querySelector('[data-window-frame-switch]')` },
   { name: "frame-setting-windows", query: "chrome=1&settings=frame&platform=win32&framepending=1", ready: `${RAIL_READY} && document.querySelector('[data-window-frame-restart]')` },
 ];
+
+/** Opens Give feedback, writes a line and sends it, then waits for the toast that answers. */
+async function sendFeedback(page: HeadlessPage) {
+  await page.evaluate(`[...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Give feedback")?.click()`);
+  await page.until("document.querySelector('textarea[data-autofocus]')");
+  await page.evaluate("document.querySelector('textarea[data-autofocus]').focus()");
+  await page.send("Input.insertText", { text: "The window frame looks good." });
+  await page.evaluate("document.querySelector('[data-feedback-send]').click()");
+  await page.until("document.querySelector('.ui-toast')");
+  await delay(400);
+  await delay(300);
+}
 
 /** Where an element of the window's rail page is, in the window. */
 const railRect = (page: HeadlessPage, selector: string) =>
@@ -90,7 +107,8 @@ async function open(page: HeadlessPage, url: string, ready: string, width = WIDT
   await page.send("Emulation.setDeviceMetricsOverride", { width, height: HEIGHT, deviceScaleFactor: scale, mobile: false });
   await mouse(page, "mouseMoved", width - 4, HEIGHT - 4);
   await page.send("Page.navigate", { url });
-  await page.until(`(${ready}) && document.querySelector("[data-sidebar-bot-row], [data-sidebar-hero]")`);
+  // below 768px the sidebar is a drawer, closed
+  await page.until(width < 768 ? `(${ready})` : `(${ready}) && document.querySelector("[data-sidebar-bot-row], [data-sidebar-hero]")`);
   await delay(900);
 }
 

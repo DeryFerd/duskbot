@@ -133,7 +133,7 @@ function RoomHeadPill({ group, members, dragProps, noDragStyle }: {
   const expanded = state.settingsOpen || openRoom === group.id;
   const you = useGroupYou();
   return (
-    <div {...dragProps} className="px-5 pt-2.5 pb-2.5 max-md:pl-14 max-md:pr-3">
+    <div {...dragProps} className="px-5 pt-2.5 pb-2.5 max-md:pl-[var(--narrow-lead,3.5rem)] max-md:pr-3">
       <div data-roomhead-row className="flex min-w-0 items-center justify-center">
         <div data-roomhead-identity data-room-name className="flex min-w-0 max-w-full justify-center" style={noDragStyle}>
           <ChatHeadPill

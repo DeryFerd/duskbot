@@ -55,7 +55,7 @@ import { needsYouVersion, useTeamPeopleLoader } from "@/state/team-people";
 import { inboxVersion, useInboxLoader, useInboxPanel, useInboxReady, useInboxSupport } from "@/state/inbox";
 import { InboxColumn } from "@/components/inbox/InboxColumn";
 import { CloudHowTo } from "@/components/CloudHowTo";
-import { DesktopCapabilitiesProvider, useCaptionChrome, useDesktopCapabilities, windowFramed } from "@/components/DesktopCapabilities";
+import { DesktopCapabilitiesProvider, useCaptionChrome, narrowPastLights, useDesktopCapabilities, windowFramed } from "@/components/DesktopCapabilities";
 import { WindowCaptionButtons } from "@/components/WindowCaptionButtons";
 import { WindowFrameBar } from "@/components/WindowFrameBar";
 import { cn } from "@/lib/cn";
@@ -310,6 +310,7 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
   // a reload with the panel open keeps its column from the first frame, not only once the bots arrive
   const panelLoading = state.settingsOpen && !bot && !group && state.hydrated !== true && !remoteClient && !settingsOverlay;
   const framed = windowFramed(capabilities);
+  const pastLights = narrowPastLights(capabilities);
   const strips = <>
     <CloudAsleepStrip />
     <LiveConnectionStrip connected={state.connected} hydrated={state.hydrated === true} />
@@ -321,7 +322,7 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
     <EgressFallbackNotice />
   </>;
   return (
-    <div className={cn("flex h-full flex-col", framed && "bg-frame")}>
+    <div className={cn("flex h-full flex-col", framed && "bg-frame")} style={pastLights}>
       <WindowFrameBar />
       <BotLimitPopup />
       {!framed && strips}
@@ -332,7 +333,7 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
         aria-label={t("app.openBotList")}
         aria-expanded={drawerOpen}
         onClick={() => setDrawerOpen(true)}
-        className="absolute left-3 top-3 z-30 rounded-md p-1.5 text-ink-secondary hover:bg-raised hover:text-ink max-md:top-2.5 max-md:flex max-md:size-10 max-md:items-center max-md:justify-center max-md:rounded-full max-md:border max-md:border-transparent max-md:bg-card max-md:p-0 max-md:text-ink md:hidden"
+        className="absolute left-3 top-3 z-30 max-md:left-[var(--narrow-button-x,0.75rem)] rounded-md p-1.5 text-ink-secondary hover:bg-raised hover:text-ink max-md:top-2.5 max-md:flex max-md:size-10 max-md:items-center max-md:justify-center max-md:rounded-full max-md:border max-md:border-transparent max-md:bg-card max-md:p-0 max-md:text-ink md:hidden"
       >
         <Menu size={18} className="max-md:hidden" />
         <ChevronLeft size={20} aria-hidden="true" className="hidden max-md:block" />

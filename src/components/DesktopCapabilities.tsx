@@ -75,6 +75,13 @@ export function windowFramed(capabilities: Pick<DesktopCapabilities, "windowChro
   return windowFrameable(capabilities) && capabilities?.windowFrame !== false;
 }
 
+/** A Mac window with its frame off keeps its traffic lights over the page's corner (16-76px): in a narrow window the bot
+ * list's button goes past them and the chat and room headers make room for it (--narrow-button-x, --narrow-lead). */
+export function narrowPastLights(capabilities: Pick<DesktopCapabilities, "windowChrome" | "windowFrame"> | undefined): CSSProperties | undefined {
+  return capabilities?.windowChrome === "mac-inset" && !windowFramed(capabilities)
+    ? { "--narrow-button-x": `${MAC_TRAFFIC_LIGHT_CLEAR_X - 4}px`, "--narrow-lead": `${MAC_TRAFFIC_LIGHT_CLEAR_X + 44}px` } as CSSProperties : undefined;
+}
+
 /** A window with no title bar of its own: the page's headers drag it, framed or not. */
 export function captionChrome(windowChrome: DesktopCapabilities["windowChrome"] | undefined) {
   const windowsCaption = windowChrome === "win-caption";
