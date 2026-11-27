@@ -5896,6 +5896,7 @@
   "keys.section.helpers.purpose": "为机器人整理内容的小模型，以及头像图片。",
   "keys.section.connected": "已连接 {count} 项",
   "keys.purpose.openai": "OpenAI 的模型与实时通话",
+  "keys.purpose.openaiNoLive": "OpenAI 的模型、语音与语音转文字",
   "keys.purpose.anthropic": "Claude 模型，按 token 计费",
   "keys.purpose.xai": "Grok 模型与 xAI 图片",
   "keys.purpose.openrouter": "一把密钥即可使用数百个模型",

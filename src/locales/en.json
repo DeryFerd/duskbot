@@ -7396,6 +7396,7 @@
   "keys.section.helpers.purpose": "Small models that sort things for your bots, and avatar pictures.",
   "keys.section.connected": "{count} connected",
   "keys.purpose.openai": "OpenAI's models and live calls",
+  "keys.purpose.openaiNoLive": "OpenAI's models, voices and speech to text",
   "keys.purpose.anthropic": "Claude models, billed per token",
   "keys.purpose.xai": "Grok models and xAI pictures",
   "keys.purpose.openrouter": "Hundreds of models through one key",

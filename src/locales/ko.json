@@ -5729,6 +5729,7 @@
   "keys.section.helpers.purpose": "봇을 위해 분류해 주는 작은 모델과 아바타 사진이에요.",
   "keys.section.connected": "{count}개 연결됨",
   "keys.purpose.openai": "OpenAI 모델과 실시간 통화",
+  "keys.purpose.openaiNoLive": "OpenAI 모델, 음성, 음성 인식",
   "keys.purpose.anthropic": "Claude 모델, 토큰 단위 청구",
   "keys.purpose.xai": "Grok 모델과 xAI 이미지",
   "keys.purpose.openrouter": "키 하나로 수백 가지 모델",
