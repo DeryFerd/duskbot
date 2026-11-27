@@ -50,11 +50,7 @@ if (dl) {
       if (!ph) return;
       $('.dl-cta', dl).hidden = true; note.hidden = true; ph.hidden = false;
       if (/android/i.test(navigator.userAgent)) for (const x of $$('[data-dl-ios], [data-dl-android]', ph)) x.hidden = !x.hidden;
-      form.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const to = form.email.value.trim(), link = `${location.origin}/download`;
-        location.href = `mailto:${encodeURIComponent(to).replace('%40', '@')}?subject=${encodeURIComponent('dusk bot for your computer')}&body=${encodeURIComponent(`download dusk bot on your computer: ${link}`)}`;
-      });
+      sendToComputer(form, $('[data-dl-share]', ph));
       return;
     }
     const row = $(`#all [data-key="${key}"]`);
@@ -64,6 +60,54 @@ if (dl) {
     label.textContent = `download for ${$('.dl-name b', row).textContent}`;
     mark.replaceChildren($('.os', row).cloneNode(true));
     note.textContent = `${row.dataset.note} · ${version}`;
+  });
+}
+
+// on a phone the download is for later: the account service emails the link to the address typed, and when it can't, the
+// phone's mail app opens with it written out. the share sheet (or a copied link) sends it to a computer some other way
+function sendToComputer(form, share) {
+  const link = `${location.origin}/download`, subject = 'dusk bot for your computer';
+  const go = $('[data-dl-send]', form), say = $('#dl-mail-say'), words = $('[data-dl-say]', say), label = go.textContent;
+  const goal = (name, value) => window.dusk?.(name, { value });
+  const tell = (text, ok) => { words.textContent = text; say.classList.toggle('is-bad', !ok); say.hidden = false; };
+  const mailApp = (to) => {
+    goal('desktop_link_email', 'mail_app');
+    location.href = `mailto:${encodeURIComponent(to).replace('%40', '@')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(`download dusk bot on your computer: ${link}`)}`;
+  };
+  form.email.addEventListener('input', () => { if (say.classList.contains('is-bad')) say.hidden = true; });
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (go.disabled) return;
+    const to = form.email.value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) { tell("that doesn't look like an email address. check it for a typo.", false); form.email.focus(); return; }
+    go.disabled = true; go.textContent = 'sending';
+    let answer = null;
+    try {
+      const r = await fetch('/api/public/desktop-link', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: to, website: form.website.value }) });
+      answer = await r.json().catch(() => null);
+    } catch {}
+    go.disabled = false;
+    if (answer?.ok) {
+      goal('desktop_link_email', 'sent');
+      go.textContent = 'sent';
+      tell(`sent to ${to.toLowerCase()}. open it on your computer.`, true);
+      later(2400, () => { go.textContent = label; });
+      return;
+    }
+    go.textContent = label;
+    if (answer?.error === 'bad_email') { tell("that doesn't look like an email address. check it for a typo.", false); form.email.focus(); return; }
+    mailApp(to);
+  });
+  share?.addEventListener('click', async () => {
+    const text = share.dataset.label ||= share.textContent;
+    if (navigator.share) {
+      try { await navigator.share({ title: subject, text: 'download dusk bot on your computer', url: link }); goal('desktop_link_share', 'share'); } catch {}
+      return;
+    }
+    const ok = await copy(link);
+    if (ok) goal('desktop_link_share', 'copy');
+    share.textContent = ok ? 'link copied' : link;
+    later(2400, () => { share.textContent = text; });
   });
 }
 

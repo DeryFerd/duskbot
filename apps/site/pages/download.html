@@ -10,16 +10,19 @@
       </div>
       <p class="dl-note" data-dl-note>apple silicon · version {{version}}</p>
       <div class="dl-phone" data-dl-phone hidden>
-        <a class="btn dark" href="{{ios-link}}" data-dl-ios><span class="dl-os">{{os apple}}</span>get it on the app store</a>
-        <a class="btn dark" href="{{dl android}}" data-dl-android hidden download><span class="dl-os">{{os android mono}}</span>download for android</a>
+        <a class="btn dark" href="{{ios-link}}" data-dl-ios data-dusk-platform="ios"><span class="dl-os">{{os apple}}</span>get it on the app store</a>
+        <a class="btn dark" href="{{dl android}}" data-dl-android data-dusk-platform="android" hidden download><span class="dl-os">{{os android mono}}</span>download for android</a>
         <p class="dl-note"><span data-dl-ios>for iphone. </span>the full app runs on your computer, so send yourself the link for later.</p>
-        <form class="dl-mail" data-dl-mail>
+        <form class="dl-mail" id="dl-mail" data-dl-mail novalidate>
           <label class="vh" for="dl-mail-to">your email</label>
           <div class="dl-mail-row">
-            <input id="dl-mail-to" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" maxlength="254" required placeholder="your email">
-            <button class="btn light" type="submit">email me the link</button>
+            <input id="dl-mail-to" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" maxlength="254" required placeholder="your email" aria-describedby="dl-mail-say">
+            <button class="btn light" type="submit" data-dl-send>email me the link</button>
           </div>
+          <div class="vh" aria-hidden="true"><label for="dl-mail-site">leave this empty</label><input id="dl-mail-site" name="website" type="text" tabindex="-1" autocomplete="off"></div>
+          <p class="dl-say" id="dl-mail-say" role="status" hidden>{{i check dl-say-ok}}{{i triangle-alert dl-say-bad}}<span data-dl-say></span></p>
         </form>
+        <button class="dl-share" type="button" data-dl-share data-dusk-ignore>or share the link</button>
       </div>
 {{/released}}
 {{^released}}
