@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { t } from "@/lib/i18n";
 import { usePlaceLook } from "@/lib/place-look";
 import { useStore } from "@/state/store";
-import { PlaceMark } from "./PlacesRail";
+import { PlaceMark } from "./PlaceMark";
 
 type WorkspaceState = Awaited<ReturnType<NonNullable<NonNullable<typeof window.duskDesktop>["workspaces"]>["state"]>>;
 

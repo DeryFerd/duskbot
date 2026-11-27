@@ -3094,7 +3094,7 @@ const openOwnCloud = id => showHome({ place: { cloud: id, name: environmentsStat
 const placeInbox = createPlaceInboxWatch({ places: () => [{ id: LOCAL_ID, local: true }, ...cloudGone.keep(environmentsState.environments.filter(entry => entry.kind !== "local" && entry.origin))], activeId: () => environmentsState.activeId, local: localServerRequest, cloudFetch: cloudFetch, asleep: origin => homeWindow.asleepAt(origin), shown: () => !desktopRemoteAccess && serverReady && Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()), changed: () => railChanged() });
 /** A server of the person's own this app linked, which can move to dusk cloud from here now. */
 const serverCanMove = id => Boolean(!desktopRemoteAccess && vpsCloudMove && !vpsCloudMove.away() && vpsLink.servers().some(server => server.id === id));
-const railList = () => { ownHome?.refresh(); const home = homeWindow.cloudOrigin() ?? ownHome?.origin() ?? null; return railPlaces({ saved: environmentsState, waiting: placeInbox.waiting, home, localShown: Boolean(home) && localShown(), mine: myCloud(), state: desktopRemoteAccess ? null : cloudAccount?.state(), offers: entry => !desktopRemoteAccess && ownHome?.offers(entry) === true, cloudMoves: entry => serverCanMove(entry.id), accounts: accountRing.waiting() }); };
+const railList = () => { ownHome?.refresh(); return railPlaces({ saved: environmentsState, waiting: placeInbox.waiting, home: homeWindow.cloudOrigin() ?? ownHome?.origin() ?? null, mine: myCloud(), state: desktopRemoteAccess ? null : cloudAccount?.state(), offers: entry => !desktopRemoteAccess && ownHome?.offers(entry) === true, cloudMoves: entry => serverCanMove(entry.id), accounts: accountRing.waiting() }); };
 // The rail as the window's own chrome (chrome-rail.mjs): this app's page beside every place's page, the one that lists.
 const chromeRail = createChromeRail({ createView: options => new WebContentsView(options), preload: path.join(__dirname, "preload.cjs"), log: slog, prefs: () => desktopPrefs, changed: () => rail.changed(),
   args: () => [...desktopCompanionRendererArguments(rendererOrigin(), desktopRemoteAccess), "--dusk-current-local-origin=1", ...(accountApp() ? ["--dusk-company-desktop=1"] : []), ...(accountApp() || accountGateNeeded() ? ["--dusk-account-gate=1"] : []), `--dusk-app-version=${app.getVersion()}`],
@@ -3207,7 +3207,7 @@ function cleanLine() {
   return { kind: "clean", ...(accountRing.waiting().some(row => row.id === oneHome.journal()?.cloud?.account) ? { saved: true } : {}) };
 }
 let workspaceMenuOpen = false; function localShown() { return Boolean(mainWindow && !mainWindow.isDestroyed() && senderIsLocal({ sender: mainWindow.webContents })); }
-// with My Cloud home, this computer stays one tap away (menu and rail): once its bots moved it opens fresh, never the frozen copy that refuses every send
+// with My Cloud home, this computer stays one tap away in the Server menu: once its bots moved it opens fresh, never the frozen copy that refuses every send
 function openThisComputer() { return workspaceMenuAction(() => (oneHome.offer()?.stay(), cleanWorkspace.marker().frozen ? workspaceSwitch.around(() => homeWindow.openHere()) : activeEnvironment(environmentsState) ? switchEnvironment(LOCAL_ID) : workspaceSwitch.around(() => (homePlaces.remember(null), persistEnvironments(withActive(environmentsState, LOCAL_ID), "chosen"), navigateMainWindow(rendererOrigin()))))); }
 ipcMain.handle("workspaces:menu", workspaceOnly(async (_event, from) => {
   if (workspaceMenuOpen) return;

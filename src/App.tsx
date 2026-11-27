@@ -54,7 +54,6 @@ import { useTeamChats } from "@/state/team-chats";
 import { needsYouVersion, useTeamPeopleLoader } from "@/state/team-people";
 import { inboxVersion, useInboxLoader, useInboxPanel, useInboxReady, useInboxSupport } from "@/state/inbox";
 import { InboxColumn } from "@/components/inbox/InboxColumn";
-import { PlacesRail } from "@/components/PlacesRail";
 import { CloudHowTo } from "@/components/CloudHowTo";
 import { DesktopCapabilitiesProvider, useCaptionChrome, useDesktopCapabilities, windowFramed } from "@/components/DesktopCapabilities";
 import { WindowCaptionButtons } from "@/components/WindowCaptionButtons";
@@ -338,9 +337,8 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
         <Menu size={18} className="max-md:hidden" />
         <ChevronLeft size={20} aria-hidden="true" className="hidden max-md:block" />
       </button>
-      <PlacesRail />
-      {/* A framed window shows the app, its sidebar and the chat or page, as one square pane under the top bar and beside
-          the window's rail, running to the window's right and bottom edges. */}
+      {/* A framed window shows the app, its sidebar and the chat or page, as one square pane under the top bar, running to
+          the window's right and bottom edges. */}
       <div data-window-card={framed ? "" : undefined}
         className={framed ? "relative flex min-w-0 flex-1 flex-col overflow-hidden bg-app" : "contents"}>
       {framed && strips}

@@ -20,7 +20,6 @@ const notActions: Array<{ file: string; snippet: string; why: string }> = [
   { file: "components/ChatView.tsx", snippet: "-ml-2.5 w-0 shrink-0 text-ink-secondary", why: "decorative chevron in the Simple bot pill; the whole pill is the tap target" },
   { file: "components/SidebarArchived.tsx", snippet: "shrink-0 opacity-60 transition-opacity", why: "an archived bot's avatar, dimmed until hovered; the whole row is the tap target and already visible" },
   { file: "components/SidebarArchived.tsx", snippet: "pr-7 opacity-60 transition-opacity", why: "an archived bot's name and preview, dimmed until hovered; the whole row is the tap target and already visible" },
-  { file: "components/PlacesRail.tsx", snippet: "h-2 opacity-0 group-hover/tile:opacity-100", why: "decorative pill beside a rail tile on hover; the tile is the tap target and has its own focus ring" },
 ];
 
 function sourceFiles(dir: string): string[] {

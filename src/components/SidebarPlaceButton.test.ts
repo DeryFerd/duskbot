@@ -122,7 +122,7 @@ it("this computer shows the laptop, a cloud window the cloud", async () => {
   expect(button()!.getAttribute("data-place-kind")).toBe("cloud");
 });
 
-it("stays in the header beside the window's rail of places too: never hidden", async () => {
+it("stays in the header whatever main says about a rail: never hidden", async () => {
   rail = { places: [], add: { cloud: false, link: false, address: false }, beside: true };
   await mount();
   expect(host.querySelector("[data-switcher-beside-rail]")).toBeNull();

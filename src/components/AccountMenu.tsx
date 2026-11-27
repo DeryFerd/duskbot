@@ -8,7 +8,6 @@ import { cn } from "@/lib/cn";
 import type { CloudSignInPhase } from "@/lib/cloud-plan";
 import { t } from "@/lib/i18n";
 import { cloudPlanLabel } from "@/lib/cloud-plan";
-import { usePlaces } from "@/lib/places";
 import { AvatarPicker } from "./AvatarPicker";
 import { UserFace } from "./UserAvatar";
 import { CLOSE, Heading, PRIMARY, QUIET, SCREEN, SHEET } from "./cloud-buy/parts";
@@ -22,8 +21,6 @@ export interface AccountsAccess {
   view: AccountsView | null;
   /** Another page: main opens the sheet on the rail's page for it. */
   openSheet: (() => void) | null;
-  /** No rail stands beside this page, so its ＋ can't be where another account is added. */
-  noRail: boolean;
   signOut(id: string): void;
   add(email?: string): void;
   /** Opens the avatar picker for the account in use, where this app can save one. */
@@ -55,7 +52,6 @@ export function useAccounts(): AccountsAccess & { sheet: { email: string | null;
   const bridge = window.duskDesktop?.remoteClient?.active ? undefined : window.duskDesktop?.accounts;
   const remote = window.duskDesktop?.accountSheet;
   const own = window.duskDesktop?.app?.ownPage === true && Boolean(bridge);
-  const places = usePlaces();
   const [view, setView] = useState<AccountsView | null>(null);
   const [offered, setOffered] = useState(false);
   const [sheet, setSheet] = useState<{ email: string | null; note: string | null } | null>(null);
@@ -79,7 +75,6 @@ export function useAccounts(): AccountsAccess & { sheet: { email: string | null;
     view: own ? view : null,
     openSheet: !own && offered && remote ? () => { void remote.open().catch(() => {}); } : null,
     face: own ? null : face,
-    noRail: !places.beside && !places.places.length,
     signOut: (id) => setAsking(id),
     add: (email) => setSheet({ email: email ?? "", note: null }),
     ...(own && bridge?.setAvatar ? { editAvatar: () => setPicking(true) } : {}),
@@ -123,17 +118,16 @@ export function cloudRowLabel(view: AccountsView | null): string {
   return t(view && !view.active ? "accounts.signIn" : "settings.section.cloudAccount");
 }
 
-/** The You menu's last rows: who is signed in here and Sign out. The other accounts are on the rail, and so is Add another account,
- * in its ＋; with no rail beside this page (nothing to list but This computer, or the person hid it) it is here. On another page,
- * one Sign out row that opens the sheet, with no address. Signed out: nothing, as Settings has the sign-in. */
-export function accountMenuItems({ view, openSheet, noRail, signOut, add, editAvatar }: AccountsAccess): SidebarMenuItem[] {
+/** The You menu's last rows: who is signed in here, Add another account and Sign out. On another page, one Sign out row that
+ * opens the sheet, with no address. Signed out: nothing, as Settings has the sign-in. */
+export function accountMenuItems({ view, openSheet, signOut, add, editAvatar }: AccountsAccess): SidebarMenuItem[] {
   if (openSheet) return [{ key: "accounts-sheet", label: t("accounts.signOut"), icon: <LogOut size={18} />, onSelect: openSheet }];
   const active = view?.active;
   if (!active) return [];
   return [
     { key: "accounts-active", heading: t("accounts.heading"), label: active.email, title: active.email, checked: true, icon: <Check size={18} />, disabled: !active.signIn, ...(active.signIn ? { subtitle: t("accounts.needsSignIn") } : {}), onSelect: () => { if (active.signIn) add(active.email); } },
     ...(editAvatar && !active.signIn ? [{ key: "accounts-avatar", label: t("accounts.avatar.change"), icon: <UserFace account={active} size={18} />, onSelect: editAvatar }] : []),
-    ...(noRail ? [{ key: "accounts-add", label: t("accounts.add"), icon: <Plus size={18} />, onSelect: () => add() }] : []),
+    { key: "accounts-add", label: t("accounts.add"), icon: <Plus size={18} />, onSelect: () => add() },
     { key: "accounts-sign-out", label: t("accounts.signOut"), icon: <LogOut size={18} />, onSelect: () => signOut(active.id) },
   ];
 }

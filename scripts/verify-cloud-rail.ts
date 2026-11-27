@@ -3,8 +3,9 @@
 // Run: node --experimental-strip-types scripts/verify-cloud-rail.ts [--shots <dir> [--only <view,view>] [--size <width>x<height>]]
 // With --shots it photographs each view in a light and a dark skin with a headless Chrome in a throwaway profile
 // (DUSK_CDP_CHROME, else the installed Google Chrome) at twice the window's size (1280x800 unless --size says) and
-// exits; without, it prints the preview's address and waits. The desktop window shows no rail (electron/main.mjs); the
-// rail-hidden and rail-chrome-hidden views are the window as it is now, the others the rail's page as it would draw.
+// exits; without, it prints the preview's address and waits. The desktop window shows no rail of places at all, neither
+// main's view (electron/main.mjs) nor one drawn on the page: the rail views are the window with its places listed, and
+// must show none.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -22,16 +23,15 @@ const sizeAt = process.argv.indexOf("--size");
 const size = /^(\d{3,4})x(\d{3,4})$/.exec(sizeAt === -1 ? "1280x800" : process.argv[sizeAt + 1] ?? "");
 if (!size) throw new Error("--size takes the window's width and height, such as 1338x870");
 const [WIDTH, HEIGHT] = [Number(size[1]), Number(size[2])];
-const RAIL = "[data-places-rail]";
 const TOP_ROW = "[data-sidebar-top-row]";
 /** Each view: its query, what must be on screen before the picture, and the window's height. */
 const VIEWS: Array<{ name: string; query: string; ready: string; height?: number; banner?: true }> = [
-  { name: "rail", query: "", ready: RAIL },
-  { name: "rail-simple", query: "mode=simple", ready: RAIL },
+  { name: "rail", query: "", ready: TOP_ROW },
+  { name: "rail-simple", query: "mode=simple", ready: TOP_ROW },
   { name: "rail-hidden", query: "hidden=1", ready: TOP_ROW },
   { name: "rail-hidden-simple", query: "mode=simple&hidden=1", ready: TOP_ROW },
-  { name: "rail-icons", query: "density=icons", ready: RAIL },
-  { name: "rail-icons-simple", query: "mode=simple&density=icons", ready: RAIL },
+  { name: "rail-icons", query: "density=icons", ready: TOP_ROW },
+  { name: "rail-icons-simple", query: "mode=simple&density=icons", ready: TOP_ROW },
   { name: "rail-chrome", query: "chrome=1", ready: TOP_ROW },
   { name: "rail-chrome-simple", query: "mode=simple&chrome=1", ready: TOP_ROW },
   { name: "rail-chrome-hidden", query: "chrome=1&hidden=1", ready: TOP_ROW },
@@ -39,21 +39,17 @@ const VIEWS: Array<{ name: string; query: string; ready: string; height?: number
   { name: "place-button-simple", query: "place=computer&mode=simple&frame=off", ready: "[data-sidebar-place] button" },
   { name: "place-button", query: "place=computer&frame=off", ready: "[data-sidebar-place] button" },
   { name: "general-settings-simple", query: "mode=simple&settings=general", ready: "[data-settings-block='appearance']" },
-  { name: "rail-many", query: "places=many&more=1", ready: "[data-rail-more] li" },
   { name: "add-sheet", query: "sheet=add", ready: "[data-place-add='choose']" },
   { name: "add-own-server", query: "sheet=server", ready: "[data-place-add='own-server']" },
   { name: "add-buy-cloud", query: "sheet=cloud", ready: "[data-plan-buy]", height: 900 },
   { name: "add-name-colour", query: "sheet=name", ready: "[data-cloud-add='extra-name']" },
   { name: "add-setting-up", query: "sheet=cloud&adding=setting_up", ready: "[data-cloud-add='extra-starting']" },
-  { name: "rail-servers", query: "places=servers&look=teal", ready: "[data-rail-server]" },
   { name: "connect-server", query: "places=servers&sheet=connect", ready: "[data-place-add='connect-server']" },
   { name: "look-settings", query: "look=teal&settings=look", ready: "[data-place-look='admin']" },
   { name: "look-settings-simple", query: "look=teal&mode=simple&settings=look", ready: "[data-place-look='admin']" },
   { name: "look-member", query: "member=1&settings=look", ready: "[data-place-look='locked']" },
   { name: "look-member-simple", query: "member=1&mode=simple&settings=look", ready: "[data-place-look='locked']" },
-  { name: "rail-colour", query: "places=servers&look=teal&menu=vps", ready: "[data-rail-menu='vps']" },
-  { name: "rail-colour-member", query: "member=1&menu=acme", ready: "[data-rail-menu-note]" },
-  // This computer's own page on a desktop with no Cloud: plain, in a colour, its Settings, and the rail beside it.
+  // This computer's own page on a desktop with no Cloud: plain, in a colour and its Settings.
   { name: "computer", query: "place=computer", ready: "[data-sidebar-top-row]" },
   { name: "computer-simple", query: "place=computer&mode=simple", ready: "[data-sidebar-top-row]" },
   { name: "computer-colour", query: "place=computer&look=teal", ready: "[data-place-tint]" },
@@ -62,8 +58,6 @@ const VIEWS: Array<{ name: string; query: string; ready: string; height?: number
   { name: "computer-settings-simple", query: "place=computer&mode=simple&settings=look", ready: "[data-place-picture]" },
   { name: "computer-colour-settings", query: "place=computer&look=teal&settings=look", ready: "[data-place-look='local'] [aria-checked='true']" },
   { name: "computer-colour-settings-simple", query: "place=computer&look=teal&mode=simple&settings=look", ready: "[data-place-look='local'] [aria-checked='true']" },
-  { name: "computer-rail", query: "place=computer&look=teal&rail=1", ready: "[data-rail-place='local']" },
-  { name: "computer-rail-colour", query: "place=computer&look=teal&rail=1&menu=local", ready: "[data-rail-menu='local']" },
   // The workspace's banner picture, kept on the fixture server first (each view after it shows it).
   { name: "banner", query: "", ready: "[data-place-banner] img", banner: true },
   { name: "banner-simple", query: "mode=simple", ready: "[data-place-banner] img", banner: true },

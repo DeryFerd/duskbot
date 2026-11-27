@@ -1,13 +1,16 @@
 # The rail of Clouds and its ＋
 
-The window shows no rail of places: `wanted` is off in `electron/main.mjs`, so
-the page always has the whole window and there is no button to hide or show
-it. Switching between places is the place button in the sidebar's top row (the
-native Server menu) and the profile menu's Switch to…, which list every saved
-place and add a Cloud or a server of the person's own. The rail's page still
-opens, held over the window, for the accounts sheet. The rest of this page
-describes the rail as it worked when shown, kept for that sheet and for
-turning it back on.
+The window shows no rail of places, on any platform and for any account: `wanted`
+is off in `electron/main.mjs`, so the page always has the whole window, and no
+page draws one of its own either (the app has no rail component; even an older
+app that lists places to the page gets none drawn, and the sidebar's switcher
+stays). Switching between places is the place button in the sidebar's top row
+(the native Server menu, This computer first once My Cloud is home), ⌘K's
+switch place, and the profile menu's Switch to…, which list every saved place
+and add a Cloud or a server of the person's own. Add another account is in the
+You menu. The rail's page still opens, held over the window, for the accounts
+sheet. The rest of this page describes the rail as it worked when shown, kept
+for that sheet; it is not to be turned back on without the owner.
 
 The rail is the window's own chrome, not a page's: this app's page `/rail` in a
 view of its own at the left edge (electron/chrome-rail.mjs), beside whichever
