@@ -164,6 +164,21 @@ export function open(base: string, channel: string, token: string, key: Uint8Arr
     })().finally(() => { locating = null; });
     return locating;
   };
+  /** a node that is not the server's home refuses its channel's traffic with 409 and where it lives (code "moved"): the
+   * phone goes there and sends again, so a first request is not lost to the node the pairing named. Only the node it was
+   * given or one that node listed is followed. `used`: the route that was refused; another call may have moved already. */
+  const follow = (text: string, used: string): boolean => {
+    if (route !== used) return true;
+    let body: { code?: unknown; url?: unknown; nodes?: unknown };
+    try { body = JSON.parse(text); } catch { return false; }
+    if (body?.code !== "moved") return false;
+    const listed = (Array.isArray(body.nodes) ? body.nodes : []).map((item) => originOf((item as { url?: unknown } | null)?.url)).filter((url): url is string => !!url).slice(0, 16);
+    const url = originOf(body.url);
+    if (!url || url === node || (url !== root.origin && !listed.includes(url) && !known.includes(url))) return false;
+    if (listed.length) known = listed;
+    node = url; route = `${node}/v1/channels/${channel}`;
+    return true;
+  };
   /** the relay answers 404 for a channel it does not have, whatever the token; a node it moved to may not be the one asked */
   const refused = (status: number) => {
     void relocate();
@@ -178,14 +193,21 @@ export function open(base: string, channel: string, token: string, key: Uint8Arr
     const next = on.posts.then(async () => {
       if (on.abort.signal.aborted) throw new Error("relay closed");
       const sealed = await Promise.all(frames.map((frame) => sealFrame(key, channel, "to-vps", frame)));
-      const response = await postFetch(`${route}/to-vps`, {
-        method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ frames: sealed, epoch: on.epoch, seq: on.seq++ }), credentials: "omit", redirect: "error",
-        signal: AbortSignal.any([on.abort.signal, AbortSignal.timeout(15_000)]),
-      });
-      await response.text();
-      noteRelayDate(response.headers.get("date"));
-      if (!response.ok) throw refused(response.status);
+      const body = JSON.stringify({ frames: sealed, epoch: on.epoch, seq: on.seq++ });
+      const send = async () => {
+        const used = route;
+        const response = await postFetch(`${used}/to-vps`, {
+          method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body, credentials: "omit", redirect: "error",
+          signal: AbortSignal.any([on.abort.signal, AbortSignal.timeout(15_000)]),
+        });
+        return { response, used, text: await response.text() };
+      };
+      let sent = await send();
+      // dropping the link on a move would fail this very request, so it is kept: the post goes again to the node it lives on
+      if (sent.response.status === 409 && follow(sent.text, sent.used)) sent = await send();
+      noteRelayDate(sent.response.headers.get("date"));
+      if (!sent.response.ok) throw refused(sent.response.status);
     });
     on.posts = next.catch((error) => { if (!(error instanceof RelayGoneError) && !on.abort.signal.aborted) void relocate(); drop(on, error instanceof RelayGoneError ? error : undefined); });
     return next;
@@ -198,10 +220,15 @@ export function open(base: string, channel: string, token: string, key: Uint8Arr
         // a node that beats (x-link-beat) and then says nothing for two beats and a bit is on a dead connection (a network
         // switch leaves it silent, not closed): the read ends and the next one dials afresh
         const quiet = new AbortController();
-        const response = await streamFetch(`${route}/to-app?wait=25&stream=1`, {
+        const used = route;
+        const response = await streamFetch(`${used}/to-app?wait=25&stream=1`, {
           headers: { Authorization: `Bearer ${token}` }, credentials: "omit", redirect: "error",
           signal: AbortSignal.any([on.abort.signal, quiet.signal, AbortSignal.timeout(40_000)]),
         });
+        if (response.status === 409) {
+          if (follow(await response.text().catch(() => ""), used)) continue;
+          throw refused(409);
+        }
         if (!response.ok) { await response.body?.cancel(); throw refused(response.status); }
         noteRelayDate(response.headers.get("date"));
         const beatMs = Number(response.headers.get("x-link-beat")) * 1000;
