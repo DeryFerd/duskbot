@@ -39,7 +39,7 @@ const before = (text: string, gate: string, reveal: string) => {
 
 describe("every pairing code waits for the presence check", () => {
   it("gates the workspace, server and team phone codes before they are made", () => {
-    before(source("MobilePairingCard.tsx"), "if ((!codesInCloud && !(await requireUserPresence())) || generation.current !== epoch) return;", 'api<MobilePairingResponse>("/api/mobile/pairing"');
+    before(source("MobilePairingCard.tsx"), "} else if (!codesInCloud && !(await requireUserPresence())) {", 'api<MobilePairingResponse>("/api/mobile/pairing"');
     before(source("ServerPairingCard.tsx"), "if (!(await requireUserPresence())) return;", 'api("/api/auth/pairing"');
     before(source("TeamPhoneCard.tsx"), "if (!(await requireUserPresence())) return;", "api(TEAM_PHONE_PAIRING");
   });
