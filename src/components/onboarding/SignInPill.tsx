@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Check, ExternalLink, LoaderCircle } from "../../icons";
-import { openExternalLink } from "@/lib/app-links";
+import { externalOpener, openExternalLink } from "@/lib/app-links";
 import { cloudAsleep, cloudWaking } from "@/lib/cloud-power";
 import { useCopyFeedback } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
@@ -27,6 +27,16 @@ export function siteName(driverKind: string): string {
   }
 }
 
+/** Opens a sign-in page; false when it did not open. A plain browser tab blocks a page opened after the sign-in's start
+ * answered (no click to carry it), and only a window.open without noopener says so. */
+export async function openSignInPage(link: string): Promise<boolean> {
+  if (externalOpener()) return openExternalLink(link).then(() => true, () => false);
+  const page = window.open(link, "_blank");
+  if (!page) return false;
+  try { page.opener = null; } catch {}
+  return true;
+}
+
 /** One connect at a time for a whole grid: a new one cancels the running one, and leaving the grid cancels it too. */
 export function useConnectFlow() {
   const { dispatch, refreshModels } = useStore();
@@ -37,7 +47,7 @@ export function useConnectFlow() {
       if (Array.isArray(instances)) dispatch({ type: "instances", instances });
       return (instances ?? []) as unknown as ConnectInstance[];
     },
-    open: (link) => openExternalLink(link).then(() => true, () => false),
+    open: openSignInPage,
     ...(window.duskDesktop?.authRelay ? { relay: window.duskDesktop.authRelay } : {}),
     trail: (ev, fields) => trail(ev, fields),
     waking: () => cloudAsleep() || cloudWaking(),
@@ -157,8 +167,8 @@ const linkText = (link: string, withPath: boolean) => {
 /** The one sign-in step every machine shows: where to finish (a blue link), the device code when there is one, one
  * button that copies the code (or the link) and opens the site, and a quiet waiting line. A browser that opened by
  * itself and needs no code shows the same step, so a cloud and this computer only differ by the code. */
-function CodeStep({ code, site, link, onOpen, cancel, guide, seconds, onTrouble }: { code: string | null; site: string; link: string | null; onOpen: (() => void) | null; cancel: React.ReactNode;
-  guide: string; seconds: number; onTrouble?: () => void }) {
+function CodeStep({ code, site, link, onOpen, cancel, guide, seconds, onTrouble, opened = true }: { code: string | null; site: string; link: string | null; onOpen: (() => void) | null; cancel: React.ReactNode;
+  guide: string; seconds: number; onTrouble?: () => void; opened?: boolean }) {
   const { state, copy } = useCopyFeedback(code ?? "");
   const copied = state === "copied";
   const waiting = <div role="status" aria-live="polite" className="flex items-center gap-2 text-[13px] leading-[18px] text-ink-secondary">
@@ -170,7 +180,9 @@ function CodeStep({ code, site, link, onOpen, cancel, guide, seconds, onTrouble 
     {waiting}
     <WaitHelp guide={guide} seconds={seconds} />
     <div className="flex items-center gap-1.5">
-      {link && onOpen && <button type="button" onClick={onOpen} className={SECONDARY}><ExternalLink size={13} aria-hidden="true" />{t("connect.openAgain")}</button>}
+      {link && onOpen && (opened
+        ? <button type="button" onClick={onOpen} className={SECONDARY}><ExternalLink size={13} aria-hidden="true" />{t("connect.openAgain")}</button>
+        : <button type="button" onClick={onOpen} data-connect-open="" className="ui-button ui-button-pill ui-button-primary min-h-9 gap-1.5 px-4 text-[14px]"><ExternalLink size={14} aria-hidden="true" />{t("connect.openSite", { site })}</button>)}
       {cancel}
     </div>
     <OtherWay seconds={seconds} onTrouble={onTrouble} />
@@ -248,18 +260,21 @@ export function ConnectPanel({ flow, name, driverKind, onTrouble }: {
       if (state.kind === "paste" || state.kind === "redirect") {
         body = <>
           <PasteSlot name={name} onSubmit={flow.submit} address={state.kind === "redirect"} problem={state.problem ?? null}
-            guide={t(state.kind === "redirect" ? "connect.guide.redirect" : "connect.guide.paste", { site })} />
+            guide={t(state.kind === "redirect" ? "connect.guide.redirect" : state.opened || !state.link ? "connect.guide.paste" : "connect.guide.pasteNotOpened", { site })} />
           <WaitHelp guide="" seconds={seconds} />
           <div className="flex items-center gap-1">
-            {state.link && <button type="button" onClick={() => void flow.openAgain()} className={QUIET}>{t("connect.openAgain")}</button>}
+            {state.link && (state.opened || state.kind === "redirect"
+              ? <button type="button" onClick={() => void flow.openAgain()} className={QUIET}>{t("connect.openAgain")}</button>
+              : <button type="button" onClick={() => void flow.openAgain()} data-connect-open="" className={SECONDARY}><ExternalLink size={13} aria-hidden="true" />{t("connect.openSite", { site })}</button>)}
             {cancel}
           </div>
           <OtherWay seconds={seconds} onTrouble={onTrouble} />
         </>;
       } else {
-        body = <CodeStep code={state.code} site={site} link={state.link} onOpen={state.link ? () => void flow.openAgain() : null} cancel={cancel}
+        const shut = !state.code && !state.opened && Boolean(state.link);
+        body = <CodeStep code={state.code} site={site} link={state.link} onOpen={state.link ? () => void flow.openAgain() : null} cancel={cancel} opened={!shut}
           // a shown code already says where to enter it above, so it gets no second line
-          guide={state.code ? "" : t("connect.guide.browser", { site })} seconds={seconds} onTrouble={onTrouble} />;
+          guide={state.code ? "" : t(shut ? "connect.guide.browserNotOpened" : "connect.guide.browser", { site })} seconds={seconds} onTrouble={onTrouble} />;
       }
       break;
     case "failed": {
