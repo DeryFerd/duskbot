@@ -3457,6 +3457,15 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
       await expect(instance.snapshot()).resolves.toMatchObject({ authenticated: false });
     });
 
+    it("runs a turn once more after a bare 401 on a login that did not change, and a provider's bad minute signs nobody out", async () => {
+      vi.stubEnv("FAKE_CODEX_RETRY_SCALE", "0.001");
+      await create({ mode: "auth-recovery-once", environment: { ...signedIn(), FAKE_CODEX_STATE: join(scratch, "launches") } });
+      const { done, errors } = await runTurn("t-401-once");
+      expect(done).toMatchObject({ ok: true });
+      expect(errors.filter((event) => (event as { setup?: boolean }).setup)).toEqual([]);
+      await expect(instance.snapshot()).resolves.toMatchObject({ authenticated: true });
+    });
+
     it("leaves the ChatGPT sign-in alone for a custom provider's 401, and its success clears no refusal", async () => {
       await create({ mode: "key-401", environment: signedIn() });
       const { errors } = await runTurn("t-provider-401", "badprov::badmodel");

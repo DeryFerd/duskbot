@@ -5,7 +5,7 @@
 //     mcp-app-approval | mcp-form | permissions-approval | question | multi-question | mixed-question |
 //     empty-question | malformed-question | config-profile | config-profile-unsupported | config-read-error |
 //     image | logged-in-stdout | logged-out | unauthorized | late-request | retry-then-complete | signin-refused |
-//     auth-recovery | mcp-401 | legacy-error | key-401 | recovered-403 | recovered-401 | recovering-403 | usage-limit
+//     auth-recovery | auth-recovery-once | mcp-401 | legacy-error | key-401 | recovered-403 | recovered-401 | recovering-403 | usage-limit
 //     | async-question (an agentMessage with delivery async and questions, as codex 0.160 sends request_user_input_async)
 //   FAKE_CODEX_MISSING_BEARER  the first N launches fail their turn as codex-cli 0.160.1 holding no login does (count in FAKE_CODEX_STATE)
 //   FAKE_CODEX_LAUNCH_CRASHES  the first N launches die pre-ack at turn/start, transient stderr, exit 1 (count in FAKE_CODEX_STATE)
@@ -751,6 +751,17 @@ process.stdin.on("data", (chunk) => {
           out({ jsonrpc: "2.0", id: msg.id, result: { turn: { id: nativeTurnId } } });
           notify("modelProvider/authRecoveryStarted", { provider: "openai", message: "Refreshing sign-in" });
           notify("turn/completed", { turn: { status: "failed", error: { message: "unexpected status 401 Unauthorized", codexErrorInfo: null } } });
+          break;
+        }
+        if (mode === "auth-recovery-once" && process.env.FAKE_CODEX_STATE) {
+          let launched = 0;
+          try { launched = Number(readFileSync(process.env.FAKE_CODEX_STATE, "utf8")) || 0; } catch {}
+          writeFileSync(process.env.FAKE_CODEX_STATE, String(launched + 1));
+          out({ jsonrpc: "2.0", id: msg.id, result: { turn: { id: nativeTurnId } } });
+          if (launched === 0) {
+            notify("modelProvider/authRecoveryStarted", { provider: "openai", message: "Refreshing sign-in" });
+            notify("turn/completed", { turn: { status: "failed", error: { message: "unexpected status 401 Unauthorized", codexErrorInfo: null } } });
+          } else finishTurn();
           break;
         }
         if (mode === "key-401") {

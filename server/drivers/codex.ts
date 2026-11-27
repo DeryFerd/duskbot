@@ -58,8 +58,8 @@ import { cliExitCode, rpcFailureCode } from "../../shared/usage-signals.ts";
 import { CodexDeviceAuthController } from "./codex-device-auth.ts";
 import { codexAccountEmail, codexHome } from "./codex-identity.ts";
 import { boundedLabel, containsControlCharacter, mcpAppApprovalForm, plainRecord } from "./codex-app-approval.ts";
-import { archivedNativeCodexThread, CODEX_MISSING_CREDENTIALS, CODEX_SIGN_IN_EXPIRED, codexLimitFacts, codexNotSignedIn, CodexRpcError, codexSignInExpired, codexAccountRefusedModel, codexSignInRefused, codexErrorCode, codexUserError, missingNativeCodexThread, type CodexRoute } from "./codex-errors.ts";
-import { codexLoginCheck, codexLoginStatus, codexSignInIdentity, storedCodexLogin } from "./codex-login.ts";
+import { archivedNativeCodexThread, CODEX_MISSING_CREDENTIALS, CODEX_SIGN_IN_EXPIRED, codexLimitFacts, codexNotSignedIn, CodexRpcError, codexSignInExpired, codexAccountRefusedModel, codexSignInDead, codexSignInRefused, codexErrorCode, codexUserError, missingNativeCodexThread, type CodexRoute } from "./codex-errors.ts";
+import { codexLoginCheck, codexLoginStatus, enterCodexRenewal, codexSignInIdentity, storedCodexLogin } from "./codex-login.ts";
 import { keyRejected, noteKeyAccepted, noteKeyRejected } from "../key-rejections.ts";
 import { classifyResumeFailure, mayReplay, rebuiltSessionNotice, recoveryPromptFor } from "../resume-recovery.ts";
 import { codexImageInputs, withoutInlineImages } from "./codex-images.ts";
@@ -695,11 +695,16 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
         if (typeof turn.resumeCursor === "string") await appServers.released(turn.resumeCursor);
         const releaseSlot = reused ? () => {} : tryCodexLaunchSlot() ?? await waitForLaunchSlot(attempt);
         if (!releaseSlot) return;
-        const server = reused ?? appServers.adopt(spawnKey, spawnHoldingSlot(releaseSlot, () => spawnCli(...codexLaunch(config.cli, appServerArgs), {
-          cwd: turn.cwd ?? homedir(),
-          env,
-          stdio: ["pipe", "pipe", "pipe"],
-        }, "bot")));
+        const renewal = reused || !chatgptTurn ? null : await enterCodexRenewal(env);
+        let server: NonNullable<typeof reused>;
+        try {
+          server = reused ?? appServers.adopt(spawnKey, spawnHoldingSlot(releaseSlot, () => spawnCli(...codexLaunch(config.cli, appServerArgs), {
+            cwd: turn.cwd ?? homedir(),
+            env,
+            stdio: ["pipe", "pipe", "pipe"],
+          }, "bot")));
+        } catch (error) { renewal?.release(); throw error; }
+        renewal?.track(server.child);
         if (!warm) server.retiring = true;
         const child = server.child;
 
@@ -1065,7 +1070,7 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
         const missing = CODEX_MISSING_CREDENTIALS.test(raw);
         if (!chatgptTurn || loginRaceRetried || state.streamed || attempt >= RETRY_MAX_ATTEMPTS - 1 || !(refused || missing)) return false;
         const mark = loginMark();
-        if (!mark || (!missing && mark[1] === launchedLogin)) return false;
+        if (!mark || (!missing && mark[1] === launchedLogin && codexSignInDead(raw))) return false;
         loginRaceRetried = true;
         void relaunch("auth", raw, "auth_required").catch(() => {});
         return true;
