@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { CARRIED_DRIVERS } from "./ai-signins-carry.mjs";
+import { cancelSurvey, retentionStep, SURVEY_WAIT_MS } from "./cloud-cancel.mjs";
 import { createManagedDesktopStore, retryDelay, unreadableRecord } from "./managed-desktop.mjs";
 import { CLOUD_MACHINE_CONNECTABLE, cloudUnreachableText, parseCloudOffer, parseCloudPurchase, parseCloudSummary, parseCloudTeams, parseCloudRoom, parseCloudTrial, parseCloudUsage, parsePairingGrant, parsePublicOffer, withoutTrial } from "./cloud-home.mjs";
 import { CLOUD_ID, CLOUD_SWATCHES, cleanCloudListName, ORGANIZATION_BLOCKS, otherOwnClouds, ownCloud, parseCloudList, parseCloudPayment, parseCloudRenewal, parseOrganizations, releaseVersion } from "./cloud-list.mjs";
@@ -45,35 +46,7 @@ export const UPGRADE_SOURCES = Object.freeze(["app_usage", "app_settings", "app_
 const UPGRADE_TIERS = Object.freeze(["starter", "personal", "pro", "max"]);
 const UPGRADE_REFUSALS = Object.freeze(["payment_failed", "not_subscribed", "already_on_plan", "plan_change_unavailable", "confirmation_required", "price_changed", "rate_limited"]);
 const CONFIRMATION = /^[A-Za-z0-9_-]{43}$/;
-/** The cancel sheet's reasons, as the Admin takes them (shared/billing-api.ts CANCEL_ANSWERS); an older app's still count. */
-export const CLOUD_CANCEL_ANSWERS = Object.freeze(["feature", "price", "setup", "broken", "later", "other", "unused", "switching", "skip"]);
-/** The one offer the cancel sheet showed for the reason (shared/billing-api.ts RETENTION_OFFERS). */
-export const CLOUD_RETENTION_OFFERS = Object.freeze(["discount", "downgrade", "help", "note", "losses", "none"]);
-const RETENTION_STEPS = Object.freeze(["reason", "help", "confirm"]);
-const RETENTION_OUTCOMES = Object.freeze(["shown", "discount", "downgrade", "helped", "kept", "cancelled"]);
-const SURVEY_TEXT_MAX = 2_000, SURVEY_WAIT_MS = 8_000;
-const surveyBox = value => typeof value === "string" ? value.trim() : "";
-/**
- * The cancel sheet's survey as main sends it: one reason, the offer it showed, and each box trimmed, at most 2,000
- * characters. Words without a reason are kept as `other`; null when nothing was said, and for anything that isn't a
- * survey (it is never sent then).
- */
-export function cancelSurvey(input) {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
-  const answer = CLOUD_CANCEL_ANSWERS.includes(input.answer) ? input.answer : null, expected = surveyBox(input.expected), improve = surveyBox(input.improve);
-  const offer = CLOUD_RETENTION_OFFERS.includes(input.offer) ? input.offer : null;
-  if ((input.answer !== undefined && input.answer !== null && !answer) || expected.length > SURVEY_TEXT_MAX || improve.length > SURVEY_TEXT_MAX) return null;
-  if (!answer && !expected && !improve) return null;
-  return { answer: answer ?? "other", ...(expected ? { expected } : {}), ...(improve ? { improve } : {}), ...(offer ? { offer } : {}) };
-}
-/** One step of the cancel sheet as main sends it (shared/billing-api.ts RetentionInput), or null for anything else. */
-export function retentionStep(input) {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
-  const note = surveyBox(input.note);
-  if (!CLOUD_CANCEL_ANSWERS.includes(input.reason) || !RETENTION_STEPS.includes(input.step) || !RETENTION_OUTCOMES.includes(input.outcome)
-    || (input.offer !== undefined && !CLOUD_RETENTION_OFFERS.includes(input.offer)) || note.length > SURVEY_TEXT_MAX) return null;
-  return { reason: input.reason, step: input.step, outcome: input.outcome, ...(input.offer ? { offer: input.offer } : {}), ...(note ? { note } : {}) };
-}
+export { CLOUD_CANCEL_ANSWERS, CLOUD_RETENTION_OFFERS, cancelSurvey, retentionStep } from "./cloud-cancel.mjs";
 /** Why the Admin won't open another Cloud's checkout now (POST clouds, 409 `addBlocked`; contract v1). */
 export const ADD_BLOCKS = Object.freeze(["cap", "checkout_open", "rate", "signups_closed"]);
 const ADD_INTERVALS = Object.freeze(["month", "year"]);
