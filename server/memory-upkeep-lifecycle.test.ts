@@ -61,6 +61,28 @@ describe("scheduled memory upkeep", () => {
     expect(memory()).toContain("Plays the cello on Sundays");
   });
 
+  it("goes on with a capture that gave way to a new message as soon as that turn ends, without waiting for a tick", async () => {
+    let busy = false;
+    const generateText = vi.fn((prompt: string, options?: { signal?: AbortSignal }) => prompt.startsWith(CAPTURE_MARKER) && generateText.mock.calls.length === 1
+      ? new Promise<string>((_, reject) => options?.signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true }))
+      : Promise.resolve(prompt.startsWith(CAPTURE_MARKER) ? JSON.stringify([{ text: "Plays the cello on Sundays", kind: "fact", evidence: "I play the cello every Sunday", confidence: 0.9 }]) : "{}"));
+    loop = createMemoryUpkeep({
+      bots: () => [BOT], bot: () => BOT, engine: () => ({ generateText }), busy: () => busy,
+      addToAboutMe: () => 0, sourceLabel: () => "chat", quietMs: () => 60_000, tidyHour: () => 3,
+    });
+    const first = loop.capture({ botId: BOT.id, threadId: "t-resume", turns: [{ person: "I play the cello every Sunday", bot: "Nice!" }] });
+    await vi.advanceTimersByTimeAsync(0);
+    busy = true;
+    loop.yieldTo(BOT.id);
+    await first;
+    busy = false;
+    loop.noteTurn(BOT.id, "t-other", { person: "thanks", bot: "Any time." });
+    await vi.advanceTimersByTimeAsync(0);
+    await loop.idle();
+    expect(generateText.mock.calls.filter(([prompt]) => prompt.startsWith(CAPTURE_MARKER))).toHaveLength(2);
+    expect(memory()).toContain("Plays the cello on Sundays");
+  });
+
   it("keeps a moved desktop's memory unchanged when frozen before the first tick", async () => {
     const freeze = createMoveFreeze({ dataDir: DATA_DIR });
     freeze.hold(() => loop.start(), () => loop.stop());
