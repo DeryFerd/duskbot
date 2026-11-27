@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ModelSelection, ProviderSnapshot } from "./contracts.ts";
-import { selectDefaultModelSelection, type SelectableInstance } from "./default-model-selection.ts";
+import { leavesFreeBackup, selectDefaultModelSelection, type SelectableInstance } from "./default-model-selection.ts";
 import type { CheckableEngine } from "./engine-check.ts";
 import { backgroundAiChecks, configIdentity, createTestedAi, type TestedAiDeps } from "./tested-ai.ts";
 
@@ -404,6 +404,37 @@ describe("testing an AI with one tiny message before a new bot's default trusts 
       expect(engines.size).toBe(0);
       expect(store.applyModelDefault).not.toHaveBeenCalled();
     }
+  });
+
+  it("with a saved default, still tests an AI only a saved key makes ready, so bots on the free backup move to it once it answers", async () => {
+    const gemini = { ...ready("gemini", "openai-compat"), access: "api" as const };
+    for (const keep of [() => { saved = on("opencodeGo"); }, () => { profile = on("opencodeGo"); }]) {
+      saved = undefined;
+      profile = undefined;
+      keep();
+      engines = new Map();
+      rmSync(data, { recursive: true, force: true });
+      data = mkdtempSync(join(tmpdir(), "dusk-tested-ai-"));
+      answers.gemini = async () => "OK";
+      instances = [ready("opencodeGo", "opencodeGo", { freeFallback: true }), gemini];
+      tested = make();
+      await boot();
+      expect(sent("gemini"), "the key's own test message").toBe(1);
+      expect(sent("opencodeGo"), "the free backup is not what bots are waiting on").toBe(0);
+      const context = { answered: tested.answered };
+      expect(leavesFreeBackup(instances, { modelSelection: on("opencodeGo") }, context)).toBe(true);
+      if (saved) expect(selectDefaultModelSelection(instances, saved, context)).toEqual(on("gemini"));
+    }
+  });
+
+  it("with a saved default, tests no AI that signs in on its own: its sign-in already counts", async () => {
+    saved = on("opencodeGo");
+    instances = [ready("opencodeGo", "opencodeGo", { freeFallback: true }), ready("claude", "claudeAgent")];
+    tested = make();
+    await boot();
+    await wait(10 * MINUTE);
+    expect(engines.size).toBe(0);
+    expect(leavesFreeBackup(instances, { modelSelection: on("opencodeGo") }, { answered: tested.answered })).toBe(true);
   });
 
   it("tests the person's own AIs in the order the default picks them, and never an organization's", async () => {
