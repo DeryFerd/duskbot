@@ -28,7 +28,7 @@ export function MentionText({ text, peers, everyone = false, person, links, hove
     const value = text.slice(range.start, range.end);
     let node: ReactNode;
     if ("command" in range) {
-      node = <span className="slash-command" style={{ color: range.command }}>{value}</span>;
+      node = <span className="slash-command" data-text={value} style={{ "--slash-color": range.command } as CSSProperties}>{value}</span>;
     } else if ("link" in range) {
       node = links === "open"
         ? <a href={range.href} target="_blank" rel="noreferrer" dir="ltr" className="link-pill">{value}</a>

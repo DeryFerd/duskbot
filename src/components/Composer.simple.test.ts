@@ -348,8 +348,8 @@ describe("the Simple composer in a group chat", () => {
     });
     expect(container.querySelector("[data-goal-chip]")).toBeNull();
     expect(container.querySelector("textarea")!.value).toBe("/goal ");
-    expect((container.querySelector(".slash-command") as HTMLElement).style.color).toBe("var(--color-accent)");
-    expect(container.querySelector(".slash-hint")?.textContent).toBe("Describe what the team should finish");
+    expect((container.querySelector(".slash-command") as HTMLElement).style.getPropertyValue("--slash-color")).toBe("var(--color-accent)");
+    expect(container.querySelector(".slash-hint")?.textContent?.trim()).toBe("Describe what the team should finish");
   });
 
   it("keeps the room's @ hint only when the room answers to mentions", () => {

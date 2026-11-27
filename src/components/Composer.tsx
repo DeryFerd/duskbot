@@ -109,7 +109,7 @@ import {
   type ComposerSlashCommand,
 } from "@/lib/composer-commands";
 import { useSlashSkills } from "@/lib/use-slash-skills";
-import { grokAccentText } from "@/lib/user-bubble-tone";
+import { botCommandText } from "@/lib/bot-button";
 import { chatCommandRows, runChatCommand, startNewChat } from "@/lib/composer-chat-commands";
 import { randomUuid } from "@/lib/random-uuid";
 import { noteSendLaunch } from "./bubble-entrance";
@@ -393,7 +393,7 @@ export const Composer = memo(function Composer({
     const found = inlineSlashCommand(text, builtInCommands.flatMap((command) => command.kind === "command" ? [command.id] : []));
     if (!found) return undefined;
     const hintKey = found.id === "goal" && group ? "composer.commandHint.goalRoom" : `composer.commandHint.${found.id}` as const;
-    return { end: found.end, color: group ? "var(--color-accent)" : grokAccentText(bot?.color ?? "green"), hint: found.hint ? t(hintKey) : null, spaced: found.spaced };
+    return { end: found.end, color: group ? "var(--color-accent)" : botCommandText(bot?.color ?? "green"), hint: found.hint ? t(hintKey) : null };
   }, [text, builtInCommands, group, bot?.color, locale]);
 
   const mention = mentionQueryAt(text, caret); const teammates = useTeammates(); const viewer = useViewerEmail();

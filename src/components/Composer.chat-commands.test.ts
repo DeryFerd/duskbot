@@ -150,7 +150,7 @@ describe("/new and /compact in the composer", () => {
       type(text);
       expect(command()?.textContent, text).toBe(name);
       expect(hint(), text).toBe(words);
-      expect(mirror().textContent).toContain(text.trimEnd() + (text.endsWith(" ") ? " " : ` ${words}`));
+      expect(mirror().textContent).toContain(`${text} ${words}`);
     }
     expect(container.querySelector("[data-goal-chip]")).toBeNull();
     expect(input().value).toBe("/goal ");

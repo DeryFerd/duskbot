@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { contrastRatio, mixSrgb, relativeLuminance } from "./color-contrast";
+import { contrastRatio, mixSrgb, relativeLuminance, toneForSurface } from "./color-contrast";
 import type { MausColor } from "./mascot";
 import { bothSchemes, grokFill, type Scheme } from "./user-bubble-tone";
 
@@ -28,6 +28,15 @@ export function botButtonTone(color: MausColor, scheme?: Scheme): BotButtonTone 
   // press from whichever of rest and hover holds the label better: grok's dark hover brightens toward the ink
   const base = contrastRatio(buttonInk, hover) >= contrastRatio(buttonInk, button) ? hover : button;
   return { fill: button, ink: buttonInk, hover, pressed: mixSrgb(away, base, PRESSED_MIX) };
+}
+
+/** A bot's colour as type on the composer's surface: the send button's own fill, moved only as far as `min` contrast
+ * needs. */
+export function botCommandText(color: MausColor, min = 3): string {
+  return bothSchemes(
+    toneForSurface(botButtonTone(color, "light").fill, "#ffffff", min),
+    toneForSurface(botButtonTone(color, "dark").fill, "#1f1f1f", min),
+  );
 }
 
 export function botButtonStyle(color: MausColor): CSSProperties {

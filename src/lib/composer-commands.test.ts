@@ -136,9 +136,9 @@ describe("composer slash commands", () => {
 describe("inlineSlashCommand", () => {
   const all: ComposerSlashCommandId[] = ["goal", "learn", "setup", "new", "compact"];
   it("names a command at the start of the field once it is complete, and whether its argument is empty", () => {
-    expect(inlineSlashCommand("/goal", all)).toEqual({ id: "goal", end: 5, hint: true, spaced: false });
-    expect(inlineSlashCommand("/compact ", all)).toEqual({ id: "compact", end: 8, hint: true, spaced: true });
-    expect(inlineSlashCommand("/compact keep the pricing", all)).toEqual({ id: "compact", end: 8, hint: false, spaced: true });
+    expect(inlineSlashCommand("/goal", all)).toEqual({ id: "goal", end: 5, hint: true });
+    expect(inlineSlashCommand("/compact ", all)).toEqual({ id: "compact", end: 8, hint: true });
+    expect(inlineSlashCommand("/compact keep the pricing", all)).toEqual({ id: "compact", end: 8, hint: false });
     expect(inlineSlashCommand("/GOAL x", all)?.id).toBe("goal");
   });
   it("is not a command while partial, longer, inside a sentence, or not offered", () => {
