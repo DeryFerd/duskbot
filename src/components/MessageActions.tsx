@@ -154,13 +154,17 @@ export function MessageActions({
     const menuBox = menuRef.current?.getBoundingClientRect();
     const more = moreRef.current?.getBoundingClientRect();
     // the composer floats over the transcript's bottom: a menu that would run under it opens upward
-    const floor = rootRef.current?.closest("main")?.querySelector("[data-grok-inset]")?.getBoundingClientRect().top ?? window.innerHeight;
+    const column = rootRef.current?.closest("main");
+    const floor = column?.querySelector("[data-grok-inset]")?.getBoundingClientRect().top ?? window.innerHeight;
     if (menuBox && more) setMenuAbove(more.bottom + 4 + menuBox.height > Math.min(floor, window.innerHeight) - 8 && more.top - 4 - menuBox.height > 8);
     const rowBox = rootRef.current?.getBoundingClientRect();
     if (menuBox && rowBox) {
       const rtl = getComputedStyle(rootRef.current!).direction === "rtl";
-      const fitsRight = rowBox.left + menuBox.width <= window.innerWidth - 8;
-      const fitsLeft = rowBox.right - menuBox.width >= 8;
+      // the chat column's sides, not the window's: the sidebar and the bot panel beside it cover what runs past them
+      const sides = column?.getBoundingClientRect();
+      const right = Math.min(window.innerWidth, sides?.width ? sides.right : window.innerWidth), left = Math.max(0, sides?.width ? sides.left : 0);
+      const fitsRight = rowBox.left + menuBox.width <= right - 8;
+      const fitsLeft = rowBox.right - menuBox.width >= left + 8;
       const fitsStart = rtl ? fitsLeft : fitsRight;
       const fitsEnd = rtl ? fitsRight : fitsLeft;
       setMenuFlipped(mirrored ? !fitsEnd && fitsStart : !fitsStart && fitsEnd);
