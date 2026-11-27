@@ -172,7 +172,7 @@ function Smaller({ plus, smaller, work, busy, onDowngrade, catalog, interval }: 
         <p className="text-14 text-ink">switch to {plus.name}</p>
         <p className="num text-13 text-ink-3">{cartText(priceCart(smaller, catalog), interval)}, a smaller dusk cloud{work ? ", work license included" : ""}</p>
       </div>
-      <Button variant="primary" size="sm" onClick={onDowngrade} disabled={busy !== null}>{busy === "downgrade" ? "changing" : "continue to change plan"}</Button>
+      <Button size="sm" onClick={onDowngrade} disabled={busy !== null}>{busy === "downgrade" ? "changing" : "continue to change plan"}</Button>
     </div>
   );
 }

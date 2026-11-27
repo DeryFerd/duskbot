@@ -189,6 +189,8 @@ test("too expensive on pro: the smaller plan, never a discount even when billing
   expect(footer()).toEqual(["no thanks, continue", "keep my plan"]);
   expect(text()).toContain("switch to plus");
   expect(text()).not.toMatch(/% off/);
+  // keep my plan is the only dark button on the screen
+  expect([...document.querySelectorAll("[role=dialog] button")].filter((b) => b.className.includes("bg-primary")).map((b) => b.textContent)).toEqual(["keep my plan"]);
   await click("continue to change plan");
   expect(spies.changePlan).toHaveBeenCalledWith(expect.objectContaining({ desktop: "shared-s", license: "starter" }), 0);
   expect(spies.retentionStep).toHaveBeenLastCalledWith({ reason: "price", step: "help", outcome: "downgrade", offer: "downgrade" });
