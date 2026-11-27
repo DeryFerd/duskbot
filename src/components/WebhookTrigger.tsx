@@ -13,7 +13,7 @@ import type { RoutineRunOn } from "@/lib/routines";
 import { WEBHOOK_DEFAULT_MAX_PENDING_RUNS, WEBHOOK_MAX_PENDING_RUNS_LIMIT, webhookActivationDefaults, webhookMaxPendingRunsInput, type WebhookCredential, type WebhookTrigger, type WebhookTriggerInput } from "@/lib/webhooks";
 import { api, useStore, type Bot } from "@/state/store";
 import { Icon } from "./Icon";
-import { fieldLabelCls, formBodyCls, formCloseCls, formFooterCls, formHeaderCls, formSheetCls, formTitleCls, mdPrimaryCls, mdSecondaryCls, textAreaCls, textFieldCls } from "./ui/GrokDialog";
+import { fieldLabelCls, formBodyCls, formCloseCls, formFooterCls, formHeaderCls, formSheetCls, formTitleCls, rowButtonCls, rowPrimaryCls, textAreaCls, textFieldCls } from "./ui/GrokDialog";
 import { friendlyError } from "@/lib/plain-error";
 
 /** A name when the person gives none: the instructions' first words, or the bot's. */
@@ -63,7 +63,7 @@ export function WebhookEditor({ webhook, bots, initialBotId, onClose, onCredenti
   return (
     <ModalLayer><div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div aria-hidden="true" className="ui-dialog-scrim absolute inset-0" onMouseDown={onClose} />
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={webhook ? t("automations.editor.app.editTitle") : t("automations.editor.app.title")} tabIndex={-1} style={{ maxWidth: "min(460px, calc(100vw - 32px))" }} className={formSheetCls}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" data-settings-look="simple" aria-label={webhook ? t("automations.editor.app.editTitle") : t("automations.editor.app.title")} tabIndex={-1} style={{ maxWidth: "min(460px, calc(100vw - 32px))" }} className={formSheetCls}>
         <div className={formHeaderCls}>
           <div className="min-w-0 flex-1">
             <h2 className={formTitleCls}>{webhook ? t("automations.editor.app.editTitle") : t("automations.editor.app.title")}</h2>
@@ -101,8 +101,8 @@ export function WebhookEditor({ webhook, bots, initialBotId, onClose, onCredenti
           {error && <p role="alert" className="m-0 text-[12px] leading-4 text-danger">{error}</p>}
         </div>
         <div className={formFooterCls}>
-          <button type="button" onClick={onClose} className={mdSecondaryCls}>{t("automations.newBox.cancel")}</button>
-          <button type="button" disabled={saving || !botId} onClick={() => void save()} className={cn(mdPrimaryCls, "gap-1.5")}>{saving && <Loader2 size={14} className="animate-spin" />}{webhook ? t("automations.editor.app.save") : t("automations.editor.app.create")}</button>
+          <button type="button" onClick={onClose} className={rowButtonCls}>{t("automations.newBox.cancel")}</button>
+          <button type="button" disabled={saving || !botId} onClick={() => void save()} className={cn(rowPrimaryCls, "gap-1.5")}>{saving && <Loader2 size={14} className="animate-spin" />}{webhook ? t("automations.editor.app.save") : t("automations.editor.app.create")}</button>
         </div>
       </div>
     </div></ModalLayer>
