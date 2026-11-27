@@ -59,7 +59,22 @@ const AUTOMATION_PROMPT = /^\[(?:Scheduled routine|Routine|Webhook|App event)\b/
 
 type ApiMsg = { id: string; at: number; role: string; kind?: string; text?: string; quietRun?: boolean; card?: any; turnSucceeded?: boolean; digest?: { durationMs?: number; toolCalls?: number; usage?: { input?: number; output?: number; costUsd?: number | null } } };
 
-interface TurnMetric { latencyMs: number; ttftMs: number | null; state: string }
+/** `early`: a bot line came well before the turn's last one (an ack or a progress note), as the person would see it. */
+interface TurnMetric { latencyMs: number; ttftMs: number | null; state: string; botTexts: number; early: boolean }
+
+const WORK_TURN_MS = 15_000;
+const EARLY_GAP_MS = 3_000;
+
+/** The harness's own beat lines in the server log: what it sent and what it dropped. */
+function beatCounts(logPath: string) {
+  const text = existsSync(logPath) ? readFileSync(logPath, "utf8") : "";
+  const count = (pattern: RegExp) => (text.match(pattern) ?? []).length;
+  return {
+    ackSent: count(/turn beats: sent the ack/g), planSent: count(/turn beats: sent the plan/g), milestoneSent: count(/turn beats: sent the milestone/g),
+    ackSkipped: count(/turn beats: the ack for \S+ was skipped/g), planSkipped: count(/turn beats: the plan for \S+ was skipped/g),
+    notWritten: count(/turn beats: the \w+ for \S+ was not written/g), aborted: count(/review aborted/g),
+  };
+}
 
 /** First bot text per conversation, from the server's event stream, as the app would paint it. */
 function watchFirstText(url: string) {
@@ -303,7 +318,12 @@ async function runScenario(s: Scenario, run: number): Promise<Record<string, unk
         personTurns += 1;
         said.push(`${localTime()} (to ${botName}): ${text.slice(0, 300)}`);
         const state = await waitIdle(api, threadId, TURN_TIMEOUT_MS);
-        turns.push({ latencyMs: Date.now() - sent, ttftMs: watcher.read(threadId), state });
+        // the server's clock can be shifted, so the turn is everything after the person's latest message
+        const all = await messages(threadId).catch(() => [] as ApiMsg[]);
+        const asked = all.findLastIndex((m) => m.role === "user");
+        const replies = all.slice(asked + 1).filter((m) => m.role === "bot" && m.kind === "text" && m.text);
+        const early = replies.length >= 2 && replies.at(-1)!.at - replies[0]!.at >= EARLY_GAP_MS;
+        turns.push({ latencyMs: Date.now() - sent, ttftMs: watcher.read(threadId), state, botTexts: replies.length, early });
         if (turn === maxTurns - 1) break;
         text = await personReply(personGateway, { persona: world.persona, goal: c.goal, knows: c.knows, now: localTime(), transcript: await transcript(), turnsLeft: maxTurns - turn - 1, before: said.slice(0, saidBefore) });
       }
@@ -365,6 +385,9 @@ async function runScenario(s: Scenario, run: number): Promise<Record<string, unk
         ttftMs: median(turns.map((t) => t.ttftMs ?? NaN)), turnLatencyMs: median(turns.map((t) => t.latencyMs)), maxTurnLatencyMs: Math.max(0, ...turns.map((t) => t.latencyMs)),
         tokensIn: usage.input, tokensOut: usage.output, costUsd: Math.round(estCost * 1e4) / 1e4, costEstimated: !usage.cost,
         recall: recall.length ? { hit: recall.filter((c) => c.ok).length, of: recall.length } : null,
+        workTurns: turns.filter((t) => t.latencyMs >= WORK_TURN_MS).length, earlyOnWork: turns.filter((t) => t.latencyMs >= WORK_TURN_MS && t.early).length,
+        quickTurns: turns.filter((t) => t.latencyMs < WORK_TURN_MS).length, earlyOnQuick: turns.filter((t) => t.latencyMs < WORK_TURN_MS && t.early).length,
+        beats: beatCounts(srv.logPath),
         routines: ours.length, routineRuns: evidence.runs.length, appErrors: state.errors?.length ?? 0, wallMs: Date.now() - wallStart,
       },
     };
