@@ -26,7 +26,7 @@ vi.mock("../data/usage", () => ({ useAccountUsage: () => state.usage }));
 vi.mock("../data/recap", () => ({ useRecap: () => state.recap }));
 
 const makeSpies = () => ({ cancel: vi.fn(async (_survey: object | null) => {}), keep: vi.fn(async () => {}), changePlan: vi.fn(async (_selection: Selection, _approved?: number) => {}), retentionStep: vi.fn((_input: object) => {}),
-  takeDiscount: vi.fn(async (_reason: string) => {}), updateCard: vi.fn(async () => {}), onClose: vi.fn(() => {}) });
+  updateCard: vi.fn(async () => {}), onClose: vi.fn(() => {}) });
 let spies = makeSpies();
 const crew = [{ id: "nova", name: "Nova", color: "blue", body: "blob", replies: 1120 }, { id: "quill", name: "Quill", color: "purple", body: "clover", replies: 684 }];
 const RECAP: AccountRecap = { v: 1, since: Date.UTC(2026, 2, 4), bots: 2, crew, topBot: crew[0]!, replies: 1804, activeDays: 140, longestStreak: 23, routines: 3, apps: 5, computers: 2 };
@@ -158,80 +158,74 @@ test("the note is optional and labelled", async () => {
 });
 
 test("keep my plan works on every screen before the cancel: it closes, cancels nothing, and logs kept once a reason is picked", async () => {
-  await open(plus);
+  await open(pro);
   await click("keep my plan");
   expect(spies.onClose).toHaveBeenCalledTimes(1);
   expect(spies.retentionStep).not.toHaveBeenCalled();
   await toReason();
   await pick("it's too expensive");
   await click("keep my plan");
-  expect(spies.retentionStep).toHaveBeenLastCalledWith({ reason: "price", step: "reason", outcome: "kept", offer: "discount" });
+  expect(spies.retentionStep).toHaveBeenLastCalledWith({ reason: "price", step: "reason", outcome: "kept", offer: "downgrade" });
   await onward();
   expect(title()).toBe("keep it for less");
   await click("keep my plan");
-  expect(spies.retentionStep).toHaveBeenLastCalledWith({ reason: "price", step: "help", outcome: "kept", offer: "discount" });
+  expect(spies.retentionStep).toHaveBeenLastCalledWith({ reason: "price", step: "help", outcome: "kept", offer: "downgrade" });
   await onward();
   expect(title()).toBe("what you'd lose");
   await click("keep my plan");
-  expect(spies.retentionStep).toHaveBeenLastCalledWith({ reason: "price", step: "confirm", outcome: "kept", offer: "discount" });
+  expect(spies.retentionStep).toHaveBeenLastCalledWith({ reason: "price", step: "confirm", outcome: "kept", offer: "downgrade" });
   await onward();
-  expect(title()).toBe("cancel your plan?");
+  expect(title()).toBe("cancel your dusk cloud?");
   await click("keep my plan");
-  expect(spies.retentionStep).toHaveBeenLastCalledWith({ reason: "price", step: "confirm", outcome: "kept", offer: "discount" });
+  expect(spies.retentionStep).toHaveBeenLastCalledWith({ reason: "price", step: "confirm", outcome: "kept", offer: "downgrade" });
   expect(spies.cancel).not.toHaveBeenCalled();
 });
 
-test("too expensive: one offer, the discount, which can be taken", async () => {
+test("too expensive on pro: the smaller plan, never a discount even when billing has one, and taking it is logged as a downgrade", async () => {
   await open(pro);
   await toOffer("it's too expensive");
   expect(title()).toBe("keep it for less");
   expect(dots()).toBe("3/5");
   expect(footer()).toEqual(["no thanks, continue", "keep my plan"]);
-  expect(text()).toContain("30% off your next 3 months");
-  expect(button("continue to change plan")).toBeNull();
-  await click("take 30% off");
-  expect(spies.takeDiscount).toHaveBeenCalledWith("price");
-  expect(spies.cancel).not.toHaveBeenCalled();
-});
-
-test("too expensive on pro without the discount: plus instead, logged as a downgrade", async () => {
-  await open(pro, false);
-  await toOffer("it's too expensive");
-  expect(button("take 30% off")).toBeNull();
+  expect(text()).toContain("switch to plus");
+  expect(text()).not.toMatch(/% off/);
   await click("continue to change plan");
   expect(spies.changePlan).toHaveBeenCalledWith(expect.objectContaining({ desktop: "shared-s", license: "starter" }), 0);
   expect(spies.retentionStep).toHaveBeenLastCalledWith({ reason: "price", step: "help", outcome: "downgrade", offer: "downgrade" });
+  expect(spies.cancel).not.toHaveBeenCalled();
 });
 
-test("too expensive on the smallest plan with no discount: personal use stays free, and continue to cancel goes on", async () => {
-  await open(plus, false);
+test("too expensive on the smallest plan: personal use stays free, and no thanks, continue goes on", async () => {
+  await open(plus);
   await toOffer("it's too expensive");
   expect(title()).toBe("free stays free");
   expect(text()).toContain("personal use on your mac stays free");
+  expect(text()).not.toMatch(/% off/);
   await onward();
   expect(spies.retentionStep).toHaveBeenLastCalledWith({ reason: "price", step: "help", outcome: "shown", offer: "none" });
   expect(title()).toBe("what you'd lose");
 });
 
-test("not using it enough: what the bots did, with the discount when there is one, else ways to get more out of it", async () => {
+test("not using it enough: what the bots did this month, then the smaller plan on pro", async () => {
+  await open(pro);
+  await toOffer("i'm not using it enough");
+  expect(title()).toBe("your bots this month");
+  expect(text()).toContain("this month your 2 bots took 42 turns.");
+  expect(text()).toContain("switch to plus");
+  expect(text()).not.toMatch(/% off/);
+  await click("continue to change plan");
+  expect(spies.retentionStep).toHaveBeenLastCalledWith({ reason: "unused", step: "help", outcome: "downgrade", offer: "downgrade" });
+});
+
+test("not using it enough on the smallest plan: what the bots did, and personal use stays free", async () => {
   await open(plus);
   await toOffer("i'm not using it enough");
   expect(title()).toBe("your bots this month");
   expect(text()).toContain("this month your 2 bots took 42 turns.");
-  expect(text()).toContain("30% off your next 3 months");
-  expect(document.querySelector('a[href="/bots"]')).toBeNull();
+  expect(text()).toContain("personal use on your mac stays free");
+  expect(button("continue to change plan")).toBeNull();
   await onward();
-  expect(spies.retentionStep).toHaveBeenLastCalledWith({ reason: "unused", step: "help", outcome: "shown", offer: "discount" });
-});
-
-test("not using it enough without a discount: the links, and following one is logged as helped", async () => {
-  await open(plus, false);
-  await toOffer("i'm not using it enough");
-  expect(button("take 30% off")).toBeNull();
-  const link = document.querySelector<HTMLAnchorElement>('a[href="/bots"]')!;
-  expect(link).toBeTruthy();
-  await act(async () => link.click());
-  expect(spies.retentionStep).toHaveBeenLastCalledWith({ reason: "unused", step: "help", outcome: "helped", offer: "help" });
+  expect(spies.retentionStep).toHaveBeenLastCalledWith({ reason: "unused", step: "help", outcome: "shown", offer: "none" });
 });
 
 test("technical problems: fix links, and keeping the plan from the offer is logged", async () => {
@@ -287,7 +281,7 @@ test("switching: what you'd lose, confirm and cancel with the survey; done shows
 
 test("every reason reaches the confirm with continue to cancel alone, through its one offer at most", async () => {
   for (const [label, offer, screens] of [
-    ["it's too expensive", "discount", ["keep it for less", "what you'd lose"]], ["i'm not using it enough", "discount", ["your bots this month", "what you'd lose"]],
+    ["it's too expensive", "none", ["free stays free", "what you'd lose"]], ["i'm not using it enough", "none", ["your bots this month", "what you'd lose"]],
     ["it's missing a feature i need", "note", ["tell us what's missing", "what you'd lose"]], ["i'm switching to something else", "losses", ["what you'd lose"]],
     ["i'm having technical problems", "help", ["let's fix it", "what you'd lose"]], ["prefer not to say", "losses", ["what you'd lose"]],
   ] as const) {

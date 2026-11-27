@@ -296,12 +296,6 @@ function route(method: string, path: string, body: unknown, query: URLSearchPara
     return s.billing;
   }
   if (method === "POST" && path === "/v1/billing/retention") return { ok: true };
-  if (method === "POST" && path === "/v1/billing/discount") {
-    const offer = s.billing.retention?.offer;
-    if (!s.billing.subscription || !offer) fail("This account already used its discount.", 409, "discount_used");
-    s.billing.retention = { offer: null, applied: { ...offer!, at: now } };
-    return s.billing;
-  }
   if (method === "POST" && path === "/v1/billing/cancel") {
     if (b.survey !== undefined) {
       const survey = b.survey as { answer?: unknown } | null;

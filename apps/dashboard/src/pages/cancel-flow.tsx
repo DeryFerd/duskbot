@@ -36,9 +36,8 @@ export const KEPT_DAYS = 30;
 const DAY = 86_400_000;
 
 /** the one offer a reason gets: only what this plan can really take */
-export function offerFor(reason: CancelAnswer | null, can: { discount: boolean; cheaper: boolean }): RetentionOfferShown {
-  if (reason === "price") return can.discount ? "discount" : can.cheaper ? "downgrade" : "none";
-  if (reason === "unused") return can.discount ? "discount" : "help";
+export function offerFor(reason: CancelAnswer | null, can: { cheaper: boolean }): RetentionOfferShown {
+  if (reason === "price" || reason === "unused") return can.cheaper ? "downgrade" : "none";
   if (reason === "broken") return "help";
   if (reason === "feature") return "note";
   if (reason === "switching" || reason === "skip") return "losses";
@@ -158,58 +157,32 @@ function HelpLink({ to, external, onClick, children }: { to: string; external?: 
     : <Link to={to} className={cls} onClick={onClick}>{children}<ArrowUpRight size={15} strokeWidth={1.5} className="shrink-0 text-ink-3" aria-hidden /></Link>;
 }
 
-/** what the bots did this month, and with no discount to offer, the ways people get more out of it */
-function Unused({ onHelped, links }: { onHelped(): void; links: boolean }) {
+/** what the bots did this month */
+function Unused() {
   const { month, bots, loading } = useAccountUsage();
   const turns = month?.totals.turns ?? 0;
-  return (
-    <>
-      <p>{loading ? "checking what your bots did..." : turns > 0 ? `this month your ${bots.length === 1 ? "bot" : `${bots.length} bots`} took ${turns.toLocaleString("en-US")} turns.` : "your bots haven't done much this month."}{links ? " a few ways people get more out of it:" : ""}</p>
-      {links && (
-        <div className="mt-4 flex flex-col gap-1.5">
-          <HelpLink to="/bots" onClick={onHelped}>give a bot a routine, like a morning brief</HelpLink>
-          <HelpLink to="/connectors" onClick={onHelped}>connect your email, calendar or slack</HelpLink>
-          <HelpLink to="/usage" onClick={onHelped}>see what each bot did this month</HelpLink>
-        </div>
-      )}
-    </>
-  );
+  return <p>{loading ? "checking what your bots did..." : turns > 0 ? `this month your ${bots.length === 1 ? "bot" : `${bots.length} bots`} took ${turns.toLocaleString("en-US")} turns.` : "your bots haven't done much this month."}</p>;
 }
 
-/** the ways to keep the plan for less: the one-time discount, and plus for someone on pro */
-function Saves({ offer, plus, smaller, work, busy, onDiscount, onDowngrade, catalog, interval }: { offer: { percent: number; cycles: number } | null; plus: { name: string } | null; smaller: Selection | null; work: boolean; busy: string | null; onDiscount(): void; onDowngrade(): void; catalog: PlanCatalog; interval: Selection["interval"] }) {
+/** the smaller plan, for someone on pro */
+function Smaller({ plus, smaller, work, busy, onDowngrade, catalog, interval }: { plus: { name: string }; smaller: Selection; work: boolean; busy: string | null; onDowngrade(): void; catalog: PlanCatalog; interval: Selection["interval"] }) {
   return (
-    <div className="mt-4 flex flex-col gap-1.5">
-      {offer && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[16px] bg-card px-4 py-3">
-          <div className="min-w-0 flex-1 basis-[200px]">
-            <p className="text-14 text-ink">{offer.percent}% off your next {offer.cycles} months</p>
-            <p className="text-13 text-ink-3">your plan stays as it is. one time only.</p>
-          </div>
-          <Button variant="primary" size="sm" onClick={onDiscount} disabled={busy !== null}>{busy === "discount" ? "applying" : `take ${offer.percent}% off`}</Button>
-        </div>
-      )}
-      {plus && smaller && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[16px] bg-card px-4 py-3">
-          <div className="min-w-0 flex-1 basis-[200px]">
-            <p className="text-14 text-ink">switch to {plus.name}</p>
-            <p className="num text-13 text-ink-3">{cartText(priceCart(smaller, catalog), interval)}, a smaller dusk cloud{work ? ", work license included" : ""}</p>
-          </div>
-          <Button variant={offer ? "outline" : "primary"} size="sm" onClick={onDowngrade} disabled={busy !== null}>{busy === "downgrade" ? "changing" : "continue to change plan"}</Button>
-        </div>
-      )}
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[16px] bg-card px-4 py-3">
+      <div className="min-w-0 flex-1 basis-[200px]">
+        <p className="text-14 text-ink">switch to {plus.name}</p>
+        <p className="num text-13 text-ink-3">{cartText(priceCart(smaller, catalog), interval)}, a smaller dusk cloud{work ? ", work license included" : ""}</p>
+      </div>
+      <Button variant="primary" size="sm" onClick={onDowngrade} disabled={busy !== null}>{busy === "downgrade" ? "changing" : "continue to change plan"}</Button>
     </div>
   );
 }
-
-
 
 /** account, plan & billing, cancel subscription: a look back at what they and their bots did, why, the one offer that fits,
  * what they'd lose, then the cancel at the period's end. consumer rules (California's online cancel, ROSCA, UK, EU) want it
  * online and plain: every screen has a way on toward the cancel, a reason is asked but "prefer not to say" counts, and there is
  * at most one offer */
 export function CancelFlow({ open, onClose, catalog }: { open: boolean; onClose(): void; catalog: PlanCatalog }) {
-  const { billing, cancel, keep: renew, changePlan, updateCard, retentionStep, takeDiscount } = useCloud();
+  const { billing, cancel, keep: renew, changePlan, updateCard, retentionStep } = useCloud();
   const { toast } = useSession();
   const { recap, loading } = useRecap(open);
   const noteId = useId();
@@ -217,7 +190,7 @@ export function CancelFlow({ open, onClose, catalog }: { open: boolean; onClose(
   const [reason, setReason] = useState<CancelAnswer | null>(null);
   const [missing, setMissing] = useState(false);
   const [note, setNote] = useState("");
-  const [busy, setBusy] = useState<"discount" | "downgrade" | "cancel" | "restart" | null>(null);
+  const [busy, setBusy] = useState<"downgrade" | "cancel" | "restart" | null>(null);
   const [error, setError] = useState<string | null>(null);
   // what was cancelled, as it was: a dusk cloud cancelled alone changes the plan it is read from
   const [ended, setEnded] = useState<{ sel: Selection; keepsLicense: boolean } | null>(null);
@@ -238,14 +211,13 @@ export function CancelFlow({ open, onClose, catalog }: { open: boolean; onClose(
   // a plan change on a trial ends the trial and bills at once, so a trial cancel always ends the whole plan
   const trial = sub.trialEndsAt !== undefined && sub.trialEndsAt > Date.now();
   const keepsLicense = ended?.keepsLicense ?? (work && desk && !trial);
-  const offer = billing?.retention?.offer ?? null;
   const onPro = sel.desktop === bundleOf(catalog, "pro")?.desktop;
   const plus = bundleOf(catalog, "starter");
   const smaller: Selection = planSelection(catalog, "starter", { interval: sel.interval, region: sel.region, work: false, keep: sel });
   const until = longDate(sub.currentPeriodEnd);
   const keptUntil = longDate(sub.currentPeriodEnd + KEPT_DAYS * DAY);
   const cheaper = onPro && plus && !trial ? plus : null;
-  const shown = offerFor(reason, { discount: Boolean(offer), cheaper: Boolean(cheaper) });
+  const shown = offerFor(reason, { cheaper: Boolean(cheaper) });
   const steps = stepsFor(shown);
   const said = note.trim();
   const crew = recap?.crew ?? [];
@@ -275,7 +247,6 @@ export function CancelFlow({ open, onClose, catalog }: { open: boolean; onClose(
     setBusy(kind); setError(null);
     try { await action(); after(); } catch (e) { setError((e as Error).message); } finally { setBusy(null); }
   };
-  const discount = () => run("discount", async () => { await takeDiscount(reason ?? "price"); toast(`${offer!.percent}% off your next ${offer!.cycles} months`); });
   const downgrade = () => run("downgrade", async () => {
     await changePlan(smaller, 0);
     log("help", "downgrade");
@@ -294,11 +265,11 @@ export function CancelFlow({ open, onClose, catalog }: { open: boolean; onClose(
 
   const title = step === "recap" ? "look what you and your bots did"
     : step === "reason" ? "why are you leaving?"
-      : step === "offer" ? (reason === "unused" ? "your bots this month" : shown === "discount" || shown === "downgrade" ? "keep it for less" : reason === "broken" ? "let's fix it" : reason === "feature" ? "tell us what's missing" : "free stays free")
+      : step === "offer" ? (reason === "unused" ? "your bots this month" : shown === "downgrade" ? "keep it for less" : reason === "broken" ? "let's fix it" : reason === "feature" ? "tell us what's missing" : "free stays free")
         : step === "losses" ? "what you'd lose"
           : step === "confirm" ? (keepsLicense ? "cancel your dusk cloud?" : "cancel your plan?")
             : keepsLicense ? "your dusk cloud is cancelled" : "your plan is cancelled";
-  const saves = <Saves offer={offer} plus={offer ? null : cheaper} smaller={!offer && cheaper ? smaller : null} work={work} busy={busy} onDiscount={() => void discount()} onDowngrade={() => void downgrade()} catalog={catalog} interval={sel.interval} />;
+  const saves = cheaper && <Smaller plus={cheaper} smaller={smaller} work={work} busy={busy} onDowngrade={() => void downgrade()} catalog={catalog} interval={sel.interval} />;
   const keepButton = <Button variant="primary" onClick={keep}>keep my plan</Button>;
   const onwardLabel = step === "offer" ? "no thanks, continue" : step === "losses" ? "i understand, continue" : keepsLicense ? "continue to cancel dusk cloud" : "continue to cancel";
   const footer = step === "done"
@@ -338,8 +309,8 @@ export function CancelFlow({ open, onClose, catalog }: { open: boolean; onClose(
       {step === "offer" && (
         <>
           {reason === "unused" ? (
-            <div><Unused onHelped={helped} links={shown === "help"} />{shown === "discount" && <><p className="mt-4">or keep it for less:</p>{saves}</>}</div>
-          ) : shown === "discount" || shown === "downgrade" ? (
+            <div><Unused />{shown === "downgrade" ? <><p className="mt-4">or keep it for less:</p>{saves}</> : <p className="mt-3">personal use on your mac stays free, so your bots can keep running there at no cost.</p>}</div>
+          ) : shown === "downgrade" ? (
             <><p>your plan can cost less, if you'd like to stay.</p>{saves}</>
           ) : reason === "price" ? (
             <p>you're on our smallest plan. personal use on your mac stays free, so your bots keep running there at no cost.</p>

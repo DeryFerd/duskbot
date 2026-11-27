@@ -22,7 +22,7 @@ const roots: Root[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await act(async () => root.unmount()); document.body.innerHTML = ""; });
 
 async function render(billing: BillingOverview, keep = vi.fn(async () => {})) {
-  state.cloud = { catalog: fixtureCatalog, billing, clouds: [], keep, updateCard: vi.fn(async () => {}), changePlan: vi.fn(async () => {}), retentionStep: vi.fn(), cancel: vi.fn(async () => {}), takeDiscount: vi.fn(async () => {}), checkout: vi.fn(async () => true) };
+  state.cloud = { catalog: fixtureCatalog, billing, clouds: [], keep, updateCard: vi.fn(async () => {}), changePlan: vi.fn(async () => {}), retentionStep: vi.fn(), cancel: vi.fn(async () => {}), checkout: vi.fn(async () => true) };
   const { PlanBilling } = await import("./plan-billing");
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
