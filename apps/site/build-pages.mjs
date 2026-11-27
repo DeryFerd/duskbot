@@ -379,7 +379,7 @@ for (const page of pages) {
 }
 
 // the changelog is releases/changelog.json (written at release time, newest first): per release its version, date, an
-// optional title, and its items grouped by where they apply. a missing or empty file shows the empty state
+// optional title, and its items grouped by where they apply (a release with no items, a silent one, is not listed). a missing or empty file shows the empty state
 {
   let log = {};
   try { log = JSON.parse(fs.readFileSync(path.join(site, 'releases', 'changelog.json'), 'utf8')); } catch {}
@@ -387,7 +387,7 @@ for (const page of pages) {
   const GH = 'https://github.com/DuskBotAI/duskbot';
   const num = (n) => Number.isInteger(n) && n > 0;
   const day = (date) => { const d = new Date(`${date}T12:00:00Z`); return /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).toLowerCase() : ''; };
-  const releases = (Array.isArray(log.releases) ? log.releases : []).filter((r) => typeof r?.version === 'string' && /^[\w.-]+$/.test(r.version));
+  const releases = (Array.isArray(log.releases) ? log.releases : []).filter((r) => typeof r?.version === 'string' && /^[\w.-]+$/.test(r.version) && Array.isArray(r.items) && r.items.some((it) => typeof it?.text === 'string' && it.text.trim()));
   const entries = releases.map((r, i) => {
     const items = (Array.isArray(r.items) ? r.items : []).filter((it) => typeof it?.text === 'string' && it.text.trim());
     const groups = AREAS.map(([area, label]) => [label, items.filter((it) => (AREAS.some(([a]) => a === it.area) ? it.area : 'all') === area)]).filter(([, list]) => list.length);
