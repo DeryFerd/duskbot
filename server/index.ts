@@ -7659,9 +7659,11 @@ bus.subscribe((event: RuntimeEvent) => {
         settlingTurns.add(event.threadId);
         liveTurnByThread.delete(event.threadId);
         const routineReportThread = routineRun ? routineSourceThread(routineRun) : null;
-        if (!routineReportThread && (!internal || reviewAnswer) && !passedQuietly) store.patchTask(bot.id, event.threadId, { unread: true });
-        if (routineRun && routineReportThread !== event.threadId) automationReports.runSettled(routineRun, completedTurnId);
-        else if ((!routineRun || (routineRun.status === "completed" && !automationReports.quietInItsChat(routineRun, completedTurnId))) && (!internal || reviewAnswer) && !computerSelectionTurns.get(event.threadId)?.selected && doneNotice.atTurnEnd({ botId: bot.id, threadId: event.threadId, review: reviewAnswer, ok: event.ok, routine: Boolean(routineRun) }) === "notify" && !passedQuietly && !personWaits.atTurnEnd(event.threadId, reply)) {
+        const ranInItsChat = routineRun !== null && routineReportThread === event.threadId;
+        const quietInItsChat = routineRun !== null && ranInItsChat && routineRun.status === "completed" && automationReports.quietInItsChat(routineRun, completedTurnId);
+        if ((!routineReportThread || (ranInItsChat && !quietInItsChat)) && (!internal || reviewAnswer) && !passedQuietly) store.patchTask(bot.id, event.threadId, { unread: true });
+        if (routineRun && !ranInItsChat) automationReports.runSettled(routineRun, completedTurnId);
+        else if ((!routineRun || (routineRun.status === "completed" && !quietInItsChat)) && (!internal || reviewAnswer) && !computerSelectionTurns.get(event.threadId)?.selected && doneNotice.atTurnEnd({ botId: bot.id, threadId: event.threadId, review: reviewAnswer, ok: event.ok, routine: Boolean(routineRun) }) === "notify" && !passedQuietly && !personWaits.atTurnEnd(event.threadId, reply)) {
           notify(buildNotification("done", bot, event.threadId, routineRun ? [routineRun.routineName, reply || routineRun.output].filter(Boolean).join(": ") : reply, { avatarUrl: bot.avatarUrl }), routineRun ? { routine: true } : undefined);
         }
         if (screenPollers.has(event.threadId)) {
@@ -9934,7 +9936,7 @@ const runHealth = startRunHealth({ dataDir: DATA_DIR, turns: () => liveTurnByThr
   },
   startTurn: async (botId, threadId, prompt, runOn, triggerSource, onDispatchError) => {
     const prefs = [proactive.prefs.block(), proactive.commitments.block()].filter(Boolean).join("\n\n"); if (!companyShutdown) await startTurn(botId, prefs ? `${prompt}\n\n${prefs}` : prompt, { threadId, runOn, automationSource: triggerSource, onDispatchError });
-  }, postReply: (botId, threadId, text, run) => { const bot = store.bot(botId); if (!bot) throw new Error("The bot is gone"); const turnId = randomUUID(), reportThread = routineSourceThread(run); store.appendMessage(threadId, { role: "bot", kind: "text", text, turnId, turnTerminal: true, turnCompletedAt: Date.now(), turnSucceeded: true }); if (!reportThread) store.patchTask(botId, threadId, { unread: true }); if (reportThread !== threadId) automationReports.runSettled(run, turnId); else if (!automationReports.quietInItsChat(run, turnId) && doneNotice.atTurnEnd({ botId, threadId, review: false, ok: true, routine: true }) === "notify" && !personWaits.atTurnEnd(threadId, text)) notify(buildNotification("done", bot, threadId, text, { avatarUrl: bot.avatarUrl }), { routine: true }); },
+  }, postReply: (botId, threadId, text, run) => { const bot = store.bot(botId); if (!bot) throw new Error("The bot is gone"); const turnId = randomUUID(), reportThread = routineSourceThread(run); store.appendMessage(threadId, { role: "bot", kind: "text", text, turnId, turnTerminal: true, turnCompletedAt: Date.now(), turnSucceeded: true }); const quiet = reportThread === threadId && automationReports.quietInItsChat(run, turnId); if (!reportThread || (reportThread === threadId && !quiet)) store.patchTask(botId, threadId, { unread: true }); if (reportThread !== threadId) automationReports.runSettled(run, turnId); else if (!quiet && doneNotice.atTurnEnd({ botId, threadId, review: false, ok: true, routine: true }) === "notify" && !personWaits.atTurnEnd(threadId, text)) notify(buildNotification("done", bot, threadId, text, { avatarUrl: bot.avatarUrl }), { routine: true }); },
   startGoal: async (groupId, threadId, prompt, coordinatorBotId, runId, _onDispatchError) => {
     if (!groupId) {
       oneOnOneGoals.start(coordinatorBotId, threadId, prompt, { runId });
