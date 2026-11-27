@@ -93,7 +93,7 @@ test("reauth_required and the other delete-data codes come back as their own cod
   const error = await api.askDeleteData("c").catch((e: unknown) => e);
   expect(needsSignIn(error)).toBe(true);
   const { ApiError } = await import("./api");
-  expect(deleteDataError(new ApiError("billing_active", 409, "billing_active"))).toMatch(/cancel it in plans and billing first/);
+  expect(deleteDataError(new ApiError("billing_active", 409, "billing_active"))).toMatch(/cancel it in account, plan & billing first/);
   expect(deleteDataError(new ApiError("confirmation_required", 409, "confirmation_required"))).toMatch(/expired or was already used/);
   expect(deleteDataError(new ApiError("weird", 500, "weird"))).toBe("that did not work. try again.");
 });

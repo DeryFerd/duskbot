@@ -12,8 +12,10 @@ import { siteUrl } from "../lib/site";
 import { ago } from "../lib/format";
 import { setTheme, useTheme, type ThemePref } from "../lib/theme";
 import { Field, Modal, Switch } from "../ui/controls";
-import { Button, ButtonLink, PageHeader, SectionTitle, Segmented, Skeleton } from "../ui/kit";
+import { Button, PageHeader, SectionTitle, Segmented, Skeleton } from "../ui/kit";
 import { useNow } from "../lib/now";
+import { navigate } from "../lib/router";
+import { PlanBilling } from "./plan-billing";
 
 const PROVIDERS: Array<{ id: IdentityProvider; label: string }> = [{ id: "google", label: "google" }, { id: "apple", label: "apple" }, { id: "email", label: "email" }];
 const NOTIFICATIONS: Array<{ id: keyof NotificationPrefs; label: string; hint: string }> = [
@@ -104,6 +106,7 @@ export function AccountPage() {
         {editing && <form className="py-3" onSubmit={(e) => { e.preventDefault(); void saveProfile(); }}><Field label="name" htmlFor="profile-name" error={profileError}><input id="profile-name" className="field" maxLength={100} value={name} autoFocus disabled={busy !== null} aria-invalid={Boolean(profileError)} onChange={(e) => setName(e.target.value)} /></Field><div className="mt-3 flex flex-wrap gap-2"><Button size="sm" type="submit" variant="primary" disabled={busy !== null}>{busy === "profile" ? "saving" : "save"}</Button><Button size="sm" variant="ghost" className="-me-3.5" disabled={busy !== null} onClick={() => setEditing(false)}>cancel</Button></div></form>}
       </div>
     </section>
+    <PlanBilling />
     <section className="mt-10" aria-labelledby="sign-in-title">
       <SectionTitle id="sign-in-title">sign-in methods</SectionTitle>
       <ul className="">{PROVIDERS.map((provider) => {
@@ -146,7 +149,7 @@ export function AccountPage() {
       {confirm === "delete" && blockers !== null && <div className="mt-4 space-y-3 text-13">
         <p role="alert">cancel your plan and dusk cloud before deleting your account.</p>
         <ul className="list-disc pl-5">{blockers.map(blocker => <li key={`${blocker.kind}-${blocker.id}`}>{blocker.label} ({blocker.status.replaceAll("_", " ")})</li>)}</ul>
-        <ButtonLink to="/billing" size="sm">plans and billing</ButtonLink>
+        <Button size="sm" disabled={busy !== null} onClick={() => { close(); navigate("/account#billing"); }}>plan &amp; billing</Button>
         <p>cancelling turns off renewal. dusk cloud runs until the paid period ends, then its data is kept 30 days before it's deleted.</p>
         <label className="flex items-start gap-2"><input type="checkbox" checked={destroyDesktopsNow} disabled={busy !== null} onChange={e => { setDestroyDesktopsNow(e.target.checked); setConfirmDestroy(false); }} />delete my dusk cloud now</label>
         {destroyDesktopsNow && <label className="flex items-start gap-2 text-bad"><input type="checkbox" checked={confirmDestroy} disabled={busy !== null} onChange={e => setConfirmDestroy(e.target.checked)} />your dusk cloud stops at once. its data is kept 30 days, then deleted for good.</label>}
