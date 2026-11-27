@@ -43,6 +43,9 @@ public class PhoneNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setViewing", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "delivered", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "remove", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setBadge", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "previewKey", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "cacheAvatars", returnType: CAPPluginReturnPromise),
     ]
 
     override public func load() {
@@ -63,7 +66,7 @@ public class PhoneNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
             let list: [JSObject] = notifications.map { one in
                 var entry: JSObject = ["id": one.request.identifier]
                 if let thread = NotificationPresentation.threadId(of: one.request.content) { entry["threadId"] = thread }
-                if let dusk = one.request.content.userInfo["dusk"] as? [AnyHashable: Any], let id = dusk["id"] as? String { entry["notificationId"] = id }
+                if let id = NotificationPresentation.field("id", of: one.request.content.userInfo) { entry["notificationId"] = id }
                 return entry
             }
             call.resolve(["notifications": list])
@@ -74,5 +77,29 @@ public class PhoneNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
         let ids = (call.getArray("ids") ?? []).compactMap { $0 as? String }
         if !ids.isEmpty { UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ids) }
         call.resolve()
+    }
+
+    @objc func setBadge(_ call: CAPPluginCall) {
+        UNUserNotificationCenter.current().setBadgeCount(max(0, call.getInt("count") ?? 0)) { _ in call.resolve() }
+    }
+
+    /// The X25519 public key a notification's preview is sealed to (the Live Activity line key).
+    @objc func previewKey(_ call: CAPPluginCall) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            if let key = TurnLineKey.publicKey() { call.resolve(["key": key]) } else { call.resolve([:]) }
+        }
+    }
+
+    @objc func cacheAvatars(_ call: CAPPluginCall) {
+        var avatars: [String: Data] = [:]
+        for case let one as JSObject in call.getArray("avatars") ?? [] {
+            guard let botId = one["botId"] as? String, !botId.isEmpty, let text = one["png"] as? String else { continue }
+            let base64 = text.range(of: "base64,").map { String(text[$0.upperBound...]) } ?? text
+            if let png = Data(base64Encoded: base64), png.count <= 64 * 1024 { avatars[botId] = png }
+        }
+        DispatchQueue.global(qos: .utility).async {
+            BotAvatars.replace(with: avatars)
+            call.resolve()
+        }
     }
 }

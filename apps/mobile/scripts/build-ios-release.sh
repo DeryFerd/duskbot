@@ -14,6 +14,7 @@
 #   APPLE_DISTRIBUTION_KEY_PATH       default ~/.config/duskbot/apple/apple-distribution.key (PEM private key)
 #   APPLE_DISTRIBUTION_CERT_PATH      default ~/.config/duskbot/apple/apple-distribution.cer (DER, from Apple)
 #   APPLE_APPSTORE_PROFILE_PATH       default ~/.config/duskbot/apple/dusk-bot-app-store.mobileprovision
+#   APPLE_NOTIFICATION_PROFILE_PATH   default ~/.config/duskbot/apple/dusk-bot-notifications-app-store.mobileprovision
 #   APPLE_API_KEY_ID, APPLE_API_ISSUER, APPLE_API_KEY_PATH   the App Store Connect API key, for --upload
 # The build number is DUSK_IOS_BUILD_NUMBER, default a UTC timestamp (every upload needs a higher one).
 set -euo pipefail
@@ -36,6 +37,7 @@ key_file="${APPLE_DISTRIBUTION_KEY_PATH:-$apple/apple-distribution.key}"
 cer_file="${APPLE_DISTRIBUTION_CERT_PATH:-$apple/apple-distribution.cer}"
 profile_file="${APPLE_APPSTORE_PROFILE_PATH:-$apple/dusk-bot-app-store.mobileprovision}"
 widget_profile_file="${APPLE_WIDGET_PROFILE_PATH:-$apple/dusk-bot-activity-app-store.mobileprovision}"
+notification_profile_file="${APPLE_NOTIFICATION_PROFILE_PATH:-$apple/dusk-bot-notifications-app-store.mobileprovision}"
 
 problems=()
 [ -n "${APPLE_TEAM_ID:-}" ] || problems+=("APPLE_TEAM_ID is not set (developer.apple.com, Account, Membership details, Team ID)")
@@ -43,6 +45,7 @@ problems=()
 [ -f "$cer_file" ] || problems+=("no Apple Distribution certificate at $cer_file (node apps/mobile/scripts/asc.mjs dist-cert <csr> <out.cer>)")
 [ -f "$profile_file" ] || problems+=("no App Store profile at $profile_file (node apps/mobile/scripts/asc.mjs store-profile <certId> <out>)")
 [ -f "$widget_profile_file" ] || problems+=("no Live Activity profile at $widget_profile_file (node apps/mobile/scripts/asc.mjs widget-profile <certId> <out>)")
+[ -f "$notification_profile_file" ] || problems+=("no notification extension profile at $notification_profile_file (node apps/mobile/scripts/asc.mjs notification-profile <certId> <out>)")
 api_key=no
 if [ -n "${APPLE_API_KEY_ID:-}" ] && [ -n "${APPLE_API_ISSUER:-}" ] && [ -n "${APPLE_API_KEY_PATH:-}" ] && [ -f "${APPLE_API_KEY_PATH:-}" ]; then api_key=yes; fi
 [ "$mode" = upload ] && [ "$api_key" = no ] && problems+=("--upload needs APPLE_API_KEY_ID, APPLE_API_ISSUER and APPLE_API_KEY_PATH")
@@ -52,6 +55,7 @@ echo "distribution key:     $([ -f "$key_file" ] && echo present || echo missing
 echo "distribution cert:    $([ -f "$cer_file" ] && echo present || echo missing)"
 echo "app store profile:    $([ -f "$profile_file" ] && echo present || echo missing)"
 echo "live activity profile: $([ -f "$widget_profile_file" ] && echo present || echo missing)"
+echo "notification profile: $([ -f "$notification_profile_file" ] && echo present || echo missing)"
 echo "api key (upload):     $api_key"
 if [ "$mode" = check ]; then
   if [ ${#problems[@]} -eq 0 ]; then echo "ready to archive"; exit 0; fi
@@ -133,12 +137,14 @@ install_profile() {
 }
 profile_name=$(install_profile "$profile_file")
 widget_profile_name=$(install_profile "$widget_profile_file")
+notification_profile_name=$(install_profile "$notification_profile_file")
 
-# each target names its own profile (DUSK_APP_PROFILE, DUSK_WIDGET_PROFILE): one PROVISIONING_PROFILE_SPECIFIER here would
-# put the app's profile on the Live Activity extension too
+# each target names its own profile (DUSK_APP_PROFILE, DUSK_WIDGET_PROFILE, DUSK_NOTIFICATION_PROFILE): one
+# PROVISIONING_PROFILE_SPECIFIER here would put the app's profile on the extensions too
 xcodebuild -quiet -project "$project" -scheme App -configuration Release -destination 'generic/platform=iOS' \
   -archivePath "$archive" DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="Apple Distribution" DUSK_APP_PROFILE="$profile_name" DUSK_WIDGET_PROFILE="$widget_profile_name" \
+  DUSK_NOTIFICATION_PROFILE="$notification_profile_name" \
   OTHER_CODE_SIGN_FLAGS="--keychain $keychain" CURRENT_PROJECT_VERSION="$build_number" archive
 
 options="$out/ExportOptions.plist"
@@ -153,7 +159,7 @@ cat > "$options" <<PLIST
   <key>teamID</key><string>$APPLE_TEAM_ID</string>
   <key>signingStyle</key><string>manual</string>
   <key>signingCertificate</key><string>Apple Distribution</string>
-  <key>provisioningProfiles</key><dict><key>bot.dusk.mobile</key><string>$profile_name</string><key>bot.dusk.mobile.activity</key><string>$widget_profile_name</string></dict>
+  <key>provisioningProfiles</key><dict><key>bot.dusk.mobile</key><string>$profile_name</string><key>bot.dusk.mobile.activity</key><string>$widget_profile_name</string><key>bot.dusk.mobile.notifications</key><string>$notification_profile_name</string></dict>
   <key>destination</key><string>$destination</string>
   <key>uploadSymbols</key><true/>
   <key>manageAppVersionAndBuildNumber</key><false/>

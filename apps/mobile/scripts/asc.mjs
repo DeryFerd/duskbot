@@ -10,6 +10,7 @@
 //   node apps/mobile/scripts/asc.mjs free                    price Free (USD 0), every territory but mainland China
 //   node apps/mobile/scripts/asc.mjs new-version <x.y>       open the next App Store version (Prepare for Submission)
 //   node apps/mobile/scripts/asc.mjs widget-profile <certId> <out>  the Live Activity extension's App ID and its App Store profile
+//   node apps/mobile/scripts/asc.mjs notification-profile <certId> <out>  the same for the notification extension
 //   node apps/mobile/scripts/asc.mjs submit [--yes]          check everything App Review needs; --yes attaches the newest
 //                                                            valid build to the version and submits it
 //
@@ -96,12 +97,13 @@ async function testflight(emails) {
   }
 }
 
-async function bundleIdRecord(identifier = BUNDLE_ID, register = false) {
+/** the App ID; an extension's (registerAs: its App ID name) is registered when missing */
+async function bundleIdRecord(identifier = BUNDLE_ID, registerAs = undefined) {
   const { data } = await call("GET", `/v1/bundleIds?filter[identifier]=${identifier}&limit=5`);
   const one = data.find((b) => b.attributes.identifier === identifier);
   if (one) return one;
-  if (!register) throw new Error(`no App ID ${identifier} in the developer account`);
-  const { data: made } = await call("POST", "/v1/bundleIds", { data: { type: "bundleIds", attributes: { identifier, name: "dusk bot Live Activity", platform: "IOS" } } });
+  if (!registerAs) throw new Error(`no App ID ${identifier} in the developer account`);
+  const { data: made } = await call("POST", "/v1/bundleIds", { data: { type: "bundleIds", attributes: { identifier, name: registerAs, platform: "IOS" } } });
   console.log(`registered the App ID ${identifier}`);
   return made;
 }
@@ -115,8 +117,8 @@ async function distCert(csrPath, outPath) {
 }
 
 /** makes (or remakes) the App Store profile for the app with one certificate and writes it */
-async function storeProfile(certId, outPath, name = "dusk bot App Store", identifier = BUNDLE_ID) {
-  const bundle = await bundleIdRecord(identifier, identifier !== BUNDLE_ID);
+async function storeProfile(certId, outPath, name = "dusk bot App Store", identifier = BUNDLE_ID, appIdName = undefined) {
+  const bundle = await bundleIdRecord(identifier, appIdName);
   const { data: existing } = await call("GET", `/v1/profiles?filter[name]=${encodeURIComponent(name)}&limit=10`);
   for (const old of existing) await call("DELETE", `/v1/profiles/${old.id}`).then(() => console.log(`removed the old profile ${old.id}`));
   const { data } = await call("POST", "/v1/profiles", { data: { type: "profiles", attributes: { name, profileType: "IOS_APP_STORE" }, relationships: {
@@ -334,12 +336,13 @@ const run = {
   get: async () => console.log(JSON.stringify(await call("GET", rest[0]), null, 1)),
   "dist-cert": () => distCert(rest[0], rest[1]),
   "store-profile": () => storeProfile(rest[0], rest[1], rest[2]),
-  "widget-profile": () => storeProfile(rest[0], rest[1], rest[2] ?? "dusk bot Live Activity App Store", `${BUNDLE_ID}.activity`),
+  "widget-profile": () => storeProfile(rest[0], rest[1], rest[2] ?? "dusk bot Live Activity App Store", `${BUNDLE_ID}.activity`, "dusk bot Live Activity"),
+  "notification-profile": () => storeProfile(rest[0], rest[1], rest[2] ?? "dusk bot Notifications App Store", `${BUNDLE_ID}.notifications`, "dusk bot Notifications"),
   metadata: () => metadata(rest[0] ?? new URL("../store/app-store.json", import.meta.url).pathname),
   screenshots: () => screenshots(rest[0], rest[1] ?? "APP_IPHONE_67"),
   submit: () => submit(rest.includes("--yes")),
   "new-version": () => newVersion(rest[0]),
   free: () => free(),
 }[verb];
-if (!run) { console.error("usage: node apps/mobile/scripts/asc.mjs status | testflight [email...] | invite <email> <first> <last> [role] | testflight-public [limit] | get <path> | dist-cert <csr> <out.cer> | store-profile <certId> <out.mobileprovision> [name] | widget-profile <certId> <out.mobileprovision> [name] | metadata [app-store.json] | screenshots <dir> [displayType] | free | new-version <x.y> | submit [--yes]"); process.exit(2); }
+if (!run) { console.error("usage: node apps/mobile/scripts/asc.mjs status | testflight [email...] | invite <email> <first> <last> [role] | testflight-public [limit] | get <path> | dist-cert <csr> <out.cer> | store-profile <certId> <out.mobileprovision> [name] | widget-profile <certId> <out.mobileprovision> [name] | notification-profile <certId> <out.mobileprovision> [name] | metadata [app-store.json] | screenshots <dir> [displayType] | free | new-version <x.y> | submit [--yes]"); process.exit(2); }
 run().catch((error) => { console.error(`error: ${error.message}`); process.exit(1); });

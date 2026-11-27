@@ -1,8 +1,6 @@
 import ActivityKit
 import AppIntents
-import CryptoKit
 import Foundation
-import Security
 
 /// A bot's turn on the lock screen and in the Dynamic Island. The bot host pushes the same JSON (content-state,
 /// attributes), so a field here is a field there.
@@ -45,66 +43,6 @@ extension DuskTurnAttributes.ContentState {
         if let line, !line.isEmpty { return line }
         guard let sealed else { return nil }
         return TurnLineKey.open(sealed)
-    }
-}
-
-/// The X25519 key a done reply's first line is sealed to. It lives in the keychain group the app and its Live Activity
-/// share, readable after the first unlock so a locked phone can show the line.
-enum TurnLineKey {
-    private static let service = "bot.dusk.turn-line"
-    private static let account = "line-key"
-    private static var group: String? { Bundle.main.object(forInfoDictionaryKey: "DuskKeychainGroup") as? String }
-
-    private static func query() -> [String: Any] {
-        var query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
-        if let group, !group.hasPrefix("$(") { query[kSecAttrAccessGroup as String] = group }
-        return query
-    }
-
-    static func stored() -> Curve25519.KeyAgreement.PrivateKey? {
-        var item = query()
-        item[kSecReturnData as String] = true
-        item[kSecMatchLimit as String] = kSecMatchLimitOne
-        var out: CFTypeRef?
-        guard SecItemCopyMatching(item as CFDictionary, &out) == errSecSuccess, let data = out as? Data else { return nil }
-        return try? Curve25519.KeyAgreement.PrivateKey(rawRepresentation: data)
-    }
-
-    static func storedOrNew() -> Curve25519.KeyAgreement.PrivateKey? {
-        if let key = stored() { return key }
-        let key = Curve25519.KeyAgreement.PrivateKey()
-        var item = query()
-        item[kSecValueData as String] = key.rawRepresentation
-        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        return SecItemAdd(item as CFDictionary, nil) == errSecSuccess ? key : nil
-    }
-
-    static func publicKey() -> String? {
-        storedOrNew().map { base64url($0.publicKey.rawRepresentation) }
-    }
-
-    /// ephemeral public key (32) | nonce (12) | ciphertext | tag (16), base64url
-    static func open(_ sealed: String) -> String? {
-        guard let key = stored(), let raw = unbase64url(sealed), raw.count > 60 else { return nil }
-        do {
-            let ephemeral = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: raw.prefix(32))
-            let shared = try key.sharedSecretFromKeyAgreement(with: ephemeral)
-            let symmetric = shared.hkdfDerivedSymmetricKey(using: SHA256.self, salt: Data("dusk-turn-line-v1".utf8), sharedInfo: Data("seal".utf8), outputByteCount: 32)
-            let box = try AES.GCM.SealedBox(nonce: AES.GCM.Nonce(data: raw.subdata(in: 32..<44)), ciphertext: raw.subdata(in: 44..<(raw.count - 16)), tag: raw.suffix(16))
-            return String(data: try AES.GCM.open(box, using: symmetric), encoding: .utf8)
-        } catch {
-            return nil
-        }
-    }
-
-    private static func base64url(_ data: Data) -> String {
-        data.base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
-    }
-
-    private static func unbase64url(_ text: String) -> Data? {
-        var value = text.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
-        while value.count % 4 != 0 { value += "=" }
-        return Data(base64Encoded: value)
     }
 }
 
