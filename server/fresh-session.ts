@@ -1,7 +1,8 @@
 // A bot's `freshSession`: its direct chats start a fresh session by themselves, as Hermes Agent's session reset policy
 // does ("daily" at 4 am, or after so many idle minutes). Silent: the chat stays, memory carries over and session_search
 // still finds the earlier messages; only /new, the person's own, says so.
-import { COMPACT_AT_MAX, COMPACT_AT_MIN, FRESH_SESSION_MAX_IDLE_HOURS, type FreshSession } from "../shared/wire.ts";
+import type { BotRecord, Message, Store } from "./store.ts";
+import { COMPACT_AT_MAX, COMPACT_AT_MIN, FRESH_SESSION_MAX_IDLE_HOURS, type FreshSession } from "../shared/session-settings.ts";
 
 /** Where a new day starts, in the person's time zone: a chat that runs past midnight is still the same evening's. */
 export const FRESH_DAY_STARTS_AT_HOUR = 4;
@@ -57,5 +58,27 @@ export function freshSessionStart<M extends { id: string; role: string; at: numb
     previousAt: before.findLast((message) => message.role === "user" && !message.peerAsk)?.at,
     foldedThroughId: before.findLast(inContext)?.id,
     started,
+  };
+}
+
+/** The bot's `freshSession`: the person's message after a new day or its idle hours starts the bot's context empty, silently. */
+export function createStartFreshSession(deps: {
+  store(): Pick<Store, "bot" | "activePath" | "appendMessage" | "taskByThread">;
+  isContextMessage: (message: Message) => boolean;
+  beforeCompaction(botId: string, threadId: string): void;
+  timeZone(): string;
+}) {
+  return (bot: BotRecord, threadId: string, message: Pick<Message, "id" | "at">): void => {
+    const store = deps.store();
+    const policy = store.bot(bot.id)?.freshSession;
+    if (!policy) return;
+    const start = freshSessionStart(store.activePath(threadId), message.id, deps.isContextMessage);
+    const due = start.started || !start.foldedThroughId ? null : freshSessionDue(policy, start.previousAt, message.at, deps.timeZone());
+    if (!due || !start.foldedThroughId) return;
+    deps.beforeCompaction(bot.id, threadId);
+    store.appendMessage(threadId, {
+      role: "bot", kind: "compaction",
+      compaction: { summary: "", firstKeptId: message.id, foldedThroughId: start.foldedThroughId, tokensBefore: store.taskByThread(bot.id, threadId)?.usage?.context?.tokens ?? 0, by: "harness", fresh: due },
+    }, { kind: "compaction.append", key: `${threadId}:fresh:${message.id}` });
   };
 }

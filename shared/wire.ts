@@ -10,7 +10,7 @@ import type { BotAvatarCrop, MascotFaceColor } from "./bot-avatar.ts";
 import type { StoredBodyId } from "./bot-body.ts";
 import type { ReplyStyle } from "./reply-style.ts";
 import type { CredentialTargetId, CUSTOM_SECRET_TARGET, SecretDelivery } from "./credential-request.ts";
-import type { TeamSetupRequest } from "./team-setup.ts"; import type { DefaultBotFields, HelperIntroField } from "./default-bot.ts";
+import type { TeamSetupRequest } from "./team-setup.ts"; import type { DefaultBotFields, HelperIntroField } from "./default-bot.ts"; import type { FreshKind, SessionSettingsFields } from "./session-settings.ts";
 import type { SetupCardFields } from "./setup-card.ts"; import type { BugReportField } from "./devs-report-status.ts"; import type { AccessRequestCardField, BotAccessFields } from "./bot-access.ts";
 import type { RoutineRequestCardData } from "./routine-request.ts";
 import type { WebhookRequestCardData } from "./webhook-request.ts"; import type { WaitCardField, WaitLineField } from "./wait-request.ts"; import type { PurchaseCardField } from "./purchase.ts"; import type { EmailCardField } from "./email-review.ts"; import type { MessageCardField } from "./message-review.ts"; import type { ProductsField } from "./products.ts"; import type { OfferField } from "./offer.ts";
@@ -277,7 +277,7 @@ export const helperModelAllowed = (bot: { helperModel?: unknown }): boolean => b
 
 /** A bot as a client may see it. avatarUrl is always present (null when the
  * bot has none). */
-export interface WireBot extends DefaultBotFields, BotAccessFields {
+export interface WireBot extends DefaultBotFields, BotAccessFields, SessionSettingsFields {
   waitingForTeammates?: boolean;
   id: string;
   /** The task selected in the UI; running turns keep their own thread id. */
@@ -392,13 +392,6 @@ export interface WireBot extends DefaultBotFields, BotAccessFields {
   /** What a turn does when its AI's usage limit refuses it and no backup can take over: "wait" (absent) holds it and
    * carries on by itself at the reset, "ask" offers the free model or the wait on a card, "free" moves to the free model. */
   limitMode?: LimitMode;
-  /** When a direct chat starts a fresh session by itself, silently: the person's first message of a new day (from 4 am
-   * in their time zone) or after `idleHours` without one starts the bot's context empty; the chat stays as it was and
-   * session_search still finds it. Absent: never. */
-  freshSession?: FreshSession;
-  /** How full the model's context gets before the chat is compacted by itself, as a fraction of its window. Absent:
-   * config.json's `context.compactAt`, else 80% and at most 200,000 tokens. */
-  compactAt?: number;
   /** Whether this bot gets the app's built-in browser. */
   browser?: boolean;
   /** Record a screenshot and a short note of each browser action, kept with the conversation. Off unless true. */
@@ -483,9 +476,7 @@ export interface WireMessage extends HelperIntroField, SetupCardFields, WaitLine
     firstKeptId: string;
     foldedThroughId: string;
     tokensBefore: number;
-    by: "person" | "harness"; awayHours?: number; // awayHours: written after the person was away that long (server/idle-compaction.ts)
-    /** A fresh session the bot's `freshSession` started: nothing before `firstKeptId` reaches the model, and no summary. */
-    fresh?: "day" | "idle";
+    by: "person" | "harness"; awayHours?: number; fresh?: FreshKind; // fresh: a freshSession started it (server/fresh-session.ts), nothing folded is summarized. awayHours: written after the person was away that long (server/idle-compaction.ts)
   };
   /** Renderers receive only the allowlisted /api/attachments URL. `file`
    * entries are opened through the message-scoped file route, never by path. */
@@ -535,11 +526,9 @@ export interface WireMessage extends HelperIntroField, SetupCardFields, WaitLine
   call?: LiveCallRecord;
   /** activity messages: tool name + outcome. */
   tool?: {
-    name: string; ok?: boolean; spoken?: string; setup?: boolean; terminal?: boolean; summary?: string;
+    name: string; ok?: boolean; spoken?: string; setup?: boolean; terminal?: boolean; summary?: string; newSession?: true; // newSession: the line /new leaves in the chat it opened, never news for the notice card, the sidebar or the mascot
     /** A notice whose way out is signing in to an AI: the chat offers Sign in beside it. */
     signIn?: boolean;
-    /** The line /new leaves in the chat it opened: a record, never news for the notice card, the sidebar or the mascot. */
-    newSession?: true;
     /** error rows: the turn waits for its AI's usage limit to reset and carries on by itself; Stop ends the wait. */
     limitHold?: LimitHoldState;
     input?: string; output?: string; clipped?: boolean; ms?: number;
@@ -779,14 +768,6 @@ export interface OptionCardData extends WaitCardField, AccessRequestCardField, O
  * message to resend, `rootId` the failed request's job-runtime root. */
 /** A held turn as its card shows it: when the limit resets, when known, and when a resumed turn refused again tries next. */
 export interface LimitHoldState { resetsAt?: number; retryAt?: number }
-
-export type FreshSession = { every: "day" } | { idleHours: number };
-export const FRESH_SESSION_IDLE_HOURS = [6, 24] as const;
-export const FRESH_SESSION_MAX_IDLE_HOURS = 24 * 30;
-/** The choices the bot's settings offer; the server takes any fraction from 0.3 to 0.9. */
-export const COMPACT_AT_CHOICES = [0.5, 0.7, 0.9] as const;
-export const COMPACT_AT_MIN = 0.3;
-export const COMPACT_AT_MAX = 0.9;
 
 export const LIMIT_MODES = ["wait", "ask", "free"] as const;
 export type LimitMode = (typeof LIMIT_MODES)[number];

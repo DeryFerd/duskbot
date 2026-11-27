@@ -131,7 +131,7 @@ import { personsOwnWords, readOutsideContent } from "./memory-trust.ts";
 import { embedderSettled, stopEmbedder, warmEmbedder } from "./memory-embed.ts";
 import { generalForPrompt, listGeneralHistory } from "./general-memory.ts";
 import { computerFailuresToResolve, RESOLVE_SCAN } from "./computer-failure-resolution.ts";
-import { chatMessageCount, habitReminder } from "./habit-reminder.ts"; import { HANDOFF_BRIEF_RULE } from "./handoff-brief.ts"; import { hostTimeZone, personTimeZone, takesTurnClock, withTurnClock } from "./turn-clock.ts"; import { freshSessionDue, freshSessionStart } from "./fresh-session.ts";
+import { chatMessageCount, habitReminder } from "./habit-reminder.ts"; import { HANDOFF_BRIEF_RULE } from "./handoff-brief.ts"; import { hostTimeZone, personTimeZone, takesTurnClock, withTurnClock } from "./turn-clock.ts"; import { createStartFreshSession } from "./fresh-session.ts";
 import { createMemoryUpkeep, dreamConversations, upkeepEnabled } from "./memory-upkeep.ts";
 import { createImportDistill, importDistillFile } from "./import-distill.ts";
 import { createCacheKeepWarm, type KeepWarmStatus, type KeepWarmTarget } from "./cache-keepwarm.ts";
@@ -1151,7 +1151,7 @@ function aboutOwnerFor(botId: string, threadId: string): string {
 const heldKey = (botId: string, threadId: string) => `${botId}\n${threadId}`;
 /** Hermes Agent's pre-compression flush: the turns a summary is about to fold are queued for capture first, and the next
  * turn reads memory fresh, with whatever this conversation saved. */
-function beforeCompaction(botId: string, threadId: string): void { memoryUpkeep.flushThread(threadId); releaseHeldMemory(heldKey(botId, threadId)); } const { leftForNewChat, startNewChat } = createNewChat({ store: () => store, flushMemory: (threadId) => memoryUpkeep.flushThread(threadId), newSessionLine: (threadId) => serverLine(threadLanguage(threadId), "server.newChat.started"), appendLine: (threadId, name) => void store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name, ok: true, newSession: true } }) });
+function beforeCompaction(botId: string, threadId: string): void { memoryUpkeep.flushThread(threadId); releaseHeldMemory(heldKey(botId, threadId)); } const { leftForNewChat, startNewChat } = createNewChat({ store: () => store, flushMemory: (threadId) => memoryUpkeep.flushThread(threadId), newSessionLine: (threadId) => serverLine(threadLanguage(threadId), "server.newChat.started"), appendLine: (threadId, name) => void store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name, ok: true, newSession: true } }) }); const startFreshSession = createStartFreshSession({ store: () => store, isContextMessage, beforeCompaction, timeZone: () => personTimeZone(proactive.brief.timeZone()) });
 
 /** About me and the core notes this turn's system prompt carries, held for the conversation so its cached prefix holds. */
 function heldMemoryParts(bot: BotRecord, threadId: string, turnShape: Parameters<typeof memorySystemPrompt>[1] & object): { about: string; core: string } {
@@ -7926,20 +7926,6 @@ async function compactConversation(input: {
   }
 }
 
-/** The bot's `freshSession`: the person's message after a new day or its idle hours starts the bot's context empty, silently. */
-function startFreshSession(bot: BotRecord, threadId: string, message: Pick<Message, "id" | "at">): void {
-  const policy = store.bot(bot.id)?.freshSession;
-  if (!policy) return;
-  const start = freshSessionStart(store.activePath(threadId), message.id, isContextMessage);
-  const due = start.started || !start.foldedThroughId ? null : freshSessionDue(policy, start.previousAt, message.at, personTimeZone(proactive.brief.timeZone()));
-  if (!due || !start.foldedThroughId) return;
-  beforeCompaction(bot.id, threadId);
-  store.appendMessage(threadId, {
-    role: "bot", kind: "compaction",
-    compaction: { summary: "", firstKeptId: message.id, foldedThroughId: start.foldedThroughId, tokensBefore: store.taskByThread(bot.id, threadId)?.usage?.context?.tokens ?? 0, by: "harness", fresh: due },
-  }, { kind: "compaction.append", key: `${threadId}:fresh:${message.id}` });
-}
-
 const handoffs = new Handoffs({
   order: (threadId) => store.activePath(threadId).filter(isContextMessage).map((m) => m.id),
   read: (botId, threadId, instanceId) => store.taskByThread(botId, threadId)?.handedMessages?.[instanceId],
@@ -8864,8 +8850,7 @@ async function beginTurn(
         }
         if (!readiness.ready) throw new Error(readiness.reason ?? "The cloud computer is not ready");
       }
-      await warmSummaries.beforeTurn(threadId, () => directTurnClaimIsCurrent(bot.id, dispatchClaimId, threadId));
-      if (personLine && oneOnOne(threadId) === bot.id) startFreshSession(bot, threadId, userMessage);
+      await warmSummaries.beforeTurn(threadId, () => directTurnClaimIsCurrent(bot.id, dispatchClaimId, threadId)); if (personLine && oneOnOne(threadId) === bot.id) startFreshSession(bot, threadId, userMessage);
       await compactConversation({ bot, threadId, generation: dispatchClaimId, instance, model,
         excludedIds: new Set([userMessage.id, ...(opts?.excludeMessageIds ?? [])]), manual: opts?.compactOnly === true, ...(opts?.compactOnly && opts.compactFocus ? { focus: opts.compactFocus } : {}) });
       if (!directTurnClaimIsCurrent(bot.id, dispatchClaimId, threadId)) throw new DirectTurnSetupCancelled("turn stopped during context setup");

@@ -1,6 +1,6 @@
 import { t } from "@/lib/i18n";
 import type { Bot } from "@/state/store";
-import { COMPACT_AT_CHOICES, FRESH_SESSION_IDLE_HOURS, type FreshSession } from "../../../../shared/wire";
+import { COMPACT_AT_CHOICES, FRESH_SESSION_IDLE_HOURS, type FreshSession } from "../../../../shared/session-settings";
 import type { useBotSettingsDerived } from "../../bot-settings/useBotSettingsDerived";
 import { Card, SheetPane } from "../../ListRows";
 import { radioArrows, RadioRow } from "../rows";
