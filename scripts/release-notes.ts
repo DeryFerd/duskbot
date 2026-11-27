@@ -81,6 +81,13 @@ export function settleRefs(item: Item, prs: ReadonlySet<number>, issues: Readonl
   return { ...rest, pr: n };
 }
 
+/** the curated lines: unreleased.json's, or once --apply moved them, the changelog.json entry of the same version */
+export function curatedFor(version: string, unreleased: { items?: Item[]; title?: string }, log: Changelog | null): { items: Item[]; title?: string } {
+  if (unreleased.items?.length) return { items: unreleased.items, title: unreleased.title };
+  const applied = log?.releases.find(r => r.version === version);
+  return applied ? { items: applied.items, title: applied.title ?? unreleased.title } : { items: [], title: unreleased.title };
+}
+
 export function buildEntry(version: string, date: string, curated: readonly Item[], g: Gathered, title?: string): { entry: Entry; drafts: Item[] } {
   const prSet = new Set(g.prs.map(p => p.number)), issueSet = new Set(g.issues.map(i => i.number));
   const covered = new Set(curated.flatMap(i => [i.pr, i.issue]).filter(Boolean) as number[]);
@@ -206,8 +213,10 @@ async function main() {
     try { github = gatherGithub(since, to, commits); } catch (error) { console.error(`GitHub lists skipped: ${(error as Error).message.split("\n")[0]}`); }
   }
   const unreleased = existsSync(UNRELEASED) ? JSON.parse(readFileSync(UNRELEASED, "utf8")) as { items?: Item[]; title?: string } : {};
+  const log = existsSync(CHANGELOG) ? JSON.parse(readFileSync(CHANGELOG, "utf8")) as Changelog : null;
+  const curated = curatedFor(version, unreleased, log);
   const g = { commits, ...github };
-  const { entry, drafts } = buildEntry(version, date, unreleased.items ?? [], g, values.title ?? unreleased.title);
+  const { entry, drafts } = buildEntry(version, date, curated.items, g, values.title ?? curated.title);
   let apk: { version: string } | null = null;
   try { apk = (JSON.parse(readFileSync(join(ROOT, "apps", "site", "public", "landing", "releases", "latest.json"), "utf8")) as { android?: { version: string } }).android ?? null; } catch { /* none yet */ }
   const body = releaseBody({ entry, drafts, g, since, apk });

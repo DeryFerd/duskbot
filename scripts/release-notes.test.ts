@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyEntry, areaOf, buildEntry, draftLine, inRange, releaseBody, settleRefs, type Gathered } from "./release-notes.ts";
+import { applyEntry, areaOf, buildEntry, curatedFor, draftLine, inRange, releaseBody, settleRefs, type Gathered } from "./release-notes.ts";
 import { checkAssets, parseBadging, releaseAssets } from "./release-assets.ts";
 
 const commit = (subject: string, files: string[]) => ({ sha: "x", subject, files });
@@ -74,5 +74,19 @@ describe("release assets", () => {
   it("reads an APK's version from aapt2's badging", () => {
     expect(parseBadging("package: name='bot.dusk.mobile' versionCode='13' versionName='1.2.12' platformBuildVersionName='16'\n")).toEqual({ version: "1.2.12", code: 13 });
     expect(parseBadging("nothing")).toBeNull();
+  });
+});
+
+describe("curatedFor", () => {
+  const line = { text: "Type /new for a clean chat.", area: "all" as const };
+  const log = { v: 1 as const, releases: [{ version: "0.2.32", date: "2026-11-27", title: "Fresh chats", items: [line] }] };
+  it("takes unreleased.json's lines while it has them", () => {
+    expect(curatedFor("0.2.32", { items: [{ text: "Other.", area: "desktop" }], title: "T" }, log)).toEqual({ items: [{ text: "Other.", area: "desktop" }], title: "T" });
+  });
+  it("takes the applied changelog entry once --apply emptied unreleased.json, as the release job runs it", () => {
+    expect(curatedFor("0.2.32", { items: [] }, log)).toEqual({ items: [line], title: "Fresh chats" });
+  });
+  it("has no lines for a version nobody wrote up", () => {
+    expect(curatedFor("0.2.33", { items: [] }, log).items).toEqual([]);
   });
 });
