@@ -7,6 +7,7 @@ import type { CloudAccountBridge, CloudAccountState, CloudPlanBridge, CloudRenew
 import type { CloudUsage } from "../../electron/cloud-home.mjs";
 import type { CloudRenewal } from "../../electron/cloud-list.mjs";
 import { setLocale } from "@/lib/i18n";
+import type { AccountRecap } from "../../shared/account-recap";
 
 vi.mock("./DesktopCapabilities", () => ({ useDesktopCapabilities: () => ({ capabilities: { host: { platform: "darwin" } }, ready: true }) }));
 vi.mock("@/state/store", async original => ({ ...await original<typeof import("@/state/store")>(), useStore: () => ({ state: { bots: [], config: {} }, dispatch: vi.fn() }) }));
@@ -45,6 +46,11 @@ const write = async (value: string) => {
 const next = () => click(sheet()!.querySelector("[data-cloud-cancel-next]"));
 const open = () => click(button("Cancel subscription"));
 const choose = async (label: string) => { await click(radio(label)); await next(); };
+const dots = () => sheet()?.querySelector("[data-cloud-cancel-dots]")?.getAttribute("data-cloud-cancel-dots");
+/** past the recap to Why are you leaving? */
+const toWhy = async () => { expect(step()).toBe("recap"); await next(); expect(step()).toBe("why"); };
+const crew = [{ id: "nova", name: "Nova", color: "blue", body: "blob", replies: 1120 }, { id: "quill", name: "Quill", color: "purple", body: "clover", replies: 684 }, { id: "rivet", name: "Rivet", color: "orange", body: "hex", replies: 402 }];
+const RECAP: AccountRecap = { v: 1, since: Date.UTC(2026, 2, 4), bots: 3, crew, topBot: crew[0]!, replies: 2206, activeDays: 140, longestStreak: 23, routines: 6, apps: 1, computers: 2 };
 /** What main answers: a cancel that turns renewal off (when it ends from the Admin), a keep, or as told; every step logged. */
 function actionsFor(results: Partial<{ cancel: CloudRenewalResult; keep: CloudRenewalResult }> = {}) {
   const state = { status: "connected" } as CloudAccountState;
@@ -56,17 +62,27 @@ function actionsFor(results: Partial<{ cancel: CloudRenewalResult; keep: CloudRe
 }
 
 describe("the cancel sheet", () => {
-  it("why, one offer, confirm, done: a reason is needed, the note and the offer go with the cancel, every step is logged, and Resume puts it back", async () => {
-    const actions = actionsFor(), changed = vi.fn(), openPlans = vi.fn(async () => undefined);
-    await show(createElement(CloudCancelPlan, { renewal: paid, actions, offers: { cheaper: "Plus", openPlans }, onChanged: changed }));
+  it("a look back, why, one offer, what you'd lose, confirm, done: every screen goes on with Continue to cancel, each step is logged, and Resume puts it back", async () => {
+    const actions = actionsFor(), changed = vi.fn(), openPlans = vi.fn(async () => undefined), recap = vi.fn(async () => RECAP);
+    await show(createElement(CloudCancelPlan, { renewal: paid, actions, offers: { cheaper: "Plus", openPlans, recap }, onChanged: changed }));
     const link = button("Cancel subscription")!;
     expect(link.className).toContain("underline");
     await open();
     expect(sheet()!.getAttribute("aria-modal")).toBe("true");
-    expect(title()).toBe("Why are you leaving?");
+    expect([step(), title(), dots()]).toEqual(["recap", "Look what you and your bots did", "1/5"]);
+    expect(recap).toHaveBeenCalledOnce();
+    expect(text()).toContain("You've been at it together since March 2026.");
+    expect(Object.fromEntries([...sheet()!.querySelectorAll("[data-cloud-cancel-stat]")].map(item => [item.getAttribute("data-cloud-cancel-stat"), item.textContent]))).toEqual({
+      replies: "Replies from your bots2,206", days: "Days you worked together140", streak: "Days in a row, your best streak23", routines: "Routines on a schedule6", apps: "App connected1", bots: "Bots you made3" });
+    expect(sheet()!.querySelector("[data-cloud-cancel-top]")?.textContent).toBe("Nova did the most: 1,120 replies.");
+    expect(sheet()!.querySelector("[data-cancel-scene='day']")).toBeTruthy();
+    expect(document.activeElement?.textContent).toBe("Keep my plan");
+    expect(sheet()!.querySelector("[data-cloud-cancel-next]")?.textContent).toBe("Continue to cancel");
+    await next();
+    expect([step(), title(), dots()]).toEqual(["why", "Why are you leaving?", "2/5"]);
+    expect(actions.retention).not.toHaveBeenCalled();
     expect([...sheet()!.querySelectorAll("input[type=radio]")].map(input => input.closest("label")!.textContent))
       .toEqual(["Too expensive", "Not using it enough", "Missing a feature", "Switching to something else", "Technical problems", "Prefer not to say"]);
-    expect(document.activeElement?.textContent).toBe("Keep my plan");
     expect(sheet()!.querySelector("label:has(textarea)")?.textContent).toBe("Anything else you'd like us to know? (Optional)");
     // Continue with nothing picked says so and stays
     await next();
@@ -78,20 +94,26 @@ describe("the cancel sheet", () => {
     await write("  Too much for a side project.  ");
     await next();
     expect(actions.retention).toHaveBeenLastCalledWith({ reason: "price", step: "reason", outcome: "shown", note: "Too much for a side project." });
-    expect([step(), title()]).toEqual(["offer", "Try a smaller plan"]);
+    expect([step(), title(), dots()]).toEqual(["offer", "Try a smaller plan", "3/5"]);
     expect(text()).toContain("Plus costs less and keeps your bots running on dusk cloud.");
     expect(button("See plans")).toBeTruthy();
-    await click(button("No thanks, continue"));
+    await next();
     expect(actions.retention).toHaveBeenLastCalledWith({ reason: "price", step: "help", outcome: "shown", offer: "downgrade", note: "Too much for a side project." });
-    expect([step(), title()]).toEqual(["confirm", "Cancel your plan"]);
-    expect([...sheet()!.querySelectorAll("li")].map(item => item.textContent)).toEqual(["Bots on dusk cloud stop running when your Mac is asleep or off.", "Routines on dusk cloud stop."]);
-    expect(text()).toContain(`You have access until ${day(END)}.`);
-    expect(text()).toContain(`Your dusk cloud files are kept until ${day(END + 30 * DAY)}, then deleted.`);
+    expect([step(), title(), dots()]).toEqual(["losses", "What you'd lose", "4/5"]);
+    expect(sheet()!.querySelector("[data-cancel-scene='dusk']")).toBeTruthy();
+    expect(text()).toContain(`Everything keeps working until ${day(END)}. After that:`);
+    expect([...sheet()!.querySelectorAll("li")].map(item => item.textContent)).toEqual(["Nova, Quill, and Rivet stop working when your Mac sleeps.", "Your 6 routines only run while your Mac is awake.",
+      "The app they use only works while your Mac is awake.", `Your dusk cloud files, and what your bots remember there, are kept until ${day(END + 30 * DAY)}, then deleted.`]);
+    await next();
+    expect([step(), title(), dots()]).toEqual(["confirm", "Cancel your plan", "5/5"]);
+    expect(text()).toContain(`Your plan ends on ${day(END)}, not today.`);
     expect(document.activeElement?.textContent).toBe("Keep my plan");
+    expect(sheet()!.querySelector("[data-cloud-cancel-next]")).toBeNull();
     await click(sheet()!.querySelector("[data-cloud-cancel-confirm]"));
     expect(actions.cancel).toHaveBeenCalledExactlyOnceWith({ answer: "price", offer: "downgrade", improve: "Too much for a side project." });
     expect(actions.retention).toHaveBeenCalledTimes(2);
-    expect([step(), title()]).toEqual(["done", "Your subscription is cancelled"]);
+    expect([step(), title(), dots()]).toEqual(["done", "Your subscription is cancelled", undefined]);
+    expect(sheet()!.querySelector("[data-cancel-scene='night']")).toBeTruthy();
     expect(sheet()!.querySelector("[role='status']")?.textContent).toBe(`You have access until ${day(END)}.`);
     expect(text()).toContain("Resume anytime before then, and nothing changes.");
     expect(changed).not.toHaveBeenCalled();
@@ -100,16 +122,32 @@ describe("the cancel sheet", () => {
     expect([sheet(), changed.mock.calls.length, openPlans.mock.calls.length]).toEqual([null, 1, 0]);
   });
 
-  it("Prefer not to say counts: what you'd lose, and No thanks always goes on to the cancel", async () => {
+  it("the look back reads plainly with no recap, and Continue to cancel never waits on it", async () => {
     const actions = actionsFor();
     await show(createElement(CloudCancelPlan, { renewal: paid, actions }));
     await open();
-    await choose("Prefer not to say");
-    expect([step(), title(), sheet()!.getAttribute("data-cloud-cancel-offer")]).toEqual(["offer", "What you'd lose", "losses"]);
-    expect([...sheet()!.querySelectorAll("li")].map(item => item.textContent)).toEqual(["Bots on dusk cloud stop running when your Mac is asleep or off.", "Routines on dusk cloud stop.",
-      `Your dusk cloud files are kept until ${day(END + 30 * DAY)}, then deleted.`]);
+    expect(text()).toContain("Before you go, here's what you and your bots did together.");
+    expect(text()).toContain("Your bots are set up and ready whenever you are.");
+    await act(async () => root.unmount()); root = createRoot(container);
+    const never = vi.fn(() => new Promise<AccountRecap | null>(() => {}));
+    await show(createElement(CloudCancelPlan, { renewal: paid, actions, offers: { recap: never } }));
+    await open();
+    expect(sheet()!.querySelector("[aria-busy='true']")).toBeTruthy();
     await next();
-    expect(step()).toBe("confirm");
+    expect(step()).toBe("why");
+  });
+
+  it("Prefer not to say counts and goes straight to what you'd lose, its one offer; Continue to cancel always goes on to the cancel", async () => {
+    const actions = actionsFor();
+    await show(createElement(CloudCancelPlan, { renewal: paid, actions }));
+    await open();
+    await toWhy();
+    await choose("Prefer not to say");
+    expect([step(), title(), dots()]).toEqual(["losses", "What you'd lose", "3/4"]);
+    expect([...sheet()!.querySelectorAll("li")].map(item => item.textContent)).toEqual(["Bots on dusk cloud stop running when your Mac is asleep or off.", "Routines on dusk cloud stop.",
+      `Your dusk cloud files, and what your bots remember there, are kept until ${day(END + 30 * DAY)}, then deleted.`]);
+    await next();
+    expect([step(), dots()]).toEqual(["confirm", "4/4"]);
     await click(sheet()!.querySelector("[data-cloud-cancel-confirm]"));
     expect(actions.cancel).toHaveBeenCalledExactlyOnceWith({ answer: "skip", offer: "losses" });
     expect(actions.retention.mock.calls.map(([call]) => call)).toEqual([{ reason: "skip", step: "reason", outcome: "shown" }, { reason: "skip", step: "help", outcome: "shown", offer: "losses" }]);
@@ -125,17 +163,17 @@ describe("the cancel sheet", () => {
       { answer: "Not using it enough", title: "Get more out of it", offer: "help", take: "Keep my plan", outcome: "kept", says: "Bots on dusk cloud can run routines while you're away, like a morning brief." },
       { answer: "Missing a feature", offers: { openLink }, title: "Tell us what's missing", offer: "note", take: "Email us", outcome: "helped" },
       { answer: "Technical problems", offers: { openLink }, title: "Let's fix it", offer: "help", take: "Open help", outcome: "helped" },
-      { answer: "Switching to something else", title: "What you'd lose", offer: "losses", take: "Keep my plan", outcome: "kept" },
     ];
     for (const one of cases) {
       const actions = actionsFor();
       await show(createElement(CloudCancelPlan, { key: `${one.answer}${one.title}`, renewal: one.renewal ?? paid, actions, offers: one.offers ?? {} }));
       await open();
+      await toWhy();
       await choose(one.answer);
       expect([title(), sheet()!.getAttribute("data-cloud-cancel-offer")], one.title).toEqual([one.title, one.offer]);
       if (one.says) expect(text()).toContain(one.says);
       if (one.lines) expect([...sheet()!.querySelectorAll("li")].map(item => item.textContent)).toEqual(one.lines);
-      expect(button("No thanks, continue")).toBeTruthy();
+      expect(button("Continue to cancel")).toBeTruthy();
       await click(button(one.take, sheet()!));
       expect(sheet(), one.title).toBeNull();
       expect(actions.retention).toHaveBeenLastCalledWith(expect.objectContaining({ step: "help", outcome: one.outcome, offer: one.offer }));
@@ -146,24 +184,52 @@ describe("the cancel sheet", () => {
     expect(openLink.mock.calls.map(([url]) => url)).toEqual([expect.stringMatching(/^mailto:hello@dusk\.bot\?subject=Missing%20from%20dusk%20cloud$/), CANCEL_HELP_URL]);
   });
 
-  it("Keep my plan on any step closes the sheet and logs kept; a failed cancel says so and stays; an Admin without Cancel says billing opened", async () => {
+  it("every reason reaches the cancel with Continue to cancel alone, through at most one offer", async () => {
+    for (const [answer, screens] of [["Too expensive", ["offer", "losses"]], ["Not using it enough", ["offer", "losses"]], ["Missing a feature", ["offer", "losses"]],
+      ["Switching to something else", ["losses"]], ["Technical problems", ["offer", "losses"]], ["Prefer not to say", ["losses"]]] as const) {
+      const actions = actionsFor();
+      await show(createElement(CloudCancelPlan, { key: answer, renewal: paid, actions }));
+      await open();
+      await toWhy();
+      await choose(answer);
+      for (const screen of screens) { expect(step(), answer).toBe(screen); await next(); }
+      expect(step(), answer).toBe("confirm");
+      await click(sheet()!.querySelector("[data-cloud-cancel-confirm]"));
+      expect(actions.cancel, answer).toHaveBeenCalledOnce();
+      await act(async () => root.unmount()); root = createRoot(container);
+    }
+  });
+
+  it("Keep my plan on every screen closes the sheet and logs kept once a reason is picked; a failed cancel says so and stays; an Admin without Cancel says billing opened", async () => {
     const actions = actionsFor();
     await show(createElement(CloudCancelPlan, { renewal: paid, actions }));
     await open();
     await click(button("Keep my plan", sheet()!));
     expect([sheet(), actions.retention.mock.calls.length]).toEqual([null, 0]);
+    const kept: Array<[string, string]> = [];
+    for (const [at, logged] of [["why", "reason"], ["offer", "help"], ["losses", "confirm"], ["confirm", "confirm"]] as const) {
+      await open();
+      await toWhy();
+      if (at !== "why") { await choose("Not using it enough"); while (step() !== at) await next(); } else await click(radio("Not using it enough"));
+      await click(button("Keep my plan", sheet()!));
+      expect(sheet(), at).toBeNull();
+      kept.push([at, actions.retention.mock.calls.at(-1)![0].step]);
+      expect(actions.retention).toHaveBeenLastCalledWith(expect.objectContaining({ reason: "unused", step: logged, outcome: "kept" }));
+    }
+    expect(kept.length).toBe(4);
+    expect([actions.cancel.mock.calls.length, actions.keep.mock.calls.length]).toEqual([0, 0]);
     await open();
+    await toWhy();
     await choose("Switching to something else");
-    await next();
     await click(button("Keep my plan", sheet()!));
-    expect(actions.retention).toHaveBeenLastCalledWith({ reason: "switching", step: "confirm", outcome: "kept", offer: "losses" });
-    expect([sheet(), actions.cancel.mock.calls.length, actions.keep.mock.calls.length]).toEqual([null, 0, 0]);
+    expect(actions.retention).toHaveBeenLastCalledWith({ reason: "switching", step: "help", outcome: "kept", offer: "losses" });
 
     const failing = actionsFor({ cancel: { outcome: "failed", state: { status: "connected" } } });
     failing.retention.mockRejectedValue(new Error("offline"));
     await show(createElement(CloudCancelPlan, { renewal: paid, actions: failing }));
     await open();
-    await choose("Technical problems");
+    await toWhy();
+    await choose("Switching to something else");
     await next();
     await click(sheet()!.querySelector("[data-cloud-cancel-confirm]"));
     expect(sheet()!.querySelector("[role='alert']")?.textContent).toBe("That didn't go through, and nothing changed. Try again in a minute.");
@@ -173,6 +239,13 @@ describe("the cancel sheet", () => {
     expect(sheet()!.querySelector("[role='status']")?.textContent).toBe("The cloud page's billing opened in your browser. You can do it there.");
     await click(button("Done"));
     expect(sheet()).toBeNull();
+  });
+
+  it("names a few bots and counts the rest in the app's language", async () => {
+    const { botNames } = await import("./CloudCancelPlan");
+    expect(botNames(["Nova", "Quill", "Rivet", "Juno", "Basil"], 6)).toBe("Nova, Quill, Rivet, and 3 more");
+    expect(botNames(["Nova", "Quill"], 2)).toBe("Nova and Quill");
+    expect(botNames([], 0)).toBeNull();
   });
 
   it("already cancelled: when it ends and Resume subscription, never Cancel; nothing at all without a renewal or a way to change it", async () => {
@@ -196,6 +269,7 @@ describe("the cancel sheet", () => {
     const actions = actionsFor();
     await show(createElement(CloudCancelPlan, { renewal: paid, actions }));
     await open();
+    await toWhy();
     await choose("Prefer not to say");
     await next();
     await click(sheet()!.querySelector("[data-cloud-cancel-confirm]"));
@@ -213,7 +287,7 @@ describe("the plan's place", () => {
   function accountBridge(state: CloudAccountState) {
     return { state: vi.fn(async () => state), begin: vi.fn(), signInAgain: vi.fn(), reopen: vi.fn(), cancel: vi.fn(), refresh: vi.fn(async () => state), signOut: vi.fn(),
       openDashboard: vi.fn(async () => state), connectHome: vi.fn(), connectHomeForPhone: vi.fn(), onState: vi.fn(() => () => {}),
-      openPage: vi.fn(async () => ({ opened: true })), continueInBrowser: vi.fn(async () => ({ outcome: "opened" as const, state })), retention: vi.fn(async () => true),
+      openPage: vi.fn(async () => ({ opened: true })), continueInBrowser: vi.fn(async () => ({ outcome: "opened" as const, state })), retention: vi.fn(async () => true), recap: vi.fn(async () => RECAP),
       cancelPlan: vi.fn(async () => ({ outcome: "cancelled" as const, renewal: cancelledPaid, surveyed: true, state })), keepPlan: vi.fn(async () => ({ outcome: "kept" as const, state })) };
   }
 
@@ -260,14 +334,19 @@ describe("the plan's place", () => {
     const buttons = [...container.querySelectorAll("button")];
     expect(buttons.at(-1)?.textContent).toBe("Cancel subscription");
     await open();
+    expect(bridge.recap).toHaveBeenCalledOnce();
+    expect(text()).toContain("Nova did the most: 1,120 replies.");
+    await toWhy();
     await choose("Too expensive");
     expect(title()).toBe("Try a smaller plan");
     await click(button("See plans", sheet()!));
     expect(bridge.continueInBrowser).toHaveBeenCalledExactlyOnceWith({ kind: "upgrade" });
     expect(bridge.retention).toHaveBeenLastCalledWith({ reason: "price", step: "help", outcome: "helped", offer: "downgrade" });
     await open();
+    await toWhy();
     await choose("Not using it enough");
     expect(title()).toBe("This month on dusk cloud");
+    await next();
     await next();
     await click(sheet()!.querySelector("[data-cloud-cancel-confirm]"));
     expect(bridge.cancelPlan).toHaveBeenCalledExactlyOnceWith({ answer: "unused", offer: "help" });

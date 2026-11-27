@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { AccountRecap } from "../../shared/account-recap";
 import type { CloudAccountState, CloudPlanSnapshot } from "../../electron/cloud-account.mjs";
 import type { CloudTrial, CloudUsage } from "../../electron/cloud-home.mjs";
 import type { CloudRenewal, CloudPayment } from "../../electron/cloud-list.mjs";
@@ -30,6 +31,7 @@ interface PlanBilling {
   /** the account page's plan & billing, where the payment method and invoices are */
   openAccount: () => Promise<unknown>;
   openPlans?: () => Promise<unknown>;
+  recap?: () => Promise<AccountRecap | null>;
 }
 
 function localPlan(account: CloudAccountState | null): PlanBilling | null {
@@ -42,6 +44,7 @@ function localPlan(account: CloudAccountState | null): PlanBilling | null {
     actions: bridge.cancelPlan && bridge.keepPlan ? { cancel: survey => bridge.cancelPlan!(survey), keep: () => bridge.keepPlan!(), ...(bridge.retention ? { retention: step => bridge.retention!(step) } : {}) } : null,
     openAccount: () => bridge.openPage ? bridge.openPage("billing") : continueInBrowser({ kind: "billing" }),
     ...(bridge.continueInBrowser ? { openPlans: () => bridge.continueInBrowser!({ kind: "upgrade" }) } : {}),
+    ...(bridge.recap ? { recap: () => bridge.recap!() } : {}),
   };
 }
 
@@ -54,6 +57,7 @@ function cloudPlan(plan: CloudPlanSnapshot | null): PlanBilling | null {
     tier: plan.tier, trial: plan.trial, renewal: plan.renewal, usage: plan.usage,
     actions: bridge.cancel && bridge.keep ? { cancel: survey => bridge.cancel!(survey), keep: () => bridge.keep!(), ...(bridge.retention ? { retention: step => bridge.retention!(step) } : {}) } : null,
     openAccount: () => bridge.openPage ? bridge.openPage("billing") : bridge.manage(),
+    ...(bridge.recap ? { recap: () => bridge.recap!() } : {}),
   };
 }
 
@@ -87,7 +91,7 @@ export function PlanBillingPage() {
   const open = (action: () => Promise<unknown>) => { setFailed(false); void action().catch(() => setFailed(true)); };
   const trial = plan.trial ? cloudTrialView(plan.trial) : null;
   const renews = plan.renewal && !plan.renewal.cancelled && plan.renewal.renewsAt && !plan.renewal.trial ? t("settings.planBilling.renews", { date: day(plan.renewal.renewsAt) }) : undefined;
-  const offers: CloudCancelOffers = { usage: plan.usage ?? null, cheaper: cheaperThan(plan.tier), openPlans: plan.openPlans, openLink: openExternalLink };
+  const offers: CloudCancelOffers = { usage: plan.usage ?? null, cheaper: cheaperThan(plan.tier), openPlans: plan.openPlans, openLink: openExternalLink, ...(plan.recap ? { recap: plan.recap } : {}) };
   return <div data-plan-billing="" className="flex flex-col gap-[22px]">
     <SettingsGroup label={t("settings.simple.billing.plan")} block="plan">
       <SettingsRows>
