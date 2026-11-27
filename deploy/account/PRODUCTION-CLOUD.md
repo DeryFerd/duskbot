@@ -51,6 +51,23 @@ node deploy/account/production-cloud.mjs package-check production    # read only
 ```
 
 Check: `production: ... matches dusk.env (sha256 ...) and has its signature`. Anything else: do not deploy.
+
+Both this check and the one `deploy.sh` runs first (`check-home-package.mjs`) read the package over ssh, as
+`ssh contabo` (Tailscale) by default. With Tailscale off, send the host and a jump instead:
+
+```sh
+export DUSK_PACKAGE_SSH_JUMP=oracle DUSK_PACKAGE_SSH_HOST=root@169.58.211.160   # ssh -J oracle root@169.58.211.160
+node deploy/account/check-home-package.mjs --dry-run <env file>                # prints the ssh command, runs nothing
+```
+
+`DUSK_PACKAGE_SSH_HOST` takes a `~/.ssh/config` alias or `user@host`; `DUSK_PACKAGE_SSH_JUMP` is passed to `ssh -J`.
+The upload itself goes to deployd over https, not ssh. Where that path is blocked too, tunnel it through the same jump
+and point the deploy CLI at it:
+
+```sh
+ssh -fN -J oracle -L 14545:127.0.0.1:4545 root@169.58.211.160
+DEPLOY_URL=http://127.0.0.1:14545 deploy/account/deploy.sh production
+```
 Also skip a deploy when the release flow deployed that service in the last 15 minutes
 (`ssh contabo 'git -C /root/autorunner/projects/dusk-account-prod log -1 --format=%cI'`).
 

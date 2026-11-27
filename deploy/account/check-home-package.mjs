@@ -1,15 +1,16 @@
 // Refuses a deploy whose managed home package settings disagree, before anything ships: the file on the server, its
 // signature and DUSK_MANAGED_HOME_PACKAGE_SHA256 must name the same package, or the service refuses to start
 // ("Release signature is for another artifact") and the site is down. Reads the built env file; looks at the files on
-// the deploy host over ssh (DUSK_PACKAGE_SSH_HOST, default contabo). Prints names and short hashes only, never a value
-// of anything secret.
+// the deploy host over ssh (package-ssh.mjs: DUSK_PACKAGE_SSH_HOST, DUSK_PACKAGE_SSH_JUMP). Prints names and short hashes
+// only, never a value of anything secret. --dry-run checks the env file and prints the ssh command instead of running it.
 //
-//   node deploy/account/check-home-package.mjs <env file>
+//   node deploy/account/check-home-package.mjs [--dry-run] <env file>
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { packageSsh } from "./package-ssh.mjs";
 
-const file = process.argv[2];
-if (!file) { console.error("usage: check-home-package.mjs <env file>"); process.exit(2); }
+const dryRun = process.argv.includes("--dry-run"), file = process.argv.slice(2).find((arg) => arg !== "--dry-run");
+if (!file) { console.error("usage: check-home-package.mjs [--dry-run] <env file>"); process.exit(2); }
 const env = Object.fromEntries(readFileSync(file, "utf8").split("\n").map((line) => /^([A-Z0-9_]+)=(.*)$/.exec(line.trim())).filter(Boolean)
   .map((m) => [m[1], m[2].replace(/^["']|["']$/g, "")]));
 const pkg = env.DUSK_MANAGED_HOME_PACKAGE_FILE, sigFile = env.DUSK_MANAGED_HOME_PACKAGE_SIGNATURE_FILE, sha = env.DUSK_MANAGED_HOME_PACKAGE_SHA256;
@@ -17,13 +18,15 @@ if (!pkg && !sigFile && !sha) { console.log("home package: none configured"); pr
 const fail = (why) => { console.error(`refusing to deploy: the home package settings disagree (${why}). Fix DUSK_MANAGED_HOME_PACKAGE_* in dusk.env.`); process.exit(1); };
 if (!pkg || !sha) fail("FILE and SHA256 go together");
 if (!/^[0-9a-f]{64}$/.test(sha)) fail("SHA256 is not a sha256");
-const host = process.env.DUSK_PACKAGE_SSH_HOST || "contabo";
+let ssh;
+try { ssh = packageSsh(); } catch (error) { console.error(`refusing to deploy: ${error.message}.`); process.exit(1); }
 const quote = (value) => `'${String(value).replace(/'/g, "'\\''")}'`;
+const command = `sha256sum ${quote(pkg)} | cut -d' ' -f1; ${sigFile ? `cat ${quote(sigFile)}` : "echo"}`;
+if (dryRun) { console.log(`home package: would run ssh ${[...ssh.args, command].map((arg) => /^[\w@.:,=/-]+$/.test(arg) ? arg : quote(arg)).join(" ")}`); process.exit(0); }
 let remote;
 try {
-  remote = execFileSync("ssh", ["-o", "BatchMode=yes", "-o", "ConnectTimeout=20", host,
-    `sha256sum ${quote(pkg)} | cut -d' ' -f1; ${sigFile ? `cat ${quote(sigFile)}` : "echo"}`], { encoding: "utf8", timeout: 120_000 }).trim().split("\n");
-} catch (error) { fail(`could not read ${pkg} on ${host}: ${String(error.message).split("\n")[0]}`); }
+  remote = execFileSync("ssh", [...ssh.args, command], { encoding: "utf8", timeout: 120_000 }).trim().split("\n");
+} catch (error) { fail(`could not read ${pkg} on ${ssh.label}: ${String(error.message).split("\n")[0]}`); }
 const [onDisk, signature = ""] = remote;
 if (onDisk !== sha) fail(`${pkg} is ${onDisk.slice(0, 12)}, SHA256 says ${sha.slice(0, 12)}`);
 if (sigFile) {
