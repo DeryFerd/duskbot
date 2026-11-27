@@ -83,7 +83,7 @@ export function usd(dollars: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: cents % 100 ? 2 : 0 }).format(cents / 100);
 }
 
-export type CloudTrialAction = "manage" | "subscribe" | "status";
+export type CloudTrialAction = "subscribe" | "status";
 export interface CloudTrialView {
   state: CloudTrialState;
   title: string;
@@ -104,7 +104,7 @@ export function cloudTrialView(trial: CloudTrial): CloudTrialView {
         : t("cloudTrial.active", { plan, price: usd(trial.amount / 100), date: shortDate(trial.chargeAt ?? trial.endsAt) }),
       ...(switchTo && switchesDown(trial.tier, switchTo.tier)
         ? { switchPlan: t("cloudTrial.preferPlan", { plan: cloudPlanLabel(switchTo.tier), price: usd(switchTo.amount / 100), date: ends }) } : {}),
-      action: { kind: "manage", label: t("cloudTrial.manage") },
+      action: null,
     };
     case "ending": return trial.keep === "portal"
       ? { state: "ending", title: t("cloudTrial.endsOn", { date: ends }),

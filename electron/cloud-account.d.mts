@@ -74,10 +74,17 @@ export interface CloudAccountState {
 /** What holding the first run's AI sign-ins did: `held` for the Cloud being made, `nothing` to hold, `no-cloud` (none
  * being made for this account), or `failed`. */
 export interface CloudHeldSignIns { outcome: "held" | "nothing" | "no-cloud" | "failed" }
-/** The cancel sheet's reasons. */
-export type CloudCancelAnswer = "feature" | "price" | "setup" | "broken" | "later" | "other";
-/** The cancel sheet's survey: one reason (words without one are kept as `other`) and two optional boxes, at most 2,000 characters each. */
-export interface CloudCancelSurvey { answer?: CloudCancelAnswer | null; expected?: string; improve?: string }
+/** The cancel sheet's reasons: the six it asks now, and an older app's setup, later and other. */
+export type CloudCancelAnswer = "price" | "unused" | "feature" | "switching" | "broken" | "skip" | "setup" | "later" | "other";
+/** The one offer the cancel sheet showed for the reason. */
+export type CloudRetentionOffer = "discount" | "downgrade" | "help" | "note" | "losses" | "none";
+/** The cancel sheet's survey: one reason (words without one are kept as `other`), the offer it showed, and two optional boxes, at most 2,000 characters each. */
+export interface CloudCancelSurvey { answer?: CloudCancelAnswer | null; expected?: string; improve?: string; offer?: CloudRetentionOffer }
+/** One step of the cancel sheet, for the save rate (shared/billing-api.ts RetentionInput). */
+export interface CloudRetentionStep {
+  reason: CloudCancelAnswer; step: "reason" | "help" | "confirm";
+  outcome: "shown" | "discount" | "downgrade" | "helped" | "kept" | "cancelled"; offer?: CloudRetentionOffer; note?: string;
+}
 /** What Cancel or Keep my plan did: `cancelled` (with when it ends, from the Admin's answer, and whether the survey was kept),
  * `kept`, `browser` (this Admin can't do it from the app yet, so the Cloud page's billing opened instead), or `failed`
  * (nothing changed). */
@@ -187,6 +194,8 @@ export interface CloudAccountBridge {
   /** Cancel trial / Cancel plan, after the survey when it says anything; Keep my plan. The Cloud is the verified session's own, never the page's. Absent on an older app. */
   cancelPlan?(survey: CloudCancelSurvey | null): Promise<CloudRenewalResult>;
   keepPlan?(): Promise<CloudRenewalResult>;
+  /** A step of the cancel sheet, for the save rate; best effort, false when it wasn't kept. Absent on an older app. */
+  retention?(step: CloudRetentionStep): Promise<boolean>;
   /** The first run on dusk cloud: this computer's AI sign-ins, held for the account's own Cloud until it runs. */
   holdSignIns?(): Promise<CloudHeldSignIns>;
   /** The first run on dusk cloud: the AIs signed in here (instance ids) whose sign-in goes along to the account's own Cloud. Absent on an older app. */
@@ -282,6 +291,8 @@ export interface CloudPlanBridge {
   /** Cancel trial / Cancel plan and Keep my plan on the Cloud's own page (only from the person's click). Absent on an older app. */
   cancel?(survey: CloudCancelSurvey | null): Promise<CloudRenewalResult>;
   keep?(): Promise<CloudRenewalResult>;
+  /** A step of the cancel sheet, for the save rate; best effort. Absent on an older app. */
+  retention?(step: CloudRetentionStep): Promise<boolean>;
   /** The room card's Not now, and Restart now after its upgrade (only from the person's click). Absent on an older app. */
   roomNotNow?(id: string): Promise<boolean>;
   restartNow?(): Promise<"restarting" | "current" | "failed">;
@@ -299,7 +310,10 @@ export declare const UPGRADE_SOURCES: readonly string[];
 export declare const CLOUD_CANCEL_ANSWERS: readonly CloudCancelAnswer[];
 /** The survey as main sends it (trimmed; words without a reason as `other`), or null when it says nothing or isn't one. */
 export declare function accountProfile(account: unknown): { name?: string; avatarUrl?: string; avatar?: string };
-export declare function cancelSurvey(input: unknown): { answer: CloudCancelAnswer; expected?: string; improve?: string } | null;
+export declare function cancelSurvey(input: unknown): { answer: CloudCancelAnswer; expected?: string; improve?: string; offer?: CloudRetentionOffer } | null;
+export declare const CLOUD_RETENTION_OFFERS: readonly CloudRetentionOffer[];
+/** A step of the cancel sheet as main sends it, or null when it isn't one. */
+export declare function retentionStep(input: unknown): CloudRetentionStep | null;
 /** Only this Admin's own /handoff (or /dashboard/handoff) page with a one-time `#t=` token; anything else is null. */
 export declare function handoffDestination(value: unknown, origin: string): string | null;
 export type CloudHandoffPage = "plans" | "home" | "workspace" | "cloud" | "billing" | "account" | "usage";
@@ -372,6 +386,8 @@ export interface CloudAccountClient {
   /** POST /api/cloud/desktop/feedback when the survey says anything (never in the cancel's way), then POST
    * /api/cloud/desktop/clouds/<the session's own Cloud>/cancel. */
   cancelPlan(survey: unknown): Promise<CloudRenewalResult>;
+  /** POST /v1/clouds/<the session's own Cloud>/retention with the step, given 8 seconds; never throws. */
+  retention(step: unknown): Promise<boolean>;
   /** POST /api/cloud/desktop/clouds/<the session's own Cloud>/keep. */
   keepPlan(): Promise<CloudRenewalResult>;
   holdSignIns(items: Array<import("../shared/ai-signins.ts").AiSignIn>): Promise<CloudHeldSignIns>;

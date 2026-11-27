@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "motion/react";
-import { Bell, CalendarClock, Check, FileText, Globe, KeyRound, LayoutDashboard, LifeBuoy, Lock, LogOut, Mail, Mic, MonitorX, MoreHorizontal, Palette, Pencil, Plug, Plus, RefreshCw, ShieldCheck, Trash2, UserPlus, UserRound, Hand, Server, Sparkles, X, ZoomIn } from "../../icons";
+import { Bell, CalendarClock, Check, CreditCard, FileText, Globe, KeyRound, LayoutDashboard, LifeBuoy, Lock, LogOut, Mail, Mic, MonitorX, MoreHorizontal, Palette, Pencil, Plug, Plus, RefreshCw, ShieldCheck, Trash2, UserPlus, UserRound, Hand, Server, Sparkles, X, ZoomIn } from "../../icons";
 import { accountDashboardUrl } from "@/lib/account-dashboard";
 import { cn } from "@/lib/cn";
 import { useMenuMotion } from "@/components/MenuMotion";
@@ -65,6 +65,10 @@ export function accountRows(input: { native: boolean; identity: PhoneIdentity; o
     signIn: Boolean(input.offered) && identity.kind === "none", cloudSignIn: Boolean(input.offered) && identity.kind === "computer",
   };
 }
+
+/** Plan & billing on the account website: the plan, the card, invoices and Cancel subscription. Only where the dashboard may
+ * be linked (never in the store apps). */
+export const planBillingUrl = (origin: string | undefined) => `${origin ?? PRODUCTION_ORIGIN}/account#billing`;
 
 /** A label a person would recognise for where these bots live: never an address like 127.0.0.1:5331 or a URL. */
 export function readableWorkspace(label: string | null | undefined): string | null {
@@ -417,6 +421,7 @@ function SettingsList({ onClose, push, placesState }: { onClose: () => void; pus
           </span>
         </div>
         {rows.dashboard && <SettingsRow icon={<LayoutDashboard />} label={t("mobile.settings.accountDashboard")} onClick={() => void accountDashboardUrl().then((url) => platform.openExternal(url))} />}
+        {rows.dashboard && email && <SettingsRow icon={<CreditCard />} label={t("settings.planBilling.title")} onClick={() => void platform.openExternal(planBillingUrl(account?.origin))} />}
         {rows.signIn && <SettingsRow icon={<UserRound />} label={t("mobile.entry.signIn")} detail={t("mobile.settings.signInDetail")} onClick={() => { onClose(); window.dispatchEvent(new Event("dusk:sign-in")); }} />}
         {otherAccounts.map((other) => (
           <SettingsRow key={other.id} icon={<UserFace account={other} size={24} className="size-6 rounded-full" />} label={other.name?.trim() || other.email} detail={other.name?.trim() ? other.email : t("mobile.settings.otherAccount")} onClick={() => void useAccount(other.id)} />

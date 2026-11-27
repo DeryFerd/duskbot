@@ -13,7 +13,6 @@ import { openSignIn } from "@/lib/sign-in-sheet";
 import { continueInBrowser } from "@/lib/account-intent";
 const browserSignIn = () => Boolean(window.duskDesktop?.cloudAccount?.continueInBrowser);
 import { Card } from "./SettingsPrimitives";
-import { CloudCancelPlan, type CloudRenewalActions } from "./CloudCancelPlan";
 import { StagingMark } from "./cloud-buy/parts";
 import { CloudSetupSteps } from "./CloudSetupSteps";
 import { useCloudSendNotice } from "./CloudSendStrip";
@@ -124,23 +123,22 @@ function accountMessage(account: CloudAccountState | null, view: CloudPlanView, 
   return null;
 }
 
-function dashboardLabel(account: CloudAccountState, view: CloudPlanView): string {
+/** The card's browser button, or null while a plan runs: its controls live in Settings > Account > Plan & billing. */
+function dashboardLabel(account: CloudAccountState, view: CloudPlanView): string | null {
   const trial = account.trial && !account.renewal?.cancelled ? cloudTrialView(account.trial).action : null;
   if (trial) return trial.label;
-  if (view.kind === "paid" || (view.kind === "unverified" && view.label)) return t("cloudAccount.manage");
   if (account.machine?.status === "payment-problem" && !account.payment) return t("cloudAccount.updatePayment");
+  if (view.kind === "paid" || (view.kind === "unverified" && view.label)) return null;
   return t("cloudAccount.dashboard");
 }
 
 export function CloudPlanOnCloud({ bridge, onConnectPhone }: { bridge: CloudPlanBridge; onConnectPhone?: () => void }) {
   const [plan, setPlan] = useState<CloudPlanSnapshot | null>(null), [failed, setFailed] = useState(false), [refused, setRefused] = useState(false);
-  const [reads, setReads] = useState(0);
   useEffect(() => {
     let active = true;
     void bridge.state().then(next => { if (active) setPlan(next); }).catch(() => { if (active) setRefused(true); });
     return () => { active = false; };
-  }, [bridge, reads]);
-  const renewal: CloudRenewalActions | null = bridge.cancel && bridge.keep ? { cancel: survey => bridge.cancel!(survey), keep: () => bridge.keep!() } : null;
+  }, [bridge]);
   if (refused) {
     return <Card title={t("settings.section.cloudAccount")}>
       <p data-cloud-plan="elsewhere" className="text-[13px] text-ink-secondary">{t("cloudAccount.onCloudNone")}</p>
@@ -152,6 +150,9 @@ export function CloudPlanOnCloud({ bridge, onConnectPhone }: { bridge: CloudPlan
     : plan?.status === "checking" ? t("cloudAccount.lastPlan", { plan: label }) : plan?.status === "signin" ? (plan.tier ? t("cloudAccount.planName", { plan: label }) : null)
       : plan ? t(home ? "cloudAccount.onCloudNoneHome" : "cloudAccount.onCloudNone") : null;
   const act = (action: () => Promise<void>) => { setFailed(false); void action().catch(() => setFailed(true)); };
+  // a running plan's controls live in Settings > Account > Plan & billing; a trial still says Subscribe or Check payment here
+  const trialAction = plan?.trial && !plan.renewal?.cancelled ? cloudTrialView(plan.trial).action : null;
+  const browserLabel = trialAction ? trialAction.label : plan?.status === "paid" ? null : t("cloudAccount.manageInBrowser");
   return <Card title={t("settings.section.cloudAccount")} subtitle={t(home ? "cloudAccount.onCloudHome" : "cloudAccount.onCloud")}>
     <div data-cloud-plan={plan?.status ?? "loading"} className="flex flex-col items-start gap-3">
       {line ? <p role="status" className="text-[15px] font-medium text-ink">{line}</p> : !plan && <p role="status" className="text-[13px] text-ink-secondary">{t("cloudAccount.loading")}</p>}
@@ -159,10 +160,9 @@ export function CloudPlanOnCloud({ bridge, onConnectPhone }: { bridge: CloudPlan
       {trialLines(plan?.trial)}
       <div className="flex flex-wrap gap-2">
         {plan?.status === "signin" && bridge.signIn && <button type="button" className="ui-button ui-button-primary" onClick={() => act(() => bridge.signIn!())}>{t("cloudAccount.signInAgain")}</button>}
-        <button type="button" className="ui-button" onClick={() => act(() => bridge.manage())}>{(plan?.trial && !plan.renewal?.cancelled && cloudTrialView(plan.trial).action?.label) || t("cloudAccount.manageInBrowser")}</button>
+        {browserLabel && <button type="button" className="ui-button" onClick={() => act(() => bridge.manage())}>{browserLabel}</button>}
         {plan && onConnectPhone && <button type="button" className="ui-button" onClick={onConnectPhone}>{t("cloudPhone.action")}</button>}
       </div>
-      {plan?.renewal && <CloudCancelPlan renewal={plan.renewal} actions={renewal} onChanged={() => setReads(count => count + 1)} />}
       {failed && <p role="alert" className="text-[13px] text-danger">{t("cloudAccount.actionFailed")}</p>}
     </div>
   </Card>;
@@ -248,7 +248,6 @@ export function CloudAccountSettings({ linkRequest = 0, cloudHome = false, teamH
   const move = moveNotice?.move ? moveLine(moveNotice.move, "local") : null;
   const moving = move && move.kind !== "done" ? move.text : null;
   const offer = useCloudOffer(Boolean(account) && buyOfferAllowed(cloudPlanView(account)), account?.offer);
-  const renewal: CloudRenewalActions | null = bridge?.cancelPlan && bridge.keepPlan ? { cancel: survey => bridge.cancelPlan!(survey), keep: () => bridge.keepPlan!() } : null;
   if (!bridge) {
     const plan = window.duskDesktop?.remoteClient?.active || !cloudHome ? undefined : window.duskDesktop?.cloudPlan;
     return <>
@@ -260,6 +259,7 @@ export function CloudAccountSettings({ linkRequest = 0, cloudHome = false, teamH
   const signed = account && ["connected", "unavailable", "reauth-required"].includes(account.status);
   const message = accountMessage(account, view, platform);
   const line = cloudPlanLine(view);
+  const dashboard = account ? dashboardLabel(account, view) : null;
   const onTeamPlan = teamPlan(account), team = planTeam(account);
   const setUp: CloudMachine | undefined = view.kind === "paid" ? { status: "provisioning" } : undefined;
   const machine: CloudMachine | undefined = onTeamPlan ? team?.machine ?? setUp : account?.status === "connected" ? account.machine ?? setUp : undefined;
@@ -303,11 +303,10 @@ export function CloudAccountSettings({ linkRequest = 0, cloudHome = false, teamH
           {view.kind === "reauth"
             ? <button type="button" disabled={busy} className="ui-button" onClick={() => void perform(() => bridge.signInAgain())}>{t("cloudAccount.signInAgain")}</button>
             : <>
-              {!(view.kind === "free" && addCloudButton) && <button type="button" disabled={busy} className="ui-button" onClick={() => void perform(() => bridge.openDashboard())}>{view.kind === "free" ? t("cloudAccount.dashboard") : dashboardLabel(account, view)}</button>}
+              {!(view.kind === "free" && addCloudButton) && (view.kind === "free" || dashboard) && <button type="button" disabled={busy} className="ui-button" onClick={() => void perform(() => bridge.openDashboard())}>{view.kind === "free" ? t("cloudAccount.dashboard") : dashboard}</button>}
             </>}
           {!confirm && <button type="button" disabled={busy} className="ui-button" onClick={() => setConfirm(true)}>{t("cloudAccount.signOut")}</button>}
         </div>
-        {account.status === "connected" && account.renewal && <CloudCancelPlan renewal={account.renewal} actions={renewal} />}
         {/* its own explicit action, never part of Start fresh: the account page says it cancels the plan, and asks there */}
         {account.status === "connected" && !confirm && <p data-cloud-delete-account="" className="text-[12px] text-ink-secondary">{t("cloudAccount.deleteAccountHint")}{" "}
           <button type="button" disabled={busy} className="underline hover:text-ink" onClick={openAccountDeletion}>{t("cloudAccount.deleteAccount")}</button></p>}

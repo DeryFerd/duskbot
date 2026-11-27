@@ -598,6 +598,7 @@ const bridge = {
     // Cancel trial / Cancel plan and Keep my plan: the survey's words only; main names the Cloud from the verified session.
     cancelPlan: survey => ipcRenderer.invoke("cloud-account:cancelPlan", survey ?? null),
     keepPlan: () => ipcRenderer.invoke("cloud-account:keepPlan"),
+    retention: step => ipcRenderer.invoke("cloud-account:retention", step ?? null),
     holdSignIns: () => ipcRenderer.invoke("cloud-account:holdSignIns"),
     carriedAis: () => ipcRenderer.invoke("cloud-account:carriedAis"),
     onState: cb => {
@@ -830,6 +831,8 @@ const bridge = {
       ? ipcRenderer.invoke("cloud-plan:cancel", survey ?? null) : Promise.reject(new Error("Choose Cancel to cancel your plan.")),
     keep: () => isLocalPage || navigator.userActivation?.isActive === true
       ? ipcRenderer.invoke("cloud-plan:keep") : Promise.reject(new Error("Choose Keep my plan to keep it.")),
+    retention: step => isLocalPage || navigator.userActivation?.isActive === true
+      ? ipcRenderer.invoke("cloud-plan:retention", step ?? null) : Promise.resolve(false),
     // The room card's Not now, and Restart now after its upgrade: only from the person's click.
     roomNotNow: id => navigator.userActivation?.isActive === true
       ? ipcRenderer.invoke("cloud-plan:room-not-now", String(id)) : Promise.reject(new Error("Choose Not now.")),

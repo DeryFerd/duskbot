@@ -45,20 +45,34 @@ export const UPGRADE_SOURCES = Object.freeze(["app_usage", "app_settings", "app_
 const UPGRADE_TIERS = Object.freeze(["starter", "personal", "pro", "max"]);
 const UPGRADE_REFUSALS = Object.freeze(["payment_failed", "not_subscribed", "already_on_plan", "plan_change_unavailable", "confirmation_required", "price_changed", "rate_limited"]);
 const CONFIRMATION = /^[A-Za-z0-9_-]{43}$/;
-/** The cancel sheet's reasons, as the Admin takes them. */
-export const CLOUD_CANCEL_ANSWERS = Object.freeze(["feature", "price", "setup", "broken", "later", "other"]);
+/** The cancel sheet's reasons, as the Admin takes them (shared/billing-api.ts CANCEL_ANSWERS); an older app's still count. */
+export const CLOUD_CANCEL_ANSWERS = Object.freeze(["feature", "price", "setup", "broken", "later", "other", "unused", "switching", "skip"]);
+/** The one offer the cancel sheet showed for the reason (shared/billing-api.ts RETENTION_OFFERS). */
+export const CLOUD_RETENTION_OFFERS = Object.freeze(["discount", "downgrade", "help", "note", "losses", "none"]);
+const RETENTION_STEPS = Object.freeze(["reason", "help", "confirm"]);
+const RETENTION_OUTCOMES = Object.freeze(["shown", "discount", "downgrade", "helped", "kept", "cancelled"]);
 const SURVEY_TEXT_MAX = 2_000, SURVEY_WAIT_MS = 8_000;
+const surveyBox = value => typeof value === "string" ? value.trim() : "";
 /**
- * The cancel sheet's survey as main sends it: one reason and each box trimmed, at most 2,000 characters. Words without a
- * reason are kept as `other`; null when nothing was said, and for anything that isn't a survey (it is never sent then).
+ * The cancel sheet's survey as main sends it: one reason, the offer it showed, and each box trimmed, at most 2,000
+ * characters. Words without a reason are kept as `other`; null when nothing was said, and for anything that isn't a
+ * survey (it is never sent then).
  */
 export function cancelSurvey(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return null;
-  const box = value => typeof value === "string" ? value.trim() : "";
-  const answer = CLOUD_CANCEL_ANSWERS.includes(input.answer) ? input.answer : null, expected = box(input.expected), improve = box(input.improve);
+  const answer = CLOUD_CANCEL_ANSWERS.includes(input.answer) ? input.answer : null, expected = surveyBox(input.expected), improve = surveyBox(input.improve);
+  const offer = CLOUD_RETENTION_OFFERS.includes(input.offer) ? input.offer : null;
   if ((input.answer !== undefined && input.answer !== null && !answer) || expected.length > SURVEY_TEXT_MAX || improve.length > SURVEY_TEXT_MAX) return null;
   if (!answer && !expected && !improve) return null;
-  return { answer: answer ?? "other", ...(expected ? { expected } : {}), ...(improve ? { improve } : {}) };
+  return { answer: answer ?? "other", ...(expected ? { expected } : {}), ...(improve ? { improve } : {}), ...(offer ? { offer } : {}) };
+}
+/** One step of the cancel sheet as main sends it (shared/billing-api.ts RetentionInput), or null for anything else. */
+export function retentionStep(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const note = surveyBox(input.note);
+  if (!CLOUD_CANCEL_ANSWERS.includes(input.reason) || !RETENTION_STEPS.includes(input.step) || !RETENTION_OUTCOMES.includes(input.outcome)
+    || (input.offer !== undefined && !CLOUD_RETENTION_OFFERS.includes(input.offer)) || note.length > SURVEY_TEXT_MAX) return null;
+  return { reason: input.reason, step: input.step, outcome: input.outcome, ...(input.offer ? { offer: input.offer } : {}), ...(note ? { note } : {}) };
 }
 /** Why the Admin won't open another Cloud's checkout now (POST clouds, 409 `addBlocked`; contract v1). */
 export const ADD_BLOCKS = Object.freeze(["cap", "checkout_open", "rate", "signups_closed"]);
@@ -76,7 +90,7 @@ export function checkoutDestination(value, { fixture = false, staging = false, c
 }
 const HANDOFF_PLANS = Object.freeze(["plus", "pro"]);
 /** The website pages a handoff opens (shared/account-api.ts HANDOFF_PAGES), and where each is when the browser signs in itself. */
-export const HANDOFF_PAGES = Object.freeze({ plans: "/billing", home: "/", workspace: "/", cloud: "/cloud", billing: "/billing", account: "/account", usage: "/usage" });
+export const HANDOFF_PAGES = Object.freeze({ plans: "/billing", home: "/", workspace: "/", cloud: "/cloud", billing: "/account#billing", account: "/account", usage: "/usage" });
 /** The service's page for approving this app's sign-in: on its own origin, at /cloud/desktop under the page's base (a
  *  service that shares its origin with the site serves the page at /dashboard), for exactly this code. */
 export function desktopApprovalLink(value, origin, userCode) {
@@ -854,6 +868,16 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
       catch (error) { return renewalFailure(error, signedIn); }
       const { cloudId: answered, ...renewal } = result?.cloudContractVersion === 1 ? parseCloudRenewal([result.cloud]) ?? {} : {};
       return { outcome: "cancelled", renewal: answered === cloudId ? renewal : null, surveyed, state: await refresh().catch(() => state()) };
+    },
+    /**
+     * One step of the cancel sheet for the save rate, for the plan's own Cloud as `cancelPlan` names it: best effort (given
+     * SURVEY_WAIT_MS), never in the sheet's way. True when the Admin kept it.
+     */
+    async retention(input) {
+      const signedIn = grant, cloudId = renewalCloud, step = retentionStep(input);
+      if (!signedIn || !cloudId || !step || state().status !== "connected") return false;
+      try { await request("", { path: `/v1/clouds/${encodeURIComponent(cloudId)}/retention`, method: "POST", body: step, token: signedIn.token, timeoutMs: SURVEY_WAIT_MS }); return true; }
+      catch { return false; }
     },
     /**
      * The first run's AI sign-ins for the account's own Cloud while it is being made: the Admin holds them sealed, for a

@@ -30,6 +30,7 @@ import { AttachmentStorageSettings } from "./AttachmentStorageSettings";
 import { AccessOverview } from "./bot-access/AccessOverview";
 import { BuiltInBrowserRow, ServerSitesRow } from "./BrowserSettingsRows";
 import { CloudPlanRow, useCloudPlan } from "./ProIntroduction";
+import { PLAN_BILLING_PAGE, PlanBillingPage, PlanBillingRow } from "./PlanBilling";
 import { buyOfferAllowed } from "@/lib/cloud-plan";
 import { CloudUsageDetails, CloudUsageSummaryView, useCloudUsageSettings } from "./CloudUsageMeter";
 import { CompanyBackupSettings } from "./CompanyBackupSettings";
@@ -195,6 +196,7 @@ export function GeneralPane({ has, remoteActive }: { has: Has; remoteActive: boo
   const { state } = useStore();
   if (at === "import") return <AdminOnly><ImportSettings /></AdminOnly>;
   if (at === SHARED_DATA_PAGE) return <SharedDataPage />;
+  if (at === PLAN_BILLING_PAGE) return <PlanBillingPage />;
   const lead = importFirst({ completedAt: state.config?.onboarding?.completedAt, lastOpenAt: previousOpenAt(), bots: state.bots?.length ?? 0 });
   const bring = has("import") && (
     <SettingsGroup label={tPreferred("settings.docs.bring", "settings.section.import")} block="import">
@@ -208,6 +210,7 @@ export function GeneralPane({ has, remoteActive }: { has: Has; remoteActive: boo
         <SettingsGroup label={tPreferred("settings.docs.you", "settings.group.account")} block="general">
           <SettingsRows>
             <AccountRows />
+            <PlanBillingRow />
           </SettingsRows>
         </SettingsGroup>
       )}
