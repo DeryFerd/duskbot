@@ -7658,9 +7658,7 @@ bus.subscribe((event: RuntimeEvent) => {
         if (bot) browserChat.turnEnded(bot.id, event.threadId);
         settlingTurns.add(event.threadId);
         liveTurnByThread.delete(event.threadId);
-        const routineReportThread = routineRun ? routineSourceThread(routineRun) : null;
-        const ranInItsChat = routineRun !== null && routineReportThread === event.threadId;
-        const quietInItsChat = routineRun !== null && ranInItsChat && routineRun.status === "completed" && automationReports.quietInItsChat(routineRun, completedTurnId);
+        const routineReportThread = routineRun ? routineSourceThread(routineRun) : null, ranInItsChat = routineRun !== null && routineReportThread === event.threadId, quietInItsChat = routineRun !== null && ranInItsChat && routineRun.status === "completed" && automationReports.quietInItsChat(routineRun, completedTurnId);
         if ((!routineReportThread || (ranInItsChat && !quietInItsChat)) && (!internal || reviewAnswer) && !passedQuietly) store.patchTask(bot.id, event.threadId, { unread: true });
         if (routineRun && !ranInItsChat) automationReports.runSettled(routineRun, completedTurnId);
         else if ((!routineRun || (routineRun.status === "completed" && !quietInItsChat)) && (!internal || reviewAnswer) && !computerSelectionTurns.get(event.threadId)?.selected && doneNotice.atTurnEnd({ botId: bot.id, threadId: event.threadId, review: reviewAnswer, ok: event.ok, routine: Boolean(routineRun) }) === "notify" && !passedQuietly && !personWaits.atTurnEnd(event.threadId, reply)) {
