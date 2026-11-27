@@ -33,7 +33,7 @@ it("a key the provider rejects stops showing Ready until it changes or works aga
   const address = provider.address();
   if (!address || typeof address === "string") throw new Error("fixture provider has no port");
   // a failed turn here must stay on the provider under test, not carry on with another AI by itself
-  const fixture = await launchVerificationServer({ ...process.env, DUSK_QUOTA_SWITCH: "0" });
+  const fixture = await launchVerificationServer({ ...process.env, DUSK_QUOTA_SWITCH: "0", FAKE_CHAT_RETRY_SCALE: "0.01" });
   const api = fixtureApi(fixture.info.url);
   const sse = await openSse(`${fixture.info.url}/api/events`);
   const control = (args: string[]) => runControlDusk([...args, "--url", fixture.info.url]) as Promise<any>;
