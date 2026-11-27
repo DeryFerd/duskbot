@@ -18,7 +18,7 @@ import { withOneChief } from "../../shared/bot-owner";
 import { DATA_ROUTES, type DataSheet, type DataTable } from "../../shared/data-surface";
 import type { NotificationLogEntry } from "../../shared/notification";
 import { isNotificationFeedAction, reduceNotificationFeed, type NotificationFeedAction } from "./notification-feed";
-import { bumpThreadUpdatedAt, mergeTaskStamps, rewindThreadUpdatedAt } from "./thread-stamps";
+import { bumpThreadUpdatedAt, mergeTaskStamps, previewOtherThread, rewindThreadUpdatedAt } from "./thread-stamps";
 import { botOpensTo, openBot, openThread, visibleNotificationThread } from "./thread-navigation";
 import { patchGroupTask } from "./thread-edits";
 import { optimisticMessageId, optimisticUserMessage, sendAnswerLost, sendArrived, sendNotDelivered, sendReconciled } from "./optimistic-send";
@@ -868,7 +868,7 @@ export function reducer(state: AppState, action: Action): AppState {
     const owner = state.bots.find((bot) => (bot.threadId !== action.threadId || bot.awaitingThreadSnapshot) && bot.tasks?.some((task) => task.threadId === action.threadId));
     if (owner) {
       const frames = [...(state.backgroundThreadEvents[action.threadId] ?? []), action].slice(-256);
-      const buffered = { ...state, backgroundThreadEvents: { ...state.backgroundThreadEvents, [action.threadId]: frames } };
+      const buffered = { ...previewOtherThread(state, "bots", owner.id, action), backgroundThreadEvents: { ...state.backgroundThreadEvents, [action.threadId]: frames } };
       return (action.type === "messageAdded" || action.type === "messagePatched") && movesThreadToTop(action.message)
         ? bumpThreadUpdatedAt(buffered, action.threadId, action.message.at, true, action.message.turnCompletedAt ?? action.message.at)
         : action.type === "messageAdded" ? bumpThreadUpdatedAt(buffered, action.threadId, action.message.at) : buffered;
@@ -1240,7 +1240,7 @@ export function reducer(state: AppState, action: Action): AppState {
         if (!group) return state;
         if (group.threadId === action.threadId && group.messages.some((m) => m.id === action.message.id)) return state;
         const stamped = bumpThreadUpdatedAt(state, action.threadId, action.message.at, movesThreadToTop(action.message), action.message.turnCompletedAt ?? action.message.at);
-        if (group.threadId !== action.threadId) return stamped;
+        if (group.threadId !== action.threadId) return previewOtherThread(stamped, "groups", group.id, action);
         const optimisticIndex = action.message.sendId
           ? group.messages.findIndex(
               (message) => message.id === optimisticMessageId(action.message.sendId!),

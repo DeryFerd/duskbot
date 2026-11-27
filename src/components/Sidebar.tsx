@@ -17,7 +17,7 @@ import { useBotMarkState } from "./mascot-presence";
 import { cn } from "@/lib/cn";
 import { useHeldMenuMotion, useMenuMotion } from "./MenuMotion";
 import { lastNonReceipt } from "@/lib/receipts";
-import { botPreview, groupPreview, lastLine, lastPreviewable, openWait, sidebarPreviewMessages, waitingLine } from "./sidebar-preview";
+import { botPreview, groupPreview, lastLine, lastPreviewable, openWait, sidebarPreviewMessages, waitingLine, withNewerPreview } from "./sidebar-preview";
 import { activeLocale, t } from "@/lib/i18n";
 import { copyText } from "@/lib/copy-text";
 import type { LocaleKey } from "@/locales";
@@ -540,7 +540,8 @@ export const BotListItem = memo(function BotListItem(props: BotRowProps) {
   const workingLabel = useWorkingLabel(bot, simpleRow && working);
   const slot = useShortcutSlot(bot.id, simpleRow && !renaming && !deleting);
   const bold = simpleRow && unread && !waiting;
-  const preview = waiting ? simpleRow ? grokWaiting(waitingLine(bot, visible, instances)) : t("sidebar.preview.waiting") : teammateWait ? t("sidebar.preview.waitingOnTeammate") : simpleRow && working ? workingLabel ?? lastLine(bot, visible, instances) : queued ? t("task.queued") : botPreview(bot, visible, instances);
+  const shown = useMemo(() => withNewerPreview(visible, bot.previewMessages), [visible, bot.previewMessages]);
+  const preview = waiting ? simpleRow ? grokWaiting(waitingLine(bot, shown, instances)) : t("sidebar.preview.waiting") : teammateWait ? t("sidebar.preview.waitingOnTeammate") : simpleRow && working ? workingLabel ?? lastLine(bot, shown, instances) : queued ? t("task.queued") : botPreview(bot, shown, instances);
   // grok names a row with what it is doing: "Manager, Main Bot, Needs attention", "Koder, Working", "Content, Unread activity"
   const grokName = [bot.name, main ? t("sidebar.grok.mainBot") : "", waiting ? t("sidebar.grok.needsAttention") : working ? t("sidebar.grok.working") : unread ? t("sidebar.grok.unreadActivity") : ""].filter(Boolean).join(", ");
   const onLiveCall = liveBadgeFor(bot.id, liveMedia, liveCall);
