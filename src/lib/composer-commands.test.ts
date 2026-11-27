@@ -136,7 +136,8 @@ describe("composer slash commands", () => {
 describe("inlineSlashCommand", () => {
   const all: ComposerSlashCommandId[] = ["goal", "learn", "setup", "new", "compact"];
   it("names a command at the start of the field once it is complete, and whether its argument is empty", () => {
-    expect(inlineSlashCommand("/goal", all)).toEqual({ id: "goal", end: 5, hint: true });
+    expect(inlineSlashCommand("/goal", all)).toEqual({ id: "goal", end: 5, hint: false });
+    expect(inlineSlashCommand("/goal ", all)).toEqual({ id: "goal", end: 5, hint: true });
     expect(inlineSlashCommand("/compact ", all)).toEqual({ id: "compact", end: 8, hint: true });
     expect(inlineSlashCommand("/compact keep the pricing", all)).toEqual({ id: "compact", end: 8, hint: false });
     expect(inlineSlashCommand("/GOAL x", all)?.id).toBe("goal");
@@ -148,7 +149,8 @@ describe("inlineSlashCommand", () => {
     expect(inlineSlashCommand("/compact", ["goal"])).toBeNull();
   });
   it("leaves /new with words after it as ordinary text", () => {
-    expect(inlineSlashCommand("/new", all)?.id).toBe("new");
+    expect(inlineSlashCommand("/new", all)).toEqual({ id: "new", end: 4, hint: false });
+    expect(inlineSlashCommand("/new ", all)).toEqual({ id: "new", end: 4, hint: false });
     expect(inlineSlashCommand("/new ideas", all)).toBeNull();
   });
 });

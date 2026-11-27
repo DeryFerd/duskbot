@@ -79,7 +79,7 @@ export function inlineSlashCommand(
   const end = match[0].length;
   const rest = text.slice(end);
   if (id === "new" && rest.trim()) return null;
-  return { id, end, hint: /^[ \t]*$/.test(rest) };
+  return { id, end, hint: id !== "new" && rest.length > 0 && /^[ \t]*$/.test(rest) };
 }
 
 export function goalTextFromComposer(text: string): string | null {

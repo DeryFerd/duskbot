@@ -2633,7 +2633,6 @@
   "composer.commandHint.goalRoom": "Describe what the team should finish",
   "composer.commandHint.learn": "What to learn (optional)",
   "composer.commandHint.setup": "What to set up (optional)",
-  "composer.commandHint.new": "Start a fresh chat",
   "composer.commandHint.compact": "What to keep (optional)",
   "composer.command.skillTag": "Skill",
   "composer.busy.team": "The team",

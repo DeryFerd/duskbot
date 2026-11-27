@@ -146,12 +146,21 @@ describe("/new and /compact in the composer", () => {
   };
 
   it("shows a built-in command as plain coloured text, no chip, with its hint after it while its argument is empty", () => {
-    for (const [text, name, words] of [["/compact ", "/compact", "What to keep (optional)"], ["/new", "/new", "Start a fresh chat"], ["/setup ", "/setup", "What to set up (optional)"], ["/learn ", "/learn", "What to learn (optional)"], ["/goal ", "/goal", "Describe what the bot should finish"]] as const) {
+    for (const [text, name, words] of [["/compact ", "/compact", "What to keep (optional)"], ["/setup ", "/setup", "What to set up (optional)"], ["/learn ", "/learn", "What to learn (optional)"], ["/goal ", "/goal", "Describe what the bot should finish"]] as const) {
       type(text);
       expect(command()?.textContent, text).toBe(name);
       expect(hint(), text).toBe(words);
-      expect(mirror().textContent).toContain(`${text} ${words}`);
+      expect(mirror().textContent).toContain(`${text}${words}`);
+      type(text.trimEnd());
+      expect(command()?.textContent, text).toBe(name);
+      expect(hint(), `${text} without its space`).toBeUndefined();
     }
+    for (const text of ["/new", "/new "]) {
+      type(text);
+      expect(command()?.textContent, text).toBe("/new");
+      expect(hint(), text).toBeUndefined();
+    }
+    type("/goal ");
     expect(container.querySelector("[data-goal-chip]")).toBeNull();
     expect(input().value).toBe("/goal ");
   });
