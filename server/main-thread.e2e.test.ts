@@ -213,3 +213,39 @@ it("keeps the person's own chat main after they open and write in a thread the b
     await fixture.close();
   }
 }, 120_000);
+
+it("keeps the main chat main after writing in a /new conversation, archives an empty one left behind, and makes main only on request", async () => {
+  const { fixture, dataDir, api, cli, wire, tasks, replied } = await launch();
+  try {
+    await api("PUT", "/api/config", { threads: { maxConcurrentPerBot: 1 } });
+    const { bot } = await cli("new-bot", "--name", "Starter");
+    writeFileSync(join(dataDir, "room-plan.json"), JSON.stringify({
+      [bot.id]: { turns: [{ reply: "Main one." }, { reply: "Side one." }, { reply: "Side two." }] },
+    }));
+    const main = bot.activeTaskId as string;
+    await cli("send", "--bot", bot.id, "--task", main, "--text", "Hello in main.");
+    await replied(bot.id, main, "Main one.");
+
+    // /new: a conversation beside the main one, selected
+    const side = (await api("POST", `/api/bots/${bot.id}/tasks`, { from: main }, 201)).task;
+    expect(side.side).toBe(true);
+    expect((await wire(bot.id)).threadId).toBe(side.threadId);
+    await cli("send", "--bot", bot.id, "--task", side.threadId, "--text", "Hello in the side chat.");
+    await replied(bot.id, side.threadId, "Side one.");
+    expect((await wire(bot.id)).mainThreadId).toBe(main);
+
+    // an empty /new conversation is archived once it is left, and only that
+    const empty = (await api("POST", `/api/bots/${bot.id}/tasks`, { from: side.threadId }, 201)).task;
+    await api("POST", `/api/bots/${bot.id}/tasks/${main}?messages=0`, {});
+    const after = await tasks(bot.id);
+    expect(after.find((task) => task.threadId === empty.threadId).archivedAt).toEqual(expect.any(Number));
+    expect(after.find((task) => task.threadId === side.threadId).archivedAt).toBeUndefined();
+    expect(after.find((task) => task.threadId === main).archivedAt).toBeUndefined();
+
+    // main moves only when the person says so
+    await api("PATCH", `/api/bots/${bot.id}`, { mainThreadChoice: side.threadId });
+    expect((await wire(bot.id)).mainThreadId).toBe(side.threadId);
+  } finally {
+    await fixture.close();
+  }
+}, 120_000);

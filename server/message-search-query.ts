@@ -21,7 +21,7 @@ export function searchMessagesInDatabase(database: DatabaseSync, query: string, 
   const statement = database.prepare(
     "SELECT thread_id, id, at, role, kind, text, json_extract(json, '$.tool.name') AS tool_name, json_extract(json, '$.from.name') AS from_name FROM messages " +
       `WHERE ${scope}((kind = 'text' AND text IS NOT NULL AND lower(text) LIKE ? ESCAPE '\\') ` +
-      "   OR (kind = 'activity' AND tool_name IS NOT NULL AND lower(tool_name) LIKE ? ESCAPE '\\')) " +
+      "   OR (kind = 'activity' AND tool_name IS NOT NULL AND tool_name NOT LIKE 'recovery:%' AND lower(tool_name) LIKE ? ESCAPE '\\')) " +
       "ORDER BY at DESC LIMIT ?",
   );
   const rows = (threadId

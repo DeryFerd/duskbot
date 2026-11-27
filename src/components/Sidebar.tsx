@@ -6,7 +6,8 @@ import { createPortal } from "react-dom";
 import { Bot as BotIcon, Check, ClipboardCopy, Crown, FolderPlus, Library, Loader2, MoreHorizontal, Pencil, Phone, Pin, Plus, TextQuote, Trash2, Users, X } from "../icons";
 import { api, useStore, formatTime, visibleMessages, botOpensTo, openBot, openThread, type Action, type AppState, type Bot, type Group, type InstanceInfo, type Message } from "@/state/store";
 import { SidebarWorkingStep, SidebarWorkingWord, useWorkingLabel } from "./SidebarWorkingStep";
-import { openBotRow } from "@/state/thread-navigation";
+import { awayFromMainThread, openBotRow } from "@/state/thread-navigation";
+import { useMainThreadLine } from "./main-thread-line";
 import { liveCallEnabled, llmThreadTitlesEnabled } from "@/lib/feature-flags";
 
 import { BotAvatar } from "./Avatar";
@@ -541,7 +542,8 @@ export const BotListItem = memo(function BotListItem(props: BotRowProps) {
   const slot = useShortcutSlot(bot.id, simpleRow && !renaming && !deleting);
   const bold = simpleRow && unread && !waiting;
   const shown = useMemo(() => withNewerPreview(visible, bot.previewMessages), [visible, bot.previewMessages]);
-  const preview = waiting ? simpleRow ? grokWaiting(waitingLine(bot, shown, instances)) : t("sidebar.preview.waiting") : teammateWait ? t("sidebar.preview.waitingOnTeammate") : simpleRow && working ? workingLabel ?? lastLine(bot, shown, instances) : queued ? t("task.queued") : botPreview(bot, shown, instances);
+  const mainLine = useMainThreadLine(bot, simpleRow && awayFromMainThread(bot) && !lastLine(bot, shown, instances), instances);
+  const preview = waiting ? simpleRow ? grokWaiting(waitingLine(bot, shown, instances)) : t("sidebar.preview.waiting") : teammateWait ? t("sidebar.preview.waitingOnTeammate") : simpleRow && working ? workingLabel ?? lastLine(bot, shown, instances) : queued ? t("task.queued") : botPreview(bot, shown, instances) || mainLine;
   // grok names a row with what it is doing: "Manager, Main Bot, Needs attention", "Koder, Working", "Content, Unread activity"
   const grokName = [bot.name, main ? t("sidebar.grok.mainBot") : "", waiting ? t("sidebar.grok.needsAttention") : working ? t("sidebar.grok.working") : unread ? t("sidebar.grok.unreadActivity") : ""].filter(Boolean).join(", ");
   const onLiveCall = liveBadgeFor(bot.id, liveMedia, liveCall);

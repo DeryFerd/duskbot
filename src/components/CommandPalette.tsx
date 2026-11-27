@@ -22,6 +22,7 @@ import { desktopMotion } from "@/lib/desktop-motion";
 import { usePaletteExits } from "./palette-exits";
 import { pacedMs } from "@/lib/motion-speed";
 import { openSettings } from "@/lib/open-settings";
+import { localizedTaskTitle } from "@/lib/task-title";
 import { botPageCommands, settingsCommands } from "./palette-commands";
 
 const FORMER_PLACE_WORD = "workspace";
@@ -78,7 +79,7 @@ function Marked({ text, query }: { text: string; query: string }) {
 /** The conversation a message result is in, unless the message is the one that titled it and already says it. */
 function conversationOf(hit: SearchHit): string {
   const title = hit.task?.replace(/…$/, "").trim() ?? "";
-  return title && !hit.snippet.replace(/^…/, "").startsWith(title) ? hit.task ?? "" : "";
+  return title && !hit.snippet.replace(/^…/, "").startsWith(title) ? localizedTaskTitle(hit.task ?? "") : "";
 }
 
 export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {

@@ -253,7 +253,7 @@ export interface Task extends Pick<WireTask, "private" | "setupRequest" | "inbox
   pinnedMessageId?: string;
   surface?: "cloud" | "vm" | "local" | "browser";
   surfaceAuto?: true;
-  openedBy?: ThreadOpener;
+  openedBy?: ThreadOpener; side?: true;
   closedBy?: ThreadCloser;
   archivedAt?: number;
   snoozedUntil?: number;
