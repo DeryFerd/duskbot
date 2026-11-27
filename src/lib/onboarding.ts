@@ -142,6 +142,10 @@ export function welcomeOnScreen(): boolean {
 export function useWelcomeOnScreen(): boolean {
   return useSyncExternalStore((listener) => { welcomeListeners.add(listener); return () => welcomeListeners.delete(listener); }, welcomeOnScreen, () => false);
 }
+/** Props for the app behind the welcome: inert while it shows, so focus and screen readers stay in the welcome. */
+export function useBehindWelcome(): { inert?: true; "aria-hidden"?: true } {
+  return useWelcomeOnScreen() ? { inert: true, "aria-hidden": true } : {};
+}
 
 const WELCOME_FINISHED_KEY = "dusk.onboarding.welcomeFinished";
 /** The first-run welcome ended in this app session (never a replay): the full-screen Cloud Pro popup waits for a later

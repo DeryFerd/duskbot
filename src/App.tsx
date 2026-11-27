@@ -13,7 +13,7 @@ import { IslandIntroHost } from "@/components/onboarding/IslandIntroHost";
 import { NotesAskHost } from "@/components/onboarding/NotesAskHost";
 import { CloudTimeZoneSync } from "@/components/CloudTimeZone";
 import { useWarmChatImages } from "@/components/use-warm-chat-images";
-import { cloudSignInDue, type WelcomeViewer } from "@/lib/onboarding";
+import { cloudSignInDue, useBehindWelcome, type WelcomeViewer } from "@/lib/onboarding";
 import { LiveCallHost } from "@/components/LiveCallHost";
 import { liveCallEnabled } from "@/lib/feature-flags";
 import { AmbientPublisher } from "@/ambient/AmbientPublisher";
@@ -197,6 +197,7 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
   const welcomeOnScreen = cloudWelcomeVisible({ viewer, connected: state.connected, enginesKnown: state.instances.length > 0, onboarding: state.config?.onboarding }, welcome)
     && state.activeView === "chat";
   const welcomeIncoming = useWelcomeIncoming(viewer);
+  const behindWelcome = useBehindWelcome();
   const firstRun = cloudFirstRun({ welcome: welcomeOnScreen, intent: cloudAsk, signIn: cloudSignIn || cloudJobWaiting });
   useAmbientAway("cloud-first-run", Boolean(firstRun));
 
@@ -329,7 +330,7 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
       <div className="relative flex min-h-0 flex-1">
       <button
         type="button"
-        ref={menuButtonRef}
+        ref={menuButtonRef} {...behindWelcome}
         aria-label={t("app.openBotList")}
         aria-expanded={drawerOpen}
         onClick={() => setDrawerOpen(true)}
@@ -340,7 +341,7 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
       </button>
       {/* A framed window shows the app, its sidebar and the chat or page, as one square pane under the top bar, running to
           the window's right and bottom edges. */}
-      <div data-window-card={framed ? "" : undefined}
+      <div data-window-card={framed ? "" : undefined} {...behindWelcome}
         className={framed ? "relative flex min-w-0 flex-1 flex-col overflow-hidden bg-app" : "contents"}>
       {framed && strips}
       <div className={framed ? "relative flex min-h-0 flex-1" : "contents"}>
