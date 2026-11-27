@@ -285,7 +285,11 @@ describe.skipIf(process.platform === "win32")("a bot's old desktop after an app 
     // per-bot: a fresh install's shared workspace computer is not this bot's own desktop
     expect((await api("PUT", "/api/config", { vps: { sshAlias: defaultAlias, mode: "per-bot" } })).status).toBe(200);
     const { bot } = await apiOk("POST", "/api/bots", { name, browser: false });
-    await apiOk("PATCH", `/api/bots/${bot.id}`, { cloudBackend: "vps", computer: null, ...(botAlias ? { vpsAlias: botAlias } : {}) });
+    // a VPS action the server started by itself can hold the lifecycle a moment, and an alias change waits for it
+    await expect.poll(async () => {
+      const patched = await api("PATCH", `/api/bots/${bot.id}`, { cloudBackend: "vps", computer: null, ...(botAlias ? { vpsAlias: botAlias } : {}) });
+      return patched.status === 409 && patched.body?.code === "server_busy" ? "server_busy" : patched.status;
+    }, { timeout: 20_000, interval: 250 }).toBe(200);
     const threadId = await send(bot.id, "Check the VPS desktop.");
     const sent = await dumpFor("Check the VPS desktop.");
     expect(sent.mcpConfig?.mcpServers?.computer, "this computer must not stand in for the VPS").toBeUndefined();
