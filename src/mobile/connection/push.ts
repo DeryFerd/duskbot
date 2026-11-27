@@ -100,9 +100,12 @@ export function registerPushForConnection(platform: MobilePlatform, { prompt = f
     if (!await ensurePairedPhone(platform)) return;
     const registration = await platform.registerPush({ prompt });
     if (!registration) return;
+    const previewKey = await platform.pushPreviewKey?.() ?? null;
     const body: MobilePushRegistration = {
       service: registration.platform, token: registration.token,
       ...(registration.platform === "apns" ? { environment: import.meta.env.DEV ? "sandbox" : "production" } : {}),
+      ...(previewKey ? { previewKey } : {}),
+      ...(registration.platform === "fcm" && platform.pushDraws ? { draws: true } : {}),
     };
     const value = JSON.stringify(body);
     const key = `dusk.mobile.push.${active.record.id}`;

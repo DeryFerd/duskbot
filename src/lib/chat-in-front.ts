@@ -2,14 +2,26 @@
 // desktop always shows the chat it has selected; the phone shows its list over the chat it last opened, and a chat under
 // the list is not being read.
 let covered = false;
+let away = false;
 
 export function setChatCovered(value: boolean): void {
   covered = value;
   noteChatInFront();
 }
 
+/** The phone app went to the background or came back. Android keeps a backgrounded page running, its stream open and
+ * its focus as it was, so only the app's own pause says nobody is reading. */
+export function setAppAway(value: boolean): void {
+  away = value;
+  noteChatInFront();
+}
+
+export function appAway(): boolean {
+  return away;
+}
+
 export function chatInFront(doc: Pick<Document, "hasFocus"> = document): boolean {
-  return !covered && doc.hasFocus();
+  return !covered && !away && doc.hasFocus();
 }
 
 /** Back in a chat sooner than this after it was last in front, its New line is not drawn. */

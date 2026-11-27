@@ -1,4 +1,5 @@
 import { expect, it, vi } from "vitest";
+import { setAppAway } from "@/lib/chat-in-front";
 import { clearSeenNotifications, seenDelivered } from "./seen-notifications";
 
 const delivered = [
@@ -23,4 +24,19 @@ it("asks the native layer to remove only what was seen, and nothing when nothing
   removeDeliveredNotifications.mockClear();
   await clearSeenNotifications({ deliveredNotifications: async () => delivered, removeDeliveredNotifications }, [], null);
   expect(removeDeliveredNotifications).not.toHaveBeenCalled();
+});
+
+it("keeps a push for the conversation the backgrounded app still shows, and clears it once the app is back", async () => {
+  const removeDeliveredNotifications = vi.fn(async () => {});
+  const phone = { deliveredNotifications: async () => delivered, removeDeliveredNotifications };
+  setAppAway(true);
+  try {
+    await clearSeenNotifications(phone, feed, "t1");
+    expect(removeDeliveredNotifications).toHaveBeenCalledExactlyOnceWith(["b"]);
+  } finally {
+    setAppAway(false);
+  }
+  removeDeliveredNotifications.mockClear();
+  await clearSeenNotifications(phone, feed, "t1");
+  expect(removeDeliveredNotifications).toHaveBeenCalledExactlyOnceWith(["a", "b"]);
 });

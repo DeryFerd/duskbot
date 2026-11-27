@@ -1,15 +1,22 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { chatInFront, setChatCovered } from "./chat-in-front";
+import { chatInFront, setAppAway, setChatCovered } from "./chat-in-front";
 
-afterEach(() => setChatCovered(false));
+afterEach(() => { setChatCovered(false); setAppAway(false); });
 const focused = { hasFocus: () => true }, away = { hasFocus: () => false };
 
 describe("chat in front", () => {
   it("is the focused page's selected chat, as on the desktop", () => {
     expect(chatInFront(focused)).toBe(true);
     expect(chatInFront(away)).toBe(false);
+  });
+
+  it("a chat the backgrounded phone app still shows is not being read, though its page keeps focus", () => {
+    setAppAway(true);
+    expect(chatInFront(focused)).toBe(false);
+    setAppAway(false);
+    expect(chatInFront(focused)).toBe(true);
   });
 
   it("a chat under the phone's list is not being read, however focused the app is", () => {

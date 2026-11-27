@@ -15,7 +15,7 @@ import { openChatLink } from "@/components/ThreadRefs";
 import { parseBotRefUrl, parseThreadRefUrl } from "@/lib/thread-refs"; import { completeSlackOAuth } from "@/lib/slack-oauth-link"; import { parseSlackOAuthLink } from "../../shared/slack";
 import { effectiveLanguage, useLanguageChoice, usePageLanguage } from "@/lib/language-preference";
 import { parseMobileOpenLink, type MobileOpenTarget } from "../../shared/mobile-link";
-import { setChatCovered } from "@/lib/chat-in-front";
+import { setAppAway, setChatCovered } from "@/lib/chat-in-front";
 import { readSkinChoice, subscribeSkin, THEME_SKINS } from "@/lib/skins";
 import { AiConsentProvider, AiConsentSheet } from "./consent/AiConsent";
 import { installAiReport } from "@/lib/ai-report";
@@ -23,6 +23,7 @@ import { registerPushForConnection } from "./connection/push";
 import { ActiveConnection } from "./connection/active"; import { useConnections } from "./connection/connections";
 import { useExternalPages } from "./external-pages";
 import { setPresenceThread } from "./connection/presence";
+import { useNotificationAvatars } from "./notification-avatars";
 import { useSeenNotifications } from "./connection/seen-notifications";
 import { visibleNotificationThread } from "@/state/thread-navigation";
 import { supportMail } from "./legal";
@@ -72,6 +73,7 @@ function Shell() {
   useProductScreen(sheetOpen && sheet ? `/${sheet.kind}` : chatId ? "/chats/:id" : "/", chatId);
   useTeamChats(state.config);
   useWarmChatImages(state.bots);
+  useNotificationAvatars(platform, state.bots);
   usePageLanguage(effectiveLanguage(useLanguageChoice(), state.config?.language));
   useKeyboardSync(platform, rootRef);
   useExternalPages(platform);
@@ -112,6 +114,10 @@ function Shell() {
 
   // with the list in front, the chat last opened is not being read: its replies stay unread and still notify
   useEffect(() => { setChatCovered(chatId === null); return () => setChatCovered(false); }, [chatId]);
+  useEffect(() => {
+    const stops = [platform.onPause?.(() => setAppAway(true)), platform.onResume?.(() => setAppAway(false))];
+    return () => { for (const stop of stops) stop?.(); setAppAway(false); };
+  }, [platform]);
   // the conversation on screen never pushes or shows a banner here; pushes already seen leave Notification Center
   const viewingThread = chatId ? visibleNotificationThread(state) : null;
   useEffect(() => { setPresenceThread(viewingThread); return () => setPresenceThread(null); }, [viewingThread]);

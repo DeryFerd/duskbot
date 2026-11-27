@@ -37,6 +37,9 @@ export interface ScanResult {
 /** A push still in Notification Center: its own identifier, the conversation and the notification it was for. */
 export interface DeliveredNotification { id: string; threadId?: string; notificationId?: string }
 
+/** A bot's picture for the notifications the system shows while the app is closed: base64 PNG, 128 px square. */
+export interface NotificationAvatar { botId: string; png: string }
+
 export interface AppleCredential { identityToken: string; authorizationCode: string; givenName?: string; familyName?: string }
 
 export type CameraPermission = "granted" | "denied" | "prompt";
@@ -265,6 +268,14 @@ export interface MobilePlatform {
   /** What Notification Center holds from the bot host, and its removal. */
   deliveredNotifications?(): Promise<DeliveredNotification[]>;
   removeDeliveredNotifications?(ids: readonly string[]): Promise<void>;
+  /** The app icon's count: the unread notifications. */
+  setBadge?(count: number): void;
+  /** The key a push's preview is sealed to, so only this phone reads it; null where the system cannot open one. */
+  pushPreviewKey?(): Promise<string | null>;
+  /** The app draws its own notifications from data-only pushes (Android), so the workspace may send those. */
+  pushDraws?: boolean;
+  /** Bots' pictures, kept where the system's notification code reads them while the app is closed. */
+  cacheNotificationAvatars?(avatars: readonly NotificationAvatar[]): Promise<void>;
   /** A push's button, its reply field, a tap on a push from the bot host, or a Live Activity's button; one that arrived
    * before a listener waits for the first. */
   onPhoneAction?(listener: (action: NativeAction) => void): () => void;

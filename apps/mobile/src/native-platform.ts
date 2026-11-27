@@ -25,11 +25,12 @@ import { BarcodeScanner, BarcodeFormat, GoogleBarcodeScannerModuleInstallState, 
 import { keychainSecrets } from "@/mobile/keychain";
 import { guardCleartext } from "@/mobile/cleartext";
 import { friendlyError } from "@/lib/plain-error";
-import { handleBack, type AppleCredential, type BackGestureEvent, type BarConfig, type CameraPermission, type CameraScanner, type DeliveredNotification, type MobileChrome, type MobilePlatform, type OrientationBridge, type ScanOverlay, type SystemMenuAction, type TurnActivityBridge } from "@/mobile/platform";
+import { handleBack, type AppleCredential, type BackGestureEvent, type BarConfig, type CameraPermission, type CameraScanner, type DeliveredNotification, type MobileChrome, type NotificationAvatar, type MobilePlatform, type OrientationBridge, type ScanOverlay, type SystemMenuAction, type TurnActivityBridge } from "@/mobile/platform";
 import type { ControlPlace, SystemControl } from "@/lib/system-control";
 import type { SystemAlertOptions, SystemAlertOutcome, SystemDialogs, SystemFormOptions, SystemFormResult } from "@/lib/system-dialog";
 import type { NativeAction } from "@/mobile/phone-actions";
 import { shortcutAction, type ShortcutBot, type ShortcutsBridge } from "@/mobile/shortcuts";
+import { createNotificationTaps } from "@/mobile/notification-taps";
 import type { TurnActivityAttributes, TurnActivityState } from "../../../shared/phone-activity";
 import type { FloatingPillGlassState, GlassBridge, GlassEvent, GlassGlyphs, GlassState, PullRefreshGlassState, SwipeReplyGlassState, TakeoverGlassState, ViewerGlassState } from "@/mobile/native-glass";
 import type { HomeGlassState } from "@/mobile/native-home-glass";
@@ -39,7 +40,7 @@ import { createVoiceEvents, type VoiceBridge, type VoiceEnd } from "@/lib/voice-
 import { registerPhoneVoice } from "@/lib/voice-input/device";
 import { attachToComposer, PickProblem, setNativeAttach } from "@/lib/native-attach";
 import { FILE_MAX_BYTES } from "../../../shared/upload-limits";
-import { appLinkFromUniversal, type MobileOpenTarget } from "../../../shared/mobile-link";
+import { appLinkFromUniversal } from "../../../shared/mobile-link";
 import { t } from "@/lib/i18n";
 
 /** The app's own scanner on ios (ios/App/App/QrScannerPlugin.swift): the ML Kit plugin ships for CocoaPods only, and this
@@ -434,6 +435,13 @@ interface NotificationsPlugin {
   setViewing(options: { threadId: string | null }): Promise<void>;
   delivered(): Promise<{ notifications: DeliveredNotification[] }>;
   remove(options: { ids: string[] }): Promise<void>;
+  setBadge(options: { count: number }): Promise<void>;
+  /** the X25519 key a push's preview is sealed to; absent where the system has no X25519 (Android before 12) */
+  previewKey(): Promise<{ key?: string }>;
+  cacheAvatars(options: { avatars: NotificationAvatar[] }): Promise<void>;
+  /** android: taps on the notifications the app drew, kept from before the page listened */
+  takeOpened(): Promise<{ actions: NativeAction[] }>;
+  addListener(event: "action", listener: (event: NativeAction) => void): Promise<PluginListenerHandle>;
 }
 const DuskNotifications = registerPlugin<NotificationsPlugin>("DuskNotifications");
 /** android only (android/.../PushSetupPlugin.java): whether the build carries a Firebase config, without which push
@@ -654,19 +662,6 @@ async function groundHex(): Promise<string> {
   return cssHex(getComputedStyle(root).getPropertyValue("--color-app")) ?? "";
 }
 
-/** Android's delivered pushes: FCM's data block is flat (server/mobile/push.ts messageData). */
-async function androidDelivered(): Promise<DeliveredNotification[]> {
-  const { notifications } = await PushNotifications.getDeliveredNotifications();
-  return notifications.map((one) => {
-    const data = (one.data ?? {}) as Record<string, unknown>;
-    return {
-      id: one.id,
-      ...(typeof data.threadId === "string" ? { threadId: data.threadId } : {}),
-      ...(typeof data.id === "string" ? { notificationId: data.id } : {}),
-    };
-  });
-}
-
 function turnActivityBridge(): TurnActivityBridge {
   return {
     async start(attributes, state) { return (await DuskTurnActivity.start({ attributes, state })).id ?? null; },
@@ -679,8 +674,6 @@ function turnActivityBridge(): TurnActivityBridge {
   };
 }
 
-/** a push the bot host sent, as opposed to one from an older link that put its ids at the top level */
-const fromBotHost = (data: Record<string, unknown>) => ["dusk", "omb"].some((key) => data[key] && typeof data[key] === "object");
 
 export function orientationBridge(plugin: OrientationPlugin): OrientationBridge {
   return {
@@ -948,19 +941,6 @@ async function ensureBarcodeModule(): Promise<boolean> {
   });
 }
 
-function notificationTarget(data: Record<string, unknown>): MobileOpenTarget {
-  const target: MobileOpenTarget = {};
-  const fields = { env: "environmentId", bot: "botId", group: "groupId", thread: "threadId", message: "messageId" } as const;
-  for (const [field, key] of Object.entries(fields)) {
-    if (typeof data[field] === "string") target[key] = data[field];
-  }
-  switch (data.view) {
-    case "chat": case "computer": case "profile": case "routines": case "settings": case "notifications":
-      target.view = data.view;
-  }
-  return target;
-}
-
 export async function nativePlatform(): Promise<MobilePlatform> {
   const kind = Capacitor.getPlatform() as "ios" | "android";
   if (kind === "android") {
@@ -1025,7 +1005,18 @@ export async function nativePlatform(): Promise<MobilePlatform> {
   };
   const speech = Capacitor.isPluginAvailable("DuskSpeech");
   const turnActivityOn = kind === "ios" && Capacitor.isPluginAvailable("DuskTurnActivity");
-  const notificationsOn = kind === "ios" && Capacitor.isPluginAvailable("DuskNotifications");
+  const notificationsOn = Capacitor.isPluginAvailable("DuskNotifications");
+  const taps = createNotificationTaps();
+  // one native listener, added before the page's: a cold start hands its tap only to the first
+  if (pushOn) void PushNotifications.addListener("pushNotificationActionPerformed", ({ actionId, inputValue, notification }) => {
+    taps.feed({ actionId, ...(inputValue ? { inputValue } : {}), data: notification.data ?? {} });
+  }).catch(() => {});
+  if (notificationsOn && kind === "android") {
+    void DuskNotifications.addListener("action", taps.feed)
+      .then(() => DuskNotifications.takeOpened())
+      .then(({ actions }) => { for (const action of actions) taps.feed(action); })
+      .catch(() => {});
+  }
   const insetsOn = kind === "android" && Capacitor.isPluginAvailable("DuskInsets");
   const backs: Array<() => boolean> = [];
   let backButton: Promise<PluginListenerHandle> | undefined;
@@ -1280,35 +1271,24 @@ export async function nativePlatform(): Promise<MobilePlatform> {
     setViewingThread: notificationsOn ? (threadId) => { void DuskNotifications.setViewing({ threadId }).catch(() => {}); } : undefined,
     async deliveredNotifications() {
       try {
-        return notificationsOn ? (await DuskNotifications.delivered()).notifications : kind === "android" ? await androidDelivered() : [];
+        return notificationsOn ? (await DuskNotifications.delivered()).notifications : [];
       } catch {
         return [];
       }
     },
     async removeDeliveredNotifications(ids) {
-      if (!ids.length) return;
-      try {
-        if (notificationsOn) return await DuskNotifications.remove({ ids: [...ids] });
-        if (kind !== "android") return;
-        // Android cancels by id and tag, so the delivered entries go back whole
-        const { notifications } = await PushNotifications.getDeliveredNotifications();
-        const gone = notifications.filter((one) => ids.includes(one.id));
-        if (gone.length) await PushNotifications.removeDeliveredNotifications({ notifications: gone });
-      } catch {}
+      if (!ids.length || !notificationsOn) return;
+      try { await DuskNotifications.remove({ ids: [...ids] }); } catch {}
     },
-    onNotificationOpen(listener) {
-      return unsubscribe([PushNotifications.addListener("pushNotificationActionPerformed", ({ actionId, notification }) => {
-        const data = notification.data ?? {};
-        if (actionId === "tap" && !fromBotHost(data)) listener(notificationTarget(data));
-      })]);
-    },
+    setBadge: notificationsOn ? (count) => { void DuskNotifications.setBadge({ count }).catch(() => {}); } : undefined,
+    pushPreviewKey: notificationsOn ? async () => { try { return (await DuskNotifications.previewKey()).key ?? null; } catch { return null; } } : undefined,
+    pushDraws: notificationsOn && kind === "android",
+    cacheNotificationAvatars: notificationsOn ? async (avatars) => { try { await DuskNotifications.cacheAvatars({ avatars: [...avatars] }); } catch {} } : undefined,
+    onNotificationOpen: (listener) => taps.onOpen(listener),
     onPhoneAction(listener) {
-      const handles = [PushNotifications.addListener("pushNotificationActionPerformed", ({ actionId, inputValue, notification }) => {
-        const data = notification.data ?? {};
-        if (actionId !== "tap" || fromBotHost(data)) listener({ actionId, ...(inputValue ? { inputValue } : {}), data });
-      })];
-      if (kind === "ios" && Capacitor.isPluginAvailable("DuskTurnActivity")) handles.push(DuskTurnActivity.addListener("action", listener));
-      return unsubscribe(handles);
+      const stops = [taps.onAction(listener)];
+      if (kind === "ios" && Capacitor.isPluginAvailable("DuskTurnActivity")) stops.push(unsubscribe([DuskTurnActivity.addListener("action", listener)]));
+      return () => { for (const stop of stops) stop(); };
     },
     turnActivity: turnActivityOn ? turnActivityBridge() : undefined,
     shortcuts: Capacitor.isPluginAvailable("DuskShortcuts") ? shortcutsBridge() : undefined,
