@@ -12,7 +12,7 @@
     "ai send saved gmail drafts"
   ],
   "answer": "**finish the proposal in gmail, then release it when the client says yes.** the bot sends the saved draft to its saved recipients, including cc and bcc. it uses the text exactly as it stands. open that copy before allowing the send; edits in chat need a separate draft update.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,7 +45,7 @@
     "toolkit": "gmail",
     "slug": "GMAIL_SEND_DRAFT"
   },
-  "what": "**write it once in gmail. send that exact copy from chat.** use a draft you wrote yourself or one a bot prepared earlier. ask it to list drafts and open the match.\n\nthe saved to, cc and bcc decide who receives it. update a wrong address or sentence separately, then read the saved email. sending asks by default unless you allow a daily amount.",
+  "what": "**write it once in gmail. send that exact copy from chat.** use a draft you wrote yourself or one a bot prepared earlier. ask it to [list your drafts](/integrations/gmail/list-drafts) and open the match.\n\nthe saved to, cc and bcc decide who receives it. [update the draft](/integrations/gmail/update-draft) for a wrong address or sentence, then read the saved email. sending asks by default unless you allow a daily amount.",
   "uses": [
     "send a proposal you finished in gmail once the customer confirms the deadline",
     "send the venue confirmation after checking its booking reference",
@@ -121,5 +121,9 @@
       "sending asks every time"
     ]
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "draft: \"ready: emberwick quote\"\nto: bettina@emberwick.example\nbcc: an old work address",
+    "after": "bot shows to, cc and bcc before asking.\nyou spot the bcc, ask for a draft update, read it again.\nsent as saved, to bettina only."
+  }
 }

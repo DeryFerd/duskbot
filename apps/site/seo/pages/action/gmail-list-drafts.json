@@ -12,7 +12,7 @@
     "claude review unfinished gmail drafts"
   ],
   "answer": "**find the reply you meant to finish last week.** a bot lists saved gmail drafts with recipients, subjects and full text, using read access alone. ask what each draft still needs and get a useful to-do list back. gmail returns drafts without a fixed order, in batches. new drafts can take time to appear, so let the bot finish the list.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,11 +45,12 @@
     "toolkit": "gmail",
     "slug": "GMAIL_LIST_DRAFTS"
   },
-  "what": "**find the half-written email before it becomes a missed reply.** full draft details let the bot see who it's for and what remains unfinished. a subject alone rarely tells the whole story.\n\ngmail returns long lists in batches without sorting them by date. the bot needs to keep reading until there are no more. an incomplete search should say what it missed.",
+  "what": "**find the half-written email before it becomes a missed reply.** full draft details let the bot see who it's for and what remains unfinished. a subject alone rarely tells the whole story.\n\ngmail returns long lists in batches without sorting them by date. the bot needs to keep reading until there are no more. an incomplete search should say what it missed.\n\n**found the draft? finish it there.** the bot can [rework the saved copy](/integrations/gmail/update-draft) or [send it as it stands](/integrations/gmail/send-draft) once you've read it.",
   "uses": [
     "**recover a forgotten follow-up.** find the unfinished grant reviewer email without opening every draft.",
     "**see what you might clear.** collect recipients and subjects before cleaning the folder yourself.",
-    "**check a lost compose window.** look for the saved proposal before writing it again."
+    "**check a lost compose window.** look for the saved proposal before writing it again.",
+    "**spot drafts with no recipient.** read the full details and flag any with an empty to line."
   ],
   "routine": {
     "message": "on mondays at 2, read all my gmail drafts with full details. keep fetching batches until the list ends.\n\nshow a checklist here for drafts addressed to pebblewake arts. include recipient, subject and what looks unfinished. mark anything you can't tell as unknown. say if an error leaves the list incomplete. never edit, delete or send a draft.",
@@ -111,5 +112,9 @@
   "tip": {
     "text": "ask what still needs doing, not just what the subjects say. that turns a folder listing into a useful checklist."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "drafts folder: about 40 saves, in no order.\nthe one you need goes to agnes about a grant extension.",
+    "after": "bot reads every batch until none are left.\nmatch: \"re: grant extension\", to agnes, last paragraph unfinished.\nnothing changed, nothing sent."
+  }
 }

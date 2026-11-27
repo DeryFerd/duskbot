@@ -12,7 +12,7 @@
     "ai gmail send email with attachments"
   ],
   "answer": "**get the payroll email ready without assembling it again every friday.** a bot can send through your connected gmail, with cc, bcc, attachments and your signature. give at least one address and a subject or body. sends ask first by default unless you set a daily amount. review the recipients as carefully as the words before tapping allow.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,7 +45,7 @@
     "toolkit": "gmail",
     "slug": "GMAIL_SEND_EMAIL"
   },
-  "what": "**this writes and sends in one step.** give the bot at least one email address, plus a subject or body. a first name alone isn't an address.\n\n- plain text or formatted email\n- extra recipients, cc and bcc if you name them\n- your gmail signature, when the connection can read it\n- attachments totalling no more than 20 mb\n\nstill choosing the words? ask to see them in chat first.",
+  "what": "**this writes and sends in one step.** give the bot at least one email address, plus a subject or body. a first name alone isn't an address.\n\n- plain text or formatted email\n- extra recipients, cc and bcc if you name them\n- your gmail signature, when the connection can read it\n- attachments totalling no more than 20 mb\n\nstill choosing the words? ask to see them in chat first.\n\n**want a second look first?** ask for [a draft instead](/integrations/gmail/create-email-draft). answering an existing conversation? [reply in the thread](/integrations/gmail/reply-to-email-thread) so it stays together.",
   "uses": [
     "**supplier details:** send the delivery address you just confirmed.",
     "**signed paperwork:** send your attached order form, copying only the buyer you name.",
@@ -127,5 +127,9 @@
       "the signature looks right"
     ]
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "you: send the floor plan to ebba and copy callum.\nfile: a 26 mb scan.",
+    "after": "bot stops: attachments over 20 mb won't go.\na 4 mb export attached instead.\nto ebba@bexley.example, cc callum@bexley.example.\nsent after you allow it."
+  }
 }

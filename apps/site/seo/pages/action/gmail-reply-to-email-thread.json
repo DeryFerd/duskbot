@@ -12,7 +12,7 @@
     "ai gmail thread response"
   ],
   "answer": "**get the answer back into the conversation where it belongs.** the bot replies in an existing gmail thread, keeps its subject and quotes the last returned message. you name the recipients and can attach files. this action sends the reply; choose create email draft when you want to keep editing in gmail.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -43,7 +43,7 @@
     "toolkit": "gmail",
     "slug": "GMAIL_REPLY_TO_THREAD"
   },
-  "what": "**keep the answer where the conversation happened.** the bot finds and reads the thread before replying to the people you name. it does not choose recipients from the thread by itself.\n\nyou can add files and your gmail signature. the complete message, attachments included, must stay under 25 mb. want to keep editing in gmail? ask for a draft instead.",
+  "what": "**keep the answer where the conversation happened.** the reply needs the conversation's id, so the bot [searches your mail](/integrations/gmail/fetch-emails) and reads the thread before replying to the people you name. it does not choose recipients from the thread by itself.\n\nyou can add files and your gmail signature. the complete message, attachments included, must stay under 25 mb. want to keep editing in gmail? ask for [a draft instead](/integrations/gmail/create-email-draft).",
   "uses": [
     "answer a venue coordinator with the room choice you already agreed",
     "return the corrected brief in the supplier conversation it belongs to",
@@ -105,10 +105,18 @@
     {
       "mistake": "using a recurring job with corrections buried in chat",
       "fix": "keep current corrections in a connected folder and name it."
+    },
+    {
+      "mistake": "attaching a long video to the reply",
+      "fix": "the whole reply must stay under 25 mb. share a drive link instead."
     }
   ],
   "tip": {
     "text": "the subject keeps the conversation together. the sender and date tell you which conversation it is."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "thread: corin at arden hall asks which room you want.\ntwo caterers are on cc.",
+    "after": "reply in the same thread, to corin only:\n\"the garden room, please.\"\ncaterers left off. subject kept from the thread."
+  }
 }

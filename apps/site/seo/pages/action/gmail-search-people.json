@@ -22,7 +22,7 @@
     "/integrations/gmail/fetch-emails"
   ],
   "og_line": "recognise the person before using the address.",
-  "what": "**get the address without digging through old email.** a surname, phone fragment or company gives the bot somewhere to start. the lookup leaves contacts unchanged and writes no email.\n\nsaved contacts can return company details. including unsaved contacts limits results to names, email addresses and phone numbers. need the company too? ask for a separate saved-contact search.",
+  "what": "**get the address without digging through old email.** a surname, phone fragment or company gives the bot somewhere to start. the lookup leaves contacts unchanged and writes no email.\n\nsaved contacts can return company details. including unsaved contacts limits results to names, email addresses and phone numbers. need the company too? ask for a separate saved-contact search.\n\n**found the address? write to them.** use it in [a new email](/integrations/gmail/send-email) or in [a draft you read first](/integrations/gmail/create-email-draft).",
   "uses": [
     "**recover a booking contact.** search for the photographer whose surname you remember.",
     "**find a repair number.** look up the equipment contact you saved.",
@@ -60,7 +60,7 @@
       "a": "**no, the lookup only reads.** your address book stays as it was."
     }
   ],
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -117,5 +117,9 @@
   "tip": {
     "text": "two people with the same name? give the bot a company or surname instead of letting it pick."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "you: find cosmo from ashgrove studio.\nsaved contacts: none.\nincluding unsaved contacts: 2 people called cosmo.",
+    "after": "cosmo, cosmo@ashgrove.example\nthe other cosmo has a different domain.\ncompany not shown: unsaved contacts return names, emails and phones only."
+  }
 }

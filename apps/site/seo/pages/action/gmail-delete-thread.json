@@ -12,7 +12,7 @@
     "ai gmail thread deletion"
   ],
   "answer": "**that old thread can take the signed attachment with it.** delete thread removes every message in a gmail conversation immediately and permanently. it skips trash, so there is no undo. use it only for mail you want gone for good. sending approval does not hold deletion; tell the bot to ask before it removes anything.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,7 +45,7 @@
     "toolkit": "gmail",
     "slug": "GMAIL_DELETE_THREAD"
   },
-  "what": "**read back to the first reply before saying goodbye.** a search may match the last message, while the signed file sits further back. have the bot show the subject, people and message count, then open the whole conversation.\n\nfor an ordinary inbox clear-out, use trash. permanent deletion is for the conversation you have decided must go.",
+  "what": "**read back to the first reply before saying goodbye.** a search may match the last message, while the signed file sits further back. the bot needs the thread's id, so it [searches your mail](/integrations/gmail/fetch-emails) and reads the match back. have it show the subject, people and message count, then open the whole conversation.\n\nfor an ordinary inbox clear-out, [move the message to trash](/integrations/gmail/move-to-trash) instead. permanent deletion is for the conversation you have decided must go.",
   "uses": [
     "**a secret sent by mistake:** remove a thread containing a password or bank details after you decide it must go.",
     "**the wrong file:** delete the named conversation after checking every reply.",
@@ -106,6 +106,10 @@
     {
       "mistake": "approving from the subject alone",
       "fix": "read the whole conversation first."
+    },
+    {
+      "mistake": "expecting to restore it later",
+      "fix": "this skips trash and has no undo. trash keeps [a way back](/integrations/gmail/untrash-message) until it empties."
     }
   ],
   "tip": {
@@ -119,5 +123,9 @@
       "the routine asks before it deletes"
     ]
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "search: \"bank details\" from dalia\nmatch: the last of 6 replies\nthe signed lease sits in reply 2",
+    "after": "bot shows the subject, people and all 6 messages.\nyou save the lease first, then allow the delete.\nthe thread is gone for good. trash never held it."
+  }
 }
