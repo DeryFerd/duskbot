@@ -98,6 +98,17 @@ describe("a batch on the agent-browser engine", () => {
     expect(planAgentBrowserBatch({ steps: [] }, tools).ok).toBe(false);
   });
 
+  it("reads a step's action as models write it", () => {
+    const tools = { tools: [...TOOLS, { name: "agent_browser_wait_ms", inputSchema: { type: "object", properties: { ms: { type: "integer" } }, required: ["ms"] } }] };
+    const plan = planAgentBrowserBatch({ steps: [
+      { do: "navigate", url: "example.com" }, { action: "agent_browser_fill", selector: "#q", text: "hi" }, { tool: "click", ref: "e3" },
+      { do: "wait", ms: 500 }, { do: "goto", url: "example.org" },
+    ] }, tools);
+    expect(plan).toMatchObject({ ok: true, steps: [
+      { do: "open", url: "example.com" }, { do: "fill", selector: "#q", text: "hi" }, { do: "click", ref: "e3" }, { do: "wait_ms", ms: 500 }, { do: "open", url: "example.org" },
+    ] });
+  });
+
   it("is listed with the engine's tools", async () => {
     const { runtime, spec } = engine();
     const listed = await runtime.agentRpc("s", spec, "tools/list", {}) as { tools: Array<{ name: string; inputSchema: { properties: Record<string, unknown> } }> };

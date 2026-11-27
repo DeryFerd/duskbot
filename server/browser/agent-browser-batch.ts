@@ -81,11 +81,35 @@ export function agentBrowserStep(step: BatchStepOf, tools: unknown): { ok: true;
   return { ok: true, call: { name, arguments: args } };
 }
 
+const STEP_NAME_KEYS = ["action", "tool", "command", "step", "name"] as const;
+const OPENS: ReadonlySet<string> = new Set(["navigate", "goto", "go", "visit", "go_to"]);
+
+/** A step's `do` as models write it: under another key, as the tool's whole name, or as the chrome engine's names. */
+export function stepAction(step: unknown): unknown {
+  if (!step || typeof step !== "object" || Array.isArray(step)) return step;
+  const record = { ...step as Record<string, unknown> };
+  if (typeof record.do !== "string") {
+    const key = STEP_NAME_KEYS.find((name) => typeof record[name] === "string");
+    if (!key) return record;
+    record.do = record[key];
+    delete record[key];
+  }
+  let action = String(record.do).trim().toLowerCase().replace(/^(?:agent_browser_|browser_)/u, "");
+  if (OPENS.has(action)) action = "open";
+  else if (action === "wait") {
+    action = record.selector !== undefined || record.ref !== undefined ? "wait_for_selector"
+      : record.text !== undefined ? "wait_for_text"
+      : record.state !== undefined || record.load !== undefined ? "wait_for_load" : "wait_ms";
+  }
+  return { ...record, do: action };
+}
+
 export type BatchPlan = { ok: true; steps: BatchStepOf[]; limitMs: number } | { ok: false; error: string };
 
 /** Every step is checked before the first runs, so a typo in step 9 does not leave a form half filled. */
 export function planAgentBrowserBatch(args: unknown, tools: unknown): BatchPlan {
-  const input = INPUT.safeParse(args ?? {});
+  const given = args && typeof args === "object" && !Array.isArray(args) ? args as Record<string, unknown> : {};
+  const input = INPUT.safeParse(Array.isArray(given.steps) ? { ...given, steps: given.steps.map(stepAction) } : given);
   if (!input.success) return { ok: false, error: `${BATCH_TOOL} got arguments it cannot use (${issues(input.error)}).` };
   const steps = input.data.steps as BatchStepOf[];
   let pictures = 0;
