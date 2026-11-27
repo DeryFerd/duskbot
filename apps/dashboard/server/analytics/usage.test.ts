@@ -138,6 +138,12 @@ describe("usage answer and focus", () => {
     expect(a.focus.some(item => item.id === "theme:slow")).toBe(true);
   });
 
+  it("counts setup as confusing only when a note says it hurt, not when people set something up", () => {
+    const notes = ["they set up a telegram bot and a daily routine.", "the bot kept setup files organized.", "the chats show little friction, so pain points are unclear.",
+      "what is painful is unclear setup and a repeated welcome loop.", "it is painful when slack setup stalls.", "the app showed a confusing connection dialog."];
+    expect(themesOf(notes).find(theme => theme.key === "confusing")?.count).toBe(3);
+  });
+
   it("writes nothing for an empty window", () => {
     const empty = { totals: { turns: 0, failRate: null, p90Ms: null }, apps: [], failures: [], frustration: { groups: [] }, routines: { peopleWithRoutines: 0, runs: 0, failed: 0 },
       adoption: [], categories: [], themes: [], people: { topShare: null } } as unknown as UsageAnswer;
