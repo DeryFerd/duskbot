@@ -2,6 +2,7 @@
 // own version (1.2.x) is not a release's (0.2.x), so the notes are the releases since the last ones this phone showed.
 import { useEffect, useState } from "react";
 import { PHONE_AREAS, loadReleases, notesForUpdate, updatedThisLaunch, type Release } from "@/lib/release-notes";
+import { useAiConsent } from "./consent/AiConsent";
 import { usePlatform } from "./platform";
 import { WhatsNewPage } from "./sheets/UpdatesPage";
 
@@ -9,6 +10,7 @@ const RELEASE_KEY = "dusk-whats-new:phone-release";
 
 export function PhoneUpdatedLine() {
   const platform = usePlatform();
+  const consent = useAiConsent();
   const [notes, setNotes] = useState<Release[] | null>(null);
   useEffect(() => {
     if (!updatedThisLaunch("phone", platform.appVersion)) return;
@@ -23,6 +25,6 @@ export function PhoneUpdatedLine() {
     });
     return () => { active = false; };
   }, [platform.appVersion, platform.native]);
-  if (!notes) return null;
+  if (!notes || (consent && (consent.asking || !consent.consent))) return null;
   return <WhatsNewPage notes={notes} updatedTo={platform.appVersion} onClose={() => setNotes(null)} />;
 }
