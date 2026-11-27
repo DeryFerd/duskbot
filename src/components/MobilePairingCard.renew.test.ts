@@ -320,6 +320,19 @@ describe("a dusk cloud in the desktop app", () => {
     expect(host.querySelector("[data-phone-cloud-sign-in]")?.textContent).toContain("owner@example.test");
   });
 
+  it("a phone list the cloud could not give never stops its log in code: the cloud's phones are its sign-ins", async () => {
+    const base = api.getMockImplementation()!;
+    api.mockImplementation(async (path: string, init?: unknown) => {
+      if (path === "/api/mobile/devices") throw new Error("upstream answered 502");
+      return base(path, init);
+    });
+    await mount({ remote: false, cloudHome: true });
+    await flush();
+    expect(host.querySelector("[data-pairing-failed]")).toBeNull();
+    expect(host.textContent).not.toContain("Could not complete the request");
+    expect(host.querySelector("[data-phone-code]")?.textContent).toBe("ABCD EFGH");
+  });
+
   it("an account service without phone codes goes straight to the email log in, without retrying", async () => {
     answer = () => ({ outcome: "unsupported" });
     await mount({ remote: false, cloudHome: true, email: "owner@example.test" });
