@@ -62,6 +62,7 @@ import { createIncidents, type Incidents } from "./incidents/index.ts";
 import { memoryIncidentStore } from "./incidents/store.ts";
 import { createIncidentRoutes, IncidentRouteError } from "./incidents/routes.ts";
 import { BUG_REPORT_PATH, createBugReports } from "./bug-reports/index.ts";
+import { createDesktopLink } from "./email/desktop-link.ts";
 import { memoryBugReportStore, type BugReportStore } from "./bug-reports/store.ts";
 import { createSealer, parseSealKey } from "./clouds/seal.ts";
 import { aliasLegacyCookies, aliasLegacyHeaders } from "../../../electron/legacy-names.mjs";
@@ -449,6 +450,8 @@ export function createDashboardApp(options: DashboardAppOptions) {
     admin: (req, mutation) => { const owner = auth.requireWeb(req, { mutation }); if (!admin.isAdmin(owner.email)) throw new AdminError(403, "not_admin", "This account is not an admin."); } });
   const reportMail = options.bugReports?.mail;
   const cloudSealer = createSealer((options.admin?.env ?? process.env).DUSK_CLOUD_SEAL_KEY ? parseSealKey((options.admin?.env ?? process.env).DUSK_CLOUD_SEAL_KEY!) : null);
+  const desktopLink = createDesktopLink({ mailer, email: emailCfg, json, readJson: async req => bodyObject(await readBody(req)), ip: req => rateIp(clientIp(req, options.trustProxy ?? false)),
+    now, daily: Number(process.env.DUSK_DESKTOP_LINK_DAILY) || undefined });
   const bugReports = createBugReports({ store: bugReportStore, now, json, bodyObject, ip: req => rateIp(clientIp(req, options.trustProxy ?? false)),
     admin: (req, mutation) => { const owner = auth.requireWeb(req, { mutation }); if (!admin.isAdmin(owner.email)) throw new AdminError(403, "not_admin", "This account is not an admin."); return owner.id; },
     audit: (actor, action, target, detail) => { void analytics.sink.audit({ id: `aud_${random(12)}`, at: now(), actor, action, target, detail }).catch(() => {}); },
@@ -873,6 +876,7 @@ export function createDashboardApp(options: DashboardAppOptions) {
     } })) return;
     if (await incidentRoutes.handle(req, res, url)) return;
     if (await bugReports.handle(req, res, url)) return;
+    if (await desktopLink.handle(req, res, url)) return;
     // preview and development only: the latest code and link mailed to a test address, for test harnesses
     if (path === "/v1/ops/test-mail" && method === "GET") {
       const token = adminEnv.DUSK_OPS_TOKEN, given = String(req.headers.authorization ?? "");

@@ -47,6 +47,7 @@ const SAY = {
   bye: { say: "bye for now!", accent: "lav" },
   promo: { say: "Something new!", accent: "lime" },
   invite: { say: "you're invited!", accent: "sky" },
+  desktop: { say: "for your computer!", accent: "sky" },
 } as const;
 /** the plain way to the billing page: no plan buttons in email, and nothing that opens the payment provider */
 const billingLink = (cfg: EmailConfig, before: string): Block => ({ t: "link", before, label: "billing page", href: `${cfg.app}/billing` });
@@ -396,5 +397,21 @@ export function teamSeatFullEmail(cfg: EmailConfig, { team, email, seats }: { te
       { t: "button", label: "open your team", href: `${cfg.app}/team` },
     ],
     reason: ACCOUNT_REASON,
+  });
+}
+
+/** a phone visitor on dusk.bot typed their own address to get the desktop download link for later (email/desktop-link.ts).
+ *  no account is involved, so nothing here assumes one */
+export function desktopLinkEmail(cfg: EmailConfig): Rendered {
+  return render(cfg, {
+    subject: "dusk bot for your computer", preheader: "open this on your computer to download dusk bot. it's free for personal use.", tag: "download", ...SAY.desktop,
+    blocks: [
+      { t: "h1", text: "here's dusk bot for your computer" },
+      { t: "p", text: "open this email on your mac, windows or linux computer and download the app. it picks the right version for you." },
+      { t: "button", label: "download dusk bot", href: `${cfg.site}/download` },
+      { t: "p", text: "open it, sign in to the ai you already use or start on the free models, and your first bot is working a couple of minutes later." },
+      { t: "p", small: true, text: "didn't ask for this? you can ignore it. we won't write again." },
+    ],
+    reason: "you got this because someone typed this address on dusk.bot to send themselves the download link.",
   });
 }
