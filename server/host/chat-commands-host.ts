@@ -6,10 +6,10 @@ import { randomUUID } from "node:crypto";
 import type { BotRecord, Message, Store } from "../store.ts";
 import type { UsageTrigger } from "../usage-ledger.ts";
 import { conversationHold, type QuietDeps } from "./warm-summary-host.ts";
-import { markSideConversation } from "../side-conversations.ts";
+import { startsSideConversation } from "../side-conversations.ts";
 import { createIdleCompaction, IDLE_COMPACT_MIN_TOKENS, idleCompactHours } from "../idle-compaction.ts";
 
-type ChatStore = Pick<Store, "taskByThread" | "groupByThread" | "activePath" | "createTask" | "tasks" | "patchTask">;
+type ChatStore = Pick<Store, "taskByThread" | "groupByThread" | "activePath" | "createTask" | "tasks">;
 
 export function createNewChat(deps: {
   /** A getter: the server builds this before its store exists. */
@@ -42,9 +42,8 @@ export function createNewChat(deps: {
       if (deps.store().taskByThread(botId, fromThreadId)) confirm(fromThreadId);
       return { threadId: fromThreadId, fresh: false };
     }
-    const task = deps.store().createTask(botId, undefined, true);
+    const task = deps.store().createTask(botId, undefined, true, undefined, undefined, undefined, undefined, undefined, startsSideConversation(deps.store(), botId));
     if (!task) return null;
-    markSideConversation(deps.store(), botId, task.threadId);
     if (starter) setStarter?.(task.threadId, starter);
     leftForNewChat(botId, fromThreadId, task.threadId);
     return { threadId: task.threadId, fresh: true };

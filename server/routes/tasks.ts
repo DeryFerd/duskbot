@@ -16,7 +16,7 @@ import { titleConversationExcerpt, type ThreadTitleSource } from "../thread-titl
 import type { MessagePage } from "./channels.ts";
 import { bulkDeleteThreadIds, type BulkDeleteRefusal } from "./bulk-delete.ts";
 import { PASS, type RouteHandler } from "./table.ts";
-import { archiveEmptySideConversations, markSideConversation } from "../side-conversations.ts";
+import { archiveEmptySideConversations, startsSideConversation } from "../side-conversations.ts";
 import { sawThread } from "../thread-presence.ts";
 import { readThreadNotifications } from "./notifications.ts";
 
@@ -187,11 +187,11 @@ export function createTaskRoutes(deps: TaskRouteDeps): RouteHandler & { deleteTa
         return json(res, 400, { error: "from must be one of this bot's conversations" });
       }
       if (body.from !== undefined && cloudThreadRefusal(auth, body.from)) return json(res, 403, { error: cloudThreadRefusal(auth, body.from) });
-      const task = store.createTask(bot.id, typeof body.title === "string" ? body.title : undefined, body.select !== false, body.projectId, undefined, body.approvalMode, undefined, cwd);
+      const task = store.createTask(bot.id, typeof body.title === "string" ? body.title : undefined, body.select !== false, body.projectId, undefined, body.approvalMode, undefined, cwd,
+        startsSideConversation(store, bot.id));
       if (!task) return json(res, 500, { error: "couldn't create that task" });
       // Who opened it decides who may answer its cards on a shared workspace.
       if (auth.kind === "session") threadStarters.set(task.threadId, actorKey(auth));
-      markSideConversation(store, bot.id, task.threadId);
       archiveEmptySideConversations(store, bot.id, task.threadId, (threadId) => threadBusy(bot.id, threadId));
       if (typeof body.from === "string") deps.leftForNewChat?.(bot.id, body.from, task.threadId);
       return json(res, 201, { bot: publicBot(store.bot(bot.id)!), task: wireTask(task, store.bot(bot.id)!.modelSelection) });

@@ -4,10 +4,14 @@ import type { Store } from "./store.ts";
 
 type SideStore = Pick<Store, "tasks" | "patchTask" | "activePath">;
 
+/** Whether a conversation the person starts now is a side one: they already have another open conversation here. */
+export function startsSideConversation(store: Pick<Store, "tasks">, botId: string, exceptThreadId?: string): boolean {
+  return store.tasks(botId).some((task) => task.threadId !== exceptThreadId && !task.routineRunId && task.archivedAt === undefined && !task.openedBy);
+}
+
 /** Marks a conversation the person just started as a side one when they already have another open conversation here. */
 export function markSideConversation(store: Pick<Store, "tasks" | "patchTask">, botId: string, threadId: string): boolean {
-  const others = store.tasks(botId).some((task) => task.threadId !== threadId && !task.routineRunId && task.archivedAt === undefined && !task.openedBy);
-  if (!others) return false;
+  if (!startsSideConversation(store, botId, threadId)) return false;
   store.patchTask(botId, threadId, { side: true });
   return true;
 }
