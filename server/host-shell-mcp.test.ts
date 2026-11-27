@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { modelPlace } from "./agents-bridge-switch.ts";
 import { planBox, visibleInBox } from "./bot-box/plan.ts";
-import { commandEnvironment, findFiles, hostShellLaunch, findInvocations, handleHostShellRpc, mountsHostShell, runCommand, runProcess, type Runner } from "./host-shell-mcp.ts";
+import { commandEnvironment, hostShellTools, shellInvocation, findFiles, hostShellLaunch, findInvocations, handleHostShellRpc, mountsHostShell, runCommand, runProcess, type Runner } from "./host-shell-mcp.ts";
 
 const desktopTurn = { engineHasShell: false, desktopApp: true, cloudHome: false, worksOn: undefined, remoteComputer: false, thisComputerRefused: false, guest: false, testRun: false,
   model: "hosted" as const, platform: "darwin" as const, watched: true };
@@ -113,12 +113,21 @@ describe("run_command", () => {
     expect(seen).toEqual({ PATH: "/bin" });
     expect(commandEnvironment({ dusk_cloud_x: "1", HOME: "/h" })).toEqual({ HOME: "/h" });
   });
-  it("runs PowerShell on Windows", async () => {
+  it("runs PowerShell on Windows, its output read as UTF-8", async () => {
     let call: string[] = [];
     const run: Runner = async (file, args) => { call = [file, ...args]; return { code: 0, stdout: "hi", stderr: "", timedOut: false }; };
     await runCommand({ command: "Get-ChildItem" }, { cwd, platform: "win32", env: {}, run });
     expect(call[0]).toBe("powershell.exe");
-    expect(call.at(-1)).toBe("Get-ChildItem");
+    expect(call).toEqual(expect.arrayContaining(["-NoProfile", "-NonInteractive", "-Command"]));
+    // Windows PowerShell writes in the console's code page, so a file named "résumé" came back garbled and the next step could not find it
+    expect(call.at(-1)).toMatch(/^try \{ \[Console\]::OutputEncoding = \[System\.Text\.UTF8Encoding\]::new\(\$false\); \$OutputEncoding = \[Console\]::OutputEncoding \} catch \{\}; Get-ChildItem$/);
+  });
+  it("prefers PowerShell 7 on Windows when it is installed, where && and || work", () => {
+    const pwsh = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
+    const found = (path: string) => path === pwsh;
+    expect(shellInvocation("git pull && git push", "win32", { ProgramFiles: "C:\\Program Files" }, found).file).toBe(pwsh);
+    expect(shellInvocation("x", "win32", { Path: "C:\\Tools;C:\\Program Files\\PowerShell\\7" }, found).file).toBe(pwsh);
+    expect(shellInvocation("x", "win32", { Path: "C:\\Tools" }, () => false).file).toBe("powershell.exe");
   });
   it("refuses an empty command", async () => {
     expect(await runCommand({ command: "  " }, { cwd })).toEqual({ text: "command is required.", isError: true });
@@ -193,5 +202,18 @@ describe("the MCP server", () => {
     const called = await handleHostShellRpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "find_files", arguments: { query: "b" } } }, options);
     expect(called).toEqual({ jsonrpc: "2.0", id: 2, result: { content: [{ type: "text", text: "/a/b.txt" }] } });
     expect(await handleHostShellRpc({ jsonrpc: "2.0", method: "notifications/initialized" }, options)).toBeUndefined();
+  });
+  it("tells a model on Windows to write PowerShell, with a PowerShell example, and one elsewhere a sh one", async () => {
+    const described = (platform: NodeJS.Platform) => {
+      const run = hostShellTools(platform)[0]!;
+      return `${run.description} ${run.inputSchema.properties.command.description}`;
+    };
+    expect(described("win32")).toContain("write PowerShell, not bash");
+    expect(described("win32")).toContain("Get-ChildItem ~\\Downloads | Select-Object -First 50");
+    expect(described("win32")).not.toMatch(/ls -la|\| head/);
+    expect(described("darwin")).toContain("ls -la ~/Downloads | head -50");
+    expect(described("linux")).not.toContain("PowerShell");
+    const listed = await handleHostShellRpc({ jsonrpc: "2.0", id: 1, method: "tools/list" }, { cwd: tmpdir(), hidden: [], platform: "win32", env: {} });
+    expect(JSON.stringify(listed)).toContain("write PowerShell, not bash");
   });
 });

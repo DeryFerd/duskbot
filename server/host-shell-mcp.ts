@@ -28,39 +28,53 @@ const FIND_MAX = 200;
 type Json = Record<string, unknown>;
 const isRecord = (value: unknown): value is Json => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
-export const HOST_SHELL_TOOLS = [
-  {
-    name: "run_command",
-    description:
-      "Run a shell command on the person's own computer, the one dusk bot runs on, and get its exit code, stdout and stderr back as text. It starts in your working folder, so files you make there can be attached to the chat. Use it for all command-line work: listing or reading files, moving or renaming them, converting a file, running a script with python3 or node, git, curl. On macOS and Linux it runs in a sh-compatible shell, on Windows in PowerShell. For a long job raise timeout_seconds (default 60, at most 300), or start it in the background with its output in a file and read that file later.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        command: { type: "string", description: "The command to run, for example: ls -la ~/Downloads | head -50" },
-        timeout_seconds: { type: "integer", minimum: 1, maximum: MAX_SECONDS, description: "How long it may run before it is stopped. Default 60." },
+const POSIX_SHELL = {
+  how: "On macOS and Linux it runs in a sh-compatible shell.",
+  example: "ls -la ~/Downloads | head -50",
+};
+// a model writes bash by habit, and Windows PowerShell 5.1 refuses most of it (ls -la, head, grep, &&)
+const WINDOWS_SHELL = {
+  how: "This computer runs Windows, so it runs in PowerShell (PowerShell 7 when installed, else Windows PowerShell 5.1): write PowerShell, not bash. Get-ChildItem for ls, Select-String for grep, Select-Object -First for head, Get-Content for cat, Get-Command for which; chain steps with ; since && and || need PowerShell 7.",
+  example: "Get-ChildItem ~\\Downloads | Select-Object -First 50",
+};
+
+/** The shell's tools as this computer's platform runs them: the same on every turn on one computer. */
+export function hostShellTools(platform: NodeJS.Platform = process.platform) {
+  const shell = platform === "win32" ? WINDOWS_SHELL : POSIX_SHELL;
+  return [
+    {
+      name: "run_command",
+      description:
+        `Run a shell command on the person's own computer, the one dusk bot runs on, and get its exit code, stdout and stderr back as text. It starts in your working folder, so files you make there can be attached to the chat. Use it for all command-line work: listing or reading files, moving or renaming them, converting a file, running a script with python3 or node, git, curl. ${shell.how} For a long job raise timeout_seconds (default 60, at most 300), or start it in the background with its output in a file and read that file later.`,
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          command: { type: "string", description: `The command to run, for example: ${shell.example}` },
+          timeout_seconds: { type: "integer", minimum: 1, maximum: MAX_SECONDS, description: "How long it may run before it is stopped. Default 60." },
+        },
+        required: ["command"],
       },
-      required: ["command"],
     },
-  },
-  {
-    name: "find_files",
-    description:
-      "Find files and folders on the person's computer: the system's own search index first (Spotlight on macOS, Windows Search on Windows), then a walk of their home folder, iCloud Drive included, when the index finds nothing. The way to find a file the person names or describes. Matches every word of the query in the file name (any order) by default; set in_content to match a phrase inside the files instead. Returns full paths. Never scan the whole disk with a command instead.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        query: { type: "string", description: "Part of the file name, for example: invoice 2026 or resume.pdf" },
-        in_content: { type: "boolean", description: "Also match words inside documents. Default false." },
-        folder: { type: "string", description: "Optional: only search inside this folder, as a full path or starting with ~." },
-        limit: { type: "integer", minimum: 1, maximum: FIND_MAX, description: `How many paths at most. Default ${FIND_DEFAULT}.` },
+    {
+      name: "find_files",
+      description:
+        "Find files and folders on the person's computer: the system's own search index first (Spotlight on macOS, Windows Search on Windows), then a walk of their home folder, iCloud Drive included, when the index finds nothing. The way to find a file the person names or describes. Matches every word of the query in the file name (any order) by default; set in_content to match a phrase inside the files instead. Returns full paths. Never scan the whole disk with a command instead.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          query: { type: "string", description: "Part of the file name, for example: invoice 2026 or resume.pdf" },
+          in_content: { type: "boolean", description: "Also match words inside documents. Default false." },
+          folder: { type: "string", description: "Optional: only search inside this folder, as a full path or starting with ~." },
+          limit: { type: "integer", minimum: 1, maximum: FIND_MAX, description: `How many paths at most. Default ${FIND_DEFAULT}.` },
+        },
+        required: ["query"],
       },
-      required: ["query"],
+      annotations: { readOnlyHint: true },
     },
-    annotations: { readOnlyHint: true },
-  },
-] as const;
+  ] as const;
+}
 
 export interface ExecResult { code: number | null; stdout: string; stderr: string; timedOut: boolean }
 
@@ -80,8 +94,20 @@ export function commandEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv
   return env;
 }
 
-export function shellInvocation(command: string, platform: NodeJS.Platform, env: NodeJS.ProcessEnv): { file: string; args: string[] } {
-  if (platform === "win32") return { file: "powershell.exe", args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command] };
+/** Windows PowerShell writes in the console's code page, which turns any name outside it into question marks. */
+const WINDOWS_UTF8 = "try { [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [Console]::OutputEncoding } catch {}; ";
+
+/** PowerShell 7 when installed (on PATH or in its default folder), else the Windows PowerShell every Windows has. */
+function windowsPowerShell(env: NodeJS.ProcessEnv, exists: (path: string) => boolean): string {
+  const named = (name: string) => Object.entries(env).find(([key]) => key.toUpperCase() === name)?.[1];
+  const programFiles = named("PROGRAMFILES");
+  const candidates = [...(named("PATH") ?? "").split(";").filter(Boolean).map((dir) => win32.join(dir, "pwsh.exe")),
+    ...(programFiles ? [win32.join(programFiles, "PowerShell", "7", "pwsh.exe")] : [])];
+  return candidates.find((candidate) => exists(candidate)) ?? "powershell.exe";
+}
+
+export function shellInvocation(command: string, platform: NodeJS.Platform, env: NodeJS.ProcessEnv, exists: (path: string) => boolean = existsSync): { file: string; args: string[] } {
+  if (platform === "win32") return { file: windowsPowerShell(env, exists), args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", WINDOWS_UTF8 + command] };
   const shell = env.SHELL && /\/(?:zsh|bash|sh)$/.test(env.SHELL) && existsSync(env.SHELL) ? env.SHELL : "/bin/sh";
   return { file: shell, args: ["-c", command] };
 }
@@ -283,7 +309,7 @@ export async function handleHostShellRpc(message: unknown, options: HostShellOpt
     case "ping":
       return reply({ result: {} });
     case "tools/list":
-      return reply({ result: { tools: HOST_SHELL_TOOLS } });
+      return reply({ result: { tools: hostShellTools(options.platform) } });
     case "tools/call": {
       const params = isRecord(rpc.params) ? rpc.params : {};
       const args = isRecord(params.arguments) ? params.arguments : {};
