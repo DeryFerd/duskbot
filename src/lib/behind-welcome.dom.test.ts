@@ -35,3 +35,10 @@ it("puts the sidebar, the chat and its panels, and the drawer button behind it",
   expect(source).toMatch(/ref=\{menuButtonRef\}\s*\{\.\.\.behindWelcome\}/);
   expect(source).toMatch(/<div data-window-card=\{framed \? "" : undefined\} \{\.\.\.behindWelcome\}/);
 });
+
+it("puts the frame bar's settings button and an unframed window's top notices behind it too", () => {
+  const app = readFileSync(join(process.cwd(), "src/App.tsx"), "utf8");
+  expect(app).toMatch(/\{!framed && <div data-notices-behind-welcome className="contents" \{\.\.\.behindWelcome\}>\{strips\}<\/div>\}/);
+  const bar = readFileSync(join(process.cwd(), "src/components/WindowFrameBar.tsx"), "utf8");
+  expect(bar).toMatch(/<div data-frame-bar-end \{\.\.\.behindWelcome\}[^>]*>\s*<button[^>]*?data-frame-settings/s);
+});

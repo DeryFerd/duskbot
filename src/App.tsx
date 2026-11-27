@@ -326,7 +326,7 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
     <div className={cn("flex h-full flex-col", framed && "bg-frame")} style={pastLights}>
       <WindowFrameBar />
       <BotLimitPopup />
-      {!framed && strips}
+      {!framed && <div data-notices-behind-welcome className="contents" {...behindWelcome}>{strips}</div>}
       <div className="relative flex min-h-0 flex-1">
       <button
         type="button"
