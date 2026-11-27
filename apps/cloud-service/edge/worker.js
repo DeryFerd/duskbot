@@ -162,51 +162,65 @@ async function queueHook(request, url, label, body, env) {
   return waking(asked === 429 ? 429 : 503);
 }
 
+/** every answer from a home's address is kept out of search results: these hosts are machines, never pages to index */
+export const ROBOTS = "noindex, nofollow";
+function unindexed(response) {
+  // a websocket upgrade is passed through untouched
+  if (response.status === 101) return response;
+  const out = new Response(response.body, response);
+  out.headers.set("x-robots-tag", ROBOTS);
+  return out;
+}
+
 export default {
   async fetch(request, env, ctx) {
-    const url = new URL(request.url);
-    const label = url.hostname.endsWith(`.${env.PUBLIC_DOMAIN}`) ? url.hostname.slice(0, -env.PUBLIC_DOMAIN.length - 1) : "";
-    if (!LABEL.test(label)) return new Response("Not found", { status: 404 });
-    const ip = request.headers.get("cf-connecting-ip") ?? "unknown", at = Date.now();
-    if (tooManyMisses(ip, at)) return new Response("Not found", { status: 404 });
-    let route;
-    try { route = await routeFor(label, env, ctx); } catch { return new Response("Unavailable", { status: 503, headers: { "retry-after": "5" } }); }
-    if (!route) { noteMiss(ip, at); return new Response("Not found", { status: 404 }); }
-    if (route.gone) return goneHome();
-    const reason = wakeReason(request, url);
-    // a webhook's body is read first, so it can still reach the home after a wake, exactly as it was sent
-    let body;
-    if (request.body && reason === "webhook") {
-      const buffer = await request.arrayBuffer();
-      if (buffer.byteLength > MAX_HELD_BODY) return new Response("Too large", { status: 413 });
-      body = buffer;
-    }
-    if (route.awake) {
-      const response = await forward(request, url, route.upstream, body).catch(() => null);
-      if (response && !DOWN.includes(response.status)) return response;
-      // a cached route can outlive the home's sleep: ask again, and wake it if it sleeps
-      ctx.waitUntil(globalThis.caches?.default?.delete(cacheKey(label)) ?? Promise.resolve());
-      if (request.body && body === undefined) return response ?? waking(503);
-      route = await routeFor(label, env, ctx, { fresh: true }).catch(() => null);
-      if (route?.gone) return goneHome();
-      if (!route || route.awake) return response ?? waking(503);
-    }
-    if (!reason && route.wakeable && !route.awake && openingWake(request, url)) {
-      const asked = await askWake(label, "client", env);
-      return waking(asked === 429 ? 429 : 503);
-    }
-    if (!reason || !route.wakeable) return waking(503, { asleep: !reason && route.wakeable && !route.awake, wakeable: route.wakeable });
-    if (request.body && body === undefined) {
-      const buffer = await request.arrayBuffer();
-      if (buffer.byteLength > MAX_HELD_BODY) return new Response("Too large", { status: 413 });
-      body = buffer;
-    }
-    if (reason === "webhook" && queueReady(env)) {
-      const queued = await queueHook(request, url, label, body, env).catch(() => null);
-      if (queued) return queued;
-    }
-    const woke = await wakeAndWait(label, reason, env, ctx);
-    if (woke.status !== 200) return waking(woke.status);
-    return forward(request, url, woke.route.upstream, body);
+    return unindexed(await answer(request, env, ctx));
   },
 };
+
+async function answer(request, env, ctx) {
+  const url = new URL(request.url);
+  const label = url.hostname.endsWith(`.${env.PUBLIC_DOMAIN}`) ? url.hostname.slice(0, -env.PUBLIC_DOMAIN.length - 1) : "";
+  if (!LABEL.test(label)) return new Response("Not found", { status: 404 });
+  const ip = request.headers.get("cf-connecting-ip") ?? "unknown", at = Date.now();
+  if (tooManyMisses(ip, at)) return new Response("Not found", { status: 404 });
+  let route;
+  try { route = await routeFor(label, env, ctx); } catch { return new Response("Unavailable", { status: 503, headers: { "retry-after": "5" } }); }
+  if (!route) { noteMiss(ip, at); return new Response("Not found", { status: 404 }); }
+  if (route.gone) return goneHome();
+  const reason = wakeReason(request, url);
+  // a webhook's body is read first, so it can still reach the home after a wake, exactly as it was sent
+  let body;
+  if (request.body && reason === "webhook") {
+    const buffer = await request.arrayBuffer();
+    if (buffer.byteLength > MAX_HELD_BODY) return new Response("Too large", { status: 413 });
+    body = buffer;
+  }
+  if (route.awake) {
+    const response = await forward(request, url, route.upstream, body).catch(() => null);
+    if (response && !DOWN.includes(response.status)) return response;
+    // a cached route can outlive the home's sleep: ask again, and wake it if it sleeps
+    ctx.waitUntil(globalThis.caches?.default?.delete(cacheKey(label)) ?? Promise.resolve());
+    if (request.body && body === undefined) return response ?? waking(503);
+    route = await routeFor(label, env, ctx, { fresh: true }).catch(() => null);
+    if (route?.gone) return goneHome();
+    if (!route || route.awake) return response ?? waking(503);
+  }
+  if (!reason && route.wakeable && !route.awake && openingWake(request, url)) {
+    const asked = await askWake(label, "client", env);
+    return waking(asked === 429 ? 429 : 503);
+  }
+  if (!reason || !route.wakeable) return waking(503, { asleep: !reason && route.wakeable && !route.awake, wakeable: route.wakeable });
+  if (request.body && body === undefined) {
+    const buffer = await request.arrayBuffer();
+    if (buffer.byteLength > MAX_HELD_BODY) return new Response("Too large", { status: 413 });
+    body = buffer;
+  }
+  if (reason === "webhook" && queueReady(env)) {
+    const queued = await queueHook(request, url, label, body, env).catch(() => null);
+    if (queued) return queued;
+  }
+  const woke = await wakeAndWait(label, reason, env, ctx);
+  if (woke.status !== 200) return waking(woke.status);
+  return forward(request, url, woke.route.upstream, body);
+}

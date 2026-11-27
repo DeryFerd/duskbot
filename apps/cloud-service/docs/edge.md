@@ -4,6 +4,15 @@
 It asks the account service (`GET /v1/managed/edge/route`, `POST /v1/managed/edge/wake`, both behind
 `DUSK_MANAGED_EDGE_TOKEN`) where a label goes and whether that home is awake.
 
+## Kept out of search results
+
+Every answer the Worker gives carries `x-robots-tag: noindex, nofollow`: a home's own pages, the 503 asleep or waking,
+429, 410 gone, 413 and the 404 for a label with no home or a host that is no label at all. Search engines found home
+addresses like `d95855d03f50cba9f4260.dusk.bot` through the `*.dusk.bot` wildcard; the wildcard stays, the header
+keeps them unindexed. A websocket upgrade (101) passes through untouched. The zone's own hosts (`dusk.bot`, `www`,
+`preview`, ...) never reach this Worker (scripts/edge-routes.mjs), so the site stays indexable. Checked by
+`src/edge-robots.test.ts`.
+
 ## Who wakes a sleeping home
 
 - A webhook: any request under `/hooks/*`.
