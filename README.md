@@ -12,7 +12,7 @@ and get a team of bots, each with its own memory and computer.</p>
 <a href="https://dusk.bot/docs">Docs</a>
 </p>
 
-<sub>v0.2.13 · free forever for personal use · source available</sub>
+<sub><a href="https://github.com/DuskBotAI/duskbot/releases/latest">latest release</a> · free forever for personal use · source available</sub>
 
 </div>
 
@@ -193,7 +193,7 @@ Backups are one encrypted file you can move anywhere:
 | --- | --- | --- |
 | Free, no account. Bots work while it's awake. | We host it. Bots keep working with your laptop shut. | Free. One line on Ubuntu or Debian, and bots stay on as long as it does. |
 
-A phone app to text your bots from anywhere is coming soon.
+Text your bots from anywhere with the phone app: [iPhone on the App Store](https://apps.apple.com/app/id6834725640) or [Android (.apk)](https://github.com/DuskBotAI/duskbot-releases/releases/latest/download/DuskBot.apk).
 
 ## Install
 
@@ -203,13 +203,9 @@ A phone app to text your bots from anywhere is coming soon.
 curl -fsSL https://dusk.bot/install-mac | sh
 ```
 
-Prefer the DMG? Get it from [the latest release](https://github.com/DuskBotAI/duskbot/releases/latest) (`arm64` for Apple silicon, `x64` for Intel). It isn't notarized by Apple yet, so the first time:
+Prefer the DMG? Get [`DuskBot.dmg`](https://github.com/DuskBotAI/duskbot-releases/releases/latest/download/DuskBot.dmg) for Apple silicon or [`DuskBot-intel.dmg`](https://github.com/DuskBotAI/duskbot-releases/releases/latest/download/DuskBot-intel.dmg) for Intel, both from the latest release. The Mac app is signed and notarized by Apple, so it opens like any other app.
 
-1. Open dusk bot, and click **Done** when macOS says it can't check it.
-2. Open **System Settings**, then **Privacy & Security**.
-3. Scroll down, click **Open Anyway**, and confirm.
-
-**Windows.** Run `DuskBot-0.2.0-setup.exe` from [the latest release](https://github.com/DuskBotAI/duskbot/releases/latest). Windows 10 or 11, 64-bit, no admin rights. If Windows says it protected your PC, click **More info**, then **Run anyway**.
+**Windows.** Run [`DuskBot-setup.exe`](https://github.com/DuskBotAI/duskbot-releases/releases/latest/download/DuskBot-setup.exe) from the latest release. Windows 10 or 11, 64-bit, no admin rights. If Windows says it protected your PC, click **More info**, then **Run anyway**.
 
 **Linux.** Ubuntu 24.04, 64-bit, in beta. Get the `.deb` or the `.AppImage` from [the latest release](https://github.com/DuskBotAI/duskbot/releases/latest). See the [Linux guide](docs/linux-desktop.md).
 
@@ -222,7 +218,7 @@ Then open the app, sign in to your AI, make a bot and hand it something real. Ab
 ## How it fits together
 
 ```text
-you          desktop app · phone (soon) · a browser
+you          desktop app · phone · a browser
                │
 the link     1. direct: same machine, ssh, https, tailscale
              2. a Cloudflare tunnel on your server
