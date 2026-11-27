@@ -1,4 +1,5 @@
 import { ModalLayer } from "../ui/ModalLayer";
+import "../../styles/settings.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Art } from "../ui/Art";
 import { ArrowLeft, Check, LoaderCircle, RefreshCw, X } from "../../icons";
@@ -148,11 +149,13 @@ export function ConnectAiDialog({ tested, directory = false, onClose, start, onC
   }, []);
   return (
     <ModalLayer><div
-      className="ui-scrim fixed inset-0 z-[60] flex items-center justify-center p-4"
+      data-settings-sheet
+      className="settings-scrim"
       data-leaving={leaving ? "" : undefined}
       inert={leaving || undefined}
       // a click outside never closes it: a sign-in may be under way; Close or Escape does
     >
+      <div aria-hidden="true" className="settings-backdrop" style={{ opacity: leaving ? 0 : 1, transition: `opacity ${DIALOG_LEAVE_MS}ms ease-out` }} />
       <div
         ref={box}
         tabIndex={-1}
@@ -166,24 +169,24 @@ export function ConnectAiDialog({ tested, directory = false, onClose, start, onC
           event.stopPropagation();
           close();
         }}
-        className={cn(leaving && "animate-pop-out", "ui-modal flex max-h-[min(680px,calc(100vh-32px))] w-[520px] max-w-full flex-col overflow-hidden text-left outline-none")}
+        className={cn(leaving && "animate-pop-out", "settings-dialog text-left")}
+        style={{ width: "min(520px, 100vw - 32px)", maxHeight: "min(680px, 100vh - 32px)" }}
       >
-        <div className="flex h-[52px] shrink-0 items-center gap-1 pl-4 pr-3">
+        <button type="button" onClick={close} aria-label={t("common.close")} title={t("common.close")} className="settings-close">
+          <X size={14} />
+        </button>
+        <div className="settings-pane-header" style={{ flexWrap: "nowrap", justifyContent: "flex-start", paddingInlineStart: more ? 14 : 24 }}>
           {more && (
             <button type="button" data-connect-ai-back="" onClick={() => setMore(false)} aria-label={t("common.back")} title={t("common.back")}
-              className="ui-icon-button -ml-2">
+              className="ui-icon-button">
               <ArrowLeft size={16} />
             </button>
           )}
-          <h2 id="connect-ai-title" className="min-w-0 flex-1 truncate text-[14px] font-semibold leading-[22px] text-ink">
+          <h2 id="connect-ai-title" className="settings-pane-title min-w-0 truncate">
             {more ? t("connectAi.more") : t("onboarding.meet.connectAi")}
           </h2>
-          <button type="button" onClick={close} aria-label={t("common.close")} title={t("common.close")}
-            className="ui-icon-button">
-            <X size={16} />
-          </button>
         </div>
-        <div data-art-hover="" className="min-h-0 overflow-y-auto p-4 [scrollbar-width:thin]">
+        <div data-art-hover="" className="settings-scroll p-4 pt-2">
           <StageSwap stage={more ? "directory" : "grid"}>
             {more
               ? <div data-connect-ai-directory=""><ModelDirectory /></div>
