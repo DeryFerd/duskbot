@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { signPolicy, verifyPolicy } from "../apps/cloud-service/src/update-policy.ts";
 import type { FleetAnswer } from "../apps/dashboard/server/admin/ops/fleet.ts";
-import { configOf, createRelease, judge, nextPolicy, release, rolloutSteps } from "./release-all.ts";
+import { configOf, createRelease, judge, macUpdateSigned, nextPolicy, release, rolloutSteps } from "./release-all.ts";
 import { releaseAssets } from "./release-assets.ts";
 
 const { privateKey } = generateKeyPairSync("ed25519");
@@ -72,7 +72,7 @@ describe("a release run", () => {
   const dirs: string[] = [];
   afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
-  function world(o: { fleet: () => FleetAnswer; served?: { serial: number; floor: string | null; blocked: string[] } }) {
+  function world(o: { codesign?: string; fleet: () => FleetAnswer; served?: { serial: number; floor: string | null; blocked: string[] } }) {
     const stateDir = mkdtempSync(join(tmpdir(), "dusk-release-all-")); dirs.push(stateDir);
     const ran: string[] = [], placed: Array<{ to: string; text: string }> = [];
     let policyDoc: string | null = o.served ? JSON.stringify(signPolicy(o.served, signing)) : null, clock = 1_000_000;
@@ -89,6 +89,7 @@ describe("a release run", () => {
       ran.push(line);
       if (cmd === "git" && args[0] === "rev-parse") return "c".repeat(40);
       if (cmd === "git" && args[0] === "status") return "";
+      if (cmd === "sh" && args[1]?.includes("codesign")) return o.codesign ?? "Authority=Developer ID Application: Siddharth Meena (S85QBF7KWC)\nTeamIdentifier=S85QBF7KWC";
       if (cmd === "gh" && args[0] === "release") return JSON.stringify({ assets: releaseAssets("0.2.26").map(a => ({ name: a.name })) });
       if (cmd === "ssh" && input !== undefined) {
         const to = /mv -f '[^']+' '([^']+)'/.exec(args.at(-1)!)![1]!;
@@ -103,6 +104,19 @@ describe("a release run", () => {
     return { r, ran, placed, stateDir, policy: () => verifyPolicy(JSON.parse(policyDoc!), [{ kid: "test-rel", x: publicKeys.split(":")[1]! }]) };
   }
   const options = { version: "0.2.26", now: false, canary: ["c1"], steps: [10, 100], watchMs: 5 * MIN, maxWaitMs: 20 * MIN, skipBuild: true, dryRun: false, pollMs: 0 };
+
+  it("reads an ad-hoc Mac build as unsigned and a release team Developer ID build as signed", () => {
+    expect(macUpdateSigned("Identifier=bot.dusk.app\nSignature=adhoc\nTeamIdentifier=not set")).toBe(false);
+    expect(macUpdateSigned("Authority=Developer ID Application: Someone Else (ABCDE12345)\nTeamIdentifier=ABCDE12345")).toBe(false);
+    expect(macUpdateSigned("Authority=Developer ID Application: Siddharth Meena (S85QBF7KWC)\nTeamIdentifier=S85QBF7KWC")).toBe(true);
+  });
+
+  it("refuses to offer a release whose Mac update zips are ad-hoc signed, before any desktop gets it", async () => {
+    const w = world({ codesign: "Signature=adhoc\nTeamIdentifier=not set", fleet: () => fleetOf(), served: { serial: 3, floor: null, blocked: [] } });
+    await expect(release(w.r, options)).rejects.toThrow(/DuskBot-0\.2\.26-arm64\.zip is not signed by Developer ID/);
+    expect(w.ran.some(line => line.includes("publish-downloads"))).toBe(false);
+    expect(w.placed.length).toBe(0);
+  });
 
   it("halts and blocks the version everywhere when the canary cloud rolls it back, and a rerun stays halted", async () => {
     const w = world({ fleet: () => fleetOf({ canary: [cloud("c1", "0.2.25", { rolledBack: "0.2.26" })] }), served: { serial: 3, floor: null, blocked: [] } });
@@ -139,7 +153,7 @@ describe("a release run", () => {
       expect(w.policy().rollout).toBeUndefined();
       expect(w.policy().serial).toBe(5);
       const state = JSON.parse(readFileSync(w.r.stateFile("0.2.26"), "utf8"));
-      expect(Object.keys(state.done)).toEqual(["preflight", "github-files", "desktop-rollout", "desktop", "cloud-package", "canary", "cloud-widen", "desktop-100"]);
+      expect(Object.keys(state.done)).toEqual(["preflight", "github-files", "mac-signature", "desktop-rollout", "desktop", "cloud-package", "canary", "cloud-widen", "desktop-100"]);
       const before = w.ran.length;
       await expect(release(w.r, options)).rejects.toThrow();
       expect(w.ran.slice(before).some(line => line.includes("build-home-package"))).toBe(false);

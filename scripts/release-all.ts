@@ -25,6 +25,12 @@ import type { FleetAnswer } from "../apps/dashboard/server/admin/ops/fleet.ts";
 import { checkAssets, releaseAssets, SOURCE_REPO } from "./release-assets.ts";
 
 const SEMVER = /^\d+\.\d+\.\d+$/;
+/** the Developer ID team every Mac build is signed by: Squirrel.Mac refuses an update whose designated requirement differs from the running app's */
+export const MAC_TEAM_ID = "S85QBF7KWC";
+/** whether `codesign -dv --verbose=4` output names a Developer ID Application authority from the release team (an ad-hoc build names none) */
+export function macUpdateSigned(codesignOutput: string): boolean {
+  return /^Authority=Developer ID Application: /m.test(codesignOutput) && new RegExp(`^TeamIdentifier=${MAC_TEAM_ID}$`, "m").test(codesignOutput);
+}
 export interface Config {
   account: string; ssh: string; homeDir: string; linkPackages: string; linkUrl: string;
   /** the account service's DUSK_UPDATE_POLICY_FILE and DUSK_MANAGED_HOME_RELEASE_FILE */
@@ -227,6 +233,21 @@ export async function release(r: Release, opt: ReleaseOptions): Promise<"done" |
       if (!dryRun) throw new Error(why);
       r.log(`  (dry run) ${why}`);
     }
+  });
+  await step("mac-signature", () => {
+    // an ad-hoc Mac zip downloads on every install and is then refused by Squirrel.Mac, so no one may be offered it
+    if (dryRun) { r.log("  (dry run) would check the Mac update zips' signature"); return; }
+    const dir = mkdtempSync(join(tmpdir(), "dusk-mac-sig-"));
+    try {
+      for (const arch of ["arm64", "x64"]) {
+        const zip = `DuskBot-${version}-${arch}.zip`, out = join(dir, arch);
+        r.sh("gh", ["release", "download", V, "--repo", SOURCE_REPO, "-p", zip, "-D", dir, "--clobber"]);
+        r.sh("ditto", ["-x", "-k", join(dir, zip), out]);
+        const said = r.sh("sh", ["-c", 'codesign -dv --verbose=4 "$1" 2>&1', "codesign", join(out, "Dusk Bot.app")]);
+        if (!macUpdateSigned(said)) throw new Error(`${zip} is not signed by Developer ID team ${MAC_TEAM_ID} (a CI build without the certificate is ad-hoc signed, and installs cannot update to it): build it with scripts/release-mac-local.sh, replace the release's Mac files, then rerun`);
+        r.log(`  ${zip}: Developer ID ${MAC_TEAM_ID}`);
+      }
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
   const first = opt.steps[0]!;
   if (first < 100) await step("desktop-rollout", () => r.publishPolicy(state, { rollout: [version, first] }));

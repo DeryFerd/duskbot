@@ -580,6 +580,21 @@ test("a slow disk is waited on while Squirrel.Mac's folder keeps growing, past t
   rmSync(dir, { recursive: true, force: true });
 });
 
+test("a zip Squirrel.Mac refuses for its signature is remembered for that version, so it is not downloaded again every check", async () => {
+  const { squirrelInstaller } = await import("./app-update.mjs");
+  const { dir, file } = zipFile();
+  const updater = await fakeSquirrel();
+  const installer = squirrelInstaller({ autoUpdater: updater, timeoutMs: 5_000, pollMs: 10 });
+  assert.equal(installer.failed("1.1.0"), false);
+  const preparing = installer.prepare(file, "1.1.0");
+  await until(() => updater.took);
+  updater.emit("error", new Error("Code signature at URL file:///x/Dusk%20Bot.app/ did not pass validation: code failed to satisfy specified code requirement(s)"));
+  await assert.rejects(preparing, /did not pass validation/);
+  assert.equal(installer.failed("1.1.0"), true);
+  assert.equal(installer.failed("1.1.1"), false);
+  rmSync(dir, { recursive: true, force: true });
+});
+
 test("Squirrel.Mac going nowhere fails with where it stopped: never asked, stopped taking the zip, or did not unpack", async () => {
   const { squirrelInstaller } = await import("./app-update.mjs");
   const { dir, file } = zipFile();
