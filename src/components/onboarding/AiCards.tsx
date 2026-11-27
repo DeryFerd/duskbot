@@ -11,8 +11,8 @@ import { CursorMark, PresetProviderMark, ProviderMark } from "@/components/Provi
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { plainSignIn } from "@/lib/onboarding";
-import { useStore, type InstanceInfo } from "@/state/store";
-import { AI_TILES, aiName, aiTiles, type AiTile, type AiTileId } from "./funnel";
+import { api, useStore, type InstanceInfo } from "@/state/store";
+import { AI_TILES, aiName, aiTiles, tileMatches, type AiTile, type AiTileId } from "./funnel";
 import { TILE } from "./FunnelSteps";
 import { connectsInApp, type ConnectInstance } from "./connect-flow";
 import { CONNECT_LEAVE_MS, Reveal, StageSwap } from "./ConnectMotion";
@@ -49,6 +49,17 @@ function MissingCard({ tile, busy, onPick }: { tile: { id: AiTileId; label: stri
       </button>
     </div>
   );
+}
+
+/** One of the eight cards whose AI this server doesn't list: one switched off in Settings comes back (and its card then
+ * connects as usual, installing first where it needs to); anything else opens every other provider, where it can be added. */
+export async function bringBackAi(id: AiTileId, refresh: (() => Promise<unknown>) | undefined, openMore: () => void): Promise<void> {
+  const hidden = await api<{ instances?: Array<{ instanceId: string; driverKind: string }> }>("/api/instances/hidden", { signal: AbortSignal.timeout(10_000) })
+    .catch(() => ({ instances: [] as Array<{ instanceId: string; driverKind: string }> }));
+  const entry = hidden.instances?.find((one) => tileMatches(id, one));
+  if (!entry) { openMore(); throw new Error("not listed here"); }
+  await api(`/api/instances/${encodeURIComponent(entry.instanceId)}`, { method: "PATCH", body: JSON.stringify({ hidden: false }), signal: AbortSignal.timeout(10_000) });
+  await Promise.resolve(refresh?.()).catch(() => {});
 }
 
 /** A local endpoint or a step finished in Terminal keeps its own words; a website sign-in says the plain line. */
@@ -162,7 +173,7 @@ export function AiCards({ onMore, className, onConnected, onManage, suggested = 
   staysHere?: readonly AiTileId[];
   /** the first run: the cards already connected when the grid opened lead it, tinted (the order holds while it is open) */
   foundFirst?: boolean;
-  /** the first run: all eight cards always show; one this server doesn't list calls this (it resolves once handled) */
+  /** the first run and the Connect an AI dialog: all eight cards always show; one this server doesn't list calls this (it resolves once handled) */
   onMissing?: (tile: AiTileId) => Promise<void> }) {
   const { state, refreshInstances } = useStore();
   const [picked, setPicked] = useState<AiTileId | null>(null);

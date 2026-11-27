@@ -11,8 +11,11 @@ const f = vi.hoisted(() => ({
   check: (): Promise<object> => Promise.resolve({ ok: true }), checks: [] as string[], fail: false,
 }));
 vi.mock("@/state/store", () => ({
-  api: async (path: string) => {
+  api: async (path: string, init?: { method?: string }) => {
     if (f.fail) { f.fail = false; throw new Error("503"); }
+    // an install that keeps running, part way through its download
+    if (path.endsWith("/install")) return init?.method === "POST" ? new Promise(() => {}) : { progress: { phase: "download", received: 68 * 2 ** 20, total: 82 * 2 ** 20 } };
+    if (path === "/api/instances/hidden") return { instances: [] };
     if (!path.endsWith("/check")) return { instances: f.instances };
     f.checks.push(path);
     return f.check();
@@ -54,8 +57,11 @@ const show = async () => {
 const otherWays = async () => {
   await act(async () => {});
 };
-/** The AIs shown as cards, in their order. */
-const cards = () => [...document.body.querySelectorAll<HTMLElement>("[data-funnel-ai]")].map((card) => card.dataset.funnelAi);
+/** The AIs the server lists, as cards, in their order. */
+const cards = () => [...document.body.querySelectorAll<HTMLElement>("[data-funnel-ai]:not([data-missing])")].map((card) => card.dataset.funnelAi);
+/** Every card shown, the ones the server doesn't list included. */
+const allCards = () => [...document.body.querySelectorAll<HTMLElement>("[data-funnel-ai]")].map((card) => card.dataset.funnelAi);
+const EIGHT = ["chatgpt", "claude", "grok", "antigravity", "cursor", "copilot", "openrouter", "local"];
 const press = async (selector: string) => {
   const target = document.body.querySelector<HTMLElement>(selector)!;
   await act(async () => { target.click(); });
@@ -228,7 +234,7 @@ describe("connecting an AI on the first screen", () => {
     const onConnected = vi.fn();
     await act(async () => { root.render(createElement(ConnectAiDialog, { tested: null, onClose: () => {}, start: start as never, onConnected })); });
     await act(async () => {});
-    const pressed = [...document.body.querySelectorAll("button[data-funnel-ai]")].map((card) => card.getAttribute("aria-pressed"));
+    const pressed = [...document.body.querySelectorAll("button[data-funnel-ai]:not([data-missing])")].map((card) => card.getAttribute("aria-pressed"));
     expect(pressed.length).toBeGreaterThan(0);
     expect(pressed.every((value) => value === "false")).toBe(true);
     expect(document.body.querySelector("[data-funnel-ai-connect]")).toBeNull();
@@ -236,6 +242,42 @@ describe("connecting an AI on the first screen", () => {
     // the AI it was opened for only takes the focus
     if (start) expect(document.activeElement).toBe(document.body.querySelector(`button[data-funnel-ai="${start}"]`));
     else expect(document.activeElement).toBe(document.body.querySelector("[data-connect-ai]"));
+  });
+
+  it.each([
+    ["nothing connected", null],
+    ["one connected", "passed"],
+    ["one that didn't answer", "failed"],
+  ] as const)("always shows all eight AIs and the link to every other provider, with %s", async (_, test) => {
+    if (test) f.instances = [engine("claude", "claudeAgent", "Claude", true), engine("codex", "codex", "Codex", false)];
+    if (test === "failed") f.check = () => Promise.resolve({ ok: false, error: "Your Claude usage limit has been reached." });
+    await act(async () => { root.render(createElement(ConnectAiDialog, { tested: null, onClose: () => {} })); });
+    await act(async () => {});
+    if (test) await act(async () => { root.render(createElement(() => createElement(ConnectAiDialog, { tested: useWelcomeAi(useStore().state.instances), onClose: () => {} }))); });
+    expect(allCards()).toEqual(EIGHT);
+    expect(document.body.querySelector("[data-ai-more]")).not.toBeNull();
+    if (test === "passed") expect(document.body.querySelector("[data-ai-connected]")?.textContent).toContain("Claude");
+    if (test === "failed") expect(document.body.querySelector("[data-ai-reason]")).not.toBeNull();
+  });
+
+  it("keeps all eight cards while one installs, its progress under the grid, every other card still a card to press", async () => {
+    vi.useFakeTimers();
+    try {
+      f.instances = [engine("claude", "claudeAgent", "Claude", false),
+        { ...engine("antigravity", "antigravityAgent", "Antigravity", false), install: { managed: { label: "Install Antigravity", downloadBytes: 82 * 2 ** 20 } } }];
+      await act(async () => { root.render(createElement(ConnectAiDialog, { tested: null, onClose: () => {} })); });
+      await press("[data-funnel-ai=antigravity]");
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
+      const panel = document.body.querySelector("[data-funnel-ai-connect=antigravity]");
+      expect(panel?.textContent).toContain("Getting Antigravity ready");
+      expect(panel?.querySelector("[role=progressbar]")?.getAttribute("aria-valuenow")).toBe("82");
+      expect(allCards()).toEqual(EIGHT);
+      for (const id of EIGHT.filter((one) => one !== "antigravity")) {
+        expect(document.body.querySelector<HTMLButtonElement>(`button[data-funnel-ai=${id}]`)?.disabled, id).toBe(false);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("opens as the Connect an AI dialog, which Escape closes and a click outside never does", async () => {

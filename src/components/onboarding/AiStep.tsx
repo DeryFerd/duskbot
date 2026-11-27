@@ -7,9 +7,9 @@ import { LoaderCircle, RefreshCw } from "../../icons";
 import { engineReady } from "@/components/EngineLibrary";
 import { activeLocale, t } from "@/lib/i18n";
 import { api, useStore, type InstanceInfo } from "@/state/store";
-import { AiCards } from "./AiCards";
+import { AiCards, bringBackAi } from "./AiCards";
 import { ConnectAiDialog } from "./ConnectAi";
-import { aiTileOf, aiTiles, autoConnects, freeModel, tileMatches, type AiTileId } from "./funnel";
+import { aiTileOf, aiTiles, autoConnects, freeModel, type AiTileId } from "./funnel";
 import { PRIMARY, QUIET, StepArt, StepFrame } from "./FunnelSteps";
 import type { WelcomeAiNow } from "./welcome-ai";
 
@@ -29,17 +29,6 @@ function useAutoConnect(instances: readonly InstanceInfo[], failed: readonly str
     void Promise.allSettled(ids.map((id) => api(`/api/instances/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ chosen: true }), signal: AbortSignal.timeout(10_000) })))
       .then(() => Promise.resolve(refreshInstances?.()).catch(() => {}));
   }, [key, refreshInstances]);
-}
-
-/** One of the eight cards whose AI this server doesn't list: one switched off in Settings comes back (and its card then
- * connects as usual, installing first where it needs to); anything else opens every other provider, where it can be added. */
-async function bringBack(id: AiTileId, refresh: (() => Promise<unknown>) | undefined, openMore: () => void): Promise<void> {
-  const hidden = await api<{ instances?: Array<{ instanceId: string; driverKind: string }> }>("/api/instances/hidden", { signal: AbortSignal.timeout(10_000) })
-    .catch(() => ({ instances: [] as Array<{ instanceId: string; driverKind: string }> }));
-  const entry = hidden.instances?.find((one) => tileMatches(id, one));
-  if (!entry) { openMore(); throw new Error("not listed here"); }
-  await api(`/api/instances/${encodeURIComponent(entry.instanceId)}`, { method: "PATCH", body: JSON.stringify({ hidden: false }), signal: AbortSignal.timeout(10_000) });
-  await Promise.resolve(refresh?.()).catch(() => {});
 }
 
 /** `onNext` says how the person went on, for the funnel's numbers. `cloud`: the person's dusk cloud is being made
@@ -78,7 +67,7 @@ export function AiStep({ tested, cloud = false, computerAis = [], onNext }: { te
         {!goes && !free && <button type="button" data-funnel-later="" onClick={() => onNext("later")} className={QUIET}>{t("funnel.ai.later")}</button>}
       </>}>
       <AiCards tested={tested} onMore={() => setMore(true)} suggested={used} staysHere={staysHere} foundFirst
-        onMissing={(id) => bringBack(id, refreshInstances, () => setMore(true))} />
+        onMissing={(id) => bringBackAi(id, refreshInstances, () => setMore(true))} />
 
       {tested?.state === "failed" && (
         <div role="alert" data-ai-silent="" className="mt-5 flex flex-col items-center gap-2 text-[13px] leading-5 text-ink">

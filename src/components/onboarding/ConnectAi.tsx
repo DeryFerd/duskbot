@@ -10,18 +10,18 @@ import { prefetchProviders } from "@/lib/model-providers";
 import { aiWorks, organisationSignIn } from "@/lib/onboarding";
 import { api, useStore } from "@/state/store";
 import { freeFallback } from "../../../shared/ai-ranking";
-import { AiCards } from "./AiCards";
+import { AiCards, bringBackAi } from "./AiCards";
 import { StageSwap } from "./ConnectMotion";
 import { OrganisationRow } from "./beats/OrganisationRow";
 import type { WelcomeAiNow } from "./welcome-ai";
 import type { AiTileId } from "./funnel";
 
-/** Connecting an AI: the grid of AIs people already use (AiCards), the organization's sign-in where there is one, and a
+/** Connecting an AI: the grid of AIs people already use (AiCards, all eight, as on the first run), the organization's sign-in where there is one, and a
  * link to every other provider (`onMore`). Until one has answered a test message (`tested`, from useWelcomeAi) it says
  * how that went: one that didn't answer says why, with Check again; OpenCode's free model is only ever a backup. */
 export function ConnectAi({ tested, onMore, onConnected }: { tested: WelcomeAiNow | null; onMore?: () => void;
   onConnected?: (tile: AiTileId) => void }) {
-  const { state, dispatch } = useStore();
+  const { state, dispatch, refreshInstances } = useStore();
   const organisation = organisationSignIn(window.duskDesktop);
   const [failed, setFailed] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -99,7 +99,8 @@ export function ConnectAi({ tested, onMore, onConnected }: { tested: WelcomeAiNo
       )}
       {failed && <p role="alert" className="mt-2 text-[13px] text-danger">{t("onboarding.engines.error")}</p>}
 
-      <AiCards tested={tested} onMore={onMore} onConnected={onConnected} className={connected || tested ? "mt-4" : undefined} />
+      <AiCards tested={tested} onMore={onMore} onConnected={onConnected} className={connected || tested ? "mt-4" : undefined}
+        onMissing={(id) => bringBackAi(id, refreshInstances, () => onMore?.())} />
 
       {organisation && (
         <div className="mt-3 w-full overflow-hidden rounded-xl text-left">
