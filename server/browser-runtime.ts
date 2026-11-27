@@ -12,6 +12,8 @@ import { HARNESS_CALL_BUDGET_MS } from "./harness-budget.ts";
 import { launchSettingsKey } from "./browser-launch-key.ts";
 import { AGENT_BROWSER_BATCH_SPEC, agentBrowserStep, planAgentBrowserBatch, PROBE_SCRIPT, probeOfEval, SETTLED_READS, type AgentBrowserCall } from "./browser/agent-browser-batch.ts";
 import { runSteps } from "./browser/batch.ts";
+import { dialogAnswerOf, dialogNote, DialogWatch, localDevToolsUrl, withoutDialogAnswer, withoutDialogWarning, type DialogAnswer, type PageDialog } from "./browser-dialogs.ts";
+import { LATE_ELEMENT_MS, lateElementMissing, missingElement, staleRef, staleRefText } from "./browser/agent-browser-misses.ts";
 import { settleNote, settlePage, type PageReader } from "./browser/cdp/settle.ts";
 
 import { ThreadTabs, type ClosedThreadTab } from "./browser-thread-tabs.ts";
@@ -19,7 +21,7 @@ import { agentBrowserTypeInLines, runAgentBrowserTypeInLines } from "./line-brea
 import { asToolResult, firstText, lostCallToolError, recoveredResult, stillBusyToolError, stuckBrowserToolError, toolNameOf, type ToolResult } from "./browser-runtime-results.ts";
 import { BATCH_TOOL } from "./browser/tools.ts";
 import { BROWSER_HOVER_TOOL, BROWSER_UPLOAD_TOOL, RELAYED_TOOL_SPECS, RELAYED_TOOLS, type RelayedToolSpec } from "./browser-relayed-tools.ts";
-import { NAVIGATING, newTabNavigated, openStillShowing, refusesAutomatedSignIn, withNote, snapshotMissedSelector, WHOLE_PAGE_NOTE, pickPageSelector, readAfterOpen, withAgentBrowserArguments, withPickNote } from "./browser/agent-browser-args.ts";
+import { agentBrowserArguments, NAVIGATING, newTabNavigated, openStillShowing, refusesAutomatedSignIn, withNote, snapshotMissedSelector, WHOLE_PAGE_NOTE, pickPageSelector, readAfterOpen, withAgentBrowserArguments, withPickNote } from "./browser/agent-browser-args.ts";
 
 /** The hosts whose bot check cleared in each browser. */
 const clearedChecks = new WeakMap<object, Set<string>>();
@@ -45,6 +47,7 @@ const PERSON_RESTARTED = "The person restarted your browser from the Browser pan
 /** One bot call, lane wait included, answers within `callBudgetMs`; the engine's action keeps `followUpReserveMs` of it for the reads after. */
 export const BROWSER_CALL_DEFAULTS = { requestTimeoutMs: 120_000, laneWaitMs: 30_000, callBudgetMs: HARNESS_CALL_BUDGET_MS, followUpReserveMs: 15_000 } as const;
 const LATE = Symbol("late"), HOLD_POLL_MS = 500;
+const WAIT_MS_TOOL = "agent_browser_wait_ms", DIALOG_RETRY_MS = 15_000;
 
 const PAGE_ACTIONS: ReadonlySet<string> = new Set([
   "agent_browser_click", "agent_browser_fill", "agent_browser_type", "agent_browser_press",
@@ -333,6 +336,9 @@ export class BrowserRuntime {
   private steps?: Pick<BrowserSteps, "before" | "after" | "signIn" | "note" | "forget" | "recentFrame" | "personTook"> & Partial<Pick<BrowserSteps, "alive">>;
   private lanes = new BrowserLanes(({ call, waitedMs, holder }) => trail("browser.lane.busy", { call, waitedMs, holder: holder?.call ?? null, heldMs: holder ? Date.now() - holder.since : null }));
   private threadTabs = new ThreadTabs();
+  /** Per session: a second DevTools client that sees the page's confirm and prompt dialogs, and the bot call running. */
+  private dialogs = new Map<string, { watch: DialogWatch; call: (DialogAnswer & { asked: PageDialog[] }) | null }>();
+  private dialogsTried = new Map<string, number>();
   /** The page size people's views want; the agent-browser live view sets it, and every bot call applies it first. */
   readonly pageSizes = new PageSizes({
     apply: (session, size) => { const spec = this.gates.get(session)?.spec; return spec && this.applyViewport ? this.applyViewport(spec, size) : Promise.resolve(); },
@@ -483,6 +489,7 @@ export class BrowserRuntime {
 
   /** Every tool result, recovery notes included, is scrubbed of held secrets. */
   async agentRpc(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void, ctx?: StepContext): Promise<unknown> {
+    if (method === "tools/call" && toolNameOf(params) === WAIT_MS_TOOL) return this.waitOnly(session, params, beforeDispatch);
     if (method === "tools/call" && readsAroundBrowser(params)) {
       const split = readAfterOpen(params);
       if (!split) return { isError: true, content: [{ type: "text", text: READ_OPEN_PAGE_ONLY }] };
@@ -522,6 +529,48 @@ export class BrowserRuntime {
     return scrubBrowserResult({ ...result as object, content: [{ type: "text", text: note }, ...Array.isArray(content) ? content : []] }, this.scrub);
   }
 
+  /**
+   * agent-browser 0.37.0 answers a page's alert itself, but a confirm or prompt stays open in its headless Chrome and
+   * holds the call that opened it, and every call after it, until the browser restarts. A bot call's own dialog is
+   * answered over a second DevTools client, which must be watching before the dialog opens; a person's never is.
+   */
+  private async watchDialogs(session: string, spec: BrowserSpawnSpec): Promise<{ watch: DialogWatch; call: (DialogAnswer & { asked: PageDialog[] }) | null } | null> {
+    const kept = this.dialogs.get(session);
+    if (kept && !kept.watch.closed) return kept;
+    if (!this.relayCommand || attachesToChrome(spec.env) || (this.dialogsTried.get(session) ?? 0) > Date.now() - DIALOG_RETRY_MS) return null;
+    this.dialogsTried.set(session, Date.now());
+    const answer = await this.relayCommand(spec, session, { action: "cdp_url" }, 3_000).catch(() => null);
+    const url = localDevToolsUrl(answer?.data?.cdpUrl);
+    if (!url) return null;
+    this.dialogsTried.delete(session);
+    const entry: { watch: DialogWatch; call: (DialogAnswer & { asked: PageDialog[] }) | null } = { watch: new DialogWatch((dialog) => {
+      const call = entry.call;
+      if (!dialog || !call || this.gate(session).owner !== null) return;
+      call.asked.push(dialog);
+      void entry.watch.answer(call.accept, call.promptText);
+    }), call: null };
+    this.dialogs.get(session)?.watch.close();
+    this.dialogs.set(session, entry);
+    await entry.watch.start(url).catch(() => entry.watch.close());
+    return entry.watch.closed ? null : entry;
+  }
+
+  /** A plain wait needs no page: it is waited out here, so it answers while the browser starts, is busy with another
+   * call or did not answer one, which agent-browser would have refused (a model told "try again in a moment" waits). */
+  private async waitOnly(session: string, params: unknown, beforeDispatch?: () => void): Promise<unknown> {
+    const { ms } = agentBrowserArguments(WAIT_MS_TOOL, ((params as { arguments?: unknown } | null)?.arguments ?? {}) as Record<string, unknown>);
+    if (typeof ms !== "number") return { isError: true, content: [{ type: "text", text: `${WAIT_MS_TOOL} needs ms, how long to wait in milliseconds, such as {"ms": 2000}.` }] };
+    const waited = Math.min(ms, this.options.callBudgetMs - this.options.followUpReserveMs);
+    beforeDispatch?.();
+    for (const until = Date.now() + waited; Date.now() < until;) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(250, until - Date.now())));
+      beforeDispatch?.();
+    }
+    const gate = this.gates.get(session);
+    if (gate) gate.lastUsed = Date.now();
+    return { content: [{ type: "text", text: JSON.stringify({ data: { ms: waited, waited: "timeout" }, error: null, success: true }) }] };
+  }
+
   /** Work that outlasts the budget goes on, so its outcome is unknown: the call counts as lost until the engine answers again. */
   private async withinBudget(session: string, method: "tools/list" | "tools/call", call: string, work: Promise<unknown>, deadline: number): Promise<unknown> {
     let timer: NodeJS.Timeout | undefined;
@@ -534,7 +583,8 @@ export class BrowserRuntime {
     return this.gate(session).lostCall === null ? stuckBrowserToolError() : lostCallToolError(call);
   }
 
-  private async agentRequest(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, deadline: number, beforeDispatch?: () => void, ctx?: StepContext): Promise<unknown> {
+  /** `batched`: a step of agent_browser_batch, whose failure answer carries the page's snapshot itself. */
+  private async agentRequest(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, deadline: number, beforeDispatch?: () => void, ctx?: StepContext, batched = false): Promise<unknown> {
     if (method !== "tools/list" && method !== "tools/call") throw new Error("Unsupported browser method.");
     // tools/list skips withAgentAction, so it must refuse the closing window itself or its client outlives restart().
     if (method !== "tools/call" && this.gate(session).closing) throw new Error(BROWSER_CLOSING);
@@ -591,7 +641,7 @@ export class BrowserRuntime {
         const heldNote = this.holds.note(session);
         if (toolName === "agent_browser_eval" && await this.holds.refuses(session, pageUrl)) return { isError: true, content: [{ type: "text", text: heldNote ?? SECRET_ON_PAGE }] };
         // Launch and session parameters dusk bot owns never reach the engine from a call.
-        const stripped = method === "tools/call" ? stripHarnessOwnedArguments(withAgentBrowserArguments(params)) : params;
+        const stripped = method === "tools/call" ? stripHarnessOwnedArguments(withAgentBrowserArguments(withoutDialogAnswer(params))) : params;
         const labelled = toolName === "agent_browser_tab_new" && ctx
           ? { ...stripped as object, arguments: this.threadTabs.labelNewTab(ctx.threadId, ((stripped as { arguments?: Record<string, unknown> }).arguments) ?? {}) } : stripped;
         const prepared = method === "tools/call" ? this.pageSizes.callArguments(session, ctx ? this.threadTabs.refs.carry(session, ctx.threadId, labelled) : labelled) : params;
@@ -637,6 +687,13 @@ export class BrowserRuntime {
           beforeDispatch?.();
           if (this.gate(session).owner !== null) throw this.taken(session);
         }
+        const dialogs = method === "tools/call" ? await this.watchDialogs(session, spec) : null;
+        const dialogCall = dialogs ? { ...dialogAnswerOf(params), asked: [] as PageDialog[] } : null;
+        if (dialogs && dialogCall) {
+          dialogs.call = dialogCall;
+          const open = dialogs.watch.dialog;
+          if (open && gate.owner === null) { dialogCall.asked.push(open); void dialogs.watch.answer(dialogCall.accept, dialogCall.promptText); }
+        }
         const engineStarted = performance.now();
         if (method === "tools/call") { dispatched = true; gate.dispatched++; }
         const engineTimeoutMs = Math.max(1, Math.min(this.options.requestTimeoutMs, deadline - Date.now() - this.options.followUpReserveMs));
@@ -653,7 +710,31 @@ export class BrowserRuntime {
             })
             : await entry.client.rpc(method, request, engineTimeoutMs);
         phases.engineMs = performance.now() - engineStarted;
+        if (dialogs && dialogs.call === dialogCall) dialogs.call = null;
+        // the first open is what starts the browser, so it had no DevTools address to watch yet
+        if (!dialogs && (toolName === "agent_browser_open" || toolName === "agent_browser_tab_new")) this.dialogsTried.delete(session);
         result = withPickNote(result, picked);
+        if (dialogCall?.asked.length) result = withNote(withoutDialogWarning(result), dialogNote(dialogCall.asked[0]!, dialogCall));
+        const missing = toolName && !relayed && !inLines ? missingElement(toolName, args as Record<string, unknown> | undefined, result) : null;
+        const lateMs = Math.min(LATE_ELEMENT_MS, engineEnd - Date.now() - 1_000);
+        if (missing && lateMs >= 500) {
+          const shown = await entry.client.rpc("tools/call", { name: "agent_browser_wait_for_selector", arguments: { selector: missing, waitTimeoutMs: lateMs } }, lateMs + 2_000)
+            .catch((error: unknown) => { if (error instanceof TransportError) throw error; return null; }) as { isError?: unknown } | null;
+          beforeDispatch?.();
+          if (this.gate(session).owner !== null) throw this.taken(session);
+          result = shown && shown.isError !== true
+            ? withPickNote(await entry.client.rpc(method, request, Math.max(1, engineEnd - Date.now())), picked)
+            : { isError: true, content: [{ type: "text", text: lateElementMissing(missing, lateMs) }] };
+        }
+        const stale = toolName ? staleRef(toolName, args as Record<string, unknown> | undefined, result) : null;
+        if (stale && !batched && followUpMs() > 1_000) {
+          const page = await entry.client.rpc("tools/call", { name: "agent_browser_snapshot", arguments: { compact: true } }, Math.min(followUpMs(), 10_000))
+            .catch((error: unknown) => { if (error instanceof TransportError) throw error; return null; }) as { isError?: unknown; content?: unknown[] } | null;
+          beforeDispatch?.();
+          const fresh = page && page.isError !== true && Array.isArray(page.content) ? page.content : null;
+          if (fresh && ctx) this.threadTabs.refs.saw(session, ctx.threadId, "agent_browser_snapshot", { compact: true }, page);
+          result = { isError: true, content: [{ type: "text", text: staleRefText(stale, Boolean(fresh)) }, ...(fresh ?? [])] };
+        } else if (stale) result = { isError: true, content: [{ type: "text", text: staleRefText(stale, false) }] };
         if (toolName && snapshotMissedSelector(toolName, args as Record<string, unknown> | undefined, result)) {
           const { selector, ...whole } = args as Record<string, unknown>;
           const page = await entry.client.rpc("tools/call", { name: toolName, arguments: whole }, engineTimeoutMs) as { content?: unknown[] };
@@ -736,7 +817,11 @@ export class BrowserRuntime {
         }
         throw error;
       }
-      finally { if (dispatched) gate.dispatched--; }
+      finally {
+        if (dispatched) gate.dispatched--;
+        const dialogs = this.dialogs.get(session);
+        if (dialogs && method === "tools/call") dialogs.call = null;
+      }
     };
     if (method !== "tools/call") return invoke();
     try {
@@ -761,7 +846,7 @@ export class BrowserRuntime {
     const plan = planAgentBrowserBatch((params as { arguments?: unknown } | null)?.arguments, tools);
     if (!plan.ok) return { isError: true, content: [{ type: "text", text: plan.error }] };
     const call = async ({ name, arguments: args }: AgentBrowserCall): Promise<ToolResult> =>
-      asToolResult(await this.agentRequest(session, spec, "tools/call", { name, arguments: args }, deadline, beforeDispatch, ctx));
+      asToolResult(await this.agentRequest(session, spec, "tools/call", { name, arguments: args }, deadline, beforeDispatch, ctx, true));
     return runSteps<AgentBrowserCall>(plan.steps, {
       deadline: Math.min(deadline, Date.now() + plan.limitMs),
       limitMs: plan.limitMs,
@@ -1126,6 +1211,9 @@ export class BrowserRuntime {
     gate.ready = false;
     this.steps?.forget(session);
     this.threadTabs.forget(session);
+    this.dialogs.get(session)?.watch.close();
+    this.dialogs.delete(session);
+    this.dialogsTried.delete(session);
     this.launch?.stopped(session);
     // Clear before the awaited stop: any uncertain latch after this point must win.
     gate.uncertain = false;

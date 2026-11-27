@@ -94,3 +94,44 @@ export class DialogWatch {
     this.#set(null);
   }
 }
+
+/** How the bot asked a call to answer a page question that call brings up: `dialog: "accept"`, with `promptText` for a
+ * prompt. Anything else answers Cancel, so a "Delete this?" is never confirmed unless the bot said so. */
+export interface DialogAnswer { accept: boolean; promptText?: string }
+
+export function dialogAnswerOf(params: unknown): DialogAnswer {
+  const args = (params as { arguments?: Record<string, unknown> } | null)?.arguments;
+  const accept = args?.dialog === "accept" || args?.dialog === true;
+  return { accept, ...(accept && typeof args?.promptText === "string" ? { promptText: args.promptText.slice(0, MESSAGE_LIMIT) } : {}) };
+}
+
+/** The call's params without the dialog answer, which is dusk bot's and never reaches the engine. */
+export function withoutDialogAnswer(params: unknown): unknown {
+  const record = params as { arguments?: unknown } | null;
+  const args = record?.arguments;
+  if (!args || typeof args !== "object" || Array.isArray(args) || !("dialog" in args || "promptText" in args)) return params;
+  const { dialog: _dialog, promptText: _promptText, ...rest } = args as Record<string, unknown>;
+  return { ...record, arguments: rest };
+}
+
+/** What the bot is told after its call brought up a page question that dusk bot answered for it. */
+export function dialogNote(dialog: PageDialog, answer: DialogAnswer): string {
+  const asked = `The page asked ${JSON.stringify(dialog.message)} (a ${dialog.type} dialog)`;
+  if (answer.accept) return `${asked} and dusk bot answered OK${dialog.type === "prompt" ? ` with ${JSON.stringify(answer.promptText ?? dialog.defaultValue)}` : ""}, as this call asked.`;
+  return `${asked} and dusk bot answered Cancel so the page would not stay stuck, so it did not get a yes. To answer OK instead, make this same call again with "dialog": "accept"${dialog.type === "prompt" ? ' and "promptText": "your answer"' : ""}.`;
+}
+
+/** agent-browser 0.37.0 adds a warning naming an agent_browser_dialog tool it does not offer in the core set; once
+ * dusk bot answered the dialog it is wrong twice over. */
+export function withoutDialogWarning(result: unknown): unknown {
+  const content = (result as { content?: unknown } | null)?.content;
+  if (!Array.isArray(content)) return result;
+  return { ...result as object, content: content.map((part) => {
+    const text = (part as { type?: unknown; text?: unknown } | null)?.type === "text" ? (part as { text: string }).text : null;
+    if (!text?.includes("dialog is blocking the page")) return part;
+    try {
+      const { warning, ...rest } = JSON.parse(text) as Record<string, unknown>;
+      return typeof warning === "string" && warning.includes("dialog is blocking the page") ? { ...part as object, text: JSON.stringify(rest) } : part;
+    } catch { return part; }
+  }) };
+}

@@ -599,7 +599,7 @@ describe("server-owned browser MCP runtime", () => {
       name: BROWSER_UPLOAD_TOOL, arguments: { selector: "#cv", files: ["/files/cv.pdf"], session: "another-bot", extraArgs: ["--headed"] },
     }) as { isError?: boolean; content: Array<{ text: string }> };
     await value.agentRpc("s", spec(), "tools/call", { name: BROWSER_HOVER_TOOL, arguments: { selector: "@e4", files: ["/files/cv.pdf"] } });
-    expect(commands).toEqual([
+    expect(commands.filter(({ command }) => command.action !== "cdp_url")).toEqual([
       { session: "s", command: { action: "upload", selector: "#cv", files: ["/files/cv.pdf"] } },
       { session: "s", command: { action: "hover", selector: "@e4" } },
     ]);
