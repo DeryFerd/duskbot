@@ -37,8 +37,9 @@ export function describeListen(cfg: AppConfig): { ready: boolean; provider?: str
   return found ? { ready: true, provider: LISTEN_NAMES[found.provider] } : { ready: false };
 }
 
-export async function transcribe(found: Listener, audio: Uint8Array, mime: string): Promise<string> {
+/** `language` is a BCP 47 tag the person speaks; without one the service detects it. */
+export async function transcribe(found: Listener, audio: Uint8Array, mime: string, language?: string): Promise<string> {
   if (found.provider === "fish") return fish.transcribe(audio, mime, found.key);
   if (found.provider === "cartesia") return cartesia.transcribe(audio, mime, found.key);
-  return transcribeClip({ provider: found.provider, wav: audio, key: found.key, signal: AbortSignal.timeout(90_000) });
+  return transcribeClip({ provider: found.provider, wav: audio, key: found.key, language, signal: AbortSignal.timeout(90_000) });
 }

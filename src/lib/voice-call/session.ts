@@ -6,6 +6,7 @@ import { MicError } from "../voice-input/mic-capture";
 import { CAPTURE_RATE, FRAME_MS, FrameRing, joinFrames, openCallMic, wavBytes, type CallMic } from "./capture";
 import { playChime, type ChimeKind } from "./chime";
 import { SystemListener, systemListenerAvailable, systemSpeak, systemVoiceAvailable } from "./fallback";
+import { builtInVoiceKnows } from "./language";
 import { CallPlayer, type PlayerEvents, type Prepare, type Render, type SystemVoice } from "./player";
 import { crestOf, levelDb, soundsUnfinished, Vad } from "./vad";
 
@@ -132,15 +133,29 @@ export class VoiceCallSession {
   speed: number;
   /** The bot's voice in the voice account set up in Settings, for the "account" choice. */
   accountVoiceId: string | undefined;
+  private readonly language: string | undefined;
+  /** Who turns a turn's words into text: the built-in hearer, a key on the server, or the computer's recognizer. */
+  private readonly hearing: "built-in" | "server" | "system";
+  private readonly builtInSpeaks: boolean;
+  private readonly accountVoice: boolean;
 
   constructor(
     private readonly bot: { id: string; threadId: string },
     private readonly actions: CallActions,
     opts: { voice: string; speed: number; accountVoiceId?: string; io?: Partial<CallIo>;
-      /** The bot's own call language (BCP 47); undefined listens and speaks in the computer's own. */
-      language?: string },
+      /** The call's language (BCP 47); undefined is English. */
+      language?: string;
+      /** A key on the server can turn speech into text. */
+      serverHears?: boolean;
+      /** A voice is set up in Settings. */
+      accountVoice?: boolean },
   ) {
     this.accountVoiceId = opts.accountVoiceId;
+    this.language = opts.language;
+    const knows = builtInVoiceKnows(opts.language);
+    this.hearing = knows ? "built-in" : opts.serverHears ? "server" : "system";
+    this.builtInSpeaks = knows;
+    this.accountVoice = opts.accountVoice === true;
     this.io = { ...defaultIo(), ...opts.io };
     this.voice = opts.voice;
     this.speed = opts.speed;
@@ -154,7 +169,7 @@ export class VoiceCallSession {
         onIdle: () => this.refresh(),
         onError: () => {},
       },
-      system ? { use: () => this.voice !== "account" && !this.halves.speak, speak: (text, signal) => system.speak(text, signal) } : null,
+      system ? { use: () => !this.speaksWithAccount() && !this.halves.speak, speak: (text, signal) => system.speak(text, signal) } : null,
     );
     this.listener = this.io.systemListener((text) => this.heardBySystem(text), opts.language);
   }
@@ -176,6 +191,15 @@ export class VoiceCallSession {
     if (this.closed) return;
     this.snapshot = { ...this.snapshot, ...patch };
     for (const fn of Array.from(this.watchers)) fn();
+  }
+
+  private speaksWithAccount(): boolean {
+    return this.voice === "account" || (!this.builtInSpeaks && this.accountVoice);
+  }
+
+  /** Whether the page's own turns are turned into text, rather than the computer's recognizer hearing on its own. */
+  private pageHears(): boolean {
+    return this.hearing === "server" || this.halves.hear;
   }
 
   /** The phase follows from who holds the floor. */
@@ -201,13 +225,13 @@ export class VoiceCallSession {
   private syncListener(): void {
     const listener = this.listener;
     if (!listener) return;
-    const want = this.ready && !this.closed && !this.halves.hear && !listener.failed && !this.snapshot.muted && !this.player.speaking;
+    const want = this.ready && !this.closed && !this.pageHears() && !listener.failed && !this.snapshot.muted && !this.player.speaking;
     if (want && !listener.active) listener.start();
     else if (!want && listener.active) listener.stop();
   }
 
   private heardBySystem(text: string): void {
-    if (this.closed || this.halves.hear) return;
+    if (this.closed || this.pageHears()) return;
     this.utterance = null;
     this.vad.reset();
     const now = this.io.now();
@@ -270,9 +294,11 @@ export class VoiceCallSession {
       return;
     }
     this.take(first.model);
+    const needed = () => (this.hearing === "built-in" && !this.halves.hear) || (this.builtInSpeaks && !this.halves.speak);
+    if (!needed()) return;
     void prepare();
     let askedAt = this.io.now();
-    while (!this.closed && !(this.halves.hear && this.halves.speak)) {
+    while (!this.closed && needed()) {
       await new Promise((resolve) => setTimeout(resolve, this.io.pollMs));
       if (this.closed) return;
       const now = await status().catch(() => null);
@@ -286,8 +312,8 @@ export class VoiceCallSession {
   }
 
   private take(model: ModelPhase): void {
-    const hear = model.phase === "ready" || model.hear === true;
-    const speak = model.phase === "ready" || model.speak === true;
+    const hear = this.hearing === "built-in" && (model.phase === "ready" || model.hear === true);
+    const speak = this.builtInSpeaks && (model.phase === "ready" || model.speak === true);
     if (hear === this.halves.hear && speak === this.halves.speak) return;
     this.halves = { hear, speak };
     for (const fn of Array.from(this.waiting)) fn();
@@ -295,7 +321,7 @@ export class VoiceCallSession {
   }
 
   private async render(text: string, signal: AbortSignal): Promise<ArrayBuffer> {
-    if (this.voice === "account") {
+    if (this.speaksWithAccount()) {
       const res = await this.io.fetch("/api/tts/speak", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -305,6 +331,7 @@ export class VoiceCallSession {
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `the voice answered ${res.status}`);
       return res.arrayBuffer();
     }
+    if (!this.builtInSpeaks) throw new Error(`no voice here speaks ${this.language}`);
     await this.whenReady("speak");
     const res = await this.io.fetch("/api/voice/local/speak", {
       method: "POST",
@@ -393,7 +420,7 @@ export class VoiceCallSession {
   }
 
   private async partial(): Promise<void> {
-    if (this.partialBusy || !this.utterance || !this.halves.hear) return;
+    if (this.partialBusy || !this.utterance || this.hearing !== "built-in" || !this.halves.hear) return;
     this.partialBusy = true;
     const id = this.utteranceId;
     try {
@@ -406,7 +433,10 @@ export class VoiceCallSession {
   }
 
   private async transcribe(samples: Float32Array, partial = false): Promise<string> {
-    const res = await this.io.fetch(`/api/voice/local/transcribe${partial ? "?partial=1" : ""}`, { method: "POST", headers: { "content-type": "audio/wav" }, body: wavBytes(samples, CAPTURE_RATE) });
+    const url = this.hearing === "server"
+      ? `/api/tts/transcribe?language=${encodeURIComponent(this.language ?? "")}`
+      : `/api/voice/local/transcribe${partial ? "?partial=1" : ""}`;
+    const res = await this.io.fetch(url, { method: "POST", headers: { "content-type": "audio/wav" }, body: wavBytes(samples, CAPTURE_RATE) });
     if (!res.ok) throw new Error(`transcription answered ${res.status}`);
     return String(((await res.json()) as { text?: string }).text ?? "").trim();
   }
@@ -424,9 +454,9 @@ export class VoiceCallSession {
     this.turn += 1;
     const turn = this.turn;
     this.refresh();
-    if (!this.halves.hear) {
+    if (!this.pageHears()) {
       // The computer's recognizer has this turn; with none, the words wait for the built-in one.
-      if (this.listener && !this.listener.failed) return;
+      if (this.hearing === "system" || (this.listener && !this.listener.failed)) return;
       await this.whenReady("hear");
       if (this.closed || turn !== this.turn) return;
     }

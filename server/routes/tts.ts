@@ -9,6 +9,7 @@ import { PASS, type RouteHandler } from "./table.ts";
 
 /** About six minutes of 16 kHz mono 16-bit PCM. */
 export const TRANSCRIBE_MAX_BYTES = 12 * 1024 * 1024;
+const LANGUAGE_TAG = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,3}$/;
 
 export interface TtsRouteDeps {
   config(): AppConfig;
@@ -104,7 +105,8 @@ export function createTtsRoutes(deps: TtsRouteDeps): RouteHandler {
       });
       if (!audio) return json(res, 413, { error: `audio exceeds ${TRANSCRIBE_MAX_BYTES} bytes` });
       try {
-        return json(res, 200, { text: await listen.transcribe(hearer, audio, mime) });
+        const language = url.searchParams.get("language")?.trim() ?? "";
+        return json(res, 200, { text: await listen.transcribe(hearer, audio, mime, LANGUAGE_TAG.test(language) ? language : undefined) });
       } catch (e) {
         return json(res, 502, { error: e instanceof Error ? e.message : String(e) });
       }

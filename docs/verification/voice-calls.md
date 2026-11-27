@@ -31,6 +31,13 @@ hash-checked (`scripts/mirror-voice-models.sh` puts them on dusk.bot).
   without a key, where the turn waits for the models); the call takes turns
   while they stand in, and takes each half as it lands, sentence by sentence.
   No download text is ever shown.
+- A call's language is the bot's own (Voice chat → Language), else Settings → Voice's,
+  else the app's, else the computer's. The built-in voice knows only English, so a call
+  in another language never uses it: it hears through the speech service chosen in
+  Settings → Voice (`POST /api/tts/transcribe?language=<tag>`, full duplex) or else the
+  computer's recognizer in that language, and speaks with the voice set up in Settings
+  or else the computer's voice for that language. The bot is told to answer in the
+  language it was spoken to in.
 - Voices come out near -16 LUFS: the built-in voice is normalised on the
   harness, and every played clip (read-aloud too) goes through a soft
   compressor and a -1.5 dBFS limiter. A quiet microphone turn is raised before
