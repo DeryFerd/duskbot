@@ -206,6 +206,16 @@ export function auditLayout(options: AuditOptions = {}): LayoutIssue[] {
     }
     return null;
   };
+  // a field under another surface or in a drawer slid off the side (the sidebar's search behind a phone's full-screen
+  // panel) is not seen beside the others; one further down a page is, once scrolled to
+  const covered = (field: Element) => {
+    const box = field.getBoundingClientRect();
+    if (box.right <= 0 || box.left >= innerWidth) return true;
+    const x = Math.min(Math.max(box.left + box.width / 2, 1), innerWidth - 1), y = box.top + box.height / 2;
+    if (y < 0 || y >= innerHeight) return false;
+    const hit = document.elementFromPoint(x, y);
+    return Boolean(hit && !(painted(field) ?? field).contains(hit) && !hit.contains(field));
+  };
   // fill, corners and line: what makes two fields read as two kinds. A field nothing paints is part of a row, not a box.
   const signature = (box: Element) => {
     const style = getComputedStyle(box);
@@ -215,7 +225,7 @@ export function auditLayout(options: AuditOptions = {}): LayoutIssue[] {
   for (const scope of scopes) {
     const looks = new Map<string, Element[]>();
     for (const field of fields) {
-      if (scopes.find((one) => one.contains(field)) !== scope) continue;
+      if (scopes.find((one) => one.contains(field)) !== scope || covered(field)) continue;
       const box = painted(field);
       if (box) looks.set(signature(box), [...(looks.get(signature(box)) ?? []), field]);
     }
