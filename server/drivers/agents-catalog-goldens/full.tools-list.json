@@ -499,7 +499,7 @@
     },
     {
       "name": "vm_exec",
-      "description": "Run a shell command on your own computer, your Local VM or your VPS desktop (as its desktop user, starting in /home/cua/workspace), and get its exit code, stdout and stderr back as text. Use this for all command-line work there: downloading with curl, calling an API, parsing a page or writing a CSV with python3, installing software, checking a file's size with ls -l. Do not type commands into a terminal window and read screenshots: that is slow and unreliable. GUI programs you start appear on that desktop. For a long job raise timeout_seconds (default 60, at most 300). Only available while this turn has a Local VM or VPS desktop.",
+      "description": "Run a shell command on your Local VM or VPS desktop (as its desktop user, starting in /home/cua/workspace), and get its exit code, stdout and stderr back as text. Use this for all command-line work there: downloading with curl, calling an API, parsing a page or writing a CSV with python3, installing software, checking a file's size with ls -l. Do not type commands into a terminal window and read screenshots: that is slow and unreliable. GUI programs you start appear on that desktop. For a long job raise timeout_seconds (default 60, at most 300). Only available while this turn has a Local VM or VPS desktop; a command for the person's own computer goes to your own shell tool.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,

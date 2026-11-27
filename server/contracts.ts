@@ -180,8 +180,9 @@ export interface SendTurnInput {
     phone?: { command: string; args: string[]; env: Record<string, string> };
     /** The built-in browser's MCP proxy: one tab per bot, in its own persistent partition. */
     browser?: { command: string; args: string[]; env: Record<string, string> };
-    /** This computer's shell (run_command, find_files) for an engine with none of its own, on the desktop app's own server. */
-    shell?: { command: string; args: string[]; env: Record<string, string>; box?: { rw: string[]; botId?: string } };
+    /** This computer's shell (run_command, find_files) for an engine with none of its own, on the desktop app's own server.
+     * `insteadOfVm`: the turn has no Local VM or VPS desktop, so a vm_exec call runs here as run_command, asked as it is. */
+    shell?: { command: string; args: string[]; env: Record<string, string>; box?: { rw: string[]; botId?: string }; insteadOfVm?: true };
     /** The Data tools' MCP proxy: DuckDB on this bot's own database. */
     data?: { command: string; args: string[]; env: Record<string, string> };
     /** The Email tools' MCP proxy: the harness holds the passwords and the per-bot verdict. */
