@@ -12,7 +12,7 @@
     "ai edit specific spreadsheet cells"
   ],
   "answer": "**fix the opening hours without retyping the weekly sheet.** give the bot the spreadsheet, tab and replacement values. it can update a known block while leaving the rest alone.\n\nbut the write stretches to fit incoming data. ask for old values, replacements and their row and column counts before it writes.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,7 +45,7 @@
     "toolkit": "googlesheets",
     "slug": "GOOGLESHEETS_VALUES_UPDATE"
   },
-  "what": "**a tidy preview saves a messy repair.** the bot writes your values and adjusts the target to fit them. count the incoming rows and columns, not just the range you named. too much data can overwrite nearby cells or add rows.\n\ngive the file link and actual tab name. choose literal text to keep values as written: otherwise an equals sign can start a formula, and 01/02 can become a date.",
+  "what": "**a tidy preview saves a messy repair.** the bot writes your values and adjusts the target to fit them. count the incoming rows and columns, not just the range you named. too much data can overwrite nearby cells or add rows.\n\ngive the file link and actual tab name. choose literal text to keep values as written: otherwise an equals sign can start a formula, and 01/02 can become a date.\n\nread the current block first with [get spreadsheet values](/integrations/google-sheets/get-spreadsheet-values). matching rows by a key such as an order number suits [upsert rows](/integrations/google-sheets/upsert-rows) better.",
   "uses": [
     "**change seasonal opening hours.** replace the agreed block after checking the old schedule.",
     "**fix one customer name.** confirm the row before correcting the spelling.",

@@ -22,7 +22,7 @@
     "/integrations/google-sheets/create-a-google-sheet"
   ],
   "og_line": "clear choices in the cells people fill in.",
-  "what": "**one clear rule beats another cleanup.** use a fixed list, choices from another range, or a condition each entry must meet.\n\n- set applies the rule\n- clear removes the rule, leaving cell contents alone\n- strict validation rejects wrong entries by default\n\nname the cells, such as bookings!d2:d40. the bot finds the tab and handles google's numbering.",
+  "what": "**one clear rule beats another cleanup.** use a fixed list, choices from another range, or a condition each entry must meet.\n\n- set applies the rule\n- clear removes the rule, leaving cell contents alone\n- strict validation rejects wrong entries by default\n\nname the cells, such as bookings!d2:d40. the bot finds the tab and handles google's numbering.\n\nold entries keep their typos. read them with [get spreadsheet values](/integrations/google-sheets/get-spreadsheet-values), then correct them with [update spreadsheet values](/integrations/google-sheets/update-spreadsheet-values).",
   "uses": [
     "**booking status:** limit choices to held, confirmed or cancelled.",
     "**expenses:** offer the categories your team agreed.",
@@ -61,7 +61,7 @@
       "a": "**no. it changes the rule.** review existing values separately; a dropdown won't repair earlier entries."
     }
   ],
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -119,6 +119,10 @@
       "fix": "review existing values separately."
     }
   ],
+  "worked": {
+    "before": "bookings!d2:d40 holds free text.\nconf, confirmed and cnfrmd all mean the same.",
+    "after": "dropdown on d2:d40: held, confirmed, cancelled\nnew wrong entries get rejected\nold typos stay until you fix them"
+  },
   "tip": {
     "text": "a warning lets the typo stay. rejection keeps it out."
   },

@@ -12,7 +12,7 @@
     "ai find shared google sheet"
   ],
   "answer": "**the supplier sent the sheet. now the link is buried.** a bot finds accessible google spreadsheets by name, content, dates or sharing status. it returns candidate files without changing cells. name searches start at the beginning of filenames, so give it the opening words or ask for a broader match when you only remember the middle.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -43,7 +43,7 @@
     "toolkit": "googlesheets",
     "slug": "GOOGLESHEETS_SEARCH_SPREADSHEETS"
   },
-  "what": "**start with the bit of the filename you remember.** name mode matches from the beginning. you can also find starred files, shared files or spreadsheets changed after a date.\n\ncontent search covers names and descriptions too. ask where the word matched before assuming it came from a cell. have the bot gather the full result list. already have the link? use it and skip the hunt.",
+  "what": "**start with the bit of the filename you remember.** name mode matches from the beginning. you can also find starred files, shared files or spreadsheets changed after a date.\n\ncontent search covers names and descriptions too. ask where the word matched before assuming it came from a cell. have the bot gather the full result list. already have the link? use it and skip the hunt.\n\nonce it finds the file, [get spreadsheet values](/integrations/google-sheets/get-spreadsheet-values) reads the range you need.",
   "uses": [
     "**recover supplier prices.** find a shared sheet after losing the email with its link.",
     "**resume planning.** collect starred spreadsheets changed since the project restarted.",
@@ -109,6 +109,10 @@
       "fix": "give the bot the link and move on to the range you need."
     }
   ],
+  "worked": {
+    "before": "you remember \"q3\" at the start of the name.\nnothing else.",
+    "after": "name search, prefix \"q3\": 4 files\nshared drives included, though those results may be incomplete\nyou pick one and the bot reads it next"
+  },
   "tip": {
     "text": "if you remember only the middle of the name, say that. a prefix search will miss it."
   },

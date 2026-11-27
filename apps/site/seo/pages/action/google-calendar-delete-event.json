@@ -12,7 +12,7 @@
     "ai remove calendar event"
   ],
   "answer": "**free the slot without wiping the whole series.** a bot can delete a google calendar event, including one occurrence of a repeating meeting. name the calendar and date so it finds the right one. deletion counts as a calendar change, so put the confirmation step in your request rather than relying on sending approval.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -43,11 +43,12 @@
     "toolkit": "googlecalendar",
     "slug": "GOOGLECALENDAR_DELETE_EVENT"
   },
-  "what": "**cancel friday's meeting and keep next week's.** give the bot an event reference or ask it to find the meeting. name the date you mean; deleting the series removes every occurrence.\n\ngoogle can email guests about the cancellation. choose who should hear, since those notices don't follow dusk's sending setting. your connected account needs permission to delete from that calendar.",
+  "what": "**cancel friday's meeting and keep next week's.** give the bot an event reference or ask it to find the meeting. name the date you mean; deleting the series removes every occurrence.\n\ngoogle can email guests about the cancellation. choose who should hear, since those notices don't follow dusk's sending setting. your connected account needs permission to delete from that calendar.\n\nno reference handy? [find event](/integrations/google-calendar/find-event) returns it first. for one date in a series, [get event instances](/integrations/google-calendar/get-event-instances) gives that date its own id.",
   "uses": [
     "cancel a training session after the facilitator withdraws it",
     "remove one date during an office closure while keeping the series",
-    "clear an abandoned personal planning block from the right calendar"
+    "clear an abandoned personal planning block from the right calendar",
+    "remove a duplicate booking left after a reschedule, keeping the copy that holds the guests"
   ],
   "routine": {
     "message": "every monday at 4, find next week’s work-calendar events whose titles start with \"temporary hold:\". ask me before you change anything. show the title, date and whether each event repeats. ask which exact events to delete and who should get cancellation notices. delete only the events i confirm, then report the result here. never delete a whole series. never call a failed lookup a cancellation.",
@@ -106,8 +107,16 @@
     {
       "mistake": "cancelling by title alone",
       "fix": "name the date and say whether you mean one occurrence or the series."
+    },
+    {
+      "mistake": "reading \"not found\" as already gone",
+      "fix": "a not-found reply can mean the event sits on another calendar. name the calendar and ask again."
     }
   ],
+  "worked": {
+    "before": "weekly induction, every monday.\nthe 16 december session is off for the office closure.",
+    "after": "the 16 december instance found and deleted\nevery other monday stays\nguest emails: none, as you chose"
+  },
   "tip": {
     "text": "say \"only this occurrence\" when you mean one meeting in a repeating series."
   },

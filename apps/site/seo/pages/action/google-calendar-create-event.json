@@ -22,7 +22,7 @@
     "/integrations/google-calendar/patch-event"
   ],
   "og_line": "a new appointment, with the details checked.",
-  "what": "**book the slot you agreed, on the calendar you meant.** choose your primary calendar, or ask the bot to list your calendars. look up availability separately before booking.\n\n- timed entries need a start and an end or duration\n- all-day entries end on the following date for a single day\n- eligible events request a meet link by default; turn it off for a simple reminder",
+  "what": "**book the slot you agreed, on the calendar you meant.** choose your primary calendar, or ask the bot to list your calendars. look up availability separately before booking.\n\n- timed entries need a start and an end or duration\n- all-day entries end on the following date for a single day\n- eligible events request a meet link by default; turn it off for a simple reminder\n\nthis action books without looking for clashes. ask [query calendar availability](/integrations/google-calendar/query-calendar-availability) first. got a detail wrong after booking? fix it with [patch event](/integrations/google-calendar/patch-event).",
   "uses": [
     "**keep confirmed exhibition dates visible.** add an all-day entry.",
     "**reserve the workshop slot.** include the street address and duration.",
@@ -61,7 +61,7 @@
       "a": "**by default, yes.** google emails all attendees. dusk counts event creation as a change. put review and notification choices directly in your request."
     }
   ],
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -115,6 +115,10 @@
       "fix": "event creation is a change. ask to review before creation."
     }
   ],
+  "worked": {
+    "before": "boiler repair agreed by phone with odile.\ntuesday, 09:30 to 11:00, dublin time.",
+    "after": "event created on your primary calendar\nboiler repair, odile, 09:30 to 11:00\nmeet link turned off\nno clash test ran, so a double booking would still go in"
+  },
   "tip": {
     "text": "ask for the calendar name, local time and guest list together before booking."
   },

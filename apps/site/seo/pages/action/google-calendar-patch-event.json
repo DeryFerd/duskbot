@@ -22,7 +22,7 @@
     "/integrations/google-calendar/update-google-event"
   ],
   "og_line": "correct the detail that actually changed.",
-  "what": "**the appointment can stay while the address changes.** have the bot find it, confirm the date and calendar, then change only the detail you name.\n\n- guest and repeat schedules replace the whole existing list\n- adding one guest means reading the current guest list first\n- update emails follow your account default unless you choose yes or no\n\nsay what should stay, and whether guests should hear about the edit.",
+  "what": "**the appointment can stay while the address changes.** have the bot find it, confirm the date and calendar, then change only the detail you name.\n\n- guest and repeat schedules replace the whole existing list\n- adding one guest means reading the current guest list first\n- update emails follow your account default unless you choose yes or no\n\nsay what should stay, and whether guests should hear about the edit.\n\nno event id yet? [find event](/integrations/google-calendar/find-event) gets it. for one date of a series, [get event instances](/integrations/google-calendar/get-event-instances) picks out that occurrence.",
   "uses": [
     "**save visitors a wrong turn.** correct the room without touching guests.",
     "**make the title useful.** replace a vague name with the agreed workshop title.",
@@ -61,7 +61,7 @@
       "a": "**say whether guests should hear about it.** tell the bot to notify guests or keep update emails off. leaving it out uses your google default."
     }
   ],
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",

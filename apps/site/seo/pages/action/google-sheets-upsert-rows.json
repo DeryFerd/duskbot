@@ -12,7 +12,7 @@
     "ai match spreadsheet rows by id"
   ],
   "answer": "**stop adding a fresh row every time a delivery changes.** a bot matches records to a key column, updates existing rows and appends new ones. header names do the matching, whatever their order. missing headers become new columns. name the key and preview new headers first, then ask for confirmation before the bot writes to your sheet.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,7 +45,7 @@
     "toolkit": "googlesheets",
     "slug": "GOOGLESHEETS_UPSERT_ROWS"
   },
-  "what": "**upsert means update a match, add the rest.** give the spreadsheet link, exact tab and a header that uniquely names each record. use an asset number rather than a person's name. without a chosen key, the first column wins.\n\n- give headers separately if every incoming row contains data; otherwise the first row becomes headers\n- partial updates can leave other columns alone\n- missing headers create columns automatically\n- name the table's start cell if its headers don't sit at a1",
+  "what": "**upsert means update a match, add the rest.** give the spreadsheet link, exact tab and a header that uniquely names each record. use an asset number rather than a person's name. without a chosen key, the first column wins.\n\n- give headers separately if every incoming row contains data; otherwise the first row becomes headers\n- partial updates can leave other columns alone\n- missing headers create columns automatically\n- name the table's start cell if its headers don't sit at a1\n\npure additions with no key? [append values](/integrations/google-sheets/append-values-to-spreadsheet) is simpler. compare headers first with [get spreadsheet values](/integrations/google-sheets/get-spreadsheet-values).",
   "uses": [
     "**keep equipment records current.** match each approved change by asset number.",
     "**refresh delivery status.** update known consignments and add new consignment numbers.",

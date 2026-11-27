@@ -12,7 +12,7 @@
     "claude make new google calendar"
   ],
   "answer": "**give a project its own calendar before it crowds your personal one.** a bot can create a secondary google calendar with a title, description, location and time zone. your connected account owns it. name the time zone because the default is utc. creation won't ask first unless you put that instruction in the job.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,7 +45,7 @@
     "toolkit": "googlecalendar",
     "slug": "GOOGLECALENDAR_CREATE_CALENDAR"
   },
-  "what": "**give rehearsals a home of their own.** this action creates a secondary calendar and its settings. choose the owning account and title, then add a description and location if useful. your primary calendar stays put.\n\nsay \"paris time\" for the time zone; a city in the description won't set it. the default is utc. events and sharing take separate steps, so the calendar starts empty.",
+  "what": "**give rehearsals a home of their own.** this action creates a secondary calendar and its settings. choose the owning account and title, then add a description and location if useful. your primary calendar stays put.\n\nsay \"paris time\" for the time zone; a city in the description won't set it. the default is utc. events and sharing take separate steps, so the calendar starts empty.\n\nonce it exists, fill it with [create event](/integrations/google-calendar/create-event). then [list events from all calendars](/integrations/google-calendar/list-events-from-all-calendars) shows it beside your other ones.",
   "uses": [
     "**separate touring dates.** keep production planning away from personal appointments.",
     "**start a course intake.** give the new cohort its own calendar and location description.",
@@ -110,6 +110,10 @@
       "fix": "read the season plans first. create only for confirmed seasons that need one."
     }
   ],
+  "worked": {
+    "before": "spring tour dates sit in your main calendar.\nlorcan wants them apart, in lisbon time.",
+    "after": "new calendar: spring tour\ntime zone: europe/lisbon\nowner: your connected account\nempty until events go in"
+  },
   "tip": {
     "text": "get the owner right before planning a season. a calendar title is much easier to fix."
   },
