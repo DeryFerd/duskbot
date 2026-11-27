@@ -1,4 +1,7 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { act, createElement, createRef } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
@@ -40,4 +43,33 @@ it("sits over the field where the wrapper pads it, so the typed words start wher
   expect([mirror.left, mirror.right]).toEqual(["6px", "auto"]);
   offsetLeft.mockRestore();
   act(() => root.unmount());
+});
+
+it("takes each typed key without rewriting the field's text child (each rewrite restyles the whole chat)", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  const inputRef = createRef<HTMLTextAreaElement>();
+  const show = (value: string) => act(async () => {
+    root.render(createElement(MentionTextarea, { inputRef, peers: [], value, onChange: () => {} }));
+  });
+  await show("");
+  const field = inputRef.current!;
+  const rewrites: MutationRecord[] = [];
+  const watch = new MutationObserver((records) => rewrites.push(...records));
+  watch.observe(field, { childList: true, characterData: true, subtree: true });
+  for (const value of ["h", "he", "hey", "hey there", ""]) {
+    await show(value);
+    expect(field.value).toBe(value);
+  }
+  await Promise.resolve();
+  expect(rewrites.length).toBe(0);
+  watch.disconnect();
+  act(() => root.unmount());
+});
+
+it("draws its words at the field's own size under the phone's text zoom, not zoomed a second time", () => {
+  const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../styles.css"), "utf8");
+  const mirror = /\.mention-editor-mirror\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+  expect(mirror).toMatch(/(^|[^-])text-size-adjust:\s*none/);
+  expect(mirror).toMatch(/-webkit-text-size-adjust:\s*none/);
 });

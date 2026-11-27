@@ -95,6 +95,10 @@ a.link-pill:focus-visible {
   white-space: pre-wrap;
   overflow-wrap: break-word;
   color: var(--color-ink);
+  /* the field's computed size it copies already carries the page's -webkit-text-size-adjust zoom; WebKit and Chromium
+     would apply that zoom a second time to the copy */
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
 }
 .mention-editor textarea {
   position: relative;
