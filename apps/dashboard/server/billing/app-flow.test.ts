@@ -374,3 +374,39 @@ it("with DUSK_TRIAL_DAYS a first plan starts free, runs its cloud through the tr
   expect(f.billing.service.trialDays({ id: "someone-else", email: "OWNER@example.test" })).toBeNull();
   expect(f.billing.service.trialDays({ id: "someone-else", email: "new@example.test" })).toBe(3);
 });
+
+it("logs the desktop's cancel flow steps for its own cloud, counts its survey and cancel as a cancel, and sends one winback a week later", async () => {
+  const f = await fixture(); await f.client.start(); await f.signIn();
+  expect((await f.client.checkout("starter", "app_card")).outcome).toBe("opened");
+  const checkout = await f.complete(); await f.reconcile();
+  const cloudId = checkout.cloudId!, path = `/v1/clouds/${cloudId}/retention`, sub = () => f.billing.store.state.subscriptions[0]!;
+  expect(await f.request(path, { reason: "skip", step: "reason", outcome: "shown" })).toEqual({ status: 200, data: { ok: true } });
+  expect(await f.request(path, { reason: "skip", step: "help", outcome: "shown", offer: "losses" })).toEqual({ status: 200, data: { ok: true } });
+  expect(await f.request(path, { reason: "skip", step: "help", outcome: "nope" })).toMatchObject({ status: 400, data: { code: "invalid_request" } });
+  expect(await f.request(path, { reason: "skip", step: "reason", outcome: "shown", extra: 1, note: 5 })).toMatchObject({ status: 400 });
+  expect(await f.request(path, { reason: "skip", step: "reason", outcome: "shown" }, "")).toMatchObject({ status: 401, data: { code: "signed_out" } });
+  const other = await f.signIn("other@example.test");
+  expect(await f.request(path, { reason: "skip", step: "reason", outcome: "shown" }, other.token)).toMatchObject({ status: 404, data: { code: "not_found" } });
+  expect(f.snapshot().retention?.map(row => [row.reason, row.step, row.outcome])).toEqual([["skip", "reason", "shown"], ["skip", "help", "shown"]]);
+
+  // the desktop's cancel: its survey (with the offer it showed), then renewal off with no survey
+  const cancelCalls = f.billing.fake!.cancelCalls.length;
+  expect(await f.request("feedback", { cloudId, answer: "skip", offer: "losses" })).toMatchObject({ status: 200 });
+  expect((await f.request(`clouds/${cloudId}/cancel`, {})).status).toBe(200);
+  expect(f.billing.fake!.cancelCalls.slice(cancelCalls)).toEqual([{ subscriptionId: sub().providerSubscriptionId, cancel: true }]);
+  expect(f.snapshot().feedback.at(-1)).toMatchObject({ answer: "skip", offer: "losses", outcome: "cancelled", subscriptionId: sub().id });
+  expect(f.snapshot().retention?.at(-1)).toMatchObject({ reason: "skip", step: "confirm", outcome: "cancelled" });
+
+  const winbacks = () => f.mailer.outbox.filter(mail => mail.to === "owner@example.test" && mail.subject === "My Cloud is still here");
+  const cancelledAt = f.now();
+  f.setTime(cancelledAt + 6 * 86_400_000); f.billing.service.winbacks();
+  expect(winbacks()).toHaveLength(0);
+  f.setTime(cancelledAt + 7 * 86_400_000); f.billing.service.winbacks();
+  await vi.waitFor(() => expect(winbacks()).toHaveLength(1));
+  expect(winbacks()[0]!.text).toContain(`${f.origin}/account#billing`);
+  expect(winbacks()[0]!.text).toMatch(/kept until \w+ \d+, \d{4}/);
+  f.setTime(cancelledAt + 8 * 86_400_000); f.billing.service.winbacks();
+  expect(f.snapshot().winbacks).toEqual([expect.objectContaining({ subscriptionId: sub().id, sentAt: cancelledAt + 7 * 86_400_000, skipped: null })]);
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(winbacks()).toHaveLength(1);
+});

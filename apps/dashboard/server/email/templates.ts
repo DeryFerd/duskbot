@@ -45,6 +45,7 @@ const SAY = {
   confirm: { say: "is this you?", accent: "pink" },
   cloudGone: { say: "bye, little cloud!", accent: "lav" },
   bye: { say: "bye for now!", accent: "lav" },
+  missed: { say: "still here for you", accent: "lav" },
   promo: { say: "Something new!", accent: "lime" },
   invite: { say: "you're invited!", accent: "sky" },
   desktop: { say: "for your computer!", accent: "sky" },
@@ -276,6 +277,29 @@ export function cancelledEmail(cfg: EmailConfig, input: CancelledInput): Rendere
       { t: "button", label: "come back to dusk cloud", href: `${cfg.app}/cloud` },
     ],
     reason: ACCOUNT_REASON,
+  });
+}
+
+/** the one email a week after a person cancelled: what they had, how long its data is kept, and one way to resume.
+ *  `keepDays`: how long its data is kept after `endsAt` */
+export interface WinbackInput { description: string; cloudName: string | null; endsAt: number | null; keepDays: number; now: number }
+export function winbackEmail(cfg: EmailConfig, input: WinbackInput): Rendered {
+  const ends = input.endsAt === null ? null : formatDate(input.endsAt), running = input.endsAt !== null && input.endsAt > input.now;
+  const keepUntil = input.endsAt === null || !input.cloudName ? null : formatDate(input.endsAt + input.keepDays * DAY);
+  const what = input.cloudName ? `**${input.cloudName}**` : "your bots";
+  return render(cfg, {
+    subject: input.cloudName ? `${input.cloudName} is still here` : "your dusk bot plan is still here", preheader: keepUntil ? `we keep everything until ${keepUntil}.` : "you can pick up where you left off.", tag: "billing", ...SAY.missed,
+    blocks: [
+      { t: "h1", text: input.cloudName ? `${input.cloudName} is still here` : "your plan is still here" },
+      { t: "p", text: `last week you cancelled **${input.description}**. ${ends ? running ? `${what} keeps working until **${ends}**.` : `${what} stopped on **${ends}**.` : ""}`.trim() },
+      ...(keepUntil ? [{ t: "p", text: `its bots, chats, files and sign-ins are kept until **${keepUntil}**, then deleted. resume before then and everything is where you left it.` } as Block] : []),
+      { t: "facts", rows: [
+        ["plan", input.description],
+        ...(keepUntil ? [["data kept until", keepUntil, "warn"] as [string, string, "warn"]] : []),
+      ] },
+      { t: "button", label: "resume your plan", href: `${cfg.app}/account#billing` },
+    ],
+    reason: "you got this because you cancelled a dusk bot plan last week. it's the only email we send about it.",
   });
 }
 

@@ -24,7 +24,7 @@ import type { BillingNotice } from "./billing/service.ts";
 import { BILLING_CONFIG, MANAGED_REGION, regionLabel } from "./billing/plans.ts";
 import type { StoredCloud } from "./clouds/types.ts";
 import { DEFAULT_RETENTION_DAYS } from "../../cloud-service/src/retention.ts";
-import { CODE_SUBJECT, accountDeletedEmail, cancelledEmail, cloudDeletedEmail, cloudNoticeEmail, cloudReadyEmail, emailConfig, paymentFailedEmail, paymentRecoveredEmail, paymentReminderEmail, receiptEmail, teamInviteEmail, teamSeatFullEmail, welcomeEmail } from "./email/templates.ts";
+import { CODE_SUBJECT, accountDeletedEmail, cancelledEmail, cloudDeletedEmail, cloudNoticeEmail, cloudReadyEmail, emailConfig, paymentFailedEmail, paymentRecoveredEmail, paymentReminderEmail, receiptEmail, teamInviteEmail, teamSeatFullEmail, welcomeEmail, winbackEmail } from "./email/templates.ts";
 import type { Rendered } from "./email/templates.ts";
 import { render } from "./email/layout.ts";
 import { BillingError } from "./billing/service.ts";
@@ -324,6 +324,9 @@ export function createDashboardApp(options: DashboardAppOptions) {
     else if (notice.kind === "payment_failed") sendTo(notice.accountId, "required", paymentFailedEmail(emailCfg, { ...notice, cloudName: cloud?.name ?? null }));
     else if (notice.kind === "payment_reminder") sendTo(notice.accountId, "required", paymentReminderEmail(emailCfg, { ...notice, cloudName: cloud?.name ?? null, final: notice.step === "final" }));
     else if (notice.kind === "payment_recovered") sendTo(notice.accountId, "required", paymentRecoveredEmail(emailCfg, { description: notice.description, cloudName: cloud?.name ?? null }));
+    // not about running the account: the person can turn it off with product news
+    else if (notice.kind === "winback") sendTo(notice.accountId, "product", winbackEmail(emailCfg, { description: notice.description, cloudName: cloud?.name ?? null, endsAt: notice.endsAt,
+      keepDays: cloud?.backend === "managed" ? retentionDays : notice.graceDays, now: now() }));
     else sendTo(notice.accountId, "required", cancelledEmail(emailCfg, { description: notice.description, cloudName: cloud?.name ?? null, endsAt: notice.endsAt,
       keptPaused: cloud?.backend === "managed", keepDays: cloud?.backend === "managed" ? retentionDays : notice.graceDays }));
   }
