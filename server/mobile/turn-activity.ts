@@ -33,12 +33,17 @@ export function turnActivityAttributes(bot: { id: string; name: string; color: s
 
 /** The reply's first line, readable only with the private half of `key` (X25519, base64url). */
 export function sealTurnLine(key: string, line: string): string {
+  return sealToPhone(key, line, TURN_LINE_SEAL);
+}
+
+/** `text` readable only with the private half of `key` (X25519, base64url), under `seal`'s salt and info. */
+export function sealToPhone(key: string, text: string, seal: { salt: string; info: string }): string {
   const ephemeral = generateKeyPairSync("x25519");
   const shared = diffieHellman({ privateKey: ephemeral.privateKey, publicKey: createPublicKey({ key: { kty: "OKP", crv: "X25519", x: key }, format: "jwk" }) });
-  const aesKey = Buffer.from(hkdfSync("sha256", shared, TURN_LINE_SEAL.salt, TURN_LINE_SEAL.info, 32));
+  const aesKey = Buffer.from(hkdfSync("sha256", shared, seal.salt, seal.info, 32));
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", aesKey, iv);
-  const sealed = Buffer.concat([cipher.update(line, "utf8"), cipher.final(), cipher.getAuthTag()]);
+  const sealed = Buffer.concat([cipher.update(text, "utf8"), cipher.final(), cipher.getAuthTag()]);
   const pub = Buffer.from(ephemeral.publicKey.export({ format: "jwk" }).x!, "base64url");
   return Buffer.concat([pub, iv, sealed]).toString("base64url");
 }

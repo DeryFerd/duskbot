@@ -124,6 +124,8 @@ export function replyFirstLine(text: string): string {
 /** HKDF salt and info of the done line's seal: X25519 between a one-time key and the activity key, then AES-256-GCM.
  * The sealed value is base64url of ephemeral public key (32) | iv (12) | ciphertext | tag (16). */
 export const TURN_LINE_SEAL = { salt: "dusk-turn-line-v1", info: "seal" } as const;
+/** The same seal for a push's preview line, to the phone's push key: what the lock screen shows under the bot's name. */
+export const PUSH_PREVIEW_SEAL = { salt: "dusk-push-preview-v1", info: "seal" } as const;
 
 /** PUT /api/mobile/activity: this phone's Live Activity for a thread. */
 export interface TurnActivityRegistration {

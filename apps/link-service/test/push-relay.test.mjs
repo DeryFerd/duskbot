@@ -56,11 +56,24 @@ describe("push relay", () => {
     expect(sent.url).toBe("https://fcm.example/v1/projects/fixture-project/messages:send");
     expect(JSON.parse(sent.body).message).toEqual({
       token: "fixture-token", notification: { title: "Nova", body: "New message" },
-      data: { id: "n1", kind: "mention", botId: "b1", threadId: "t1" }, android: { collapse_key: "t1", priority: "high" },
+      data: { id: "n1", kind: "mention", botId: "b1", threadId: "t1" }, android: { priority: "high", notification: { channel_id: "messages" } },
     });
     expect(sent.body).not.toContain("should not travel");
     fcmStatus = 404;
     expect(await (await post({ service: "fcm", token: "fixture-token", message })).json()).toEqual({ outcome: "gone" });
+  });
+
+  it("sends data only to an app that draws its own notification, with its sealed preview and count", async () => {
+    await start(createPushRelay({ env: { DUSK_FCM_SERVICE_ACCOUNT_FILE: "/keys/account.json", DUSK_FCM_HOST: "https://fcm.example" }, fetch: fakeFetch(), readFile }));
+    const sealed = "s".repeat(120);
+    expect(await (await post({ service: "fcm", token: "fixture-token", draws: true, message: { ...message, sealed, badge: 4 } })).json()).toEqual({ outcome: "sent" });
+    const sent = JSON.parse(calls.find((one) => one.url.startsWith("https://fcm.example")).body).message;
+    expect(sent).toEqual({
+      token: "fixture-token", android: { priority: "high", ttl: "2419200s" },
+      data: { dusk: "1", id: "n1", kind: "mention", botId: "b1", threadId: "t1", sealed, botName: "Nova", badge: "4" },
+    });
+    expect((await post({ service: "fcm", token: "fixture-token", message: { ...message, sealed: "not sealed!" } })).status).toBe(400);
+    expect((await post({ service: "fcm", token: "fixture-token", message: { ...message, badge: -1 } })).status).toBe(400);
   });
 
   it("sends an APNs alert to the sandbox when asked", async () => {
@@ -79,7 +92,33 @@ describe("push relay", () => {
     expect(requests[0].origin).toBe("https://api.sandbox.push.apple.com");
     expect(requests[0].headers[":path"]).toBe("/3/device/abcdef0123456789");
     expect(requests[0].headers["apns-topic"]).toBe("com.example.omb");
-    expect(requests[0].body).toEqual({ aps: { alert: { title: "Nova", body: "New message" }, sound: "default", "thread-id": "t1", category: "dusk.message" }, omb: { id: "n1", kind: "mention", botId: "b1", threadId: "t1" } });
+    expect(requests[0].headers["apns-collapse-id"]).toBeUndefined();
+    expect(requests[0].body).toEqual({
+      aps: { alert: { title: "Nova", body: "New message" }, sound: "default", "thread-id": "t1", "mutable-content": 1, category: "dusk.message" },
+      dusk: { id: "n1", kind: "mention", botId: "b1", threadId: "t1" },
+    });
+  });
+
+  it("drops an APNs connection that stopped answering and sends on a new one, so later pushes do not wait on it", async () => {
+    const sessions = [];
+    const http2Connect = () => {
+      const session = Object.assign(new EventEmitter(), { closed: false, destroyed: false, unref() {}, close() {}, destroy() { session.destroyed = true; } });
+      const answers = sessions.length > 0;
+      session.request = () => {
+        const stream = Object.assign(new EventEmitter(), { setEncoding() {}, close() {} });
+        stream.end = () => { if (answers) queueMicrotask(() => { stream.emit("response", { ":status": 200 }); stream.emit("end"); }); };
+        return stream;
+      };
+      sessions.push(session);
+      return session;
+    };
+    const relay = createPushRelay({ env: { DUSK_APNS_KEY_FILE: "/keys/apns.p8", DUSK_APNS_KEY_ID: "key", DUSK_APNS_TEAM_ID: "team", DUSK_APNS_TOPIC: "com.example.omb" }, http2Connect, readFile, serviceTimeoutMs: 50 });
+    await start(relay);
+    expect(await (await post({ service: "apns", token: "abcdef0123456789", message })).json()).toEqual({ outcome: "sent" });
+    expect(sessions).toHaveLength(2);
+    expect(sessions[0].destroyed).toBe(true);
+    expect(await (await post({ service: "apns", token: "abcdef0123456789", message })).json()).toEqual({ outcome: "sent" });
+    expect(sessions).toHaveLength(2);
   });
 
   it("refuses bad input and limits pushes per device token", async () => {

@@ -37,8 +37,8 @@ import { formatPairingCode, type Scope, type SessionRegistry } from "../sessions
 import { postLookup } from "./lookup.ts";
 import { createPhonePresence } from "./presence.ts";
 import { createPushSender, pushRelayBase, type PushMessage, type PushSender } from "./push.ts";
-import { createTurnActivities } from "./turn-activity.ts";
-import type { TurnActivityAttributes, TurnActivityEvent } from "../../shared/phone-activity.ts";
+import { createTurnActivities, sealToPhone } from "./turn-activity.ts";
+import { PUSH_PREVIEW_SEAL, type TurnActivityAttributes, type TurnActivityEvent } from "../../shared/phone-activity.ts";
 
 const B32 = "abcdefghijklmnopqrstuvwxyz234567";
 const B64URL_KEY = /^[A-Za-z0-9_-]{43}$/;
@@ -52,7 +52,7 @@ const SYNC_WAIT_MAX_S = 25;
 const ORIGIN_CHECK_MS = 4_000;
 const MAX_DEVICES = 24;
 /** a push the service could not take is tried again after these */
-const PUSH_RETRY_MS = [10_000, 60_000];
+const PUSH_RETRY_MS = [10_000, 60_000, 300_000];
 /** a notification waits this long before it pushes, so one read right away (on any device) never buzzes */
 export const PUSH_GRACE_MS = 4_000;
 
@@ -68,7 +68,14 @@ const deviceSchema = z.object({
   install: z.string().regex(INSTALL_ID).optional(),
   createdAt: z.number(),
   relay: z.object({ channel: z.string().regex(/^[a-z2-7]{10}$/), verifier: z.string().regex(HEX64), pub: z.string().regex(B64URL_KEY) }).nullable(),
-  push: z.object({ service: z.enum(PUSH_SERVICES), token: z.string().min(8).max(4096), environment: z.enum(["sandbox", "production"]).optional(), updatedAt: z.number() }).nullable(),
+  push: z.object({
+    service: z.enum(PUSH_SERVICES), token: z.string().min(8).max(4096), environment: z.enum(["sandbox", "production"]).optional(),
+    /** X25519, base64url: each push's preview line is sealed to it */
+    previewKey: z.string().regex(B64URL_KEY).optional(),
+    /** FCM: the app draws its own notifications from data-only pushes */
+    draws: z.boolean().optional(),
+    updatedAt: z.number(),
+  }).nullable(),
   /** the iPhone's Live Activity push-to-start token */
   activityStart: z.object({ token: z.string().min(8).max(4096), environment: z.enum(["sandbox", "production"]).optional(), updatedAt: z.number() }).nullable().optional(),
 });
@@ -98,6 +105,8 @@ export interface MobileLinkDeps {
   push?: PushSender;
   /** whether the person already read this notification (on any device) */
   isRead?: (notificationId: string) => boolean;
+  /** the notifications not read yet, for the app icon's count */
+  unreadCount?: () => number;
   /** A dusk cloud: its phones sign in with the account instead of pairing, so a phone's own bearer session may ask for a
    * relay channel, and is listed as a phone once it does. */
   adoptSessions?: boolean;
@@ -164,23 +173,23 @@ export function createMobileLink(deps: MobileLinkDeps) {
   /** not read on any device, and the phone is not open on that conversation */
   const stillNews = (device: DeviceRecord, message: PushMessage) => !deps.isRead?.(message.id) && !presence.viewing(device.id, message.threadId);
 
-  function later(device: DeviceRecord, message: PushMessage) {
+  function later(device: DeviceRecord, message: PushMessage, preview: string) {
     const key = `${device.id}\n${message.threadId}`;
     clearTimeout(waiting.get(key)?.timer);
     const timer = setTimeout(() => {
       if (waiting.get(key)?.timer === timer) waiting.delete(key);
-      if (devices.includes(device) && device.push && stillNews(device, message)) void deliver(device, message);
+      if (devices.includes(device) && device.push && stillNews(device, message)) void deliver(device, message, preview);
     }, PUSH_GRACE_MS);
     timer.unref?.();
     waiting.set(key, { timer, id: message.id });
   }
   /** a phone showing this conversation that then goes quiet without saying it went away was likely suspended before it
    * could, and never saw this: it gets the push. One that checks in again was open and showed it. */
-  function unlessCheckedIn(device: DeviceRecord, message: PushMessage) {
+  function unlessCheckedIn(device: DeviceRecord, message: PushMessage, preview: string) {
     const at = now();
     const timer = setTimeout(() => {
       if (!devices.includes(device) || !device.push || presence.reportedSince(device.id, at) || deps.isRead?.(message.id)) return;
-      void deliver(device, message);
+      void deliver(device, message, preview);
     }, Math.max(0, presence.overdueIn(device.id)));
     timer.unref?.();
   }
@@ -199,11 +208,24 @@ export function createMobileLink(deps: MobileLinkDeps) {
     },
   });
 
-  /** sends now; a push the service could not take goes again at 10 s and 60 s while it is still news to the phone */
-  function deliver(device: DeviceRecord, message: PushMessage, attempt = 0): Promise<void> {
+  /** what goes to this phone: the preview sealed to its own key, and the app icon's count as it stands now */
+  function forPhone(registration: NonNullable<DeviceRecord["push"]>, message: PushMessage, preview: string): PushMessage {
+    let sealed: string | undefined;
+    if (registration.previewKey && preview) {
+      try { sealed = sealToPhone(registration.previewKey, preview, PUSH_PREVIEW_SEAL); } catch { sealed = undefined; }
+    }
+    const badge = deps.unreadCount?.();
+    return { ...message, ...(sealed ? { sealed } : {}), ...(badge !== undefined ? { badge } : {}) };
+  }
+
+  /** sends now; a push the service could not take goes again at 10 s, 60 s and 5 min while it is still news to the phone */
+  function deliver(device: DeviceRecord, message: PushMessage, preview: string, attempt = 0): Promise<void> {
     const registration = device.push;
     if (!registration) return Promise.resolve();
-    return push.send({ service: registration.service, token: registration.token, ...(registration.environment ? { environment: registration.environment } : {}) }, message)
+    return push.send({
+      service: registration.service, token: registration.token,
+      ...(registration.environment ? { environment: registration.environment } : {}), ...(registration.draws ? { draws: true } : {}),
+    }, forPhone(registration, message, preview))
       .catch(() => "failed" as const)
       .then((outcome) => {
         if (outcome === "gone" && device.push === registration) { device.push = null; persist(); }
@@ -211,7 +233,7 @@ export function createMobileLink(deps: MobileLinkDeps) {
         if (outcome !== "failed" || wait === undefined) return;
         const timer = setTimeout(() => {
           if (device.push !== registration || !devices.includes(device) || !stillNews(device, message)) return;
-          void deliver(device, message, attempt + 1);
+          void deliver(device, message, preview, attempt + 1);
         }, wait);
         timer.unref?.();
       });
@@ -541,11 +563,12 @@ export function createMobileLink(deps: MobileLinkDeps) {
     if (!targets.length) return;
     const sessions = new Map(deps.sessions.list().map((session) => [session.id, session]));
     const message: PushMessage = { id: notification.id, kind: notification.kind, title: notification.title, botId: notification.botId, botName: notification.botName, threadId: notification.threadId, ...(notification.groupId ? { groupId: notification.groupId } : {}), ...(notification.requestId ? { requestId: notification.requestId } : {}) };
+    const preview = pushPreview(notification);
     await Promise.all(targets.map((device) => {
       const session = sessions.get(device.sessionId);
       if (!session || (options.adminOnly && !session.scopes.includes("admin")) || !device.push) return;
-      if (!presence.viewing(device.id, message.threadId)) later(device, message);
-      else unlessCheckedIn(device, message);
+      if (!presence.viewing(device.id, message.threadId)) later(device, message, preview);
+      else unlessCheckedIn(device, message, preview);
     }));
   }
 
@@ -647,7 +670,10 @@ export function createMobileLink(deps: MobileLinkDeps) {
         const token = typeof value.token === "string" ? value.token.trim() : "";
         const environment = value.environment === "sandbox" || value.environment === "production" ? value.environment : undefined;
         if (!service || !/^[\w:.-]{8,4096}$/.test(token)) { json(res, 400, { error: "service must be apns or fcm, with its device token" }); return true; }
-        device.push = { service, token, ...(environment ? { environment } : {}), updatedAt: now() };
+        if (value.previewKey !== undefined && (typeof value.previewKey !== "string" || !usableX25519(value.previewKey))) { json(res, 400, { error: "previewKey must be an X25519 public key, base64url" }); return true; }
+        const previewKey = typeof value.previewKey === "string" ? value.previewKey : undefined;
+        const draws = service === "fcm" && value.draws === true;
+        device.push = { service, token, ...(environment ? { environment } : {}), ...(previewKey ? { previewKey } : {}), ...(draws ? { draws } : {}), updatedAt: now() };
         for (const replaced of devices.filter((one) => one !== device && one.push?.service === service && one.push.token === token)) revoke(replaced.id);
         persist();
         const delivering = push.delivers?.(service) ?? push.configured.includes(service);
@@ -714,6 +740,16 @@ export function createMobileLink(deps: MobileLinkDeps) {
     /** for tests */
     state: () => ({ rev, applied, devices: devices.map((device) => ({ ...device })), grants: grants.size, agent }),
   };
+}
+
+const MESSAGE_KINDS = new Set(["done", "mention", "brief", "wait", "delegation-settled", "notice"]);
+const PREVIEW_MAX = 240;
+
+/** The line a phone shows under the bot's name: what the bot said, or for an ask or a problem what it is and its detail. */
+export function pushPreview(notification: Pick<NotificationLogEntry, "kind" | "title" | "body">): string {
+  const body = notification.body.replace(/\s+/g, " ").trim();
+  const line = MESSAGE_KINDS.has(notification.kind) && body ? body : [notification.title.trim(), body].filter(Boolean).join(": ");
+  return line.length > PREVIEW_MAX ? `${line.slice(0, PREVIEW_MAX - 1).trimEnd()}\u2026` : line;
 }
 
 /** a low-order point (all zeros, say) makes every agreement fail, so the agent could never derive this phone's key */
