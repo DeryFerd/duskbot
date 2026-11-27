@@ -40,7 +40,7 @@ test("plan & billing sits at #billing and ends with a quiet cancel that opens th
   expect(cancel).not.toBeNull();
   expect([...document.getElementById("billing")!.querySelectorAll("button")].at(-1)).toBe(cancel);
   await act(async () => cancel.click());
-  expect(document.querySelector("[role=dialog] h2")?.textContent).toBe("why are you leaving?");
+  expect(document.querySelector("[role=dialog] h2")?.textContent).toBe("look what you and your bots did");
 });
 
 test("a plan already set to end shows restart instead of cancel", async () => {

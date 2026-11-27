@@ -111,11 +111,12 @@ const scrim = { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacit
 
 /** a centered dialog: scrim, escape and outside click close it, focus moves in and comes back; it scales in from the
  * middle and fades out, and also plays its exit when an AnimatePresence above it drops it */
-export function Modal({ open, onClose, title, children, footer, wide }: { open: boolean; onClose(): void; title: string; children: ReactNode; footer?: ReactNode; wide?: boolean | "xl" }) {
+/** `top`: art that bleeds to the dialog's top edge, over the title; the close button floats on it */
+export function Modal({ open, onClose, title, children, footer, wide, top }: { open: boolean; onClose(): void; title: string; children: ReactNode; footer?: ReactNode; wide?: boolean | "xl"; top?: ReactNode }) {
   // a portal, so a dialog opened from a table row or an animated card is never trapped under the shell
-  return createPortal(<AnimatePresence propagate>{open && <ModalFrame key="modal" onClose={onClose} title={title} footer={footer} wide={wide}>{children}</ModalFrame>}</AnimatePresence>, document.body);
+  return createPortal(<AnimatePresence propagate>{open && <ModalFrame key="modal" onClose={onClose} title={title} footer={footer} wide={wide} top={top}>{children}</ModalFrame>}</AnimatePresence>, document.body);
 }
-function ModalFrame({ onClose, title, children, footer, wide }: { onClose(): void; title: string; children: ReactNode; footer?: ReactNode; wide?: boolean | "xl" }) {
+function ModalFrame({ onClose, title, children, footer, wide, top }: { onClose(): void; title: string; children: ReactNode; footer?: ReactNode; wide?: boolean | "xl"; top?: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
   useDialog(true, onClose, ref);
@@ -124,9 +125,10 @@ function ModalFrame({ onClose, title, children, footer, wide }: { onClose(): voi
       <m.div {...scrim} className="absolute inset-0" style={{ background: "var(--scrim)" }} onClick={onClose} aria-hidden />
       <m.div ref={ref} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className={cx("pop relative my-auto w-full min-w-0 rounded-[28px] bg-pop p-7 outline-none max-sm:p-5", wide === "xl" ? "max-w-[760px]" : wide ? "max-w-[540px]" : "max-w-[440px]")} style={{ boxShadow: "var(--pop-shadow)" }}
         initial={{ opacity: 0, scale: 0.96, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 6, transition: { duration: 0.16, ease: EASE_OUT } }} transition={GLIDE}>
+        {top && <div className="-mx-7 -mt-7 mb-4 overflow-hidden rounded-t-[28px] max-sm:-mx-5 max-sm:-mt-5">{top}</div>}
         <div className="flex items-start justify-between gap-4">
           <h2 id={titleId} className="text-20 font-medium tracking-[-0.03em] text-ink">{title}</h2>
-          <button data-close type="button" onClick={onClose} aria-label="close" className="press hover-ghost -me-2 -mt-2 grid size-10 shrink-0 place-items-center rounded-full text-ink-3"><X size={18} strokeWidth={1.5} /></button>
+          <button data-close type="button" onClick={onClose} aria-label="close" className={cx("press grid size-10 shrink-0 place-items-center rounded-full", top ? "absolute end-3 top-3 bg-pop/85 text-ink-2 hover:bg-pop" : "hover-ghost -me-2 -mt-2 text-ink-3")}><X size={18} strokeWidth={1.5} /></button>
         </div>
         <div className="mt-2 text-14 leading-[1.55] text-ink-3">{children}</div>
         {footer && <div className="mt-6 flex flex-wrap justify-end gap-2">{footer}</div>}

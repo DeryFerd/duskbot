@@ -1,15 +1,23 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { ArrowUpRight, Minus } from "@/icons";
+import { ArrowUpRight } from "@/icons";
+import booksArt from "@/assets/pixel-art/books.webp";
+import clockArt from "@/assets/pixel-art/clock.webp";
+import computerArt from "@/assets/pixel-art/computer.webp";
+import keyArt from "@/assets/pixel-art/key.webp";
+import plugArt from "@/assets/pixel-art/plug.webp";
+import { CancelScene, SceneSprite } from "@/components/CancelScene";
+import type { AccountRecap } from "../../../../shared/account-recap";
 import { useCloud } from "../data/cloud";
 import type { PlanCatalog, Selection } from "../data/contracts";
 import { bundleOf, priceCart } from "../data/pricing";
 import { useAccountUsage } from "../data/usage";
+import { useRecap } from "../data/recap";
 import { useSession } from "../data/session";
 import type { CancelAnswer, RetentionInput, RetentionOfferShown } from "../data/wire";
-import { longDate } from "../lib/format";
+import { longDate, MONTH_NAMES } from "../lib/format";
 import { Link } from "../lib/router";
 import { Choice, Modal } from "../ui/controls";
-import { Button } from "../ui/kit";
+import { Button, cx, Skeleton } from "../ui/kit";
 import { cartText, planSelection } from "./plan-sheet";
 
 export const CONTACT = "mailto:hello@dusk.bot";
@@ -37,26 +45,109 @@ export function offerFor(reason: CancelAnswer | null, can: { discount: boolean; 
   return "none";
 }
 
-export type FlowStep = "reason" | "offer" | "confirm" | "done";
+export type FlowStep = "recap" | "reason" | "offer" | "losses" | "confirm" | "done";
 
-/** what ends with the plan, as plain lines, in the person's own numbers when known; `keepsLicense` is a work license that outlives the dusk cloud */
-export function losses(opts: { desk: boolean; work: boolean; keepsLicense: boolean; bots?: number; routines?: number; keptUntil: string }): string[] {
-  const bots = opts.bots && opts.bots > 1 ? `your ${opts.bots} bots stop` : opts.bots === 1 ? "your bot stops" : "your bots stop";
-  const routines = opts.routines && opts.routines > 1 ? `your ${opts.routines} routines only run` : opts.routines === 1 ? "your routine only runs" : "routines only run";
+/** the screens a reason walks through; "what you'd lose" is its own screen, so the reasons whose one offer is that list skip the offer screen */
+export function stepsFor(shown: RetentionOfferShown): FlowStep[] {
+  return ["recap", "reason", ...(shown === "losses" ? [] : ["offer" as const]), "losses", "confirm"];
+}
+
+export type LossIcon = "bots" | "routines" | "apps" | "memory" | "work";
+const LOSS_ART: Record<LossIcon, string> = { bots: computerArt, routines: clockArt, apps: plugArt, memory: booksArt, work: keyArt };
+
+/** "Nova, Quill and Rivet", "Nova, Quill, Rivet and 2 more" */
+export function botNames(names: readonly string[], total: number): string {
+  const shown = names.slice(0, total > 4 ? 3 : 4);
+  const more = total - shown.length;
+  if (!shown.length) return total === 1 ? "your bot" : total > 1 ? `your ${total} bots` : "your bots";
+  if (more > 0) return `${shown.join(", ")} and ${more} more`;
+  return shown.length === 1 ? shown[0]! : `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}`;
+}
+
+/** what ends with the plan, in the person's own numbers and names when known; `keepsLicense` is a work license that outlives the dusk cloud */
+export function losses(opts: { desk: boolean; work: boolean; keepsLicense: boolean; keptUntil: string; recap?: AccountRecap | null }): Array<{ icon: LossIcon; text: string }> {
+  const r = opts.recap;
+  const bots = r?.bots ?? 0;
+  const who = botNames(r?.crew.map((b) => b.name) ?? [], bots);
+  const routines = r?.routines ?? 0;
+  const apps = r?.apps ?? 0;
   return [
-    ...(opts.desk ? [`${bots} working when your mac sleeps`, `${routines} while your mac is awake`, `your dusk cloud files are kept until ${opts.keptUntil}, then deleted`] : []),
-    ...(opts.work && !opts.keepsLicense ? ["work use is no longer covered. personal use stays free."] : []),
+    ...(opts.desk ? [
+      { icon: "bots" as const, text: `${who} ${bots === 1 ? "stops" : "stop"} working when your mac sleeps` },
+      { icon: "routines" as const, text: routines > 1 ? `your ${routines} routines only run while your mac is awake` : routines === 1 ? "your routine only runs while your mac is awake" : "routines only run while your mac is awake" },
+      ...(apps > 0 ? [{ icon: "apps" as const, text: apps === 1 ? "the app they use only works while your mac is awake" : `the ${apps} apps they use only work while your mac is awake` }] : []),
+      { icon: "memory" as const, text: `your dusk cloud's files, and what your bots remember there, are kept until ${opts.keptUntil}, then deleted` },
+    ] : []),
+    ...(opts.work && !opts.keepsLicense ? [{ icon: "work" as const, text: "work use is no longer covered. personal use stays free." }] : []),
   ];
 }
 
-function Losses({ desk, work, keepsLicense, keptUntil }: { desk: boolean; work: boolean; keepsLicense: boolean; keptUntil: string }) {
-  const { bots } = useAccountUsage();
-  const lost = losses({ desk, work, keepsLicense, keptUntil, bots: bots.length, routines: bots.reduce((sum, row) => sum + (row.bot.routines?.length ?? 0), 0) });
-  if (!lost.length) return null;
+function LossList({ rows }: { rows: Array<{ icon: LossIcon; text: string }> }) {
+  if (!rows.length) return null;
   return (
-    <ul className="mt-3 flex flex-col gap-2">
-      {lost.map((l) => <li key={l} className="flex gap-2.5 text-14 text-ink-2"><Minus size={16} strokeWidth={1.75} className="mt-0.5 shrink-0 text-ink-4" aria-hidden />{l}</li>)}
+    <ul className="mt-4 flex flex-col gap-1">
+      {rows.map((row) => (
+        <li key={row.text} data-loss={row.icon} className="flex min-h-12 items-center gap-3.5 text-14 text-ink-2">
+          <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-card"><img src={LOSS_ART[row.icon]} alt="" draggable={false} className="max-h-7 max-w-7 object-contain [image-rendering:pixelated]" /></span>
+          <span className="min-w-0">{row.text}</span>
+        </li>
+      ))}
     </ul>
+  );
+}
+
+/** where the person is in the flow: one dot a screen, the current one long */
+function Dots({ steps, at }: { steps: FlowStep[]; at: FlowStep }) {
+  const index = steps.indexOf(at);
+  return (
+    <div role="img" aria-label={`step ${index + 1} of ${steps.length}`} data-dots={`${index + 1}/${steps.length}`} className="flex items-center gap-1.5">
+      {steps.map((step, i) => <span key={step} aria-hidden className={cx("h-1.5 rounded-full transition-[width,background-color] duration-200 ease-out", i === index ? "w-5 bg-ink" : i < index ? "w-1.5 bg-ink-3" : "w-1.5 bg-track")} />)}
+    </div>
+  );
+}
+
+const fmt = (n: number) => n.toLocaleString("en-US");
+const monthYear = (t: number) => { const d = new Date(t); return `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`; };
+
+/** the numbers worth showing, biggest story first; zeros say nothing, so they are left out */
+export function recapStats(r: AccountRecap): Array<{ id: string; value: string; label: string }> {
+  return [
+    { id: "replies", n: r.replies, label: r.replies === 1 ? "reply from your bots" : "replies from your bots" },
+    { id: "days", n: r.activeDays, label: r.activeDays === 1 ? "day you worked together" : "days you worked together" },
+    { id: "streak", n: r.longestStreak > 1 ? r.longestStreak : 0, label: "days in a row, your best streak" },
+    { id: "routines", n: r.routines, label: r.routines === 1 ? "routine on a schedule" : "routines on a schedule" },
+    { id: "apps", n: r.apps, label: r.apps === 1 ? "app connected" : "apps connected" },
+    { id: "bots", n: r.bots, label: r.bots === 1 ? "bot you made" : "bots you made" },
+  ].filter((s) => s.n > 0).map((s) => ({ id: s.id, value: fmt(s.n), label: s.label }));
+}
+
+function Recap({ recap, loading }: { recap: AccountRecap | null; loading: boolean }) {
+  const stats = recap ? recapStats(recap) : [];
+  const top = recap?.topBot ?? null;
+  return (
+    <>
+      <p>{recap?.since ? `you've been at it together since ${monthYear(recap.since)}. before you go, here's what that added up to.` : "before you go, here's what you and your bots did together."}</p>
+      {loading ? (
+        <div className="mt-5 grid grid-cols-3 gap-2 max-sm:grid-cols-2" aria-busy="true" aria-label="loading">{[0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-[84px] !rounded-[16px]" />)}</div>
+      ) : stats.length ? (
+        <dl className="mt-5 grid grid-cols-3 gap-2 max-sm:grid-cols-2">
+          {stats.map((s) => (
+            <div key={s.id} data-stat={s.id} className="flex flex-col-reverse justify-end gap-1 rounded-[16px] bg-card px-4 py-3.5">
+              <dt className="text-13 leading-[17px] text-ink-3">{s.label}</dt>
+              <dd className="num text-24 font-medium tracking-[-0.03em] text-ink">{s.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p className="mt-3">your bots are set up and ready whenever you are.</p>
+      )}
+      {top && !loading && (
+        <p data-top-bot className="mt-4 flex items-center gap-3 text-14 text-ink-2">
+          <SceneSprite bot={top} size={28} state="happy" />
+          <span><span className="text-ink">{top.name}</span> did the most: {fmt(top.replies)} {top.replies === 1 ? "reply" : "replies"}.</span>
+        </p>
+      )}
+    </>
   );
 }
 
@@ -111,14 +202,18 @@ function Saves({ offer, plus, smaller, work, busy, onDiscount, onDowngrade, cata
   );
 }
 
-/** account, plan & billing, cancel subscription: why, the one offer that fits, what ends and when, then the cancel at the
- * period's end. consumer rules (California's online cancel, ROSCA, UK, EU) want it online and plain: a reason is asked
- * but "prefer not to say" counts, every step has a way forward, and there is one offer, which "no thanks" passes */
+
+
+/** account, plan & billing, cancel subscription: a look back at what they and their bots did, why, the one offer that fits,
+ * what they'd lose, then the cancel at the period's end. consumer rules (California's online cancel, ROSCA, UK, EU) want it
+ * online and plain: every screen has "continue to cancel", a reason is asked but "prefer not to say" counts, and there is
+ * at most one offer */
 export function CancelFlow({ open, onClose, catalog }: { open: boolean; onClose(): void; catalog: PlanCatalog }) {
   const { billing, cancel, keep: renew, changePlan, updateCard, retentionStep, takeDiscount } = useCloud();
   const { toast } = useSession();
+  const { recap, loading } = useRecap(open);
   const noteId = useId();
-  const [step, setStep] = useState<FlowStep>("reason");
+  const [step, setStep] = useState<FlowStep>("recap");
   const [reason, setReason] = useState<CancelAnswer | null>(null);
   const [missing, setMissing] = useState(false);
   const [note, setNote] = useState("");
@@ -151,19 +246,31 @@ export function CancelFlow({ open, onClose, catalog }: { open: boolean; onClose(
   const keptUntil = longDate(sub.currentPeriodEnd + KEPT_DAYS * DAY);
   const cheaper = onPro && plus && !trial ? plus : null;
   const shown = offerFor(reason, { discount: Boolean(offer), cheaper: Boolean(cheaper) });
+  const steps = stepsFor(shown);
   const said = note.trim();
+  const crew = recap?.crew ?? [];
 
   const log = (s: RetentionInput["step"], outcome: RetentionInput["outcome"]) => {
     if (reason) retentionStep({ reason, step: s, outcome, offer: shown, ...(said && outcome !== "shown" ? { note: said } : {}) });
   };
   const helped = () => log("help", "helped");
-  const keep = () => { if (step !== "done") log(step === "offer" ? "help" : step, "kept"); onClose(); };
-  const go = (to: FlowStep) => { setError(null); setStep(to); };
-  const toOffer = () => {
-    if (!reason) { setMissing(true); return; }
-    log("reason", "shown"); go("offer");
+  // "what you'd lose" is the offer itself for the reasons whose offer it is, else it belongs with the confirm
+  const lossesStep: RetentionInput["step"] = shown === "losses" ? "help" : "confirm";
+  const keep = () => {
+    if (step !== "done" && step !== "recap") log(step === "reason" ? "reason" : step === "offer" ? "help" : step === "losses" ? lossesStep : "confirm", "kept");
+    onClose();
   };
-  const toConfirm = () => { log("help", "shown"); go("confirm"); };
+  const go = (to: FlowStep) => { setError(null); setStep(to); };
+  const next = () => {
+    if (step === "recap") return go("reason");
+    if (step === "reason") {
+      if (!reason) { setMissing(true); return; }
+      log("reason", "shown");
+      return go(steps[steps.indexOf("reason") + 1]!);
+    }
+    if (step === "offer") { log("help", "shown"); return go("losses"); }
+    if (step === "losses") { if (shown === "losses") log("help", "shown"); return go("confirm"); }
+  };
   const run = async (kind: NonNullable<typeof busy>, action: () => Promise<void>, after: () => void = onClose) => {
     setBusy(kind); setError(null);
     try { await action(); after(); } catch (e) { setError((e as Error).message); } finally { setBusy(null); }
@@ -185,25 +292,32 @@ export function CancelFlow({ open, onClose, catalog }: { open: boolean; onClose(
     toast(`your plan renews again on ${until}`);
   });
 
-  const title = step === "reason" ? "why are you leaving?"
-    : step === "offer" ? (reason === "unused" ? "your bots this month" : shown === "discount" || shown === "downgrade" ? "keep it for less" : reason === "broken" ? "let's fix it" : reason === "feature" ? "tell us what's missing" : reason === "price" ? "free stays free" : "what you'd lose")
-      : step === "confirm" ? (keepsLicense ? "cancel your dusk cloud?" : "cancel your plan?")
-        : keepsLicense ? "your dusk cloud is cancelled" : "your plan is cancelled";
+  const title = step === "recap" ? "look what you and your bots did"
+    : step === "reason" ? "why are you leaving?"
+      : step === "offer" ? (reason === "unused" ? "your bots this month" : shown === "discount" || shown === "downgrade" ? "keep it for less" : reason === "broken" ? "let's fix it" : reason === "feature" ? "tell us what's missing" : "free stays free")
+        : step === "losses" ? "what you'd lose"
+          : step === "confirm" ? (keepsLicense ? "cancel your dusk cloud?" : "cancel your plan?")
+            : keepsLicense ? "your dusk cloud is cancelled" : "your plan is cancelled";
   const saves = <Saves offer={offer} plus={offer ? null : cheaper} smaller={!offer && cheaper ? smaller : null} work={work} busy={busy} onDiscount={() => void discount()} onDowngrade={() => void downgrade()} catalog={catalog} interval={sel.interval} />;
-  const lost = <Losses desk={desk} work={work} keepsLicense={keepsLicense} keptUntil={keptUntil} />;
   const keepButton = <Button variant="primary" onClick={keep}>keep my plan</Button>;
   const footer = step === "done"
-    ? <><Button onClick={() => void restart()} disabled={busy !== null}>{busy === "restart" ? "restarting" : "restart plan"}</Button><Button variant="primary" onClick={onClose}>done</Button></>
+    ? <><Button onClick={() => void restart()} disabled={busy !== null}>{busy === "restart" ? "resuming" : "resume my plan"}</Button><Button variant="primary" onClick={onClose}>done</Button></>
     : step === "confirm"
       ? <>{keepButton}<Button variant="danger" onClick={() => void stop()} disabled={busy !== null}>{busy === "cancel" ? "cancelling" : keepsLicense ? "cancel dusk cloud" : "cancel subscription"}</Button></>
-      : step === "offer"
-        ? <>{keepButton}<Button onClick={toConfirm} disabled={busy !== null}>no thanks, continue</Button></>
-        : <>{keepButton}<Button onClick={toOffer}>continue</Button></>;
+      : <>{keepButton}<Button onClick={next} disabled={busy !== null}>continue to cancel</Button></>;
+  const dots = step === "done" ? null : <Dots steps={steps} at={step} />;
+  const pad = "px-7 max-sm:px-5";
+  const top = step === "recap" ? <><CancelScene time="day" bots={crew} state="working" /><div className={cx(pad, "pt-6 max-sm:pt-5")}>{dots}</div></>
+    : step === "losses" && desk ? <><CancelScene time="dusk" bots={crew} state="sad" /><div className={cx(pad, "pt-6 max-sm:pt-5")}>{dots}</div></>
+      : step === "done" ? <CancelScene time="night" bots={recap?.topBot ? [recap.topBot] : crew.slice(0, 1)} state="happy" />
+        : <div className={cx(pad, "pt-7 max-sm:pt-5")}>{dots}</div>;
 
   closeRef.current = step === "done" ? onClose : keep;
 
   return (
-    <Modal open={open} onClose={dismiss} title={title} footer={footer} wide>
+    <Modal open={open} onClose={dismiss} title={title} footer={footer} wide top={top}>
+      {step === "recap" && <Recap recap={recap} loading={loading} />}
+
       {step === "reason" && (
         <>
           <p>pick the closest one. it helps us fix the right thing.</p>
@@ -231,32 +345,36 @@ export function CancelFlow({ open, onClose, catalog }: { open: boolean; onClose(
           ) : reason === "broken" ? (
             <>
               <p>most problems clear up with a restart, and we answer every message.</p>
-              <div className="mt-3 flex flex-col gap-1.5">
+              <div className="mt-4 flex flex-col gap-1.5">
                 {desk && <HelpLink to="/cloud" onClick={helped}>restart your dusk cloud</HelpLink>}
                 <HelpLink to="/workspaces" onClick={helped}>check that your computers are connected</HelpLink>
                 <HelpLink to={`${CONTACT}?subject=${encodeURIComponent("something broke")}${said ? `&body=${encodeURIComponent(said)}` : ""}`} external onClick={helped}>tell us what broke at hello@dusk.bot</HelpLink>
               </div>
             </>
-          ) : reason === "feature" ? (
+          ) : (
             <>
               <p>tell us and we'll reply. it may already be there, or be close.</p>
-              <div className="mt-3 flex flex-col gap-1.5">
+              <div className="mt-4 flex flex-col gap-1.5">
                 <HelpLink to="/connectors" onClick={helped}>see the apps your bots can use</HelpLink>
                 <HelpLink to={`${CONTACT}?subject=${encodeURIComponent("a missing feature")}${said ? `&body=${encodeURIComponent(said)}` : ""}`} external onClick={helped}>tell us what's missing at hello@dusk.bot</HelpLink>
               </div>
             </>
-          ) : (
-            <><p>{keepsLicense ? `if you cancel, your dusk cloud keeps working until ${until}. your work license stays. after that:` : `if you cancel, everything keeps working until ${until}. after that:`}</p>{lost}</>
           )}
+        </>
+      )}
+
+      {step === "losses" && (
+        <>
+          <p>{keepsLicense ? `your dusk cloud keeps working until ${until} and your work license stays. after that:` : `everything keeps working until ${until}. after that:`}</p>
+          <LossList rows={losses({ desk, work, keepsLicense, keptUntil, recap })} />
         </>
       )}
 
       {step === "confirm" && (
         <>
           <p>{keepsLicense ? `your dusk cloud ends on ${until}, not today. it keeps working until then and isn't charged again. your work license stays and keeps renewing.`
-            : `your plan ends on ${until}, not today. everything keeps working until then, and you won't be charged${trial ? "" : " again"}.`}{desk || (work && !keepsLicense) ? " after that:" : ""}</p>
-          {lost}
-          <p className="mt-3">you can restart any time before {until}.</p>
+            : `your plan ends on ${until}, not today. everything keeps working until then, and you won't be charged${trial ? "" : " again"}.`}</p>
+          <p className="mt-3">{desk ? `your dusk cloud's files are kept until ${keptUntil}. ` : ""}you can resume any time before {until}.</p>
         </>
       )}
 
