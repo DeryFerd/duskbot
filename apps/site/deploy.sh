@@ -46,6 +46,8 @@ for row in "${SITES[@]}"; do
   DUSK_WAITLIST_HOME="$waitlist" node "$HERE/build-pages.mjs" "$DUSK_REPO"
   # no deploy with a link, picture or anchor that leads nowhere
   node "$HERE/check-links.mjs"
+  # no deploy with a sitemap address google would not index (a redirect, noindex, a thin or empty page)
+  [ "$waitlist" = 1 ] || node "$HERE/check-index.mjs"
   dir="$stage/$name"
   mkdir -p "$dir/public"
   cp "$HERE/server.js" "$HERE/release-mirror.js" "$HERE/waitlist-store.js" "$HERE/waitlist-mongo.js" "$HERE/unsubscribe.js" "$HERE/package.json" "$HERE/package-lock.json" "$dir/"

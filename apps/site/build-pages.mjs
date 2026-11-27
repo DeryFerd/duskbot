@@ -364,7 +364,8 @@ for (const page of pages) {
   const at = page.name === 'home' ? '/' : page.name === '404' ? '/404.html' : `/${page.name}`;
   const jsonld = page.name === 'home' ? [appLd, orgLd, ...faqLd(macros(body))] : page.name === 'about' ? [orgLd, ...faqLd(macros(body))] : faqLd(macros(body));
   // the waitlist never carries the site's bar or footer, wherever it is served
-  // the phone app's link pages (/m/...) are for one person's phone, never for search
+  // the phone app's link pages (/m/...) are for one person's phone, never for search, and since launch the waitlist is a
+  // bare form nothing links to, which search engines file as a soft 404
   const noindex = page.noindex === true || page.name === '404';
   const html = layout({ ...page, page: page.name, at, kind: page.kind || `p-${page.name.replace(/\//g, '-')}`, body, jsonld, noindex });
   write(at, page.name === 'waitlist' ? soloWaitlist(html) : html, { index: !noindex });
@@ -392,7 +393,9 @@ for (const page of pages) {
   });
   const shell = withStrips(fs.readFileSync(path.join(here, 'pages', 'partials', 'changelog-shell.html'), 'utf8'));
   const body = shell.replace('{{entries}}', entries.join('\n')).replace(/\{\{([#^])entries\}\}([\s\S]*?)\{\{\/entries\}\}/g, (_, mark, inner) => ((entries.length > 0) === (mark === '#') ? inner : ''));
-  write('/changelog', layout({ title: "what's new / dusk bot", description: 'Every dusk bot release, newest first: what changed and what got fixed.', page: 'changelog', kind: 'p-changelog', body }));
+  // with no release yet the page is only its empty state, which search engines file as a soft 404
+  const listed = entries.length > 0;
+  write('/changelog', layout({ title: "what's new / dusk bot", description: 'Every dusk bot release, newest first: what changed and what got fixed.', page: 'changelog', kind: 'p-changelog', body, noindex: !listed }), { index: listed });
 }
 
 // the legal pages, each with a list of its sections beside it
