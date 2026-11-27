@@ -661,42 +661,42 @@ describe("a Starter Cloud's limit on bots", () => {
   };
 
   it("refuses a proposal at the limit with the words a bot acts on, and shows no card", () => {
-    const app = full(3);
+    const app = full(10);
     expect(() => app.propose([specialist("Scout")])).toThrow(expect.objectContaining({ status: 409, code: "bot_limit", message: expect.stringContaining("Do not retry") }));
     expect(app.messages).toHaveLength(0);
     expect(app.apply).not.toHaveBeenCalled();
   });
 
   it("refuses a whole setup that doesn't fit: no bot of it is made", async () => {
-    const app = full(2);
+    const app = full(9);
     app.autoApply.mockReturnValue({ source: "profile" } as never);
     await expect(app.submit([specialist("Scout"), specialist("Writer")])).rejects.toMatchObject({ status: 409, code: "bot_limit" });
     expect(app.apply).not.toHaveBeenCalled();
-    expect(app.store.bots).toHaveLength(4);
+    expect(app.store.bots).toHaveLength(11);
   });
 
   it("takes a setup that fits", () => {
-    const app = full(2);
+    const app = full(9);
     expect(app.propose([specialist("Scout")]).requestId).toBeTruthy();
   });
 
   it("at the limit still changes the bots it has", () => {
-    const app = full(3);
+    const app = full(10);
     const proposal = app.propose([{ action: "update", botId: app.peer.id, fields: { title: "Lead" } }]);
     expect(proposal.requestId).toBeTruthy();
   });
 
   it("asks again when the person confirms, and tells them, not the bot", async () => {
-    const app = full(2);
+    const app = full(9);
     const { requestId } = app.propose([specialist("Scout")]);
     app.bot("Late arrival");
     const answered = await app.resolve(requestId);
     expect(app.apply).not.toHaveBeenCalled();
-    expect(answered?.result).toMatchObject({ state: "cancelled", error: "You've reached the 5 bots Starter includes. To create more, upgrade this Cloud." });
+    expect(answered?.result).toMatchObject({ state: "cancelled", error: "You've reached the 12 bots Starter includes. To create more, upgrade this Cloud." });
   });
 
   it("makes what was proposed on Starter once the plan is bigger", async () => {
-    const app = full(2);
+    const app = full(9);
     const { requestId } = app.propose([specialist("Scout")]);
     app.bot("Late arrival");
     app.plan.starter = false;
@@ -705,7 +705,7 @@ describe("a Starter Cloud's limit on bots", () => {
   });
 
   it("has no such limit on another plan", () => {
-    const app = full(10, false);
+    const app = full(15, false);
     expect(app.propose([specialist("Scout")]).requestId).toBeTruthy();
   });
 });

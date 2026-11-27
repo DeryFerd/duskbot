@@ -19,7 +19,7 @@ const botNamed = (id: string, extra: Partial<BotAnnouncement> = {}): BotAnnounce
   id, threadId: `${id}-thread`, name: id, title: "", description: "", notifications: true, unread: false, color: "green",
   modelSelection: { instanceId: "fake", model: "m" }, tasks: [{ threadId: `${id}-thread`, title: "Thread", createdAt: 1 }], messages: [], ...extra,
 });
-const REFUSED = { error: "You've reached the 5 bots Starter includes. To create more, upgrade this Cloud.", code: "bot_limit" };
+const REFUSED = { error: "You've reached the 12 bots Starter includes. To create more, upgrade this Cloud.", code: "bot_limit" };
 const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status }));
 
 const { StoreProvider, useStore } = await import("./store");
@@ -68,8 +68,8 @@ const send = async (action: Action) => {
   await vi.waitFor(() => expect(seen.botCreationPending).toBe(false));
   await settle();
 };
-const five = () => Array.from({ length: 5 }, (_, i) => botNamed(`b${i}`));
-const STARTER = { cloudStarter: true, botLimit: 5 };
+const full = () => Array.from({ length: 12 }, (_, i) => botNamed(`b${i}`));
+const STARTER = { cloudStarter: true, botLimit: 12 };
 
 beforeEach(() => {
   creates = 0;
@@ -87,7 +87,7 @@ const CREATE: Action = { type: "newBot", look: { name: "New", color: "blue", mas
 
 describe("a create button with no room", () => {
   it.each<[string, Action]>([["New bot", { type: "newBot" }], ["Duplicate", { type: "duplicateBot", botId: "b0" }]])("%s opens the popup and asks the server nothing", async (_name, action) => {
-    await mount(five(), STARTER);
+    await mount(full(), STARTER);
     await send(action);
     expect(botLimitShown()).toBe(true);
     expect(creates).toBe(0);
@@ -95,7 +95,7 @@ describe("a create button with no room", () => {
   });
 
   it("leaves the Dusk out of the count, as the server does", async () => {
-    await mount([botNamed("maus", { defaultBot: {} } as never), ...five().slice(1)], STARTER);
+    await mount([botNamed("maus", { defaultBot: {} } as never), ...full().slice(1)], STARTER);
     created = () => json({ bot: botNamed("new") }, 201);
     await send(CREATE);
     await vi.waitFor(() => expect(creates).toBe(1));
@@ -103,7 +103,7 @@ describe("a create button with no room", () => {
   });
 
   it("goes straight on the moment the plan is bigger, with nothing reloaded", async () => {
-    await mount(five(), STARTER);
+    await mount(full(), STARTER);
     FixtureEventSource.opened[0]!.send({ kind: "config", ...seen.config, cloudStarter: false, botLimit: undefined }, "run:1");
     await settle();
     created = () => json({ bot: botNamed("new") }, 201);
@@ -113,7 +113,7 @@ describe("a create button with no room", () => {
   });
 
   it("has no limit on a plan that doesn't say one", async () => {
-    await mount(five(), { cloudStarter: false });
+    await mount(full(), { cloudStarter: false });
     created = () => json({ bot: botNamed("new") }, 201);
     await send(CREATE);
     await vi.waitFor(() => expect(creates).toBe(1));
@@ -123,7 +123,7 @@ describe("a create button with no room", () => {
 
 describe("the server's refusal, when the page's count was stale", () => {
   it.each<[string, Action]>([["New bot", CREATE], ["Duplicate", { type: "duplicateBot", botId: "b1" }]])("%s shows the popup and no error beside it", async (_name, action) => {
-    await mount(five().slice(1), STARTER);
+    await mount(full().slice(1), STARTER);
     await send(action);
     await vi.waitFor(() => expect(botLimitShown()).toBe(true));
     expect(creates).toBe(1);
@@ -131,7 +131,7 @@ describe("the server's refusal, when the page's count was stale", () => {
   });
 
   it("any other refusal is still an error", async () => {
-    await mount(five().slice(1), STARTER);
+    await mount(full().slice(1), STARTER);
     created = () => json({ error: "this workspace is limited to 100 bots" }, 409);
     await send({ type: "duplicateBot", botId: "b1" });
     await vi.waitFor(() => expect(seen.error).toBe("this workspace is limited to 100 bots"));

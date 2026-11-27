@@ -3,7 +3,7 @@
 import { BOT_LIMIT_CODE, botsTowardLimit, type BotLimitRefusal } from "../../shared/bot-limit.ts";
 
 /** How many bots a Starter Cloud can make, not counting its Dusk. The one number to change. */
-export const STARTER_BOT_LIMIT = 5;
+export const STARTER_BOT_LIMIT = 12;
 
 export type BotLimitReader = "person" | "bot";
 

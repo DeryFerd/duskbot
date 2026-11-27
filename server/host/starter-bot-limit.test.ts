@@ -21,54 +21,54 @@ const calling = (pattern: RegExp) => sources(SERVER).filter((path) => pattern.te
   .map((path) => relative(SERVER, path).split(sep).join("/")).sort();
 
 describe("a Starter Cloud's bots", () => {
-  it("is five, in one number", () => {
-    expect(STARTER_BOT_LIMIT).toBe(5);
+  it("is twelve, in one number", () => {
+    expect(STARTER_BOT_LIMIT).toBe(12);
   });
 
   it("counts every bot but its Dusk, an archived one and one that moved away", () => {
     expect(botsTowardLimit([{}, { defaultBot: {} }, { hidden: true }, { movedTo: { state: "moved" } }, {}])).toBe(2);
   });
 
-  it("makes the fifth and refuses the sixth", () => {
-    expect(onStarter(made(4)).refusal()).toBeNull();
-    expect(onStarter(made(5)).refusal()).toMatchObject({ code: BOT_LIMIT_CODE });
-    expect(onStarter(made(5)).limit()).toBe(5);
+  it("makes the twelfth and refuses the thirteenth", () => {
+    expect(onStarter(made(11)).refusal()).toBeNull();
+    expect(onStarter(made(12)).refusal()).toMatchObject({ code: BOT_LIMIT_CODE });
+    expect(onStarter(made(12)).limit()).toBe(12);
   });
 
   it("leaves the Dusk out of the count", () => {
-    expect(onStarter([{ defaultBot: {} }, ...made(4)]).refusal()).toBeNull();
-    expect(onStarter([{ defaultBot: {} }, ...made(5)]).refusal()).not.toBeNull();
+    expect(onStarter([{ defaultBot: {} }, ...made(11)]).refusal()).toBeNull();
+    expect(onStarter([{ defaultBot: {} }, ...made(12)]).refusal()).not.toBeNull();
   });
 
   it("refuses a group that doesn't fit, whole, and takes one that does", () => {
-    expect(onStarter(made(3)).refusal(2)).toBeNull();
-    const refused = onStarter(made(3)).refusal(3);
-    expect(refused?.error).toBe("This adds 3 bots, and your Starter plan has room for 2 more of its 5. To add them all, upgrade this Cloud.");
+    expect(onStarter(made(10)).refusal(2)).toBeNull();
+    const refused = onStarter(made(10)).refusal(3);
+    expect(refused?.error).toBe("This adds 3 bots, and your Starter plan has room for 2 more of its 12. To add them all, upgrade this Cloud.");
   });
 
   it("still refuses a Cloud already over the limit, in the same words as one at it", () => {
-    expect(onStarter(made(9)).refusal()?.error).toBe(onStarter(made(5)).refusal()?.error);
+    expect(onStarter(made(20)).refusal()?.error).toBe(onStarter(made(12)).refusal()?.error);
   });
 
   it("tells a person to upgrade, in words an older app can show as they are", () => {
-    expect(onStarter(made(5)).refusal()?.error).toBe("You've reached the 5 bots Starter includes. To create more, upgrade this Cloud.");
+    expect(onStarter(made(12)).refusal()?.error).toBe("You've reached the 12 bots Starter includes. To create more, upgrade this Cloud.");
   });
 
   it("tells a bot to explain it to the person, not to retry or work around it", () => {
-    const words = onStarter(made(5)).refusal(1, "bot")?.error;
+    const words = onStarter(made(12)).refusal(1, "bot")?.error;
     expect(words).toContain("Explain this to the person");
     expect(words).toContain("upgrade this Cloud");
     expect(words).toContain("Do not retry");
     expect(words).toContain("do not try to work around it");
-    expect(onStarter(made(4)).refusal(3, "bot")?.error).toContain("Do not retry");
-    expect(onStarter(made(9)).refusal(0, "bot"), "changing the bots it has").toBeNull();
+    expect(onStarter(made(11)).refusal(3, "bot")?.error).toContain("Do not retry");
+    expect(onStarter(made(20)).refusal(0, "bot"), "changing the bots it has").toBeNull();
   });
 
   it("has no limit on any other plan, and follows the plan at each question", () => {
     expect(onStarter(made(50), false).refusal(10)).toBeNull();
     expect(onStarter(made(50), false).limit()).toBeUndefined();
     let starter = true;
-    const limit = createBotLimit({ starter: () => starter, bots: () => made(5) });
+    const limit = createBotLimit({ starter: () => starter, bots: () => made(12) });
     expect(limit.refusal()).not.toBeNull();
     starter = false;
     expect(limit.refusal()).toBeNull();

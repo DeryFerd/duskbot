@@ -255,7 +255,7 @@ describe("importing onto a Starter Cloud", () => {
   const team = (app: { parsePackageDocument: (input: unknown) => PackageDocument }) => app.parsePackageDocument(fixture("full-team.v2.json"));
 
   it("refuses a team that doesn't fit before writing anything", async () => {
-    const app = await onStarter(3);
+    const app = await onStarter(10);
     const before = app.snapshot();
     expect(() => app.importer.importPackageDocument(team(app), { trust: "file", mode: "add" }, app.deps))
       .toThrow(expect.objectContaining({ code: "bot_limit", status: 409 }));
@@ -264,7 +264,7 @@ describe("importing onto a Starter Cloud", () => {
   });
 
   it("refuses a template's manifest the same way", async () => {
-    const app = await onStarter(5);
+    const app = await onStarter(12);
     const before = app.snapshot();
     const { parseTeamManifest } = await import("./team-manifest.ts");
     const manifest = parseTeamManifest({ format: "dusk.team", version: 2, team: { name: "Desk", members: [{ key: "helper", name: "Helper", appearance: { color: "blue" } }] } });
@@ -274,22 +274,22 @@ describe("importing onto a Starter Cloud", () => {
   });
 
   it("adds a team that fits, exactly up to the limit", async () => {
-    const app = await onStarter(2);
+    const app = await onStarter(9);
     const result = app.importer.importPackageDocument(team(app), { trust: "file", mode: "add" }, app.deps);
     if (result.alreadyAdded) throw new Error("unexpected");
     expect(result.bots).toHaveLength(3);
-    expect(app.store.bots).toHaveLength(5);
+    expect(app.store.bots).toHaveLength(12);
   });
 
   it("adds it on another plan however many are here", async () => {
-    const app = await onStarter(9, false);
+    const app = await onStarter(15, false);
     const result = app.importer.importPackageDocument(team(app), { trust: "file", mode: "add" }, app.deps);
     if (result.alreadyAdded) throw new Error("unexpected");
     expect(result.bots).toHaveLength(3);
   });
 
   it("registers a preset library at the limit: it makes no bot", async () => {
-    const app = await onStarter(5);
+    const app = await onStarter(12);
     const library = app.parsePackageDocument(fixture("library-only.v2.json"));
     const presets = { register: vi.fn(() => ({ added: [], existing: [], skipped: [] })) };
     expect(() => app.importer.importPackageDocument(library, { trust: "file", mode: "add" }, { ...app.deps, presets: presets as never })).not.toThrow();

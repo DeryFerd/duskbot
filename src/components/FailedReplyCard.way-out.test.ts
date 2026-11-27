@@ -84,7 +84,7 @@ describe("a failure card always offers a way on", () => {
 describe("a refusal a setting fixes", () => {
   it("offers the setting that fixes it, never the generic sentence", async () => {
     expect(labels(await show(failed("The provider rejected this key. Change it in Settings → API keys.", { reason: "key_rejected" }), vi.fn()))).toEqual(["Update key", "Try again"]);
-    expect(labels(await show(failed("This Cloud's Starter plan includes 5 bots and has no room for another", { reason: "plan_limit" }), vi.fn()))).toEqual(["See your plan"]);
+    expect(labels(await show(failed("This Cloud's Starter plan includes 12 bots and has no room for another", { reason: "plan_limit" }), vi.fn()))).toEqual(["See your plan"]);
     expect(labels(await show(failed("This bot's folder launch was moved or deleted. Pick a folder in the bot's settings.", { reason: "folder_gone" }), vi.fn()))).toEqual(["Working folder", "Try again"]);
   });
 });

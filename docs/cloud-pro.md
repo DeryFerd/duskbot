@@ -666,7 +666,7 @@ provider outage. So on a Cloud home (`server/engine-memory.ts`):
   signed `POST /api/cloud/plan` `{"v":1,"tier":"starter"}` (`server/host/cloud-plan-tier.ts`), and a
   home it never told has no such limit. What a bot's own turn starts always goes through,
   and a teammate's hand-off never takes that one thread from the person.
-- **How many bots a Starter Cloud makes.** Five beside its Dusk, one number in
+- **How many bots a Starter Cloud makes.** Twelve beside its Dusk, one number in
   `server/host/starter-bot-limit.ts`, from the same signed plan. An archived bot or one
   that moved away takes no room. Making one past it answers `409` with
   `{"code":"bot_limit","error":"…"}` from `POST /api/bots`, `POST /api/teams/import`,
