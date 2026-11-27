@@ -302,15 +302,16 @@ describe("the Simple composer in a bot chat", () => {
     expect(container.querySelector("[data-goal-chip]")).toBeNull();
   });
 
-  it("turns a typed /goal into the chip, leaving only the goal itself in the field", () => {
+  it("keeps a typed /goal as plain coloured text in the field, with no chip", () => {
     render({ bot });
     const field = container.querySelector("textarea")!;
     flushSync(() => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(field, "/goal ship the release");
       field.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    expect(container.querySelector("[data-goal-chip]")?.textContent).toBe("Work until done");
-    expect(container.querySelector("textarea")!.value).toBe("ship the release");
+    expect(container.querySelector("[data-goal-chip]")).toBeNull();
+    expect(container.querySelector("textarea")!.value).toBe("/goal ship the release");
+    expect(container.querySelector(".slash-command")?.textContent).toBe("/goal");
   });
 });
 
@@ -327,7 +328,7 @@ describe("the composer after Set me up", () => {
 });
 
 describe("the Simple composer in a group chat", () => {
-  it("turns a typed /goal into Finish together and keeps its chip in view while it is on", () => {
+  it("keeps a typed /goal in a room as plain text in the accent colour, with no chip", () => {
     render({ group: room, members: [bot, peer] });
     expect(container.querySelector("[data-goal-chip]")).toBeNull();
     expect(container.querySelector("textarea")!.getAttribute("placeholder")).toBe("Message Launch planning");
@@ -345,11 +346,10 @@ describe("the Simple composer in a group chat", () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(field, "/goal ");
       field.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    const chip = container.querySelector("[data-goal-chip]");
-    expect(chip?.getAttribute("aria-label")).toBe("Turn off finish together");
-    expect(container.querySelector("textarea")!.getAttribute("placeholder")).toContain("finish together");
-    click(chip);
     expect(container.querySelector("[data-goal-chip]")).toBeNull();
+    expect(container.querySelector("textarea")!.value).toBe("/goal ");
+    expect((container.querySelector(".slash-command") as HTMLElement).style.getPropertyValue("--slash-color")).toBe("var(--color-accent)");
+    expect(container.querySelector(".slash-hint")?.textContent?.trim()).toBe("Describe what the team should finish");
   });
 
   it("keeps the room's @ hint only when the room answers to mentions", () => {

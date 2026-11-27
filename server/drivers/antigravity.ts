@@ -14,6 +14,7 @@ import type {
 } from "../contracts.ts";
 import { createAcpDriver, type AcpConfig, type AcpSupport } from "./acp/core.ts";
 import { AntigravityAuthController } from "./antigravity-auth.ts";
+import { ensureAntigravitySignIn } from "./antigravity-signin.ts";
 import {
   antigravityAcpArgs,
   antigravityProfileAuthenticated,
@@ -193,6 +194,27 @@ export function neutralizeAntigravitySlashCommands(
 const INELIGIBLE_ACCOUNT = /\b(?:INELIGIBLE_ACCOUNT|UNSUPPORTED_LOCATION|UNKNOWN_LOCATION|RESTRICTED_AGE|RESTRICTED_NETWORK|RESTRICTED_DASHER_USER|NON_USER_ACCOUNT)\b|\bnot (?:currently )?eligible\b|failed to get user's project|OnboardUser operation failed|Failed to select license|verify your account in your browser/iu;
 const NETWORK_CAUSE = /\b(?:dial tcp|i\/o timeout|connection (?:refused|reset)|no such host|ENOTFOUND|ECONNRESET|ETIMEDOUT|TLS handshake|context deadline exceeded)\b/iu;
 
+const MOMENTARY_CAUSE = /\b(?:timed? ?out|timeout|temporar(?:y|ily)|unavailable|bad gateway|gateway|overloaded|rate limit|(?:status|http|error)[ :]*5\d\d)\b|\b5\d\d (?:internal|bad|service|gateway)/iu;
+
+let authenticateRetryDelays: readonly number[] = [2_000, 6_000, 15_000];
+export function setAntigravityAuthenticateRetryDelays(delays: readonly number[]): void {
+  authenticateRetryDelays = delays;
+}
+
+export const ANTIGRAVITY_MOMENTARY_AUTH = "Antigravity couldn't reach Google just now, and you are still signed in. Send your message again in a moment.";
+
+/** `authenticate` also fails while the CLI cannot renew its Google token for a moment: a network or server hiccup, or
+ * (Antigravity CLI 1.5+) its "No browser is available here" fallback when the renewal call itself failed. None of
+ * those means the sign-in is gone, so each is tried again before the person is asked to sign in. */
+export function antigravityAuthenticateRetry(error: unknown): "momentary" | "unconfirmed" | undefined {
+  const code = typeof error === "object" && error !== null ? Reflect.get(error, "code") : undefined;
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  if (code === -32000) return undefined;
+  if (message.startsWith("No browser is available here")) return "unconfirmed";
+  if (NETWORK_CAUSE.test(message) || MOMENTARY_CAUSE.test(message)) return "momentary";
+  return undefined;
+}
+
 export const ANTIGRAVITY_INELIGIBLE_ACCOUNT =
   "Google won't let this account use Antigravity. Sign in at antigravity.google with it to see why, or add another Google account in Settings › Models.";
 
@@ -246,6 +268,7 @@ const support: AcpSupport = {
   resolveCommand: async (env, config, instanceId) => {
     const runtime = await resolveAntigravityRuntime(config.cli, env);
     const profile = await prepareAntigravityProfile({ instanceId, runtime, baseEnv: env });
+    await ensureAntigravitySignIn(profile).catch(() => {});
     if (profile.tempDirectory) scheduleAntigravityTempSweep(instanceId);
     return {
       command: runtime.executablePath,
@@ -269,6 +292,9 @@ const support: AcpSupport = {
     ? "oauth-personal"
     : null,
   authFailure: "fail",
+  authenticateRetry: antigravityAuthenticateRetry,
+  get authenticateRetryDelaysMs() { return authenticateRetryDelays; },
+  momentaryAuthNote: ANTIGRAVITY_MOMENTARY_AUTH,
   requireAuthenticationBeforeSpawn: true,
   classifyError: (error) => {
     const code = typeof error === "object" && error !== null ? Reflect.get(error, "code") : undefined;

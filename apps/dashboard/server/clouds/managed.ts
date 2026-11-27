@@ -66,6 +66,8 @@ export interface ManagedCloud {
   accountDeleted?(cloud: StoredCloud): void;
   /** a backup of a running cloud now (its owner's move into it was checked); false when it did not run or was asked too soon */
   backupNow?(cloud: StoredCloud): Promise<boolean>;
+  /** a client met the provider's own pause page at a running home's address: it reads as waking, not awake, and the next pass resumes it; false when the cloud is not running */
+  providerPageSeen?(cloud: StoredCloud): boolean;
   /** apply a pending plan change now instead of at the next idle sleep */
   resizeNow(cloud: StoredCloud): void;
   resizing(cloud: StoredCloud): boolean;

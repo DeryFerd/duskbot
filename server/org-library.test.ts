@@ -227,7 +227,7 @@ describe("release files", () => {
 describe("adding from the shelf on a Starter Cloud", () => {
   it("answers 409 at the limit, adds nothing, reports no broken package, and adds it once there is room", async () => {
     const app = await installation();
-    for (let i = 0; i < 5; i++) app.store.createBot({ name: `Bot ${i}` });
+    for (let i = 0; i < 12; i++) app.store.createBot({ name: `Bot ${i}` });
     const { createBotLimit } = await import("./host/starter-bot-limit.ts");
     let starter = true;
     const deps = { ...app.importDeps, botLimit: createBotLimit({ starter: () => starter, bots: () => app.store.bots }) };

@@ -3,7 +3,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence } from "motion/react";
 import { DialogScrimLayer, DialogSheet } from "./ui/SheetMotion";
-import { X } from "../icons";
+import { Icon } from "./Icon";
+import "../styles/settings.css";
 import type { CloudColor } from "../../electron/cloud-buy.mjs";
 import type { CloudAccountState, CloudCheckoutOutcome } from "../../electron/cloud-account.mjs";
 import type { CloudOffer } from "../../electron/cloud-home.mjs";
@@ -20,7 +21,6 @@ import { ChooseScreen } from "./cloud-buy/ChooseScreen";
 import { OneCloudScreen, StatusScreen } from "./cloud-buy/OneCloudScreen";
 import { PayScreen } from "./cloud-buy/PayScreen";
 import { SHEET, StagingMark } from "./cloud-buy/parts";
-import { formCloseCls } from "./ui/GrokDialog";
 import { SetupScreen, TeamReadyScreen, TeamSetupScreen } from "./cloud-buy/SetupScreen";
 import { BrowserSignInScreen, codeDigits, SignInScreen } from "./cloud-buy/SignInScreen";
 
@@ -94,17 +94,18 @@ export function CloudAddPanel({ view, ui, actions }: { view: CloudAddView; ui: C
   }
 }
 
-const WIDTH: Partial<Record<CloudAddView["kind"], string>> = { offer: "max-w-[800px]", starting: "max-w-[720px]", ready: "max-w-[720px]" };
+const WIDTH: Partial<Record<CloudAddView["kind"], number>> = { offer: 800, starting: 720, ready: 720 };
 /** Mid sign-in, checkout or setup a stray click beside the sheet (say, back from paying in the browser) must not lose it: there only Close and Esc do. */
 const HELD: ReadonlySet<CloudAddView["kind"]> = new Set(["sign-in", "signing-in", "waiting", "starting", "team-starting"]);
 
 /** The sheet over the app: one width per screen, the close button, and the staging mark when the app is on staging.
  * Above the z-50 layers (Settings, the welcome flow) and the full-screen places picker (z-60), which it may be opened over. */
 export function CloudAddSheet({ kind, staging, onClose, children }: { kind: CloudAddView["kind"]; staging: boolean; onClose: () => void; children: ReactNode }) {
-  return <DialogScrimLayer className="ui-scrim fixed inset-0 z-[61] flex items-center justify-center p-4 sm:p-6" onMouseDown={event => event.target === event.currentTarget && !HELD.has(kind) && onClose()}>
+  return <DialogScrimLayer className="settings-scrim" style={{ zIndex: 61 }} onMouseDown={event => event.target === event.currentTarget && !HELD.has(kind) && onClose()}>
+    <div aria-hidden="true" className="settings-backdrop pointer-events-none" />
     <DialogSheet role="dialog" aria-modal="true" aria-labelledby="cloud-add-title" data-cloud-add-dialog tabIndex={-1}
-      className={cn(SHEET, "relative max-h-full w-full overflow-y-auto overscroll-contain rounded-[14px] border border-transparent outline-none", WIDTH[kind] ?? "max-w-[540px]")}>
-      <button type="button" onClick={onClose} aria-label={t("cloudAdd.close")} className={cn(formCloseCls, "absolute end-3 top-3 z-10")}><X size={16} /></button>
+      className={cn("settings-dialog", SHEET)} style={{ width: `min(${WIDTH[kind] ?? 540}px, 100vw - 32px)`, overflowY: "auto", overscrollBehavior: "contain", borderRadius: 14 }}>
+      <button type="button" onClick={onClose} aria-label={t("cloudAdd.close")} className="settings-close"><Icon name="close" size={14} /></button>
       {staging && <StagingMark className="absolute end-11 top-[15px] z-10" />}
       {children}
     </DialogSheet>

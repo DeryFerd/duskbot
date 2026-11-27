@@ -14,7 +14,7 @@ import { augmentedPath } from "../env-path.ts";
 import { brokerSocketPath, cliVersionReader, describeSpawnFailure, execCli, killCliTree, lentBotFolders, readOnlyBotFolders, spawnCli } from "../procs.ts";
 import { conversationLanguage, serverLine } from "../server-lines.ts";
 import { claudeAuthStatus, type ClaudeAuthStatus } from "./claude-auth-status.ts";
-import { killClaudeTree } from "./claude-stored-login.ts";
+import { claudeLoginRenewed, claudeRefusalIsSignOut, enterClaudeRenewal, killClaudeTree } from "./claude-stored-login.ts";
 import { projectMcpServers } from "./claude-project-mcp.ts";
 import { botSettingsFor, withBotSettings } from "./claude-bot-settings.ts";
 import { claudeBilling, claudeCallUsage } from "./claude-billing.ts";
@@ -110,6 +110,8 @@ export function resolveClaudeConfigDir(configDir?: string, env: NodeJS.ProcessEn
 
 /** What an error `result` says failed: its `errors` (2.1.295: "No conversation found with session ID: …"), else its
  * text in plain words, else its kind; never its synthetic message's "stop_sequence", nor the subtype "success". */
+const CLAUDE_REFUSED_ONCE = "Claude did not accept the request just now, and its sign-in is still saved. Try again in a moment.";
+
 export function claudeResultError(frame: { errors?: unknown; result?: unknown; subtype?: unknown; terminal_reason?: unknown; api_error_status?: unknown }): string {
   const errors = Array.isArray(frame.errors) ? frame.errors.filter((error): error is string => typeof error === "string" && error.trim() !== "") : [];
   if (errors.length) return errors.join("; ");
@@ -913,10 +915,10 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
       for (const l of Array.from(listeners)) l(event);
     }, async (threadId) => {
       const session = sessions.get(threadId);
-      if (!session || !(await killCliTree(session.child))) return false;
+      if (!session || !(await killClaudeTree(session.child, environment()))) return false;
       await session.closed;
       return sessions.get(threadId) !== session;
-    }, (threadId) => active.has(threadId));
+    }, (threadId) => active.has(threadId), () => claudeRefusalIsSignOut(environment()));
     const emit = (event: RuntimeEvent) => authRecovery.emit(event);
     const base = (threadId: string, turnId: string) => ({
       eventId: newEventId(),
@@ -943,7 +945,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
         // process to be gone.
         const stopped = sessions.get(threadId);
         if (stopped?.turn?.stopRequested && active.get(threadId)?.turnId === stopped.turn.turnId &&
-            await killCliTree(stopped.child)) await stopped.closed;
+            await killClaudeTree(stopped.child, environment())) await stopped.closed;
         if (active.has(threadId)) throw new Error("a turn is already running on this thread");
       }
       const permissionMode = turn.approvalMode === undefined
@@ -1306,12 +1308,15 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
       }
 
       let child: ReturnType<typeof spawnCli>;
+      const renewal = await enterClaudeRenewal(env);
       try {
         child = spawnCli(config.cli, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"], box: { ...(broker ? { rw: [broker.socketPath] } : {}), ...(hookTokenPath ? { ro: [dirname(hookTokenPath)] } : {}) } }, "bot");
       } catch (error) {
+        renewal.release();
         cleanupUnownedLaunch();
         throw error;
       }
+      renewal.track(child);
       if (turn.guestConfined) warmContracts.delete(threadId);
       else {
         warmContracts.set(threadId, {
@@ -1493,6 +1498,11 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
             if (swap) emit({ ...base(threadId, currentTurnId()), type: "runtime.notice", message: swap });
             // Signed out, the CLI answers with an api-error frame whose only content is "run /login".
             if (claudeAuthFailure(o, text)) {
+              if (!claudeRefusalIsSignOut(environment())) {
+                if (session.turn) session.turn.explained = true;
+                emit({ ...base(threadId, currentTurnId()), type: "runtime.error", message: CLAUDE_REFUSED_ONCE });
+                break;
+              }
               if (session.turn) session.turn.authFailed = session.turn.explained = true;
               emit({ ...base(threadId, currentTurnId()), type: "runtime.error", message: text, setup: true });
               break;
@@ -1582,6 +1592,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
               session.turn.explained = true;
               emit({ ...base(threadId, currentTurnId()), type: "runtime.error", message: claudeResultError(o) });
             }
+            if (o.is_error !== true) claudeLoginRenewed(environment());
             if (!config.managed) void orgBlocks.refresh();
             // result.usage is per turn "in streaming-input sessions" (2.1.282) even on a retained
             // process; total_cost_usd is the process's running total.
@@ -1919,15 +1930,20 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
     /** One-shot call, prompt on stdin (approval summaries can hold secrets), no tools or MCP servers. */
     const generateReview = async (prompt: string, signal?: AbortSignal, onUsage?: TextGenerationOptions["onUsage"], timeoutMs?: number, named?: string): Promise<string> => {
       await ensureCliVersion(environment());
+      const renewal = await enterClaudeRenewal(environment(named ?? config.managedModels?.[0] ?? "claude-haiku-5-5"));
       return new Promise((resolve, reject) => {
         if (config.requireApiKey && !input.environment.ANTHROPIC_API_KEY) {
+          renewal.release();
           reject(new Error(NO_ANTHROPIC_KEY));
           return;
         }
         const model = named ?? config.managedModels?.[0] ?? "claude-haiku-5-5";
         const env = environment(model);
         const args = backgroundCallArgs({ model, outputFormat: onUsage ? "json" : "text", supports: (flag) => cliVersion !== null && claudeCliSupports(cliVersion, flag), isolated: !inheritsUserConfig(env) });
-        const { child, removeCwd } = spawnBackgroundCall(config.cli, args, env);
+        let spawned: ReturnType<typeof spawnBackgroundCall>;
+        try { spawned = spawnBackgroundCall(config.cli, args, env); } catch (error) { renewal.release(); throw error; }
+        const { child, removeCwd } = spawned;
+        renewal.track(child);
         let stdout = "";
         let stderr = "";
         let settled = false;

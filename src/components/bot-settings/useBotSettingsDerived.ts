@@ -55,6 +55,8 @@ export type BotPatch = Partial<
   peers?: string[] | null;
   /** null: back to the automatic backup */
   fallback?: Bot["fallback"] | null;
+  freshSession?: Bot["freshSession"];
+  compactAt?: Bot["compactAt"];
   acknowledgeLocalAuto?: boolean;
   acknowledgePeerScope?: boolean;
 };

@@ -128,12 +128,17 @@ describe("the Simple header", () => {
       const simple = renderToStaticMarkup(createElement(ChatView, { bot: busyElsewhere }));
       const identity = simple.slice(simple.indexOf("data-chathead-identity"), simple.indexOf("data-chathead-controls"));
       const pill = identity.match(/<button[^>]*data-chathead-pill="true"[^>]*>([\s\S]*?)<\/button>/)!;
-      expect(identity.replace(pill[0], "").replace(/<span role="status"[^>]*>[^<]*<\/span>/, "")).not.toMatch(/<(button|a|span)[\s>]/);
+      // a second conversation splits the pill in one group: the face and name, then a crumb that switches conversations
+      const crumb = identity.match(/<button[^>]*data-chathead-crumb="true"[^>]*>([\s\S]*?)<\/button>/)!;
+      expect(identity.replace(pill[0], "").replace(crumb[0], "").replace(/<span role="status"[^>]*>[^<]*<\/span>/, "")).not.toMatch(/<(button|a|span)[\s>]/);
       expect(pill[1]).toContain(">Pepper</span>");
       expect(pill[1]).not.toContain("data-chathead-elsewhere");
-      expect(pill[0].match(/class="([^"]*)"/)![1]!.split(" ")).toEqual(expect.arrayContaining(["rounded-full", "bg-composer", "border-[0.5px]", "border-transparent", "py-[7.5px]", "pr-[13.5px]"]));
-      // Away from the bot's main conversation, the pill names the one on screen.
-      expect(pill[1]).toContain("data-chathead-conversation");
+      const group = identity.match(/<div class="([^"]*)" data-chathead-group=""/)!;
+      expect(group[1]!.split(" ")).toEqual(expect.arrayContaining(["rounded-full", "bg-composer", "border-[0.5px]", "border-transparent"]));
+      expect(pill[0].match(/class="([^"]*)"/)![1]!.split(" ")).toEqual(expect.arrayContaining(["rounded-full", "py-[7.5px]"]));
+      expect(crumb[0].match(/class="([^"]*)"/)![1]!.split(" ")).toEqual(expect.arrayContaining(["rounded-full", "py-[7.5px]", "pr-[13.5px]"]));
+      // Away from the bot's main conversation, the crumb names the one on screen.
+      expect(crumb[1]).toContain("data-chathead-conversation");
       for (const gone of ["data-chathead-role", "data-background-activity", "data-chathead-back", 'data-testid="chat-more"']) {
         expect(simple, gone).not.toContain(gone);
       }

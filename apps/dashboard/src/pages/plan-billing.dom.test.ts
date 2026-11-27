@@ -22,7 +22,7 @@ const roots: Root[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await act(async () => root.unmount()); document.body.innerHTML = ""; });
 
 async function render(billing: BillingOverview, keep = vi.fn(async () => {})) {
-  state.cloud = { catalog: fixtureCatalog, billing, clouds: [], keep, updateCard: vi.fn(async () => {}), changePlan: vi.fn(async () => {}), retentionStep: vi.fn(), cancel: vi.fn(async () => {}), takeDiscount: vi.fn(async () => {}), checkout: vi.fn(async () => true) };
+  state.cloud = { catalog: fixtureCatalog, billing, clouds: [], keep, updateCard: vi.fn(async () => {}), changePlan: vi.fn(async () => {}), retentionStep: vi.fn(), cancel: vi.fn(async () => {}), checkout: vi.fn(async () => true) };
   const { PlanBilling } = await import("./plan-billing");
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
@@ -40,7 +40,7 @@ test("plan & billing sits at #billing and ends with a quiet cancel that opens th
   expect(cancel).not.toBeNull();
   expect([...document.getElementById("billing")!.querySelectorAll("button")].at(-1)).toBe(cancel);
   await act(async () => cancel.click());
-  expect(document.querySelector("[role=dialog] h2")?.textContent).toBe("why are you leaving?");
+  expect(document.querySelector("[role=dialog] h2")?.textContent).toBe("look what you and your bots did");
 });
 
 test("a plan already set to end shows restart instead of cancel", async () => {

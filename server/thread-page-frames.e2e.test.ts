@@ -117,10 +117,14 @@ describe("transcript pages on bot and room frames", () => {
     expect(opened).toHaveLength(1);
     expect(opened[0]).toMatchObject({ threadId: created!.threadId, messages: [], hasMore: false });
 
+    // leaving the empty side conversation archives it: a background frame beside the one page
     const back = await framesFor("bot", bot.id, () => api("POST", `/api/bots/${bot.id}/tasks/${bot.threadId}?messages=5`));
-    expect(back).toHaveLength(1);
-    expect(back[0]).toMatchObject({ threadId: bot.threadId, hasMore: true });
-    expect(texts(back[0].messages)).toEqual(newestPage);
+    const pages = back.filter((frame) => "messages" in frame);
+    expect(pages).toHaveLength(1);
+    expect(back).toHaveLength(2);
+    expect(pages[0]).toMatchObject({ threadId: bot.threadId, hasMore: true });
+    expect(texts(pages[0].messages)).toEqual(newestPage);
+    expect(back.at(-1).tasks.find((task: { threadId: string }) => task.threadId === created!.threadId)?.archivedAt).toEqual(expect.any(Number));
 
     const background = await framesFor("bot", bot.id, () => api("DELETE", `/api/bots/${bot.id}/tasks/${created!.threadId}`));
     expect(background).toHaveLength(1);

@@ -24,9 +24,15 @@ import {
   parseAntigravityAuthorizationUrl,
   type AntigravityAuthorizationUrl,
 } from "./antigravity-oauth.ts";
+import { acceptNewAntigravitySignIn } from "./antigravity-signin.ts";
 import { markAntigravityRuntimeOutdated, type AntigravityRuntime } from "./antigravity-runtime.ts";
 
 export { antigravityLoginResponse };
+
+async function rmLegacyAndKeep(profile: AntigravityProfile): Promise<void> {
+  await rm(profile.legacyTokenPath, { force: true, maxRetries: 4, retryDelay: 250 }).catch(() => {});
+  await acceptNewAntigravitySignIn(profile).catch(() => {});
+}
 
 const AUTH_TIMEOUT_MS = 5 * 60_000;
 const COMPLETE_TIMEOUT_MS = 90_000;
@@ -218,7 +224,7 @@ export class AntigravityAuthController {
       if (outcome.kind === "done") {
         await stop();
         if (await antigravityProfileAuthenticated(profile)) {
-          await rm(profile.legacyTokenPath, { force: true, maxRetries: 4, retryDelay: 250 }).catch(() => {});
+          await rmLegacyAndKeep(profile);
           this.onSignedIn();
           return { phase: "succeeded", flowId: null, authorizationUrl: null, expiresAt: null };
         }
@@ -296,7 +302,7 @@ export class AntigravityAuthController {
       if (!(await antigravityProfileAuthenticated(flow.profile))) {
         throw new Error("Antigravity finished without saving a Google sign-in. Start sign-in again.");
       }
-      await rm(flow.profile.legacyTokenPath, { force: true, maxRetries: 4, retryDelay: 250 }).catch(() => {});
+      await rmLegacyAndKeep(flow.profile);
       this.onSignedIn();
     } finally {
       if (completeTimer) clearTimeout(completeTimer);

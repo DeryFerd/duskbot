@@ -556,6 +556,9 @@
     border-radius: 14px;
     background-color: color-mix(in srgb, var(--color-ink) 2.75%, transparent);
   }
+  :root [data-settings-sheet] .settings-dialog .settings-pane [class*="bg-composer"][class*="rounded-[12px]"]:not([data-settings-rows]) {
+    background-color: color-mix(in srgb, var(--color-ink) 2.75%, transparent);
+  }
   :root [data-settings-sheet] .settings-dialog .settings-pane [data-settings-rows] > :is(button, a, div, label):not(.contents, [hidden], [data-settings-rows]) { border-radius: 10px; }
   :root [data-settings-sheet] .settings-dialog .settings-pane [data-settings-group-head] { margin-bottom: 8px; }
   :root [data-settings-sheet] .settings-dialog .settings-pane [data-settings-rows] :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], .bg-transparent), textarea:not(.bg-transparent), :is(div, label):has(> input.bg-transparent):is(.border)) {
@@ -651,7 +654,8 @@
   .settings-nav-item:active { background: color-mix(in srgb, var(--color-ink) 4%, var(--color-menu)); }
   .settings-nav-item > .ui-icon:not(.settings-nav-chevron) { color: color-mix(in srgb, var(--color-ink) 68%, transparent); }
   .settings-nav-chevron { display: block; flex-shrink: 0; margin-inline-start: auto; color: color-mix(in srgb, var(--color-ink) 40%, transparent); }
-  .settings-close { display: none; }
+  .settings-dialog[data-phone-view] .settings-close { display: none; }
+  .settings-dialog:not([data-phone-view]) .settings-pane-header { padding-inline-end: 44px; }
   .settings-panel { height: 100%; }
   .settings-wipe { background-color: var(--settings-phone-page); }
   .settings-pane-header {

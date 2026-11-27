@@ -101,7 +101,7 @@ const ASK_NOW = { approvalMode: "ask" as const, autoApprove: false, alwaysAllow:
 const TASK_PATCH_FIELDS = [
   "title", "projectId", "modelSelection", "approvalMode", "autoApprove", "alwaysAllow",
   "unread", "lastReadMessageId", "rewound", "archivedAt", "pinned", "pinnedMessageId", "resumeCursors", "lastInstanceId", "cwd",
-  "routineRunId", "surface", "surfaceSource", "snoozedUntil", "modelChosen", "link", "linkAuto", "appliedCompactionId", "contextFloor", "lastContextModel", "setupRequest", "botApi", "outside",
+  "routineRunId", "side", "surface", "surfaceSource", "snoozedUntil", "modelChosen", "link", "linkAuto", "appliedCompactionId", "contextFloor", "lastContextModel", "setupRequest", "botApi", "outside",
 ] as const satisfies readonly (keyof TaskRecord)[];
 export type TaskPatch = Partial<Pick<TaskRecord, typeof TASK_PATCH_FIELDS[number]>>;
 
@@ -2200,11 +2200,12 @@ export class Store {
   }
 
   createTask(botId: string, title?: string, activate = true, projectId?: string, openedBy?: TaskOpenedBy, approvalMode?: "ask" | "full",
-    modelSelection?: ModelSelection, cwd?: string): TaskRecord | null {
+    modelSelection?: ModelSelection, cwd?: string, side = false): TaskRecord | null {
     const bot = this.bot(botId);
     if (!bot) return null;
     if (projectId !== undefined && !this.project(botId, projectId)) return null;
     const task = this.buildTask(bot, title, projectId, openedBy, approvalMode, modelSelection, cwd);
+    if (side) task.side = true;
     this.commitBotChange(bot, "the new thread", () => {
       bot.tasks = [task, ...(bot.tasks ?? [])];
       if (activate) this.mirrorActiveTask(bot, task);

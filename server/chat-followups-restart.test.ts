@@ -120,6 +120,8 @@ it("survives a real server crash: queued sends keep receipts, cancellation and u
     writeFileSync(join(dataDir, `${bot.threadId}.gate`), "finish the first task");
     expect(await runControlDusk(["wait", "--bot", bot.id, "--task", bot.threadId, "--url", url])).toMatchObject({ status: "settled" });
     const holder = (await api("POST", `/api/bots/${bot.id}/tasks`, { title: "Hold the slot" }, 201)).task;
+    // the main chat is never at capacity, so the holder is starred as main for the first one to wait
+    await api("PATCH", `/api/bots/${bot.id}`, { mainThreadChoice: holder.threadId });
     await api("POST", `/api/bots/${bot.id}/messages`, { text: "Hold the slot", threadId: holder.threadId }, 202);
     await expect.poll(() => prompts(holder.threadId).length, { timeout: 15_000 }).toBe(1);
     const attachments = join(dataDir, "attachments");

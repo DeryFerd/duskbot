@@ -110,3 +110,19 @@ for (const [density, size, short, long] of [["mdpi", 48, 320, 480], ["hdpi", 72,
   write(join(android, `drawable-port-${density}/splash.png`), png(launch(short, long), short));
   write(join(android, `drawable-land-${density}/splash.png`), png(launch(long, short), long));
 }
+// Android 13+ Material You themed launcher icon layer: 108dp adaptive canvas with the monochrome cat silhouette
+// centered inside the 66dp safe zone (49dp wide, matching the regular adaptive foreground).
+const monochromeLauncher = [
+  `<vector xmlns:android="http://schemas.android.com/apk/res/android"`,
+  `    android:width="108dp"`,
+  `    android:height="108dp"`,
+  `    android:viewportWidth="108"`,
+  `    android:viewportHeight="108">`,
+  `    <path`,
+  `        android:fillColor="#FFFFFFFF"`,
+  `        android:fillType="evenOdd"`,
+  `        android:pathData="${glyphPath(KIT_GLYPH, { x: 26, y: 24.25, scale: 3.5 })}" />`,
+  `</vector>`,
+  "",
+].join("\n");
+write(join(android, "drawable/ic_launcher_monochrome.xml"), monochromeLauncher);

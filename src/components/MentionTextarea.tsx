@@ -14,7 +14,9 @@ export function keepDefaultValueInPlace(input: HTMLTextAreaElement): void {
   Object.defineProperty(input, "defaultValue", { configurable: true, get: () => input.value, set: () => {} });
 }
 
-export function MentionTextarea({ inputRef, peers, everyone = false, wrapperClassName, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement> & {
+export function MentionTextarea({ inputRef, peers, everyone = false, wrapperClassName, command, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement> & {
+  /** A slash command at the start of the field: painted in `color`, with its short `hint` after it while its argument is empty. */
+  command?: { end: number; color: string; hint: string | null };
   wrapperClassName?: string;
   inputRef: RefObject<HTMLTextAreaElement | null>;
   peers: readonly MentionPeer[];
@@ -83,8 +85,9 @@ export function MentionTextarea({ inputRef, peers, everyone = false, wrapperClas
     return () => observer.disconnect();
   }, [inputRef, resize, sync]);
   return <div className={cn("mention-editor relative min-w-0 flex-1 self-center", wrapperClassName)}>
-    <div ref={mirrorRef} dir={props.dir} aria-hidden="true" className="mention-editor-mirror pointer-events-none absolute inset-0 overflow-hidden">
-      <MentionText text={String(props.value ?? "")} peers={peers} everyone={everyone} links="highlight" hoverStart={hoverStart} />{"\n"}
+    <div ref={mirrorRef} dir={props.dir} aria-hidden="true" data-command-hint={command?.hint ? "" : undefined} className="mention-editor-mirror pointer-events-none absolute inset-0 overflow-hidden">
+      <MentionText text={String(props.value ?? "")} peers={peers} everyone={everyone} links="highlight" hoverStart={hoverStart} command={command} />
+      {command?.hint && <span className="slash-hint">{command.hint}</span>}{"\n"}
     </div>
     <textarea {...props} ref={setInput}
       style={hoverStart === null ? props.style : { ...props.style, cursor: "pointer" }}

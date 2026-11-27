@@ -17,13 +17,13 @@ export function claudeAuthFailure(frame: { error?: unknown; is_api_error_message
 
 /** Claude Code 2.1.295 refuses a signed-out turn with an `authentication_failed` error, and a turn past its usage limit
  * with a `usage_limit_reached` api error (a `rate_limit` error), each as a synthetic api-error frame. */
-function syntheticRefusal(frame: Frame): Refusal | undefined {
+function syntheticRefusal(frame: Frame, signOut: () => boolean): Refusal | undefined {
   const content = frame.message?.content;
   if (frame.type !== "assistant" || frame.message?.model !== "<synthetic>" ||
       frame.is_api_error_message !== true || !Array.isArray(content) || content.length === 0 ||
       !content.every(block => block?.type === "text" && typeof block.text === "string")) return undefined;
   const text = content.map(block => block.text).join("");
-  if (frame.error === "authentication_failed") return { text, kind: "auth" };
+  if (frame.error === "authentication_failed") return signOut() ? { text, kind: "auth" } : undefined;
   if (frame.api_error === "usage_limit_reached" || (frame.error === "rate_limit" && USAGE_LIMIT.test(text))) return { text, kind: "limit" };
 }
 
@@ -41,6 +41,7 @@ export function claudeAuthRecovery(
   publish: (event: RuntimeEvent) => void,
   retire: (threadId: string) => Promise<boolean>,
   busy: (threadId: string) => boolean,
+  signOut: () => boolean = () => true,
 ) {
   const pending = new Map<string, Pending>();
   const accept = (threadId: string, held: Pending) => {
@@ -53,7 +54,7 @@ export function claudeAuthRecovery(
     frame(threadId: string, frame: Frame, priorCost?: number | null) {
       const held = pending.get(threadId);
       if (!held || preamble(frame)) return;
-      const refusal = syntheticRefusal(frame);
+      const refusal = syntheticRefusal(frame, signOut);
       if (refusal) held.refusal = refusal;
       else if (held.refusal && frame.type === "result" && frame.is_error === true &&
           (frame.total_cost_usd === undefined || frame.total_cost_usd === 0 || frame.total_cost_usd === priorCost)) held.refused = true;

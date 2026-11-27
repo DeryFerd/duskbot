@@ -6,7 +6,7 @@
 // Drivers/AntigravityDriver.ts.
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 
@@ -19,6 +19,7 @@ import type { AntigravityRuntime } from "./antigravity-runtime.ts";
 import { acpVariantOption, surveyModelVariants } from "./acp/config-options.ts";
 import { StderrTail, exitDetail } from "./acp/exit-report.ts";
 import { parseAntigravityAuthorizationUrl } from "./antigravity-oauth.ts";
+import { antigravityTokenState, ensureAntigravitySignIn, forgetAntigravitySignIn, withAntigravitySignInGate } from "./antigravity-signin.ts";
 import {
   VERIFICATION_TEMP_KEY,
   antigravityTempDir,
@@ -170,10 +171,10 @@ export async function removeAntigravityProfile(instanceId: string, baseDir = DAT
 /** Signing out forgets only this account's stored Google sign-in; its profile stays for the next sign-in. */
 export async function removeAntigravitySignIn(instanceId: string, baseDir = DATA_DIR): Promise<void> {
   const acpDirectory = join(antigravityProfileDirectory(instanceId, baseDir), ANTIGRAVITY_APP_DATA_DIR);
-  await Promise.all([
-    rm(join(acpDirectory, ANTIGRAVITY_CLI_TOKEN_FILE), { force: true, maxRetries: 4, retryDelay: 250 }),
-    rm(join(acpDirectory, ANTIGRAVITY_LEGACY_TOKEN_FILE), { force: true, maxRetries: 4, retryDelay: 250 }),
-  ]);
+  await forgetAntigravitySignIn({
+    tokenPath: join(acpDirectory, ANTIGRAVITY_CLI_TOKEN_FILE),
+    legacyTokenPath: join(acpDirectory, ANTIGRAVITY_LEGACY_TOKEN_FILE),
+  });
 }
 
 function resolveLinuxCaBundle(baseEnv: NodeJS.ProcessEnv, platform: NodeJS.Platform): string | undefined {
@@ -263,19 +264,11 @@ export async function prepareAntigravityProfile(input: {
   };
 }
 
-async function readableTokenFile(path: string): Promise<boolean> {
-  try {
-    const info = await stat(path);
-    if (!info.isFile() || info.size <= 0 || info.size > 1024 * 1024) return false;
-    await readFile(path, { encoding: "utf8" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export async function antigravityProfileAuthenticated(profile: Pick<AntigravityProfile, "tokenPath">): Promise<boolean> {
-  return readableTokenFile(profile.tokenPath);
+/** Signed in while the profile holds a readable Google token; a lost or half-written file is first put back from the copy. */
+export async function antigravityProfileAuthenticated(profile: Pick<AntigravityProfile, "tokenPath"> & Partial<Pick<AntigravityProfile, "legacyTokenPath">>): Promise<boolean> {
+  await ensureAntigravitySignIn(profile).catch(() => "none");
+  const state = await antigravityTokenState(profile.tokenPath);
+  return state === "durable" || state === "short-lived";
 }
 
 interface PendingRpc {
@@ -565,6 +558,14 @@ export async function probeAntigravityModels(input: {
     if (milliseconds <= 0) throw new Error("Antigravity model discovery timed out.");
     return Math.min(milliseconds, STARTUP_TIMEOUT_MS);
   };
+  return withAntigravitySignInGate(`${input.profile.tokenPath}#process`, () => probeUnderGate(input, deadline, remaining));
+}
+
+async function probeUnderGate(
+  input: { runtime: AntigravityRuntime; profile: AntigravityProfile; cwd?: string; fallbackDefault: string },
+  deadline: number,
+  remaining: () => number,
+): Promise<ModelCatalog> {
   const client = new AntigravityAcpClient(input.runtime, input.profile, input.cwd ?? input.profile.directory);
   try {
     await client.initialize(remaining(), deadline);
@@ -588,6 +589,7 @@ export async function probeAntigravityModels(input: {
     };
   } finally {
     client.close();
+    void client.closeAndWait().then(() => ensureAntigravitySignIn(input.profile)).catch(() => {});
   }
 }
 
@@ -698,6 +700,6 @@ export async function logoutAntigravity(
   } finally {
     await client.closeAndWait();
   }
-  // Antigravity CLI 1.5+ logout clears only antigravity-oauth-token, leaving any 1.4 acp_token.json behind.
-  await rm(profile.legacyTokenPath, { force: true, maxRetries: 4, retryDelay: 250 }).catch(() => {});
+  // Antigravity CLI 1.5+ logout clears only antigravity-oauth-token, leaving any 1.4 acp_token.json and our copy behind.
+  await forgetAntigravitySignIn(profile).catch(() => {});
 }

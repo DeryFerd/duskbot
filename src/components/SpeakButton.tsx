@@ -19,7 +19,7 @@ type SpeakArgs = {
 export function useSpeakAction({ text, botId, messageId, voiceId, tts, localVoice }: SpeakArgs) {
   const speech = useSpeech();
   const configured = localVoice || Boolean(tts?.configured);
-  const ready = localVoice || (configured && Boolean(voiceId || tts?.voice));
+  const ready = localVoice || (configured && Boolean(voiceId || tts?.voice || tts?.provider === "system"));
   const mine = speech.messageId === messageId && speech.status !== "idle";
   const preparing = mine && speech.status === "preparing";
   const label = !configured

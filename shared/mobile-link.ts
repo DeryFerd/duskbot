@@ -150,6 +150,11 @@ export interface MobilePushRegistration {
   token: string;
   /** APNs only: which gateway the token belongs to. */
   environment?: "sandbox" | "production";
+  /** X25519 public key, base64url: a push's preview is sealed to it (PUSH_PREVIEW_SEAL), so only this phone reads it.
+   * Absent: pushes carry no preview. */
+  previewKey?: string;
+  /** FCM only: the app draws its own notifications, so its pushes are data-only and reach it while it is closed. */
+  draws?: boolean;
 }
 
 const B64URL = /^[A-Za-z0-9_-]+$/;

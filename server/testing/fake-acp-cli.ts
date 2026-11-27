@@ -821,6 +821,17 @@ function handle(msg: any) {
       break;
     }
     case "authenticate":
+      if (process.env.FAKE_ACP_AUTH_FAILURE_FILE) {
+        const once = process.env.FAKE_ACP_AUTH_FAIL_UNTIL_FILE;
+        const failures = Number.parseInt(once && existsSync(once) ? readFileSync(once, "utf8") : "0", 10) || 0;
+        const limit = Number.parseInt(process.env.FAKE_ACP_AUTH_FAIL_COUNT ?? "1000", 10);
+        if (failures < limit) {
+          if (once) writeFileSync(once, String(failures + 1));
+          const failure = JSON.parse(readFileSync(process.env.FAKE_ACP_AUTH_FAILURE_FILE, "utf8"));
+          out({ jsonrpc: "2.0", id: msg.id, error: failure });
+          break;
+        }
+      }
       if (mode === "authenticate-failed") {
         out({ jsonrpc: "2.0", id: msg.id, error: { code: -32000, message: "Login expired" } });
         break;

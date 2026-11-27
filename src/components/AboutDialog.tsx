@@ -15,8 +15,11 @@ import { productName } from "@/lib/brand";
 import { t } from "@/lib/i18n";
 import { useOtherServerName } from "@/lib/other-server";
 import { copyText } from "@/lib/copy-text";
-import { formCloseCls, formSheetCls, mdSecondaryCls, rowHintCls, useDialogKeys } from "./ui/GrokDialog";
+import { useDialogKeys } from "./ui/GrokDialog";
+import { SettingRow, SettingsGroup, SettingsRows, SIMPLE_BUTTONS } from "./SettingsPrimitives";
+import "../styles/settings.css";
 import { Icon } from "./Icon";
+import { ChevronRight } from "../icons";
 import { ScrimMotion, SheetMotion, useDialogMotion } from "./ui/SheetMotion";
 import { cn } from "@/lib/cn";
 
@@ -49,8 +52,8 @@ function AboutSheet({ onClose }: { onClose: () => void }) {
   const copy = () => void copyText([productName(), ...lines].join("\n")).then((result) => setCopied(result === "copied"));
 
   return createPortal(
-    <div {...played.layer} className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <ScrimMotion {...played.scrim} aria-hidden="true" className="ui-dialog-scrim absolute inset-0" onMouseDown={() => close.current()} />
+    <div {...played.layer} data-settings-sheet data-settings-look="simple" className="settings-scrim">
+      <ScrimMotion {...played.scrim} aria-hidden="true" className="settings-backdrop" onMouseDown={() => close.current()} />
       <SheetMotion
         {...played.sheet}
         ref={sheet}
@@ -58,43 +61,59 @@ function AboutSheet({ onClose }: { onClose: () => void }) {
         aria-modal="true"
         aria-labelledby="about-dialog-title"
         tabIndex={-1}
-        className={cn(formSheetCls, "max-w-[320px] items-center px-6 pb-6 pt-8 text-center")}
+        className="settings-dialog"
+        style={{ width: "min(420px, 100vw - 32px)" }}
       >
-        <button type="button" aria-label={t("common.close")} onClick={() => close.current()} className={cn(formCloseCls, "absolute right-3 top-3")}>
-          <Icon name="close" size={16} />
-        </button>
-        <img src="/app-icon.svg" alt="" width={64} height={64} className="size-16" />
-        <h2 id="about-dialog-title" className="m-0 mt-2 text-[20px] font-semibold leading-7 text-ink">{productName()}</h2>
-        <p className="m-0 mt-1 text-[12px] leading-4 tracking-[0.01em] text-ink">{version}</p>
-        {connected && <p className="m-0 mt-0.5 text-[12px] leading-4 tracking-[0.01em] text-ink/68">{connected}</p>}
-        <p className={cn(rowHintCls, "m-0 mt-2 text-[11px] leading-4 text-pretty")}>
-          {t("about.license")}
-        </p>
-        <div className="mt-1.5 flex flex-wrap justify-center gap-x-3 gap-y-1 text-[12px] leading-4">
-          <AboutLink href={DOCS_URL} label={t("about.docs")} />
-          <AboutLink href={RELEASES_URL} label={t("about.releases")} />
-          <AboutLink href={LICENSE_URL} label={t("about.licenseLink")} />
-          <a href={THIRD_PARTY_NOTICES_URL} target="_blank" rel="license noopener noreferrer" className={aboutLinkCls}>{t("about.notices")}</a>
-        </div>
-        <button type="button" data-autofocus onClick={copy} className={cn(mdSecondaryCls, "mt-4")}>
-          {copied ? t("about.copied") : t("about.copyVersion")}
-        </button>
+        <section className="settings-panel min-h-0">
+          <button type="button" aria-label={t("common.close")} onClick={() => close.current()} className="settings-close">
+            <Icon name="close" size={14} />
+          </button>
+          <div className="settings-pane-header">
+            <h2 id="about-dialog-title" className="settings-pane-title">{productName()}</h2>
+          </div>
+          <div className="settings-scroll">
+            <div className={cn("settings-pane", SIMPLE_BUTTONS)} style={{ paddingBottom: 20 }}>
+              <SettingsGroup footnote={t("about.license")}>
+                <SettingsRows>
+                  <SettingRow title={version ?? ""} icon={<img src="/app-icon.svg" alt="" width={24} height={24} className="size-6" />}>
+                    <button type="button" data-autofocus onClick={copy} className="ui-button">
+                      {copied ? t("about.copied") : t("about.copyVersion")}
+                    </button>
+                  </SettingRow>
+                  {connected && <SettingRow title={connected}>{null}</SettingRow>}
+                </SettingsRows>
+              </SettingsGroup>
+              <SettingsGroup>
+                <SettingsRows>
+                  <AboutLink href={DOCS_URL} label={t("about.docs")} />
+                  <AboutLink href={RELEASES_URL} label={t("about.releases")} />
+                  <AboutLink href={LICENSE_URL} label={t("about.licenseLink")} />
+                  <a href={THIRD_PARTY_NOTICES_URL} target="_blank" rel="license noopener noreferrer" className={aboutRowCls}>
+                    <span>{t("about.notices")}</span>
+                    <ChevronRight size={12} aria-hidden="true" className="text-ink-secondary" />
+                  </a>
+                </SettingsRows>
+              </SettingsGroup>
+            </div>
+          </div>
+        </section>
       </SheetMotion>
     </div>,
     document.body,
   );
 }
 
-const aboutLinkCls = "rounded-sm text-ink/68 hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
+const aboutRowCls = "flex w-full cursor-pointer items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-start text-[13px] leading-[18px] tracking-[0.015em] text-ink transition-[background-color] duration-[120ms] ease-[ease] hover:bg-ink/[0.04] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus";
 
 function AboutLink({ href, label }: { href: string; label: string }) {
   return (
     <button
       type="button"
       onClick={() => void openExternalLink(href)}
-      className={aboutLinkCls}
+      className={aboutRowCls}
     >
-      {label}
+      <span>{label}</span>
+      <ChevronRight size={12} aria-hidden="true" className="text-ink-secondary" />
     </button>
   );
 }

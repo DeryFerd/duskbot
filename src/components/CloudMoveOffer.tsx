@@ -13,7 +13,9 @@ import { useStore } from "@/state/store";
 import { CloudMoveScene } from "./CloudMoveScene";
 import { WhatMovesLine } from "./WhatMoves";
 import { useCloudSendNotice } from "./CloudSendStrip";
-import { mdPrimaryCls, useDialogKeys } from "./ui/GrokDialog";
+import { useDialogKeys } from "./ui/GrokDialog";
+import { SIMPLE_BUTTONS } from "./SettingsPrimitives";
+import "../styles/settings.css";
 import { ScrimMotion, SheetMotion } from "./ui/SheetMotion";
 import { TOP_BAR_PILL, TOP_BAR_PILL_CLOSE, TopBarNotice } from "./TopBarNotice";
 
@@ -107,30 +109,34 @@ function MoveSheet({ state, progress, busy, onClose, onMove, onLater, onHide, on
     : state === "failed" ? t("cloudMoveOffer.failed") : t("cloudMoveOffer.doneLine");
   const spinner = busy && <Loader2 aria-hidden="true" className="size-3.5 shrink-0 animate-spin motion-reduce:animate-none" />;
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <ScrimMotion aria-hidden="true" data-modal-scrim className="ui-dialog-scrim absolute inset-0" onMouseDown={onClose} />
+    <div data-settings-sheet data-settings-look="simple" className="settings-scrim">
+      <ScrimMotion aria-hidden="true" data-modal-scrim className="settings-backdrop" onMouseDown={onClose} />
       <SheetMotion ref={sheet} role="dialog" aria-modal="true" aria-labelledby={lineId} tabIndex={-1} data-cloud-move={state}
-        className="relative flex w-[min(380px,calc(100vw-32px))] flex-col items-center overflow-hidden rounded-[18px] bg-menu px-6 pb-5 text-center text-ink outline-none">
-        <CloudMoveScene progress={progress} done={state === "done"} className="-mx-6 mb-2 w-[calc(100%+3rem)] pt-3" />
-        {state === "done" && <h2 className="m-0 mt-2 text-[17px] font-semibold leading-6">{t("cloudMoveOffer.done")}</h2>}
-        <p id={lineId} role={state === "ask" ? undefined : "status"}
-          className={cn("m-0 text-pretty", state === "done" ? "mt-1 text-[14px] font-medium leading-5 text-ink-secondary" : "mt-2 text-[15px] font-medium leading-6")}>{line}</p>
-        {state === "ask" && <div className="mt-3 w-full"><WhatMovesLine /></div>}
-        {(state === "moving" || state === "failed") && <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-ink/8">
-          <div data-cloud-move-progress={Math.round(progress * 100)} className={cn("h-full origin-left rounded-full transition-transform duration-700 ease-out motion-reduce:transition-none", state === "failed" ? "bg-warning" : "bg-accent")}
-            style={{ transform: `scaleX(${Math.max(0.04, progress)})` }} />
-        </div>}
-        <div className="mt-5 flex items-center justify-center gap-1.5">
-          {state === "ask" && <>
-            <button type="button" className={QUIET_BUTTON} disabled={busy} onClick={onLater}>{t("cloudMoveOffer.later")}</button>
-            <button type="button" data-autofocus data-cloud-move-accept="prompt" className={mdPrimaryCls} disabled={busy} aria-busy={busy || undefined} onClick={onMove}>{spinner}{t("cloudMoveOffer.move")}</button>
-          </>}
-          {state === "moving" && <button type="button" data-autofocus className={QUIET_BUTTON} onClick={onHide}>{t("cloudMoveOffer.hide")}</button>}
-          {state === "failed" && <>
-            <button type="button" className={QUIET_BUTTON} onClick={onHide}>{t("cloudMoveOffer.hide")}</button>
-            <button type="button" data-autofocus className={mdPrimaryCls} disabled={busy} aria-busy={busy || undefined} onClick={onRetry}>{spinner}{t("cloudMoveOffer.tryAgain")}</button>
-          </>}
-          {state === "done" && <button type="button" data-autofocus className={mdPrimaryCls} disabled={busy} aria-busy={busy || undefined} onClick={onOpen}>{spinner}{t("cloudMoveOffer.open")}</button>}
+        className="settings-dialog" style={{ width: "min(400px, 100vw - 32px)" }}>
+        <CloudMoveScene progress={progress} done={state === "done"} className="w-full pt-3" />
+        <div className={cn("settings-pane", SIMPLE_BUTTONS)} style={{ gap: 14, paddingTop: 8, paddingBottom: 20 }}>
+          <div className="flex flex-col gap-1">
+            {state === "done" && <h2 className="settings-pane-title m-0">{t("cloudMoveOffer.done")}</h2>}
+            <p id={lineId} role={state === "ask" ? undefined : "status"}
+              className={cn("m-0 px-2.5 text-pretty text-[13px] leading-[18px] tracking-[0.015em]", state === "done" ? "text-ink-secondary" : "text-ink")}>{line}</p>
+          </div>
+          {state === "ask" && <div className="px-2.5"><WhatMovesLine /></div>}
+          {(state === "moving" || state === "failed") && <div className="mx-2.5 h-1 overflow-hidden rounded-full bg-ink/[0.08]">
+            <div data-cloud-move-progress={Math.round(progress * 100)} className={cn("h-full origin-left rounded-full transition-transform duration-700 ease-out motion-reduce:transition-none", state === "failed" ? "bg-warning" : "bg-accent")}
+              style={{ transform: `scaleX(${Math.max(0.04, progress)})` }} />
+          </div>}
+          <div className="flex items-center justify-end gap-2 px-2.5">
+            {state === "ask" && <>
+              <button type="button" className="ui-button" disabled={busy} onClick={onLater}>{t("cloudMoveOffer.later")}</button>
+              <button type="button" data-autofocus data-cloud-move-accept="prompt" className="ui-button ui-button-primary" disabled={busy} aria-busy={busy || undefined} onClick={onMove}>{spinner}{t("cloudMoveOffer.move")}</button>
+            </>}
+            {state === "moving" && <button type="button" data-autofocus className="ui-button" onClick={onHide}>{t("cloudMoveOffer.hide")}</button>}
+            {state === "failed" && <>
+              <button type="button" className="ui-button" onClick={onHide}>{t("cloudMoveOffer.hide")}</button>
+              <button type="button" data-autofocus className="ui-button ui-button-primary" disabled={busy} aria-busy={busy || undefined} onClick={onRetry}>{spinner}{t("cloudMoveOffer.tryAgain")}</button>
+            </>}
+            {state === "done" && <button type="button" data-autofocus className="ui-button ui-button-primary" disabled={busy} aria-busy={busy || undefined} onClick={onOpen}>{spinner}{t("cloudMoveOffer.open")}</button>}
+          </div>
         </div>
       </SheetMotion>
     </div>,

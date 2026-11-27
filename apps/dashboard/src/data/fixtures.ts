@@ -1,3 +1,4 @@
+import type { AccountRecap } from "../../../../shared/account-recap";
 import type { ActivityReport, BotReport, WorkspaceDetail, WorkspaceKind, WorkspaceSummary } from "../../../../shared/dashboard-protocol";
 import type { AccountData, Scenario } from "../lib/api";
 import { dayKey } from "../lib/format";
@@ -10,13 +11,13 @@ export const fixtureCatalog: PlanCatalog = {
     { id: "team", name: "team", monthly: 30, includedMembers: 2, perExtraMember: 20, maxMembers: 50, work: true, blurb: "For a team, 2 seats included" },
   ],
   desktops: [
-    { id: "shared-s", name: "plus", monthly: 20, vcpu: 2, ramGb: 4, diskGb: 20, placement: "shared", botComputers: 2, priority: false, sizable: false, blurb: "Always available, wakes in seconds" },
+    { id: "shared-s", name: "plus", monthly: 20, vcpu: 2, ramGb: 4, diskGb: 20, placement: "shared", botComputers: 2, priority: false, sizable: false, blurb: "Always available, wakes on its own in under a minute" },
     { id: "shared-m", name: "pro", monthly: 38, vcpu: 4, ramGb: 8, diskGb: 60, placement: "shared", botComputers: 5, priority: true, sizable: false, blurb: "Always available, priority wake" },
     { id: "dedicated", name: "dedicated", monthly: 89, vcpu: 8, ramGb: 16, diskGb: 160, placement: "dedicated", botComputers: null, priority: true, sizable: true, blurb: "A whole machine of your own" },
   ],
   bundles: [
     { id: "free", name: "free", monthly: 0, license: "personal", members: 1, desktop: "none", blurb: "Your bots, on your computer", features: ["Your bots, on your computer", "Personal use", "No subscription"] },
-    { id: "starter", name: "plus", monthly: 20, license: "personal", members: 1, desktop: "shared-s", blurb: "dusk cloud, always available", features: ["your bots work in dusk cloud", "2 vcpu, 4 gb ram, 20 gb disk", "always available, wakes in seconds"] },
+    { id: "starter", name: "plus", monthly: 20, license: "personal", members: 1, desktop: "shared-s", blurb: "dusk cloud, always available", features: ["your bots work in dusk cloud", "2 vcpu, 4 gb ram, 20 gb disk", "always available, wakes on its own in under a minute"] },
     { id: "pro", name: "pro", monthly: 50, license: "starter", members: 1, desktop: "shared-m", recommended: true, blurb: "A bigger machine, priority wake and a work license", features: ["4 vcpu, 8 gb ram, 60 gb disk", "always available, priority wake", "work license for one person"] },
     { id: "team", name: "team", monthly: 119, license: "team", members: 2, desktop: "dedicated", blurb: "A dedicated machine and a team license", features: ["dedicated 8 vcpu, 16 gb ram, 160 gb disk", "always available, priority wake", "team license, 2 seats"] },
   ],
@@ -148,4 +149,11 @@ export function fixtureAppsInApp(): Record<string, string[]> {
 /** apps whose sign-in was started and not finished */
 export function fixturePendingApps(): Record<string, string[]> {
   return { [fixtureWorkspaceIds.mac]: ["linear"], [fixtureWorkspaceIds.vps]: ["linear"], [fixtureWorkspaceIds.cloud]: ["linear", "figma"] };
+}
+
+/** the cancel flow's recap for a long-time user: four of the fixture bots, their replies adding up to the total */
+export function fixtureRecap(now = Date.now()): AccountRecap {
+  const crew = [["nova", "Nova", "blue", "blob", 1046], ["quill", "Quill", "purple", "clover", 702], ["rivet", "Rivet", "orange", "hex", 431], ["tally", "Tally", "green", "star", 233]] as const;
+  const bots = crew.map(([id, name, color, body, replies]) => ({ id, name, color, body, replies }));
+  return { v: 1, since: now - 240 * DAY, bots: bots.length, crew: bots, topBot: bots[0]!, replies: 2412, activeDays: 140, longestStreak: 23, routines: 6, apps: 5, computers: 2 };
 }

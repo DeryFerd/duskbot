@@ -91,7 +91,7 @@ export function codexUserError(value: string, route: CodexRoute, codexErrorInfo?
 }
 
 // Codex's own words when OpenAI refuses its stored ChatGPT login (codex-cli 0.160 login/src/auth).
-const CODEX_SIGN_IN_REFUSED = /workspace routing discovery unauthorized|access token could not be refreshed|authentication session could not be refreshed|ChatGPT login is required|auth data is not available|please (?:log out and )?sign in again/i;
+const CODEX_SIGN_IN_REFUSED = /workspace routing discovery unauthorized|access token could not be refreshed|authentication session could not be refreshed|ChatGPT login is required|auth data is not available|please (?:log out and )?sign in again|refresh_token_(?:reused|expired|invalidated)|refresh token (?:was already used|has expired|was revoked)/i;
 
 /** A turn error saying Codex's own sign-in was refused (`unauthorized`, a model-backend 401, or its
  * sign-in words). A 401 from an MCP server or tool reaches the model as a tool result, never here. */
@@ -103,6 +103,10 @@ export function codexSignInRefused(error: unknown): boolean {
     Object.values(info).some((variant) => (variant as { httpStatusCode?: unknown } | null)?.httpStatusCode === 401)) return true;
   return typeof message === "string" && CODEX_SIGN_IN_REFUSED.test(message);
 }
+
+/** Codex's own words that its stored login cannot be renewed: nothing a second try fixes. A bare 401 may be the provider's bad
+ * minute, so the turn runs once more before it counts as a sign-out. */
+export const codexSignInDead = (raw: string): boolean => CODEX_SIGN_IN_REFUSED.test(raw);
 
 export const CODEX_SIGN_IN_EXPIRED = "Codex's ChatGPT sign-in has expired. Sign in again in Settings → Models → ChatGPT.";
 

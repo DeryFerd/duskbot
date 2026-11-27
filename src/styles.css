@@ -100,6 +100,30 @@ a.link-pill:focus-visible {
   -webkit-text-size-adjust: none;
   text-size-adjust: none;
 }
+/* a command with its argument still empty is one line: the hint after it trails off instead of wrapping under it */
+.mention-editor-mirror[data-command-hint] {
+  white-space: pre;
+  text-overflow: ellipsis;
+}
+.mention-editor-mirror .slash-hint {
+  color: color-mix(in srgb, var(--color-ink) 40%, transparent);
+  font-weight: 400;
+}
+/* a heavier command without moving a glyph: the plain text holds the command's width and the semibold copy is drawn over
+   it, tightened by what its weight adds (about 0.3px a letter at 14px, measured for every command), so the text after it
+   stays exactly under the field's caret */
+.mention-editor-mirror .slash-command {
+  position: relative;
+  color: transparent;
+}
+.mention-editor-mirror .slash-command::after {
+  content: attr(data-text);
+  position: absolute;
+  inset-inline-start: 0;
+  color: var(--slash-color);
+  font-weight: 600;
+  letter-spacing: -0.013em;
+}
 .mention-editor textarea {
   position: relative;
   color: transparent;

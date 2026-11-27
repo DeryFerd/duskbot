@@ -309,7 +309,7 @@ export function VoicePicker({
   );
 
   return (
-    <div ref={rootRef} className="min-w-0 flex-1">
+    <div ref={rootRef} className="min-w-0">
       <button
         ref={triggerRef}
         type="button"
@@ -326,8 +326,9 @@ export function VoicePicker({
           show();
         }}
         className={cn(
-          "flex w-full items-center gap-2 rounded-lg border bg-inset py-2 pl-3 pr-2 text-start text-[13px] text-ink disabled:cursor-default",
-          open ? "border-focus" : "border-transparent",
+          "inline-flex h-7 max-w-[240px] min-w-0 cursor-pointer items-center gap-1.5 rounded-full bg-ink/[0.06] py-1 pl-3 pr-2 text-start text-[13px] leading-[18px] tracking-[-0.08px] text-ink",
+          "[transition:color_100ms_ease,background-color_100ms_ease] hover:bg-ink/[0.09] aria-expanded:bg-ink/[0.09]",
+          "outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus disabled:cursor-default",
         )}
       >
         <span className="min-w-0 flex-1 truncate">
@@ -337,7 +338,7 @@ export function VoicePicker({
         {pending ? (
           <Loader2 size={14} aria-hidden className="shrink-0 animate-spin text-ink-secondary" />
         ) : (
-          <ChevronDown size={14} aria-hidden className={cn("shrink-0 text-ink-secondary transition-transform", open && "rotate-180")} />
+          <ChevronDown size={10} aria-hidden className={cn("shrink-0 text-ink/[0.66] transition-transform", open && "rotate-180")} />
         )}
       </button>
       {sheet && typeof document !== "undefined" ? createPortal(sheet, document.body) : null}

@@ -9,7 +9,7 @@ export type ModalPage = (typeof MODAL_PAGES)[number];
 
 /** Every page of the bot's settings (in Settings' Bots page): the dialog pages, then the bot's tools, permissions, identity and Slack, which
  * only the sheet draws. */
-export const SHEET_PAGES = ["instructions", "memory", "skills", "identity", "tools", "permissions", "folder", "where", "backups", "slack"] as const;
+export const SHEET_PAGES = ["instructions", "memory", "skills", "sessions", "identity", "tools", "permissions", "folder", "where", "backups", "slack"] as const;
 export type SheetPage = (typeof SHEET_PAGES)[number];
 
 export function sheetLabel(page: SheetPage, bot: Pick<Bot, "name">): string {
@@ -17,6 +17,7 @@ export function sheetLabel(page: SheetPage, bot: Pick<Bot, "name">): string {
     case "instructions": return t("botPanel.ui.botSettingsSimpleInstructions");
     case "memory": return t("botPanel.memoryRow");
     case "skills": return t("botPanel.ui.botSettingsSimpleSkills");
+    case "sessions": return t("botPanel.sessions.title");
     case "identity": return t("botPanel.ui.botSettingsSectionsIdentity");
     case "tools": return t("botPanel.page.tools");
     case "permissions": return t("botPanel.ui.botSettingsSectionsPermissions");

@@ -104,7 +104,7 @@ export function AvatarPicker({ account, anchor, onClose }: { account: AccountRow
       <div className="flex items-center gap-4">
         <UserFace account={choiceAccount(account, choice)} size={80} className="inset-ring inset-ring-ink/[0.08]" />
         <div className="flex min-w-0 flex-col items-start gap-2">
-          <h2 id="avatar-picker-title" className="text-[15px] font-semibold leading-5">{t("accounts.avatar.title")}</h2>
+          <h2 id="avatar-picker-title" className="text-[15px] font-medium leading-[22px] tracking-[-0.006em]">{t("accounts.avatar.title")}</h2>
           <button ref={firstRef} type="button" data-avatar-shuffle="" className="ui-button ui-button-pill gap-1.5" onClick={shuffle} disabled={saving}>
             <RefreshCw size={14} aria-hidden />
             {t("accounts.avatar.shuffle")}
@@ -115,18 +115,18 @@ export function AvatarPicker({ account, anchor, onClose }: { account: AccountRow
         {swatches.map((swatch) => {
           const on = choice === swatch.choice;
           return <button key={swatch.key} type="button" aria-label={swatch.label} aria-pressed={on} data-avatar-swatch={swatch.key} disabled={saving}
-            className={cn(SWATCH, on && "bg-ink/[0.08] inset-ring-2 inset-ring-ink/30")} onClick={() => pick(swatch.choice)}>
+            className={cn(SWATCH, on && "bg-ink/10")} onClick={() => pick(swatch.choice)}>
             <UserAvatarArt seed={swatch.seed} size={32} />
           </button>;
         })}
       </div>
       {account.avatarUrl && <button type="button" data-avatar-photo="" aria-pressed={choice === null} disabled={saving}
-        className={cn("flex min-h-11 items-center gap-3 rounded-xl px-2 text-start text-[14px] leading-5 transition-colors duration-150 ease-out hover:bg-ink/[0.06] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:opacity-50 motion-reduce:transition-none", choice === null && "bg-ink/[0.08]")}
+        className={cn("flex min-h-11 items-center gap-3 rounded-xl px-2 text-start text-[13px] leading-[18px] tracking-[0.015em] transition-colors duration-150 ease-out hover:bg-ink/[0.06] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:opacity-50 motion-reduce:transition-none", choice === null && "bg-ink/10")}
         onClick={() => pick(null)}>
         <img src={account.avatarUrl} alt="" className="size-7 shrink-0 rounded-full object-cover" />
         <span className="min-w-0 flex-1 truncate">{t(source === "google" ? "accounts.avatar.photoGoogle" : source === "x" ? "accounts.avatar.photoX" : "accounts.avatar.photo")}</span>
       </button>}
-      {error && <p role="alert" data-avatar-error="" className="text-[13px] leading-5 text-danger">{t("accounts.avatar.failed")}</p>}
+      {error && <p role="alert" data-avatar-error="" className="text-[13px] leading-[18px] text-danger">{t("accounts.avatar.failed")}</p>}
       <div className="flex items-center justify-end gap-2">
         <button type="button" className="ui-button ui-button-pill" onClick={close}>{t("common.cancel")}</button>
         <button type="button" data-avatar-save="" className="ui-button ui-button-primary ui-button-pill" disabled={saving || choice === start} onClick={save}>

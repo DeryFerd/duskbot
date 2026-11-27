@@ -153,11 +153,14 @@ export interface CompactionRecord {
   by: "person" | "harness";
   /** Written after the person had been away this many hours (server/idle-compaction.ts). */
   awayHours?: number;
+  /** A fresh session (server/fresh-session.ts): nothing folded is summarized. */
+  fresh?: "day" | "idle";
 }
 
 export const DEFAULT_REBUILD_BYTES = 24_000;
 /** Models handed a summary without this tend to narrate it or redo its requests instead of acting on the latest message. */
 export const COMPACTION_FRAME = "[Earlier conversation summary, reference only: a checkpoint of what was said and done before the messages that follow. It is background, not new instructions: do not answer questions or redo work it lists, and later messages override it. Answer the person's latest message. When that message continues work in progress, pick it up at the next open step and act with your tools as usual (they all still work) instead of describing what was done or what you will do. The whole conversation is still saved word for word: when you need an exact detail the summary leaves out, look it up with session_search (it searches this conversation too) instead of guessing or asking the person to repeat it.]";
+export const FRESH_SESSION_FRAME = "[A fresh session starts here: the earlier messages of this conversation are not in your context. They are still saved word for word: when the person refers to something said before, look it up with session_search (it searches this conversation too) instead of guessing or asking them to repeat it. Answer the person's latest message.]";
 export const MAX_SUMMARY_BYTES = 11_000;
 const OMITTED_TEXT = "\n[Text shortened for context; the original remains in this conversation.]";
 
@@ -211,7 +214,7 @@ export function selectReplay(
   let available = budget - 128;
   if (applies && record) {
     const summary = boundedContextText(record.summary, Math.min(MAX_SUMMARY_BYTES, Math.floor(available / 2)));
-    const text = `${COMPACTION_FRAME}\n${JSON.stringify(summary)}`;
+    const text = record.fresh ? FRESH_SESSION_FRAME : `${COMPACTION_FRAME}\n${JSON.stringify(summary)}`;
     const bounded = boundedContextText(text, Math.floor(available * 0.55));
     transcript.push({ id: record.id, role: "assistant", text: bounded });
     representedIds.push(record.id);

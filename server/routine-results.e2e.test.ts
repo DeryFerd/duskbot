@@ -223,6 +223,13 @@ it("reports a routine made in a room to that room, as the bot's member line, and
   }
 }, 120_000);
 
+/** Saved conversations from before /new marked side ones. */
+function withoutSideConversations(dataDir: string) {
+  const bots = JSON.parse(readFileSync(join(dataDir, "bots.json"), "utf8")) as any[];
+  for (const saved of bots) for (const each of saved.tasks ?? []) delete each.side;
+  writeFileSync(join(dataDir, "bots.json"), JSON.stringify(bots));
+}
+
 async function resultsFixture() {
   const fixture = await launchVerificationServer();
   const { dataDir, url, logPath } = fixture.info;
@@ -276,21 +283,25 @@ async function resultsFixture() {
   return { api, control, messages, savedBot, destination, routine, report, restart, close };
 }
 
-it("runs in the conversation the person is in, the one a bot with hidden threads opens, after they used threads", async () => {
+it("runs in the bot's main conversation while the person writes in a side one, and in the one they star as main", async () => {
   const f = await resultsFixture();
   try {
     const { bot } = await f.control("new-bot", "--name", "Hidden threads");
     const oldest = bot.activeTaskId as string;
     const { task } = await f.api("POST", `/api/bots/${bot.id}/tasks`, { title: "Later chat" }, 201);
     const live = task.threadId as string;
+    expect(task.side).toBe(true);
     const routine = await f.routine(bot.id);
-    expect(await f.report(routine)).toBe(live);
+    expect(await f.report(routine)).toBe(oldest);
     await f.control("send", "--bot", bot.id, "--task", live, "--text", "Good morning.");
     expect((await f.control("wait", "--bot", bot.id, "--task", live, "--timeout", "20")).status).toBe("settled");
     await f.api("POST", `/api/bots/${bot.id}/tasks/${oldest}?messages=0`);
+    expect(await f.report(routine)).toBe(oldest);
+    expect((await f.savedBot(bot.id)).mainThreadId).toBe(oldest);
+    await f.api("PATCH", `/api/bots/${bot.id}`, { mainThreadChoice: live });
     expect(await f.report(routine)).toBe(live);
-    expect((await f.messages(live)).filter((message) => message.routineStart)).toHaveLength(2);
-    expect((await f.messages(oldest)).some((message) => message.routineStart)).toBe(false);
+    expect((await f.messages(live)).filter((message) => message.routineStart)).toHaveLength(1);
+    expect((await f.messages(oldest)).filter((message) => message.routineStart)).toHaveLength(2);
     const saved = await f.savedBot(bot.id);
     expect(saved.threadId).toBe(oldest);
     expect(saved.mainThreadId).toBe(live);
@@ -316,7 +327,7 @@ it("after the upgrade, reports into and opens the conversation the person last w
       file.routines.find((candidate: any) => candidate.id === routine).resultsThreadId = oldest;
     }, (dataDir) => {
       const bots = JSON.parse(readFileSync(join(dataDir, "bots.json"), "utf8")) as any[];
-      for (const saved of bots) for (const each of saved.tasks ?? []) delete each.askedAt;
+      for (const saved of bots) for (const each of saved.tasks ?? []) { delete each.askedAt; delete each.side; }
       writeFileSync(join(dataDir, "bots.json"), JSON.stringify(bots));
       rmSync(join(dataDir, "asked-at-filled"), { force: true });
     });
@@ -345,7 +356,7 @@ it("clears the oldest thread v0.1.98 to v0.1.107 saved as a routine's destinatio
       delete file.frozenResultsCleared;
       file.routines.find((candidate: any) => candidate.id === routine).resultsThreadId = oldest;
       file.routines.find((candidate: any) => candidate.id === tidiedRoutine).resultsThreadId = archived;
-    });
+    }, withoutSideConversations);
     expect(await f.destination(routine)).toBeUndefined();
     expect(await f.report(routine)).toBe(task.threadId);
     expect(await f.destination(tidiedRoutine)).toBeUndefined();

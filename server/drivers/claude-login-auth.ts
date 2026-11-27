@@ -64,7 +64,7 @@ type Flow = {
   stopping?: Promise<void>;
   terminationFailed?: boolean;
   linking?: boolean;
-  recorder: ReturnType<typeof browserRecorder>;
+  recorder: ReturnType<typeof browserRecorder> | null;
   loopback: Loopback | null;
 };
 

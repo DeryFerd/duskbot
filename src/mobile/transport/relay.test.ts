@@ -210,3 +210,31 @@ describe("relay channel", () => {
     client.close();
   });
 });
+
+describe("relay channel on a node that is not the server's home", () => {
+  it("follows a 409 moved to the node the server lives on and sends the first request there, not only the next one", async () => {
+    const fixture = relayFixture();
+    const home = "https://home.relay.test";
+    const moved = () => new Response(JSON.stringify({ code: "moved", node: "home", url: home, nodes: [{ url: "https://relay.test" }, { url: home }] }), { status: 409 });
+    const through = fixture.fetcher.getMockImplementation()!;
+    fixture.fetcher.mockImplementation(async (input, init) => String(input).startsWith("https://relay.test/v1/channels/abcdefghij/to-vps") ? moved() : String(input).endsWith("/node") ? new Response("{}", { status: 404 }) : through(input, init));
+    const origin = fixture.streamFetch.getMockImplementation()!;
+    fixture.streamFetch.mockImplementation(async (input, init) => String(input).startsWith("https://relay.test/") ? moved() : origin(input, init));
+    const client = open("https://relay.test", channel, "channel-secret", key);
+    try {
+      expect((await client.request("GET", "/api/bots")).status).toBe(200);
+      const posted = fixture.fetcher.mock.calls.map(([url]) => String(url)).filter((url) => url.endsWith("/to-vps"));
+      expect(posted.at(-1)).toBe(`${home}/v1/channels/${channel}/to-vps`);
+      expect(fixture.posts.map((one) => one.seq)).toEqual([0]);
+      expect(String(fixture.streamFetch.mock.calls.at(-1)![0])).toBe(`${home}/v1/channels/${channel}/to-app?wait=25&stream=1`);
+    } finally { client.close(); }
+  });
+
+  it("never follows a 409 to a node the relay did not list", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify({ code: "moved", url: "https://elsewhere.test", nodes: [{ url: "https://relay.test" }] }), { status: 409 })));
+    const client = open("https://relay.test", channel, "channel-secret", key);
+    await expect(client.request("GET", "/api/bots")).rejects.toThrow();
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith("https://elsewhere.test/v1/channels/abcdefghij/to-vps"))).toBe(false);
+    client.close();
+  });
+});

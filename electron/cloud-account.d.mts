@@ -66,7 +66,7 @@ export interface CloudAccountState {
   staging?: true;
   /** Connected: opening My Cloud waits for it to wake. */
   waking?: true;
-  /** Connected: the plan's renewal, only while this account pays for a plan that runs: what Cancel and Keep act on (display only). */
+  /** Connected: the plan's renewal, only while this account pays for a plan that runs (display only). */
   renewal?: import("./cloud-list.mjs").CloudRenewal;
   /** Connected: My Cloud's renewal failed; it keeps running until `fixBy` (Update card opens the billing page). */
   payment?: import("./cloud-list.mjs").CloudPayment;
@@ -74,25 +74,6 @@ export interface CloudAccountState {
 /** What holding the first run's AI sign-ins did: `held` for the Cloud being made, `nothing` to hold, `no-cloud` (none
  * being made for this account), or `failed`. */
 export interface CloudHeldSignIns { outcome: "held" | "nothing" | "no-cloud" | "failed" }
-/** The cancel sheet's reasons: the six it asks now, and an older app's setup, later and other. */
-export type CloudCancelAnswer = "price" | "unused" | "feature" | "switching" | "broken" | "skip" | "setup" | "later" | "other";
-/** The one offer the cancel sheet showed for the reason. */
-export type CloudRetentionOffer = "discount" | "downgrade" | "help" | "note" | "losses" | "none";
-/** The cancel sheet's survey: one reason (words without one are kept as `other`), the offer it showed, and two optional boxes, at most 2,000 characters each. */
-export interface CloudCancelSurvey { answer?: CloudCancelAnswer | null; expected?: string; improve?: string; offer?: CloudRetentionOffer }
-/** One step of the cancel sheet, for the save rate (shared/billing-api.ts RetentionInput). */
-export interface CloudRetentionStep {
-  reason: CloudCancelAnswer; step: "reason" | "help" | "confirm";
-  outcome: "shown" | "discount" | "downgrade" | "helped" | "kept" | "cancelled"; offer?: CloudRetentionOffer; note?: string;
-}
-/** What Cancel or Keep my plan did: `cancelled` (with when it ends, from the Admin's answer, and whether the survey was kept),
- * `kept`, `browser` (this Admin can't do it from the app yet, so the Cloud page's billing opened instead), or `failed`
- * (nothing changed). */
-export type CloudRenewalResult =
-  | { outcome: "cancelled"; renewal: import("./cloud-list.mjs").CloudRenewal | null; surveyed: boolean; state: CloudAccountState }
-  | { outcome: "kept"; state: CloudAccountState }
-  | { outcome: "browser" }
-  | { outcome: "failed"; state: CloudAccountState };
 /** The email-code sign-in (cloud-signin.mjs). `sent`: the code is on its
  * way (`resendAt`: when another may be asked for). `browser`: this Cloud signs
  * in only in the browser (single sign-on there, or an older Admin). */
@@ -191,11 +172,6 @@ export interface CloudAccountBridge {
   connectHomeForPhone(): Promise<CloudAccountState>;
   /** Opens a team's Cloud in this window, as the switcher does: one the verified session lists, by its id. Absent on an older app. */
   openTeam?(teamId: string): Promise<void>;
-  /** Cancel trial / Cancel plan, after the survey when it says anything; Keep my plan. The Cloud is the verified session's own, never the page's. Absent on an older app. */
-  cancelPlan?(survey: CloudCancelSurvey | null): Promise<CloudRenewalResult>;
-  keepPlan?(): Promise<CloudRenewalResult>;
-  /** A step of the cancel sheet, for the save rate; best effort, false when it wasn't kept. Absent on an older app. */
-  retention?(step: CloudRetentionStep): Promise<boolean>;
   /** The first run on dusk cloud: this computer's AI sign-ins, held for the account's own Cloud until it runs. */
   holdSignIns?(): Promise<CloudHeldSignIns>;
   /** The first run on dusk cloud: the AIs signed in here (instance ids) whose sign-in goes along to the account's own Cloud. Absent on an older app. */
@@ -261,7 +237,7 @@ export interface CloudPlanSnapshot {
   usage?: import("./cloud-home.mjs").CloudUsage;
   /** Verified, beside `usage`: this Cloud is short on room, and the plan that fixes it or a tip (the room card). */
   room?: import("./cloud-home.mjs").CloudRoom;
-  /** Verified, while this account pays for a plan that runs: what Cancel and Keep act on. */
+  /** Verified, while this account pays for a plan that runs (display only). */
   renewal?: import("./cloud-list.mjs").CloudRenewal;
   /** Verified: who runs My Cloud's machine, when the session's list says ("managed"). */
   provider?: string;
@@ -288,11 +264,6 @@ export interface CloudPlanBridge {
   /** The usage meter's Upgrade: the preview, then the change (only from the person's click). Absent on an older app. */
   upgradePreview?(plan: string, source: string): Promise<CloudUpgradePreviewResult>;
   upgrade?(plan: string, source: string): Promise<CloudUpgradeResult>;
-  /** Cancel trial / Cancel plan and Keep my plan on the Cloud's own page (only from the person's click). Absent on an older app. */
-  cancel?(survey: CloudCancelSurvey | null): Promise<CloudRenewalResult>;
-  keep?(): Promise<CloudRenewalResult>;
-  /** A step of the cancel sheet, for the save rate; best effort. Absent on an older app. */
-  retention?(step: CloudRetentionStep): Promise<boolean>;
   /** The room card's Not now, and Restart now after its upgrade (only from the person's click). Absent on an older app. */
   roomNotNow?(id: string): Promise<boolean>;
   restartNow?(): Promise<"restarting" | "current" | "failed">;
@@ -307,13 +278,7 @@ export declare function cloudTarget(env?: Record<string, string | undefined>): {
 };
 export declare const CHECKOUT_SOURCES: readonly string[];
 export declare const UPGRADE_SOURCES: readonly string[];
-export declare const CLOUD_CANCEL_ANSWERS: readonly CloudCancelAnswer[];
-/** The survey as main sends it (trimmed; words without a reason as `other`), or null when it says nothing or isn't one. */
 export declare function accountProfile(account: unknown): { name?: string; avatarUrl?: string; avatar?: string };
-export declare function cancelSurvey(input: unknown): { answer: CloudCancelAnswer; expected?: string; improve?: string; offer?: CloudRetentionOffer } | null;
-export declare const CLOUD_RETENTION_OFFERS: readonly CloudRetentionOffer[];
-/** A step of the cancel sheet as main sends it, or null when it isn't one. */
-export declare function retentionStep(input: unknown): CloudRetentionStep | null;
 /** Only this Admin's own /handoff (or /dashboard/handoff) page with a one-time `#t=` token; anything else is null. */
 export declare function handoffDestination(value: unknown, origin: string): string | null;
 export type CloudHandoffPage = "plans" | "home" | "workspace" | "cloud" | "billing" | "account" | "usage";
@@ -383,13 +348,6 @@ export interface CloudAccountClient {
   upgradePreview(plan: string, source: string): Promise<CloudUpgradePreviewResult>;
   /** POST /api/cloud/desktop/upgrade with this app's own preview's confirmation, or nothing is asked. */
   upgrade(plan: string, source: string): Promise<CloudUpgradeResult>;
-  /** POST /api/cloud/desktop/feedback when the survey says anything (never in the cancel's way), then POST
-   * /api/cloud/desktop/clouds/<the session's own Cloud>/cancel. */
-  cancelPlan(survey: unknown): Promise<CloudRenewalResult>;
-  /** POST /v1/clouds/<the session's own Cloud>/retention with the step, given 8 seconds; never throws. */
-  retention(step: unknown): Promise<boolean>;
-  /** POST /api/cloud/desktop/clouds/<the session's own Cloud>/keep. */
-  keepPlan(): Promise<CloudRenewalResult>;
   holdSignIns(items: Array<import("../shared/ai-signins.ts").AiSignIn>): Promise<CloudHeldSignIns>;
   /** POST /api/cloud/desktop/room: Not now on the room card for the session's own Cloud; false when it couldn't be said. */
   roomNotNow(id: string): Promise<boolean>;
@@ -399,7 +357,7 @@ export interface CloudAccountClient {
   /** The Admin's last word on a Cloud whose plan sleeps; null for any other. */
   power(): import("./cloud-power.mjs").CloudPower | null;
   /** Asks the Admin to start a sleeping Cloud (POST /api/cloud/desktop/wake), then reads the session again. */
-  wakeHome(intent: WakeIntent): Promise<"awake" | "waking" | "asleep" | null>;
+  wakeHome(intent: WakeIntent, options?: { paused?: boolean }): Promise<"awake" | "waking" | "asleep" | null>;
   setWaking(on: boolean): void;
   /** My Cloud's one-time code, or (`cloudId`) another Cloud of the person's own that the verified session lists, its
    * grant for that Cloud's own address only. Rejects with `gone: true` once that Cloud is no longer theirs. */

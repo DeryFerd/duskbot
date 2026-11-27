@@ -325,7 +325,7 @@ export interface CloudDesktopView {
   deleteScheduledAt?: number | null;
   /** managed only: when the owner asked to delete its data; the emailed link stays valid for an hour after */
   deleteAskedAt?: number | null;
-  /** managed only: asleep, and a wake (the owner's, the app's, a routine's) is under way */
+  /** managed only: asleep, and a wake (the owner's, the app's, a routine's) is under way, or running with its machine paused by the provider and being resumed */
   waking?: boolean;
   /** managed only, while asleep or stopped: who stopped it. "user" is the owner's own pause; "idle" is ours, to save cost,
    *  and wakes the moment anyone uses it; null when no stop was recorded */

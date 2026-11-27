@@ -286,7 +286,10 @@ try {
     views: async () => (await dashboardCall("GET", "/v1/clouds")).clouds as CloudDesktopView[],
     power: async (id, action) => { await dashboardCall("POST", `/v1/clouds/${id}/power`, { action }); },
     grant: async () => client.pairHome() as Promise<{ origin: string; code: string; expiresAt: number }>,
-    cancel: async () => { const r = await client.cancelPlan({ answer: "testing", improve: "" }); if (r.outcome !== "cancelled") throw new Error(`cancel ${JSON.stringify(r)}`); },
+    cancel: async () => {
+      const { subscriptions } = await dashboardCall("GET", "/v1/billing/overview") as { subscriptions: Array<{ id: string }> };
+      await dashboardCall("POST", `/v1/billing/subscriptions/${subscriptions[0]!.id}/cancel`, { survey: { answer: "other", improve: "live test" } });
+    },
     deleteData: async id => { await dashboardCall("POST", `/v1/clouds/${id}/delete-data`, {}); },
     confirmDelete: async (id, token) => { await dashboardCall("POST", `/v1/clouds/${id}/delete-data/confirm`, { token }); },
     close: () => { client.close(); app.close(); },

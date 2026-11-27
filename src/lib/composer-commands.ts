@@ -65,6 +65,23 @@ export function composerSlashTrigger(text: string, caretInput: number): Composer
   return blankCode(text)[start] === "/" ? { query, start, end: caret } : null;
 }
 
+/** A built-in command typed at the start of the field, shown in the bot's colour as plain text. `/new` is a command
+ * only when nothing follows it; with words after it the message is sent as written. `hint`: its argument is still
+ * empty, so its short hint can follow it. */
+export function inlineSlashCommand(
+  text: string,
+  offered: readonly ComposerSlashCommandId[],
+): { id: ComposerSlashCommandId; end: number; hint: boolean } | null {
+  const match = /^\/(goal|learn|setup|new|compact)(?=\s|$)/i.exec(text);
+  if (!match) return null;
+  const id = match[1]!.toLowerCase() as ComposerSlashCommandId;
+  if (!offered.includes(id)) return null;
+  const end = match[0].length;
+  const rest = text.slice(end);
+  if (id === "new" && rest.trim()) return null;
+  return { id, end, hint: id !== "new" && rest.length > 0 && /^[ \t]*$/.test(rest) };
+}
+
 export function goalTextFromComposer(text: string): string | null {
   const match = /^\/goal(?:\s+([\s\S]*))?$/i.exec(text);
   return match ? (match[1] ?? "").trimStart() : null;

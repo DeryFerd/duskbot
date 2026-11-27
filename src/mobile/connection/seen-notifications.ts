@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { appAway } from "@/lib/chat-in-front";
 import type { NotificationLogEntry } from "../../../shared/notification";
 import type { DeliveredNotification, MobilePlatform } from "../platform";
 
@@ -15,9 +16,10 @@ export function seenDelivered(
     .map((one) => one.id);
 }
 
+/** A conversation the backgrounded app still shows is not being read: its pushes stay until the person comes back. */
 export async function clearSeenNotifications(platform: Pick<MobilePlatform, "deliveredNotifications" | "removeDeliveredNotifications">, feed: readonly Pick<NotificationLogEntry, "id" | "read">[], viewing: string | null): Promise<void> {
   if (!platform.deliveredNotifications || !platform.removeDeliveredNotifications) return;
-  const seen = seenDelivered(await platform.deliveredNotifications(), feed, viewing);
+  const seen = seenDelivered(await platform.deliveredNotifications(), feed, appAway() ? null : viewing);
   if (seen.length) await platform.removeDeliveredNotifications(seen);
 }
 
@@ -28,4 +30,6 @@ export function useSeenNotifications(platform: MobilePlatform, feed: readonly No
   useEffect(() => () => platform.setViewingThread?.(null), [platform]);
   useEffect(() => { void clearSeenNotifications(platform, feed, viewing); }, [platform, feed, viewing]);
   useEffect(() => platform.onResume?.(() => { void clearSeenNotifications(platform, feed, viewing); }), [platform, feed, viewing]);
+  const unread = feed.reduce((count, entry) => count + (entry.read ? 0 : 1), 0);
+  useEffect(() => { platform.setBadge?.(unread); }, [platform, unread]);
 }

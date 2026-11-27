@@ -13,7 +13,7 @@ import { LoginBotPicker, LoginForm } from "./LoginForm";
 import { SavedSecretDialog, useSavedSecrets } from "./SavedSecretsSettings";
 import type { SavedSecretSummary } from "../../shared/saved-secrets";
 import { ItemRow, NavRow, NoteRow, SwitchRow } from "./ListRows";
-import { Card, SettingsGroup, SettingsRows } from "./SettingsPrimitives";
+import { Card, SettingsGroup, SettingsRows, SIMPLE_CARD } from "./SettingsPrimitives";
 import { DialogPane, GrokDialog, mdPrimaryCls, mdSecondaryCls, textFieldCls } from "./ui/GrokDialog";
 import { cn } from "@/lib/cn";
 import { Icon } from "./Icon";
@@ -245,7 +245,7 @@ export function LoginsSettings() {
           </label>
         </div>
         {nothing ? <ArtState data-art-state="vault" art="key" title={t("settings.docs.vault.empty")}>{t("settings.docs.vault.emptyBody")}</ArtState> : <>
-          <div aria-busy={!ready || busy} className="flex flex-col rounded-xl border border-transparent bg-app p-1.5">
+          <div aria-busy={!ready || busy} className={SIMPLE_CARD}>
             {ready && logins !== null && shown.length + shownSecrets.length === 0 && <NoteRow>{words ? t("settings.vault.noMatch") : t("settings.vault.noneHere")}</NoteRow>}
             {ready && !!shown.length && (
               <ul className="flex flex-col" data-logins-list>

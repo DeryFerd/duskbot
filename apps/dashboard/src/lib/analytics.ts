@@ -121,9 +121,9 @@ export function trackPage(path: string) {
 }
 
 /** an onboarding step shown, with how long the step before it took; `fromApp` when the desktop app's sign-in led here */
-export function trackOnboardingStep(step: string, fromApp: boolean) {
+export function trackOnboardingStep(step: string, fromApp: boolean, skipped = false) {
   const now = Date.now();
-  track({ name: "onboarding_step", props: { step, ...(stepAt !== null ? { ms: now - stepAt } : {}), ...(fromApp ? { from: "app" as const } : {}) } });
+  track({ name: "onboarding_step", props: { step, ...(stepAt !== null ? { ms: now - stepAt } : {}), ...(fromApp ? { from: "app" as const } : {}), ...(skipped ? { skipped: true } : {}) } });
   stepAt = now;
 }
 

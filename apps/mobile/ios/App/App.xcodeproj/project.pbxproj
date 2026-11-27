@@ -45,6 +45,14 @@
 		E1A100142F00000100B07D05 /* TurnActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A100032F00000100B07D05 /* TurnActivityWidget.swift */; };
 		E1A100152F00000100B07D05 /* MascotBodies.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A100042F00000100B07D05 /* MascotBodies.swift */; };
 		E1A100162F00000100B07D05 /* TurnActivityWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E1A100072F00000100B07D05 /* TurnActivityWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		F3C100112F00000100B07D05 /* TurnLineKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C100012F00000100B07D05 /* TurnLineKey.swift */; };
+		F3C100122F00000100B07D05 /* TurnLineKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C100012F00000100B07D05 /* TurnLineKey.swift */; };
+		F3C100132F00000100B07D05 /* TurnLineKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C100012F00000100B07D05 /* TurnLineKey.swift */; };
+		F3C100142F00000100B07D05 /* BotAvatars.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C100022F00000100B07D05 /* BotAvatars.swift */; };
+		F3C100152F00000100B07D05 /* BotAvatars.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C100022F00000100B07D05 /* BotAvatars.swift */; };
+		F3C100162F00000100B07D05 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C100032F00000100B07D05 /* NotificationService.swift */; };
+		F3C100172F00000100B07D05 /* NotificationPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B100022F00000100B07D05 /* NotificationPresentation.swift */; };
+		F3C100182F00000100B07D05 /* NotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F3C100062F00000100B07D05 /* NotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -54,6 +62,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = E1A100312F00000100B07D05;
 			remoteInfo = TurnActivityWidget;
+		};
+		F3C100372F00000100B07D05 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F3C100312F00000100B07D05;
+			remoteInfo = NotificationService;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -65,6 +80,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				E1A100162F00000100B07D05 /* TurnActivityWidget.appex in Embed Foundation Extensions */,
+				F3C100182F00000100B07D05 /* NotificationService.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -114,6 +130,12 @@
 		E1A100052F00000100B07D05 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E1A100062F00000100B07D05 /* TurnActivityWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TurnActivityWidget.entitlements; sourceTree = "<group>"; };
 		E1A100072F00000100B07D05 /* TurnActivityWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TurnActivityWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		F3C100012F00000100B07D05 /* TurnLineKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurnLineKey.swift; sourceTree = "<group>"; };
+		F3C100022F00000100B07D05 /* BotAvatars.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotAvatars.swift; sourceTree = "<group>"; };
+		F3C100032F00000100B07D05 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		F3C100042F00000100B07D05 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F3C100052F00000100B07D05 /* NotificationService.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NotificationService.entitlements; sourceTree = "<group>"; };
+		F3C100062F00000100B07D05 /* NotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -132,6 +154,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F3C100332F00000100B07D05 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -142,6 +171,7 @@
 				504EC3061FED79650016851F /* App */,
 				E1A100212F00000100B07D05 /* Shared */,
 				E1A100222F00000100B07D05 /* TurnActivityWidget */,
+				F3C100212F00000100B07D05 /* NotificationService */,
 				504EC3051FED79650016851F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -150,6 +180,8 @@
 			isa = PBXGroup;
 			children = (
 				E1A100022F00000100B07D05 /* TurnActivity.swift */,
+				F3C100012F00000100B07D05 /* TurnLineKey.swift */,
+				F3C100022F00000100B07D05 /* BotAvatars.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -170,6 +202,7 @@
 			children = (
 				504EC3041FED79650016851F /* App.app */,
 				E1A100072F00000100B07D05 /* TurnActivityWidget.appex */,
+				F3C100062F00000100B07D05 /* NotificationService.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -215,6 +248,16 @@
 			path = App;
 			sourceTree = "<group>";
 		};
+		F3C100212F00000100B07D05 /* NotificationService */ = {
+			isa = PBXGroup;
+			children = (
+				F3C100032F00000100B07D05 /* NotificationService.swift */,
+				F3C100042F00000100B07D05 /* Info.plist */,
+				F3C100052F00000100B07D05 /* NotificationService.entitlements */,
+			);
+			path = NotificationService;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -232,6 +275,7 @@
 			);
 			dependencies = (
 				E1A100362F00000100B07D05 /* PBXTargetDependency */,
+				F3C100362F00000100B07D05 /* PBXTargetDependency */,
 			);
 			name = App;
 			packageProductDependencies = (
@@ -258,6 +302,23 @@
 			productReference = E1A100072F00000100B07D05 /* TurnActivityWidget.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		F3C100312F00000100B07D05 /* NotificationService */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F3C100432F00000100B07D05 /* Build configuration list for PBXNativeTarget "NotificationService" */;
+			buildPhases = (
+				F3C100322F00000100B07D05 /* Sources */,
+				F3C100332F00000100B07D05 /* Frameworks */,
+				F3C100342F00000100B07D05 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = NotificationService;
+			productName = NotificationService;
+			productReference = F3C100062F00000100B07D05 /* NotificationService.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -273,6 +334,10 @@
 						ProvisioningStyle = Automatic;
 					};
 					E1A100312F00000100B07D05 = {
+						CreatedOnToolsVersion = 27.2;
+						ProvisioningStyle = Automatic;
+					};
+					F3C100312F00000100B07D05 = {
 						CreatedOnToolsVersion = 27.2;
 						ProvisioningStyle = Automatic;
 					};
@@ -296,6 +361,7 @@
 			targets = (
 				504EC3031FED79650016851F /* App */,
 				E1A100312F00000100B07D05 /* TurnActivityWidget */,
+				F3C100312F00000100B07D05 /* NotificationService */,
 			);
 		};
 /* End PBXProject section */
@@ -316,6 +382,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		E1A100342F00000100B07D05 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F3C100342F00000100B07D05 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -377,6 +450,8 @@
 				E1A100122F00000100B07D05 /* TurnActivity.swift in Sources */,
 				F2B100112F00000100B07D05 /* PhoneNotificationsPlugin.swift in Sources */,
 				F2B100122F00000100B07D05 /* NotificationPresentation.swift in Sources */,
+				F3C100112F00000100B07D05 /* TurnLineKey.swift in Sources */,
+				F3C100142F00000100B07D05 /* BotAvatars.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -385,8 +460,20 @@
 			buildActionMask = 2147483647;
 			files = (
 				E1A100132F00000100B07D05 /* TurnActivity.swift in Sources */,
+				F3C100122F00000100B07D05 /* TurnLineKey.swift in Sources */,
 				E1A100142F00000100B07D05 /* TurnActivityWidget.swift in Sources */,
 				E1A100152F00000100B07D05 /* MascotBodies.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F3C100322F00000100B07D05 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F3C100162F00000100B07D05 /* NotificationService.swift in Sources */,
+				F3C100172F00000100B07D05 /* NotificationPresentation.swift in Sources */,
+				F3C100132F00000100B07D05 /* TurnLineKey.swift in Sources */,
+				F3C100152F00000100B07D05 /* BotAvatars.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -397,6 +484,11 @@
 			isa = PBXTargetDependency;
 			target = E1A100312F00000100B07D05 /* TurnActivityWidget */;
 			targetProxy = E1A100372F00000100B07D05 /* PBXContainerItemProxy */;
+		};
+		F3C100362F00000100B07D05 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F3C100312F00000100B07D05 /* NotificationService */;
+			targetProxy = F3C100372F00000100B07D05 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -627,6 +719,55 @@
 			};
 			name = Release;
 		};
+		F3C100412F00000100B07D05 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = NotificationService/NotificationService.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = NotificationService/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.6;
+				PRODUCT_BUNDLE_IDENTIFIER = bot.dusk.mobile.notifications;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		F3C100422F00000100B07D05 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = NotificationService/NotificationService.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = NotificationService/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.6;
+				PRODUCT_BUNDLE_IDENTIFIER = bot.dusk.mobile.notifications;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "$(DUSK_NOTIFICATION_PROFILE)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -653,6 +794,15 @@
 			buildConfigurations = (
 				E1A100412F00000100B07D05 /* Debug */,
 				E1A100422F00000100B07D05 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F3C100432F00000100B07D05 /* Build configuration list for PBXNativeTarget "NotificationService" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F3C100412F00000100B07D05 /* Debug */,
+				F3C100422F00000100B07D05 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -16,7 +16,7 @@ import { join } from "node:path";
 
 import type { CacheWarmPingResult } from "../contracts.ts";
 import { spawnCli } from "../procs.ts";
-import { killClaudeTree } from "./claude-stored-login.ts";
+import { enterClaudeRenewal, killClaudeTree } from "./claude-stored-login.ts";
 import { USAGE_LIMIT } from "./retry.ts";
 
 export const KEEP_WARM_PROMPT = "Reply with the single word: warm";
@@ -172,11 +172,13 @@ export function runForkedPrompt<T>(opts: {
     cleanup();
     return Promise.resolve(opts.failed(`the ${what} could not start: ${(error as Error).message}`));
   }
-  return new Promise((resolve) => {
+  return enterClaudeRenewal(env).then((renewal) => new Promise<T>((resolve) => {
     let child: ReturnType<typeof spawnCli>;
     try {
       child = spawnCli(opts.cli, args, { cwd: contract.cwd, env, stdio: ["pipe", "pipe", "pipe"], engineHome: true, botWork: true });
+      renewal.track(child);
     } catch (error) {
+      renewal.release();
       cleanup();
       resolve(opts.failed(`the ${what} could not start: ${(error as Error).message}`));
       return;
@@ -219,5 +221,5 @@ export function runForkedPrompt<T>(opts: {
       child.stdin.on("error", () => { /* a CLI that exits early closes stdin */ });
       child.stdin.end(opts.prompt);
     }
-  });
+  }));
 }

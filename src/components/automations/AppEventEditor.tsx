@@ -13,7 +13,7 @@ import { useStore, type Bot } from "@/state/store";
 import { Select } from "../Select";
 import { suggestedName } from "../WebhookTrigger";
 import { Icon } from "../Icon";
-import { fieldLabelCls, formBodyCls, formCloseCls, formFooterCls, formHeaderCls, formSheetCls, formTitleCls, mdPrimaryCls, mdSecondaryCls, rowButtonCls, textAreaCls, textFieldCls } from "../ui/GrokDialog";
+import { fieldLabelCls, formBodyCls, formCloseCls, formFooterCls, formHeaderCls, formSheetCls, formTitleCls, rowPrimaryCls, rowButtonCls, textAreaCls, textFieldCls } from "../ui/GrokDialog";
 import { friendlyError } from "@/lib/plain-error";
 
 const FIELD = textFieldCls;
@@ -92,7 +92,7 @@ export function AppEventEditor({ trigger, bots, initialBotId, onClose, onSaved }
   return (
     <ModalLayer><div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div aria-hidden="true" className="ui-dialog-scrim absolute inset-0" onMouseDown={onClose} />
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} style={{ maxWidth: "min(460px, calc(100vw - 32px))" }} className={formSheetCls}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" data-settings-look="simple" aria-label={title} tabIndex={-1} style={{ maxWidth: "min(460px, calc(100vw - 32px))" }} className={formSheetCls}>
         <div className={formHeaderCls}>
           <h2 className={formTitleCls}>{title}</h2>
           <button type="button" onClick={onClose} aria-label={t("automations.newBox.cancel")} className={formCloseCls}><Icon name="close" size={16} /></button>
@@ -110,7 +110,7 @@ export function AppEventEditor({ trigger, bots, initialBotId, onClose, onSaved }
           )}
           {!trigger && !catalog && !error && <p className="flex items-center gap-2 text-[13px] text-ink-secondary"><Loader2 size={14} className="animate-spin" />{t("automations.editor.appEvent.loading")}</p>}
           {!trigger && catalog && (catalog.unavailable || !catalog.apps.some((candidate) => candidate.events.length)) && (
-            <div className="flex flex-col items-start gap-2 text-[13px] leading-[18px] text-ink/68">
+            <div className="flex flex-col items-start gap-2 text-[13px] leading-[18px] text-ink-secondary">
               <p className="m-0">{catalog.unavailable ?? t("automations.editor.appEvent.noApps")}</p>
               {!catalog.unavailable && <button type="button" onClick={() => dispatch({ type: "togglePlugins", open: true, surface: "apps" })} className={rowButtonCls}>{t("automations.editor.appEvent.connect")}</button>}
             </div>
@@ -171,8 +171,8 @@ export function AppEventEditor({ trigger, bots, initialBotId, onClose, onSaved }
           {error && <p role="alert" className="m-0 text-[12px] leading-4 text-danger">{error}</p>}
         </div>
         <div className={formFooterCls}>
-          <button type="button" onClick={onClose} className={mdSecondaryCls}>{t("automations.newBox.cancel")}</button>
-          <button type="button" disabled={saving || !botId || (!trigger && !chosen) || required.some((field) => !config[field.name]?.trim())} onClick={() => void save()} className={cn(mdPrimaryCls, "gap-1.5")}>{saving && <Loader2 size={14} className="animate-spin" />}{trigger ? t("automations.editor.app.save") : t("automations.editor.app.create")}</button>
+          <button type="button" onClick={onClose} className={rowButtonCls}>{t("automations.newBox.cancel")}</button>
+          <button type="button" disabled={saving || !botId || (!trigger && !chosen) || required.some((field) => !config[field.name]?.trim())} onClick={() => void save()} className={cn(rowPrimaryCls, "gap-1.5")}>{saving && <Loader2 size={14} className="animate-spin" />}{trigger ? t("automations.editor.app.save") : t("automations.editor.app.create")}</button>
         </div>
       </div>
     </div></ModalLayer>

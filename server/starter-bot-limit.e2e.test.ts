@@ -141,18 +141,18 @@ describe("a Starter Cloud's bots, on a real server", () => {
     await cloud.tellPlan(tier);
   };
 
-  it("makes five beside its Dusk, says so in config, then refuses each way of making one and writes nothing", async () => {
+  it("makes twelve beside its Dusk, says so in config, then refuses each way of making one and writes nothing", async () => {
     await starter();
-    expect(await cloud.config()).toMatchObject({ cloudStarter: true, botLimit: 5 });
+    expect(await cloud.config()).toMatchObject({ cloudStarter: true, botLimit: 12 });
     const dusk = (await cloud.bots()).filter((bot) => bot.defaultBot);
     expect(dusk).toHaveLength(1);
-    await cloud.fill(5);
+    await cloud.fill(12);
     const held = (await cloud.bots()).map((bot) => bot.id).sort();
-    expect(held).toHaveLength(6);
+    expect(held).toHaveLength(13);
 
-    const refused = await cloud.create("Sixth");
+    const refused = await cloud.create("Thirteenth");
     expect(refused).toMatchObject(REFUSED);
-    expect(refused.body.error).toBe("You've reached the 5 bots Starter includes. To create more, upgrade this Cloud.");
+    expect(refused.body.error).toBe("You've reached the 12 bots Starter includes. To create more, upgrade this Cloud.");
     // What Duplicate and a paired device's New bot send.
     expect(await cloud.api("POST", "/api/bots", {})).toMatchObject(REFUSED);
     expect(await cloud.api("POST", "/api/teams/import?mode=add", manifest("Desk"))).toMatchObject(REFUSED);
@@ -173,7 +173,7 @@ describe("a Starter Cloud's bots, on a real server", () => {
 
   it("takes a move and a restore at the limit, and a bot moved in keeps its id and conversation", async () => {
     await starter();
-    await cloud.fill(5);
+    await cloud.fill(12);
     const backup = await cloud.api("POST", "/api/teams/export", { format: "backup", name: "Saved" });
     expect(backup.status, JSON.stringify(backup.body)).toBe(200);
 
@@ -184,7 +184,7 @@ describe("a Starter Cloud's bots, on a real server", () => {
 
     const restored = await cloud.api("POST", "/api/teams/import?mode=add", backup.body);
     expect(restored.status, JSON.stringify(restored.body)).toBe(201);
-    expect(restored.body.bots.length).toBeGreaterThanOrEqual(6);
+    expect(restored.body.bots.length).toBeGreaterThanOrEqual(13);
     expect((await cloud.bots()).length).toBe(after + restored.body.bots.length);
 
     // Over the limit now: every one stays, and a new one is still refused.
@@ -194,16 +194,16 @@ describe("a Starter Cloud's bots, on a real server", () => {
   it("keeps every bot of a downgraded Cloud, across a restart, and lifts the limit the moment it upgrades, with no restart", async () => {
     await starter("pro");
     expect((await cloud.config()).botLimit).toBeUndefined();
-    await cloud.fill(7);
-    const seven = (await cloud.bots()).map((bot) => bot.id).sort();
+    await cloud.fill(14);
+    const fourteen = (await cloud.bots()).map((bot) => bot.id).sort();
 
     await cloud.tellPlan("starter");
-    expect(await cloud.config()).toMatchObject({ cloudStarter: true, botLimit: 5 });
-    expect((await cloud.bots()).map((bot) => bot.id).sort()).toEqual(seven);
+    expect(await cloud.config()).toMatchObject({ cloudStarter: true, botLimit: 12 });
+    expect((await cloud.bots()).map((bot) => bot.id).sort()).toEqual(fourteen);
     expect(await cloud.create("New")).toMatchObject(REFUSED);
 
     await cloud.restart();
-    expect((await cloud.bots()).map((bot) => bot.id).sort()).toEqual(seven);
+    expect((await cloud.bots()).map((bot) => bot.id).sort()).toEqual(fourteen);
     expect(await cloud.create("New")).toMatchObject(REFUSED);
 
     const pid = cloud.child!.pid;
@@ -215,18 +215,18 @@ describe("a Starter Cloud's bots, on a real server", () => {
 
   it("makes room when a bot is archived, and the Dusk never takes any", async () => {
     await starter();
-    await cloud.fill(5);
+    await cloud.fill(12);
     const one = (await cloud.bots()).find((bot) => !bot.defaultBot);
     expect((await cloud.api("PATCH", `/api/bots/${one.id}`, { hidden: true })).status).toBe(200);
     expect((await cloud.create("In its place")).status).toBe(201);
     expect(await cloud.create("And another")).toMatchObject(REFUSED);
-    expect((await cloud.bots()).filter((bot) => !bot.hidden)).toHaveLength(6);
+    expect((await cloud.bots()).filter((bot) => !bot.hidden)).toHaveLength(13);
   }, 120_000);
 
   it.each([["max"], ["personal"], ["team"]])("has no such limit on %s", async (tier) => {
     await starter(tier);
     expect((await cloud.config()).botLimit).toBeUndefined();
-    await cloud.fill(6);
+    await cloud.fill(13);
     expect((await cloud.api("POST", "/api/teams/import?mode=add", manifest("Desk"))).status).toBe(201);
   }, 120_000);
 
@@ -235,19 +235,19 @@ describe("a Starter Cloud's bots, on a real server", () => {
     await cloud.start();
     expect(await cloud.config()).toMatchObject({ cloudStarter: false });
     expect((await cloud.config()).botLimit).toBeUndefined();
-    await cloud.fill(6);
+    await cloud.fill(13);
     expect(existsSync(join(cloud.dataDir, "cloud-plan-tier.json"))).toBe(false);
   }, 120_000);
 
   it("a Chief's create_bot works while there's room, up to the limit", async () => {
     await starter();
-    await cloud.fill(4);
+    await cloud.fill(11);
     if (existsSync(cloud.dump)) unlinkSync(cloud.dump);
     const { token, chief } = await cloud.chiefTurn();
-    const made = await cloud.internal("/api/internal/create-bot", token, { fromBotId: chief.id, fromThreadId: chief.threadId, name: "Fifth", role: "Specialist", instructions: "Work." });
+    const made = await cloud.internal("/api/internal/create-bot", token, { fromBotId: chief.id, fromThreadId: chief.threadId, name: "Twelfth", role: "Specialist", instructions: "Work." });
     expect(made.status, JSON.stringify(made.body)).toBe(201);
-    expect(made.body).toMatchObject({ state: "applied", name: "Fifth" });
-    const refused = await cloud.internal("/api/internal/create-bot", token, { fromBotId: chief.id, fromThreadId: chief.threadId, name: "Sixth", role: "Specialist", instructions: "Work." });
+    expect(made.body).toMatchObject({ state: "applied", name: "Twelfth" });
+    const refused = await cloud.internal("/api/internal/create-bot", token, { fromBotId: chief.id, fromThreadId: chief.threadId, name: "Thirteenth", role: "Specialist", instructions: "Work." });
     expect(refused).toMatchObject(REFUSED);
   }, 120_000);
 });

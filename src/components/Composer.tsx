@@ -102,12 +102,14 @@ import { serializeThreadRefs, threadTokenFromPaste, threadTokenSpacing } from "@
 import {
   composerSlashTrigger,
   goalTextFromComposer,
+  inlineSlashCommand,
   replaceComposerSlashTrigger,
   skillSlashCommands,
   slashMenuRows,
   type ComposerSlashCommand,
 } from "@/lib/composer-commands";
 import { useSlashSkills } from "@/lib/use-slash-skills";
+import { botCommandText } from "@/lib/bot-button";
 import { chatCommandRows, runChatCommand, startNewChat } from "@/lib/composer-chat-commands";
 import { randomUuid } from "@/lib/random-uuid";
 import { noteSendLaunch } from "./bubble-entrance";
@@ -353,17 +355,15 @@ export const Composer = memo(function Composer({
   // the other AI tools' skills wait behind one More row for each / typed
   const [slashMoreAt, setSlashMoreAt] = useState<number | null>(null);
   const slashMoreOpen = slash !== null && slashMoreAt === slash.start;
-  const commandCandidates = useMemo(() => {
-    if (!slash || slash.start === dismissedSlashAt) return [];
+  const builtInCommands = useMemo(() => {
     const available: ComposerSlashCommand[] = [];
-    const builtIns = slash.start === 0; // Built-in commands only work at the start of a message; skills can be named anywhere.
-    if (builtIns && !group?.dm) available.push({
+    if (!group?.dm) available.push({
       kind: "command",
       id: "goal",
       label: "/goal",
       description: t(group ? "composer.command.goalDesc" : "composer.command.goalBotDesc"),
     });
-    if (builtIns && canLearn) {
+    if (canLearn) {
       available.push({
         kind: "command",
         id: "learn",
@@ -371,18 +371,30 @@ export const Composer = memo(function Composer({
         description: t("composer.command.learnDesc"),
       });
     }
-    if (builtIns && !group && supportsAgents(state.instances, bot)) available.push({
+    if (!group && supportsAgents(state.instances, bot)) available.push({
       kind: "command",
       id: "setup",
       label: "/setup",
       description: t("composer.command.setupDesc"),
     });
-    if (builtIns && (group ? !group.dm : bot)) available.push(...chatCommandRows(Boolean(group)));
-    return slashMenuRows(available, skillSlashCommands(slashSkills), slash.query, slashMoreOpen, () => ({
+    if (group ? !group.dm : bot) available.push(...chatCommandRows(Boolean(group)));
+    return available;
+  }, [group, bot, canLearn, state.instances, locale]);
+  const commandCandidates = useMemo(() => {
+    if (!slash || slash.start === dismissedSlashAt) return [];
+    // Built-in commands only work at the start of a message; skills can be named anywhere.
+    return slashMenuRows(slash.start === 0 ? builtInCommands : [], skillSlashCommands(slashSkills), slash.query, slashMoreOpen, () => ({
       label: t("composer.commands.more"), description: t("composer.commands.moreHint"),
     }));
-  }, [slash, dismissedSlashAt, group, bot, canLearn, state.instances, locale, slashSkills, slashMoreOpen]);
+  }, [slash, dismissedSlashAt, builtInCommands, locale, slashSkills, slashMoreOpen]);
   const commandPickerOpen = commandCandidates.length > 0;
+  // a built-in command at the start of the field stays plain text, in the bot's colour, with its hint after it while its argument is empty
+  const inlineCommand = useMemo(() => {
+    const found = inlineSlashCommand(text, builtInCommands.flatMap((command) => command.kind === "command" ? [command.id] : []));
+    if (!found) return undefined;
+    const hintKey = found.id === "new" ? null : found.id === "goal" && group ? "composer.commandHint.goalRoom" : `composer.commandHint.${found.id}` as const;
+    return { end: found.end, color: group ? "var(--color-accent)" : botCommandText(bot?.color ?? "green"), hint: found.hint && hintKey ? t(hintKey) : null };
+  }, [text, builtInCommands, group, bot?.color, locale]);
 
   const mention = mentionQueryAt(text, caret); const teammates = useTeammates(); const viewer = useViewerEmail();
   const candidates = useMemo(() => {
@@ -452,12 +464,12 @@ export const Composer = memo(function Composer({
     if (command.kind === "more") { setSlashMoreAt(slash.start); return; } if (command.kind === "command" && command.id === "new" && !text.slice(slash.end).trim()) { setDismissedSlashAt(slash.start); const target = group ? { groupId: group.id } : bot ? { botId: bot.id } : null; if (target) startNewChat(target, threadId, dispatch, clearField); return; }
     const spaceAfter = /^\s/.test(text.slice(slash.end)) ? "" : " ";
     const replacement = command.kind === "skill" ? `${command.label}${spaceAfter}`
-      : command.id === "learn" ? "/learn " : command.id === "setup" ? "/setup " : command.id === "compact" ? "/compact " : command.id === "new" ? "/new" : "";
+      : command.id === "goal" ? "/goal " : command.id === "learn" ? "/learn " : command.id === "setup" ? "/setup " : command.id === "compact" ? "/compact " : command.id === "new" ? "/new" : "";
     const next = replaceComposerSlashTrigger(text, slash, replacement);
     editText(next.text);
     setCaret(next.caret);
     setDismissedSlashAt(slash.start);
-    setChannelMode(command.kind === "command" && command.id === "goal" ? "goal" : "chat");
+    setChannelMode("chat");
     requestAnimationFrame(() => {
       inputRef.current?.focus();
       inputRef.current?.setSelectionRange(next.caret, next.caret);
@@ -1002,7 +1014,7 @@ export const Composer = memo(function Composer({
             <div className={cn("flex items-center gap-1", simpleDock ? "shrink-0" : "flex-wrap")}>
               {simpleDock && <ComposerPlusMenu onAttach={pickers.files} attachChoices={pickers.choices} />}
               {/* a mode's chip shows only while it is on, so a choice made in the + menu or the bot panel stays in view */}
-              {goal?.on && <GoalToggle {...goal} compact={simpleDock} />}
+              {goal?.on && typedGoalText === null && <GoalToggle {...goal} compact={simpleDock} />}
               {simpleDock && approvalChoice && profile && bot && approvalModeFor(bot) !== approvalModeFor(profile) && <ApprovalChip choice={approvalChoice} />}
             </div>
           )}
@@ -1013,23 +1025,12 @@ export const Composer = memo(function Composer({
           peers={[...(group ? members ?? [] : state.bots.filter((member) => member.id !== bot?.id)), ...teammates.peers]}
           everyone={Boolean(group && !group.dm)}
           dir="auto"
+          command={inlineCommand}
           rows={1}
           enterKeyHint={sendKey === "enter" ? "send" : "enter"}
           value={text}
           onChange={(e) => {
             if (bot && !group) cueMascot(bot.id, "watch");
-            // a typed "/goal " becomes the goal chip, so the field never says it a second time
-            const goalToken = !group?.dm ? /^\/goal\s+/i.exec(e.target.value) : null;
-            if (goalToken) {
-              const at = Math.max(0, (e.target.selectionStart ?? e.target.value.length) - goalToken[0].length);
-              editText(e.target.value.slice(goalToken[0].length));
-              setChannelMode("goal");
-              setCaret(at);
-              requestAnimationFrame(() => inputRef.current?.setSelectionRange(at, at));
-              setDismissedAt(null);
-              setDismissedSlashAt(null);
-              return;
-            }
             editText(e.target.value);
             setCaret(e.target.selectionStart ?? e.target.value.length);
             setDismissedAt(null);

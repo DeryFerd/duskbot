@@ -6,7 +6,7 @@ export const KEEP_WORDS: ReadonlySet<string> = new Set([
   "Foundry", "Gemini", "Gmail", "Google", "Greenference", "Grok", "Groq", "Jev", "Kimi", "Linux", "Mac", "Markdown",
   "Mermaid", "Meta", "Microsoft", "Mistral", "Moonshot", "Muse", "Node", "Notion", "Ollama", "OpenClaw", "Outlook", "Pi", "Podman",
   "PowerShell", "Qwen", "Reddit", "Safari", "Slack", "Stripe", "Tailscale", "Telegram", "Terminal", "Twitter", "Ubuntu",
-  "Unsloth", "Venice", "Vercel", "Wayland", "Whop", "Windows", "Windsurf", "Xorg", "Zoom", "Accessibility", "Downloads", "Applications",
+  "Unsloth", "Venice", "Vercel", "Wayland", "Whop", "Windows", "Windsurf", "Xorg", "Zoom", "Access", "Accessibility", "Downloads", "Applications",
   // people and places
   "Karan", "Bansal", "Europe", "Lisbon",
   // days, months, languages
@@ -27,7 +27,7 @@ export const KEEP_PHRASES: readonly string[] = [
   "Cloudflare Workers AI", "OpenCode Zen, Go", "OpenCode Zen and Go", "DeepSeek Harness", "Grok Imagine", "Muse Wonder", "Wispr Flow",
   "Cua Driver", "VS Code", "Node.js", "Wi-Fi", "Gmail, Calendar or Drive", "Outlook, Calendar or OneDrive", "Google Drive",
   "1Password", "AirPods Pro", "Google Calendar", "Google Sheets", "Google Docs", "Google Meet", "Microsoft Teams", "X Developer",
-  "Settings › Phone", "Settings › Voice", "Settings › Transfer", "Settings › General › Plan & billing", "Scan a QR code", "New code", "Chime A", "Prefer not to say",
+  "Settings › Phone", "Settings › Voice", "Settings › Transfer", "Scan a QR code", "New code", "Chime A",
 ];
 
 /** whole strings left alone: the remote desktop's key caps, drawn as keys, and the viewer's line that starts with noVNC's own name */

@@ -41,12 +41,44 @@ function writeInPlace(source: string, bytes: Buffer, from: Stats): void {
 
 export type SignInSync = "copied" | "taken back" | "removed" | "same";
 
+/** What a login file holds, for the two refreshing logins Team Clouds share: `blank` when its tokens are gone (a refresh the
+ * provider refused makes the CLI blank its file), `stamp` when its tokens were last renewed. Other files say nothing. */
+export function loginFacts(path: string, bytes: Buffer): { blank: boolean; stamp: number | null } | null {
+  const name = basename(path);
+  if (name !== ".credentials.json" && name !== "auth.json") return null;
+  try {
+    const parsed = JSON.parse(bytes.toString("utf8")) as Record<string, any>;
+    if (name === ".credentials.json") {
+      const oauth = parsed?.claudeAiOauth;
+      if (!oauth || typeof oauth !== "object") return null;
+      const blank = !oauth.accessToken && !oauth.refreshToken;
+      return { blank, stamp: typeof oauth.expiresAt === "number" && oauth.expiresAt > 0 ? oauth.expiresAt : null };
+    }
+    if (!parsed || typeof parsed !== "object" || !("tokens" in parsed || "OPENAI_API_KEY" in parsed)) return null;
+    const tokens = parsed.tokens;
+    const blank = !(tokens && typeof tokens === "object" && (tokens.refresh_token || tokens.access_token)) && !parsed.OPENAI_API_KEY;
+    const stamp = typeof parsed.last_refresh === "string" ? Date.parse(parsed.last_refresh) : NaN;
+    return { blank, stamp: Number.isFinite(stamp) ? stamp : null };
+  } catch {
+    return null;
+  }
+}
+
+/** A copy that lost its login, or whose tokens are older than the team's, is never the newer one: taking it back would
+ * hand every audience a refresh token the provider already retired. */
+function staleOrBlank(path: string, copy: Buffer, team: Buffer): boolean {
+  const mine = loginFacts(path, copy), held = loginFacts(path, team);
+  if (!mine || !held) return false;
+  if (mine.blank) return !held.blank;
+  return mine.stamp !== null && held.stamp !== null && mine.stamp < held.stamp;
+}
+
 /** A copy an engine wrote outside a box after the team's file changed, once it has settled and reads whole. */
-function newerCopy(path: string, team: Stats, now: number): { bytes: Buffer; stats: Stats } | null {
+function newerCopy(path: string, team: Stats, now: number, teamBytes: Buffer): { bytes: Buffer; stats: Stats } | null {
   const copy = stat(path, false);
   if (!copy?.isFile() || Math.floor(copy.mtimeMs) <= Math.floor(team.mtimeMs) || now - copy.mtimeMs < SETTLED_MS) return null;
   const bytes = readFileSync(path);
-  return whole(path, bytes) ? { bytes, stats: copy } : null;
+  return whole(path, bytes) && !staleOrBlank(path, bytes, teamBytes) ? { bytes, stats: copy } : null;
 }
 
 /** `peers` are the same file in the other audiences' homes: the newest refresh any of them made becomes the team's. */
@@ -63,7 +95,8 @@ export function syncSignIn(file: SharedFile, peers: readonly string[] = [], now 
     return "removed";
   }
   let taken: SignInSync = "same";
-  const newest = [file.target, ...peers].map((path) => newerCopy(path, team!, now)).filter((found) => found !== null)
+  const teamBytes = readFileSync(file.source);
+  const newest = [file.target, ...peers].map((path) => newerCopy(path, team!, now, teamBytes)).filter((found) => found !== null)
     .sort((a, b) => b.stats.mtimeMs - a.stats.mtimeMs)[0];
   if (newest) {
     writeInPlace(file.source, newest.bytes, newest.stats);

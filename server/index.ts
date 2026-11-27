@@ -131,7 +131,7 @@ import { personsOwnWords, readOutsideContent } from "./memory-trust.ts";
 import { embedderSettled, stopEmbedder, warmEmbedder } from "./memory-embed.ts";
 import { generalForPrompt, listGeneralHistory } from "./general-memory.ts";
 import { computerFailuresToResolve, RESOLVE_SCAN } from "./computer-failure-resolution.ts";
-import { chatMessageCount, habitReminder } from "./habit-reminder.ts"; import { HANDOFF_BRIEF_RULE } from "./handoff-brief.ts"; import { hostTimeZone, personTimeZone, takesTurnClock, withTurnClock } from "./turn-clock.ts";
+import { chatMessageCount, habitReminder } from "./habit-reminder.ts"; import { HANDOFF_BRIEF_RULE } from "./handoff-brief.ts"; import { hostTimeZone, personTimeZone, takesTurnClock, withTurnClock } from "./turn-clock.ts"; import { createStartFreshSession } from "./fresh-session.ts";
 import { createMemoryUpkeep, dreamConversations, upkeepEnabled } from "./memory-upkeep.ts";
 import { createImportDistill, importDistillFile } from "./import-distill.ts";
 import { createCacheKeepWarm, type KeepWarmStatus, type KeepWarmTarget } from "./cache-keepwarm.ts";
@@ -1151,7 +1151,7 @@ function aboutOwnerFor(botId: string, threadId: string): string {
 const heldKey = (botId: string, threadId: string) => `${botId}\n${threadId}`;
 /** Hermes Agent's pre-compression flush: the turns a summary is about to fold are queued for capture first, and the next
  * turn reads memory fresh, with whatever this conversation saved. */
-function beforeCompaction(botId: string, threadId: string): void { memoryUpkeep.flushThread(threadId); releaseHeldMemory(heldKey(botId, threadId)); } const { leftForNewChat, startNewChat } = createNewChat({ store: () => store, flushMemory: (threadId) => memoryUpkeep.flushThread(threadId) });
+function beforeCompaction(botId: string, threadId: string): void { memoryUpkeep.flushThread(threadId); releaseHeldMemory(heldKey(botId, threadId)); } const { leftForNewChat, startNewChat } = createNewChat({ store: () => store, flushMemory: (threadId) => memoryUpkeep.flushThread(threadId), newSessionLine: (threadId) => serverLine(threadLanguage(threadId), "server.newChat.started"), appendLine: (threadId, name) => void store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name, ok: true, newSession: true } }) }); const startFreshSession = createStartFreshSession({ store: () => store, isContextMessage, beforeCompaction, timeZone: () => personTimeZone(proactive.brief.timeZone()) });
 
 /** About me and the core notes this turn's system prompt carries, held for the conversation so its cached prefix holds. */
 function heldMemoryParts(bot: BotRecord, threadId: string, turnShape: Parameters<typeof memorySystemPrompt>[1] & object): { about: string; core: string } {
@@ -7658,10 +7658,10 @@ bus.subscribe((event: RuntimeEvent) => {
         if (bot) browserChat.turnEnded(bot.id, event.threadId);
         settlingTurns.add(event.threadId);
         liveTurnByThread.delete(event.threadId);
-        const routineReportThread = routineRun ? routineSourceThread(routineRun) : null;
-        if (!routineReportThread && (!internal || reviewAnswer) && !passedQuietly) store.patchTask(bot.id, event.threadId, { unread: true });
-        if (routineRun && routineReportThread !== event.threadId) automationReports.runSettled(routineRun, completedTurnId);
-        else if ((!routineRun || (routineRun.status === "completed" && !automationReports.quietInItsChat(routineRun, completedTurnId))) && (!internal || reviewAnswer) && !computerSelectionTurns.get(event.threadId)?.selected && doneNotice.atTurnEnd({ botId: bot.id, threadId: event.threadId, review: reviewAnswer, ok: event.ok, routine: Boolean(routineRun) }) === "notify" && !passedQuietly && !personWaits.atTurnEnd(event.threadId, reply)) {
+        const routineReportThread = routineRun ? routineSourceThread(routineRun) : null, ranInItsChat = routineRun !== null && routineReportThread === event.threadId, quietInItsChat = routineRun !== null && ranInItsChat && routineRun.status === "completed" && automationReports.quietInItsChat(routineRun, completedTurnId);
+        if ((!routineReportThread || (ranInItsChat && !quietInItsChat)) && (!internal || reviewAnswer) && !passedQuietly) store.patchTask(bot.id, event.threadId, { unread: true });
+        if (routineRun && !ranInItsChat) automationReports.runSettled(routineRun, completedTurnId);
+        else if ((!routineRun || (routineRun.status === "completed" && !quietInItsChat)) && (!internal || reviewAnswer) && !computerSelectionTurns.get(event.threadId)?.selected && doneNotice.atTurnEnd({ botId: bot.id, threadId: event.threadId, review: reviewAnswer, ok: event.ok, routine: Boolean(routineRun) }) === "notify" && !passedQuietly && !personWaits.atTurnEnd(event.threadId, reply)) {
           notify(buildNotification("done", bot, event.threadId, routineRun ? [routineRun.routineName, reply || routineRun.output].filter(Boolean).join(": ") : reply, { avatarUrl: bot.avatarUrl }), routineRun ? { routine: true } : undefined);
         }
         if (screenPollers.has(event.threadId)) {
@@ -7897,7 +7897,7 @@ async function compactConversation(input: {
   }
   const nativeCompactAt = nativeCompactTokens(instance);
   if (away ? (measurement?.tokens ?? Math.ceil(bytes / 4)) < away.minTokens : !manual && !shouldCompact({ contextTokens: measurement?.tokens, estimatedBytes: bytes,
-    budget: compactBudget(window, cfg.context?.compactAt, nativeCompactAt) * (idle ? HARNESS_IDLE_FRACTION : 1), floor, window, nativeCompactAt })) return;
+    budget: compactBudget(window, store.bot(bot.id)?.compactAt ?? cfg.context?.compactAt, nativeCompactAt) * (idle ? HARNESS_IDLE_FRACTION : 1), floor, window, nativeCompactAt })) return;
   const fold = manual ? { folded: history, firstKeptId: "" } : foldPoint(history);
   if (!fold) return;
   const foldedThroughId = manual
@@ -7908,7 +7908,7 @@ async function compactConversation(input: {
   const controller = new AbortController(); idle?.addEventListener("abort", () => controller.abort(), { once: true }); if (idle?.aborted) controller.abort();
   compactionControllers.set(threadId, { generation, controller, ...(idle ? {} : { shown: true as const }) }); if (!idle) compactingChanged(threadId);
   try {
-    beforeCompaction(bot.id, threadId); const previous = record && fold.folded[0]?.id === record.id ? { id: record.id, summary: record.summary } : undefined;
+    beforeCompaction(bot.id, threadId); const previous = record && !record.fresh && fold.folded[0]?.id === record.id ? { id: record.id, summary: record.summary } : undefined;
     const summary = await draftSummary(fold.folded, { signal: controller.signal, generateText: sideJobs.text("compaction", bot.id, { instance })?.generateText, previous, today: memoryDate(), ...(manual || idle ? { thorough: true, timeoutMs: BACKGROUND_CALL_MS } : {}), ...(focus ? { focus } : {}), archive: supportsWorkspaceFiles(instance.driverKind) ? archiveFoldedTools({ botId: bot.id, threadId, messages, afterId: previous && record?.foldedThroughId, throughId: foldedThroughId, spillDir: threadToolResultsDir(TOOL_RESULTS_DIR, threadId), cwd: task.cwd !== undefined ? task.cwd : bot.cwd, boxed: botBox.enabled() }) : undefined });
     if (!idle && !directTurnClaimIsCurrent(bot.id, generation, threadId)) throw new DirectTurnSetupCancelled("context summarization stopped");
     controller.signal.throwIfAborted();
@@ -8850,7 +8850,7 @@ async function beginTurn(
         }
         if (!readiness.ready) throw new Error(readiness.reason ?? "The cloud computer is not ready");
       }
-      await warmSummaries.beforeTurn(threadId, () => directTurnClaimIsCurrent(bot.id, dispatchClaimId, threadId));
+      await warmSummaries.beforeTurn(threadId, () => directTurnClaimIsCurrent(bot.id, dispatchClaimId, threadId)); if (personLine && oneOnOne(threadId) === bot.id) startFreshSession(bot, threadId, userMessage);
       await compactConversation({ bot, threadId, generation: dispatchClaimId, instance, model,
         excludedIds: new Set([userMessage.id, ...(opts?.excludeMessageIds ?? [])]), manual: opts?.compactOnly === true, ...(opts?.compactOnly && opts.compactFocus ? { focus: opts.compactFocus } : {}) });
       if (!directTurnClaimIsCurrent(bot.id, dispatchClaimId, threadId)) throw new DirectTurnSetupCancelled("turn stopped during context setup");
@@ -9934,7 +9934,7 @@ const runHealth = startRunHealth({ dataDir: DATA_DIR, turns: () => liveTurnByThr
   },
   startTurn: async (botId, threadId, prompt, runOn, triggerSource, onDispatchError) => {
     const prefs = [proactive.prefs.block(), proactive.commitments.block()].filter(Boolean).join("\n\n"); if (!companyShutdown) await startTurn(botId, prefs ? `${prompt}\n\n${prefs}` : prompt, { threadId, runOn, automationSource: triggerSource, onDispatchError });
-  }, postReply: (botId, threadId, text, run) => { const bot = store.bot(botId); if (!bot) throw new Error("The bot is gone"); const turnId = randomUUID(), reportThread = routineSourceThread(run); store.appendMessage(threadId, { role: "bot", kind: "text", text, turnId, turnTerminal: true, turnCompletedAt: Date.now(), turnSucceeded: true }); if (!reportThread) store.patchTask(botId, threadId, { unread: true }); if (reportThread !== threadId) automationReports.runSettled(run, turnId); else if (!automationReports.quietInItsChat(run, turnId) && doneNotice.atTurnEnd({ botId, threadId, review: false, ok: true, routine: true }) === "notify" && !personWaits.atTurnEnd(threadId, text)) notify(buildNotification("done", bot, threadId, text, { avatarUrl: bot.avatarUrl }), { routine: true }); },
+  }, postReply: (botId, threadId, text, run) => { const bot = store.bot(botId); if (!bot) throw new Error("The bot is gone"); const turnId = randomUUID(), reportThread = routineSourceThread(run); store.appendMessage(threadId, { role: "bot", kind: "text", text, turnId, turnTerminal: true, turnCompletedAt: Date.now(), turnSucceeded: true }); const quiet = reportThread === threadId && automationReports.quietInItsChat(run, turnId); if (!reportThread || (reportThread === threadId && !quiet)) store.patchTask(botId, threadId, { unread: true }); if (reportThread !== threadId) automationReports.runSettled(run, turnId); else if (!quiet && doneNotice.atTurnEnd({ botId, threadId, review: false, ok: true, routine: true }) === "notify" && !personWaits.atTurnEnd(threadId, text)) notify(buildNotification("done", bot, threadId, text, { avatarUrl: bot.avatarUrl }), { routine: true }); },
   startGoal: async (groupId, threadId, prompt, coordinatorBotId, runId, _onDispatchError) => {
     if (!groupId) {
       oneOnOneGoals.start(coordinatorBotId, threadId, prompt, { runId });
@@ -10601,7 +10601,7 @@ if (homeEgressLink) {
   runHomeEgress({ link: homeEgressLink, report: (value) => computerEgress.report(value), log: (line) => console.warn(line) });
   browserEgress.routeThrough((target) => (homeEgressLink.online() && computerEgress.routesHome(target.host) ? homeEgressLink.open(target.host, target.port) : null));
 }
-ROUTES.push(createHomeEgressLinkRoutes({ link: homeEgressLink, upgrades })); const mobileLink = createMobileLink({ dataDir: DATA_DIR, sessions, workspace: () => ({ name: cfg.computerName || environmentDescriptor({ environmentId: ENVIRONMENT_ID, ...TEAM_LABEL, desktopManaged: DESKTOP_MANAGED }).label, environmentId: ENVIRONMENT_ID, kind: DESKTOP_MANAGED ? "mac" : "server" }), publicOrigin: () => (publicUrl()?.startsWith("https://") ? publicUrl() : null), refusal: () => (CLOUD_HOME ? "Phones sign in to this workspace through its own sign-in." : null), lookupRelay: mobileLookupRelay(process.env, DESKTOP_MANAGED), companion: utilityParentPort && DESKTOP_MANAGED ? () => companionEndpoints.request() : undefined, isRead: (id) => recentNotificationLog(200).some((entry) => entry.id === id && entry.read), adoptSessions: Boolean(CLOUD_HOME) }); ROUTES.push(async (ctx) => ((await mobileLink.route(ctx)) ? undefined : PASS)); const cloudPhoneRelay = CLOUD_HOME ? startCloudPhoneRelay({ dataDir: DATA_DIR, machineId: CLOUD_HOME.machineId, port: () => PORT, label: () => `${(cfg.computerName || "dusk cloud").slice(0, 50)} phones`, sync: (input) => mobileLink.relaySync(input), log: (line) => console.warn(`cloud phone relay: ${line}`) }) : null;
+ROUTES.push(createHomeEgressLinkRoutes({ link: homeEgressLink, upgrades })); const mobileLink = createMobileLink({ dataDir: DATA_DIR, sessions, workspace: () => ({ name: cfg.computerName || environmentDescriptor({ environmentId: ENVIRONMENT_ID, ...TEAM_LABEL, desktopManaged: DESKTOP_MANAGED }).label, environmentId: ENVIRONMENT_ID, kind: DESKTOP_MANAGED ? "mac" : "server" }), publicOrigin: () => (publicUrl()?.startsWith("https://") ? publicUrl() : null), refusal: () => (CLOUD_HOME ? "Phones sign in to this workspace through its own sign-in." : null), lookupRelay: mobileLookupRelay(process.env, DESKTOP_MANAGED), companion: utilityParentPort && DESKTOP_MANAGED ? () => companionEndpoints.request() : undefined, isRead: (id) => recentNotificationLog(200).some((entry) => entry.id === id && entry.read), unreadCount: () => recentNotificationLog(200).filter((entry) => !entry.read && !entry.forPerson).length, adoptSessions: Boolean(CLOUD_HOME) }); ROUTES.push(async (ctx) => ((await mobileLink.route(ctx)) ? undefined : PASS)); const cloudPhoneRelay = CLOUD_HOME ? startCloudPhoneRelay({ dataDir: DATA_DIR, machineId: CLOUD_HOME.machineId, port: () => PORT, label: () => `${(cfg.computerName || "dusk cloud").slice(0, 50)} phones`, sync: (input) => mobileLink.relaySync(input), log: (line) => console.warn(`cloud phone relay: ${line}`) }) : null;
 
 let webhookIngress: WebhookIngress | null = null;
 let webhookIngressError: string | null = null;

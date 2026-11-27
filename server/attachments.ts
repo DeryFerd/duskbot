@@ -79,7 +79,7 @@ export const SCRIPT_EXTENSIONS: ReadonlySet<string> = new Set([
   ".swift", ".c", ".h", ".cpp", ".cc", ".hpp", ".cs", ".php", ".pl", ".lua", ".r", ".sql", ".yaml", ".yml", ".toml", ".ini",
   ".log", ".xml", ".css", ".scss", ".less", ".vue", ".svelte", ".conf", ".cfg", ".properties", ".gradle", ".proto", ".graphql",
   ".gql", ".dart", ".scala", ".tf", ".hcl", ".ex", ".exs", ".hs", ".zig", ".env", ".gitignore", ".dockerignore", ".editorconfig",
-  ".diff", ".patch", ".srt", ".vtt",
+  ".diff", ".patch", ".srt", ".vtt", ".jsonl", ".ndjson", ".jsonc", ".json5", ".geojson",
 ]);
 export const SCRIPT_MAX_BYTES = 1024 * 1024;
 

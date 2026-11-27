@@ -30,10 +30,19 @@ export function sidebarPreviewMessages(owner: { messages: Message[]; previewMess
     const newer = owner.previewMessages.filter((message) => !known.has(message.id));
     return newer.length ? [...owner.messages, ...newer].sort((a, b) => a.at - b.at) : owner.messages;
   }
-  if (owner.transcriptLoaded !== false) return owner.messages;
+  if (owner.transcriptLoaded !== false) return withNewerPreview(owner.messages, owner.previewMessages);
   const rows = new Map(owner.previewMessages.map((message) => [message.id, message]));
   for (const message of owner.messages) rows.set(message.id, message);
   return [...rows.values()];
+}
+
+/** A row's thread plus any newer message the row learned of from another of its threads (a task, a routine run). */
+export function withNewerPreview(messages: Message[], previewMessages: Message[] | undefined): Message[] {
+  if (!previewMessages?.length) return messages;
+  const known = new Set(messages.map((message) => message.id));
+  const edge = lastPreviewable(messages)?.at ?? 0;
+  const newer = previewMessages.filter((message) => !known.has(message.id) && message.at > edge);
+  return newer.length ? [...messages, ...newer].sort((a, b) => a.at - b.at) : messages;
 }
 
 export function botPreview(bot: Bot, visible: Message[], instances: InstanceInfo[]): string {

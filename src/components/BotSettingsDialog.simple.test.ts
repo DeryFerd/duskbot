@@ -611,7 +611,7 @@ describe("the Bot settings page", () => {
     expect(order.every((index) => index > -1)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     const pages = [...rendered.html.matchAll(/data-panel-page="(\w+)"/g)].map((match) => match[1]);
-    expect(pages).toEqual(["identity", "instructions", "memory", "skills", "tools", "permissions", "folder", "backups"]);
+    expect(pages).toEqual(["identity", "instructions", "memory", "skills", "sessions", "tools", "permissions", "folder", "backups"]);
     expect(rendered.html).not.toContain('data-panel-advanced="settings"');
     for (const page of pages) {
       click(find(rendered, "data-panel-page", page));
@@ -724,6 +724,21 @@ describe("the Computer tab", () => {
     expect(rendered.nodes.some((node) => node.props.fullscreen !== undefined)).toBe(false);
     expect(fixture.dispatch).not.toHaveBeenCalledWith({ type: "toggleComputer", open: true });
     expect(fixture.dispatch).not.toHaveBeenCalledWith({ type: "toggleSettings", open: false });
+  });
+
+  it.each([undefined, "cloud"] as const)("keeps a remote %s bot's live browser above its machine screen", (computerPlace) => {
+    fixture.storeState = { ...fixture.storeState, config: { features: { browser: true } } };
+    const rendered = computer(cloudBot({ computer: computerPlace }));
+    expect(rendered.nodes.find((node) => node.props.onlyWhileOpen === true)?.props.bot).toMatchObject({ id: "scout" });
+    expect(rendered.nodes.some((node) => node.props.inline === true)).toBe(true);
+    expect(rendered.html).toContain("Scout&#x27;s screen");
+  });
+
+  it.each([[false, true], [true, false]] as const)("keeps the additional browser hidden when disabled (feature: %s, bot: %s)", (enabled, browser) => {
+    fixture.storeState = { ...fixture.storeState, config: { features: { browser: enabled } } };
+    const rendered = computer(cloudBot({ browser }));
+    expect(rendered.nodes.some((node) => node.props.onlyWhileOpen === true)).toBe(false);
+    expect(rendered.nodes.some((node) => node.props.inline === true)).toBe(true);
   });
 
   it("on a server leads with the screen, then the move to dusk cloud, with no screen picker, Advanced fold or move back", () => {

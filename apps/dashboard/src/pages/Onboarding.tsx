@@ -28,6 +28,7 @@ type Step = (typeof STEPS)[number];
 type Home = "cloud" | "free";
 
 const SAVED = "dusk-onboarding-step";
+const NAME_SKIPPED = "dusk-onboarding-name-skipped";
 /** the end of the first steps for someone the desktop app sent: the way back to it */
 const APP_DONE = `${APP_LANDING_PATH}?set=1`;
 const isStep = (v: string | null): v is Step => (STEPS as readonly string[]).includes(v ?? "");
@@ -197,10 +198,17 @@ export function Onboarding() {
   const scene = useRef<SceneHandle>(null);
   const leaving = useRef(false);
   const shownName = name ?? guess;
+  // a name the sign-in brought (Google, Apple) is already on the account: the step is skipped once, with none it stays,
+  // and going back to it later shows it
+  const given = (account?.profile.name || me?.name || "").trim();
+  const [skippedOnce, setSkippedOnce] = useState(() => sessionStorage.getItem(NAME_SKIPPED) !== null);
+  const autoSaved = useRef(false);
   // signed up from the app (its sign-in brought them here): they have it, so there is no app step
   const [inApp] = useState(fromApp);
   const total = inApp ? STEPS.length - 1 : STEPS.length;
   const ended = useRef(false);
+  const direct = Boolean(intent) && !bought;
+  const skipping = step === "name" && !skippedOnce && account !== null && /\p{L}/u.test(given) && (!direct || catalog !== null);
 
   const search = query.toString();
   const address = (to: Step) => {
@@ -210,13 +218,16 @@ export function Onboarding() {
   };
   const here = address(step);
   useEffect(() => { sessionStorage.setItem(SAVED, step); }, [step]);
-  useEffect(() => { trackOnboardingStep(step, inApp); }, [step, inApp]);
+  useEffect(() => {
+    if (step === "name" && account === null) return;
+    trackOnboardingStep(step, inApp, step === "name" && skipping);
+  }, [step, inApp, account === null]);
   useEffect(() => { setError(null); scene.current?.react("perk"); }, [step]);
   useEffect(() => { if (step === "plan") setInterval("month"); }, [step]);
   // each history entry names its step, so back and forward move between steps and a refresh stays put
   useEffect(() => { if (asked !== step && !leaving.current) navigate(here, { replace: true }); }, [asked, step, here]);
 
-  const go = (to: Step) => navigate(address(to));
+  const go = (to: Step, replace = false) => navigate(address(to), replace ? { replace: true } : undefined);
   /** done: the account is marked and the dashboard opens like any other visit; the app picks things up by itself */
   const finish = async (to: string, home: WebsiteHome) => {
     setBusy("done"); setError(null);
@@ -249,22 +260,28 @@ export function Onboarding() {
   };
   const signOut = () => {
     sessionStorage.removeItem(SAVED);
+    sessionStorage.removeItem(NAME_SKIPPED);
     leaving.current = true;
     void api.signOut().finally(() => setAccount(null));
   };
   // a plan picked on the site goes from the name straight to checkout
-  const direct = Boolean(intent) && !bought;
-  const saveName = async () => {
-    const next = shownName.trim();
+  const saveName = async (auto = false) => {
+    const next = (auto ? given : shownName).trim();
     if (!next) { setError("a name, any name."); return; }
     setBusy("name"); setError(null);
     try { if (next !== (account?.profile.name ?? "")) await updateProfile(next); }
-    catch (e) { setError((e as Error).message); setBusy(null); return; }
+    catch (e) { setError(auto ? null : (e as Error).message); setBusy(null); return; }
     if (direct && catalog) { await choose("cloud"); return; }
     setBusy(null);
     if (bought && inApp) { await finish("/billing", "cloud"); return; }
-    go(bought ? "app" : "plan");
+    go(bought ? "app" : "plan", auto);
   };
+  useEffect(() => {
+    if (!skipping || autoSaved.current) return;
+    autoSaved.current = true;
+    sessionStorage.setItem(NAME_SKIPPED, "1");
+    void saveName(true).finally(() => setSkippedOnce(true));
+  }, [skipping]);
 
   const chosen = catalog ? bundleOf(catalog, plan) : null;
   const price = chosen && catalog ? per(chosen.monthly, interval, catalog) : null;
@@ -282,7 +299,9 @@ export function Onboarding() {
       aside={<button type="button" onClick={signOut} disabled={busy !== null} className="text-link -me-2 h-11 rounded-full px-2 text-14 disabled:opacity-50">sign out</button>}
     >
       <Rail at={Math.min(at, total - 1)} total={total} />
-      {step === "name" ? (
+      {step === "name" && skipping ? (
+        <div key="name-skip" className="min-h-[200px]" aria-busy="true" />
+      ) : step === "name" ? (
         <form key="name" className="step-in" onSubmit={(e) => { e.preventDefault(); void saveName(); }} noValidate>
           <h1 className="t-title">what's your name?</h1>
           <p className="mt-3 text-16 text-ink-2">{direct ? "then checkout, and your dusk cloud starts setting up." : "two quick things and you're in."}</p>

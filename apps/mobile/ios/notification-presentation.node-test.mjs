@@ -10,11 +10,12 @@ import assert from "node:assert/strict";
 const here = fileURLToPath(new URL(".", import.meta.url));
 const swiftc = (() => { try { execFileSync("xcrun", ["--find", "swiftc"], { stdio: "ignore" }); return true; } catch { return false; } })();
 
-test("willPresent shows the system banner except for the conversation on screen", { skip: process.platform !== "darwin" || !swiftc }, () => {
+test("willPresent shows the system banner except for the conversation on screen, and a sealed preview opens", { skip: process.platform !== "darwin" || !swiftc }, () => {
   const dir = mkdtempSync(join(tmpdir(), "dusk-presentation-"));
   try {
     const binary = join(dir, "check");
-    execFileSync("xcrun", ["swiftc", join(here, "App/App/NotificationPresentation.swift"), join(here, "App/Tests/NotificationPresentation/main.swift"), "-o", binary], { stdio: "pipe" });
+    const sources = ["App/App/NotificationPresentation.swift", "App/Shared/TurnLineKey.swift", "App/Tests/NotificationPresentation/main.swift"];
+    execFileSync("xcrun", ["swiftc", ...sources.map((file) => join(here, file)), "-o", binary], { stdio: "pipe" });
     assert.equal(execFileSync(binary, { encoding: "utf8" }).trim(), "ok");
   } finally {
     rmSync(dir, { recursive: true, force: true });

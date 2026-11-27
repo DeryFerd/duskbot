@@ -116,9 +116,9 @@ describe("bot-first sidebar", () => {
     });
   }
 
-  it.each([false])("uses 14px medium names in Simple comfortable rows and keeps 15px semibold otherwise (advanced %s)", (advanced) => {
+  it.each([false])("uses 14px medium names in read Simple comfortable rows and keeps 15px semibold otherwise (advanced %s)", (advanced) => {
     fixture.advanced = advanced;
-    const markup = renderToStaticMarkup(createElement(BotListItem, rowProps("comfortable", { ...bot, tasks: [], projects: [] })));
+    const markup = renderToStaticMarkup(createElement(BotListItem, rowProps("comfortable", { ...bot, tasks: [], projects: [], unread: false })));
     const name = markup.match(/<span class="flex min-w-0 grow items-center gap-1\.5 truncate text-ink ([^"]*)"/)?.[1];
     expect(name).toBe(advanced ? "text-[15px] font-semibold leading-5" : "text-[14px] font-medium leading-5 tracking-[0.01em]");
     expect(markup).toContain("truncate text-[13px] leading-[18px]");
@@ -139,6 +139,24 @@ describe("bot-first sidebar", () => {
     expect(String(findElement(tree, "data-sidebar-bot-row", bot.id)!.props.className)).not.toContain("group-hover:pr-9");
     expect(markup).not.toContain("group-hover:pr-7");
     expect(markup).toMatch(/data-bot-actions="atlas"[^>]*class="[^"]*\bright-2 top-1 translate-y-0\b/);
+  });
+
+  it("sets an unread row's name and newest line in full ink and a heavier name, and a read row back to its quiet weight", () => {
+    const said = [{ id: "m", role: "bot", kind: "text", text: "Posted the tweet.", at: 1 }] as Bot["messages"];
+    const unread = renderToStaticMarkup(createElement(BotListItem, rowProps("comfortable", { ...bot, tasks: [], projects: [], unread: true, messages: said })));
+    const read = renderToStaticMarkup(createElement(BotListItem, rowProps("comfortable", { ...bot, tasks: [], projects: [], unread: false, messages: said })));
+    const nameClass = (markup: string) => /class="(flex min-w-0 grow items-center[^"]*)"/.exec(markup)?.[1].split(" ") ?? [];
+    const lineClass = (markup: string) => /class="(flex min-w-0 items-center gap-1\.5 truncate text-\[13px\][^"]*)"><span dir="auto" class="truncate">Posted the tweet\./.exec(markup)?.[1].split(" ") ?? [];
+    expect(nameClass(unread)).toContain("font-semibold");
+    expect(lineClass(unread)).toContain("text-ink");
+    expect(nameClass(read)).toContain("font-medium");
+    expect(nameClass(read)).not.toContain("font-semibold");
+    expect(lineClass(read)).toContain("text-ink-secondary");
+    const room = (unreadRoom: boolean) => renderToStaticMarkup(createElement(GroupListItem, { group: { id: "room", threadId: "room-thread", name: "Launch", memberIds: [bot.id], messages: [], defaultResponder: { kind: "mentions" }, bulletin: "", unread: unreadRoom, createdAt: 1, description: "Weekly launch" }, density: "comfortable", onMenu: vi.fn() }));
+    expect(room(true)).toMatch(/class="truncate text-\[14px\] text-ink font-semibold leading-5">Launch</);
+    expect(room(true)).toMatch(/class="truncate text-ink text-\[13px\] leading-\[18px\]">Weekly launch</);
+    expect(room(false)).toMatch(/class="truncate text-\[14px\] text-ink font-medium leading-5">Launch</);
+    expect(room(false)).toMatch(/class="truncate text-ink-secondary text-\[13px\] leading-\[18px\]">Weekly launch</);
   });
 
   it("keeps Simple mode's collapsed rail to the avatar and fades the Advanced rail's engine badge", () => {

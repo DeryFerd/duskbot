@@ -7,6 +7,9 @@ import { cloudPlanLabel } from "@/lib/cloud-plan";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { useStore } from "@/state/store";
+import { SIMPLE_BUTTONS } from "./SettingsPrimitives";
+import { compactBackdropStyle, compactSheetStyle } from "./compact-settings-sheet";
+import "../styles/settings.css";
 import { MausAvatar } from "./Avatar";
 import { useCloudPlanSnapshot } from "./CloudTrialNotice";
 import { NoteLine, UpgradeButton, usageBridge, useUpgrade } from "./CloudUsageMeter";
@@ -69,12 +72,13 @@ function BotLimitDialog({ onClose }: { onClose: () => void }) {
 
   return createPortal(<>
     {!confirming && (
-      <div className={cn("ui-scrim fixed inset-0 flex items-center justify-center p-4 motion-reduce:animate-none", LAYER)}>
+      <div data-settings-sheet data-settings-look="simple" className={cn("settings-scrim", LAYER)}>
+        <div aria-hidden="true" className="settings-backdrop" style={compactBackdropStyle} />
         <div role="dialog" aria-modal="true" aria-labelledby={TITLE} aria-describedby={settled ? undefined : BODY} data-bot-limit-popup=""
-          className="ui-modal relative flex w-[min(380px,calc(100vw-32px))] flex-col items-center border-0 px-6 pb-3 pt-8 text-center text-ink">
+          className={cn("settings-dialog items-center px-6 pb-4 pt-8 text-center", SIMPLE_BUTTONS)} style={compactSheetStyle(380)}>
           <div aria-hidden="true"><MausAvatar color="chrome" size={52} state="idle" animated={false} /></div>
-          <h2 id={TITLE} className="mt-5 text-[19px] font-semibold leading-6 tracking-[-0.012em] [text-wrap:balance]">{title}</h2>
-          {!settled && <p id={BODY} className="mt-1.5 text-[14px] leading-5 text-ink-secondary [text-wrap:pretty]">{t(inApp ? "botLimit.body" : "botLimit.bodyElsewhere")}</p>}
+          <h2 id={TITLE} className="mt-5 text-[15px] font-medium leading-[22px] tracking-[-0.006em] [text-wrap:balance]">{title}</h2>
+          {!settled && <p id={BODY} className="mt-1.5 text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary [text-wrap:pretty]">{t(inApp ? "botLimit.body" : "botLimit.bodyElsewhere")}</p>}
           {settled ? (
             <button type="button" onClick={onClose} className={cn(PRIMARY_BUTTON, "mt-5 w-full justify-center")}>{t("roomCard.gotIt")}</button>
           ) : usage ? (
@@ -91,7 +95,7 @@ function BotLimitDialog({ onClose }: { onClose: () => void }) {
           {planFailed && <p role="alert" className="mt-2 text-[12px] text-danger">{t("notice.openFailed")}</p>}
           {upgrade.note && !upgraded && <div className="mt-2"><NoteLine note={upgrade.note} /></div>}
           {!settled && <div className="mt-1"><NotNowButton onClick={onClose} /></div>}
-          <button type="button" onClick={onClose} aria-label={t("common.close")} className="ui-icon-button absolute end-3 top-3"><X size={16} /></button>
+          <button type="button" onClick={onClose} aria-label={t("common.close")} className="settings-close"><X size={14} /></button>
         </div>
       </div>
     )}

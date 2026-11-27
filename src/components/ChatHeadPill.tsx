@@ -1,7 +1,8 @@
 import { localizedTaskTitle } from "@/lib/task-title";
 import { Lock, UserRound, Users } from "../icons";
-import type { ComponentProps, MouseEvent, ReactNode } from "react";
+import { useCallback, useRef, useState, type ComponentProps, type MouseEvent, type ReactNode } from "react";
 
+import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { useStore, type Bot } from "@/state/store";
 import { awayFromMainThread } from "@/state/thread-navigation";
@@ -9,6 +10,8 @@ import { BotAvatar } from "./Avatar";
 import { Icon } from "./Icon";
 import { BOT_PANEL_ID } from "./bot-panel/side-panel";
 import { sharedChatAudience } from "./TeamPrivateChatsLine";
+import { botConversations, conversationLabel } from "@/lib/bot-conversations";
+import { ConversationSwitcher } from "./ConversationSwitcher";
 
 /** The factory title a new conversation starts with. */
 const UNTITLED = "New thread";
@@ -62,6 +65,14 @@ export function ChatHeadPill({ bot, avatar, privacy = null, room, onToggle }: Ch
   const conversation = !bot ? null : !awayFromMainThread(bot) || shown?.openedBy?.kind === "work" ? (privacy?.kind === "shared" ? t("task.sharedChat") : null)
     : !title || title === UNTITLED ? t("task.untitledConversation") : localizedTaskTitle(title);
   const label = room ? room.label : t("chat.openProfileAria", { name: bot?.name ?? "" });
+  const conversations = bot ? botConversations(bot) : [];
+  // a bot with a second conversation always says which one this is, the main chat included, and the crumb switches
+  const switcher = bot && !room && conversations.length > 1;
+  if (switcher) {
+    const current = conversations.find((entry) => entry.current);
+    const crumb = conversation ?? (privacy?.kind === "shared" ? t("task.sharedChat") : conversationLabel(current ?? { main: true, title: "" }));
+    return <ChatHeadSwitcherPill bot={bot} avatar={avatar} privacy={privacy} privacyLabel={privacyLabel} open={open} label={conversation ? `${label}, ${crumb}` : label} crumb={crumb} onToggle={onToggle} />;
+  }
   return (
     <button
       type="button"
@@ -88,5 +99,69 @@ export function ChatHeadPill({ bot, avatar, privacy = null, room, onToggle }: Ch
         </span>
       )}
     </button>
+  );
+}
+
+const GROUP = "chat-head-group relative flex min-w-0 max-w-full items-center rounded-full border-[0.5px] border-transparent bg-composer text-ink shadow-(--shadow-float)";
+const HALF = "chat-head-pill group relative isolate flex min-w-0 items-center gap-2 rounded-full py-[7.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
+
+/** The pill of a bot with more than one conversation: the face and name still open the bot panel; the crumb beside them
+ * names this conversation and opens the switcher. */
+function ChatHeadSwitcherPill({ bot, avatar, privacy, privacyLabel, open, label, crumb, onToggle }: {
+  bot: Bot;
+  avatar: ChatHeadPillProps["avatar"];
+  privacy: ChatHeadPrivacy;
+  privacyLabel: string | null;
+  open: boolean;
+  label: string;
+  crumb: string;
+  onToggle: ChatHeadPillProps["onToggle"];
+}) {
+  const [menu, setMenu] = useState(false);
+  const anchor = useRef<HTMLDivElement>(null);
+  const crumbButton = useRef<HTMLButtonElement>(null);
+  const PrivacyIcon = privacy ? PRIVACY_ICONS[privacy.kind] : Users;
+  const close = useCallback((restoreFocus: boolean) => {
+    setMenu(false);
+    if (restoreFocus) crumbButton.current?.focus();
+  }, []);
+  return (
+    <div ref={anchor} className="relative flex min-w-0 max-w-full justify-center">
+      <div className={GROUP} data-chathead-group="">
+        <button
+          type="button"
+          data-chathead-pill
+          data-tour="bot-pill"
+          onClick={onToggle}
+          aria-label={label}
+          aria-expanded={open}
+          aria-controls={open ? BOT_PANEL_ID : undefined}
+          className={cn(HALF, "shrink-0 pl-[7.5px] pr-2")}
+        >
+          <BotAvatar bot={bot} size={24} {...avatar} />
+          <span dir="auto" className="min-w-0 max-w-[160px] truncate text-[14px] font-medium leading-5">{bot.name}</span>
+        </button>
+        <Icon name="chevron-right" size={12} className="pointer-events-none shrink-0 text-ink/[0.56]" />
+        <button
+          ref={crumbButton}
+          type="button"
+          data-chathead-crumb
+          onClick={() => setMenu((value) => !value)}
+          aria-label={t("chat.conversations.switch", { name: crumb })}
+          aria-haspopup="menu"
+          aria-expanded={menu}
+          className={cn(HALF, "min-w-0 pl-2 pr-[13.5px] tracking-[0.01em]")}
+        >
+          <span data-chathead-conversation dir="auto" className="min-w-0 max-w-[180px] truncate text-[14px] font-medium leading-5 text-ink-secondary">{crumb}</span>
+          {privacyLabel && (
+            <span data-chathead-privacy={privacy?.kind} title={privacyLabel} className="flex shrink-0 text-ink-tertiary">
+              <PrivacyIcon size={13} aria-hidden="true" />
+              <span className="sr-only">{privacyLabel}</span>
+            </span>
+          )}
+        </button>
+      </div>
+      <ConversationSwitcher bot={bot} open={menu} onClose={close} anchor={anchor} />
+    </div>
   );
 }

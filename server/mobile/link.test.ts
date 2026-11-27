@@ -7,9 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_MOBILE_RELAY, parseMobileLink, type MobilePairingResponse, type MobileRedeemResponse } from "../../shared/mobile-link.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { SessionRegistry } from "../sessions.ts";
-import { generateKeyPairSync } from "node:crypto";
+import { createDecipheriv, createPublicKey, diffieHellman, generateKeyPairSync, hkdfSync, type KeyObject } from "node:crypto";
+import { PUSH_PREVIEW_SEAL } from "../../shared/phone-activity.ts";
 
-import { createMobileLink, mobileLookupRelay, PUSH_GRACE_MS, typedCodeRelay } from "./link.ts";
+import { createMobileLink, mobileLookupRelay, PUSH_GRACE_MS, pushPreview, typedCodeRelay } from "./link.ts";
 import { PRESENCE_OVERDUE_MS } from "./presence.ts";
 import { lookupKeys, openLookup } from "./lookup.ts";
 import type { PushMessage, PushTarget } from "./push.ts";
@@ -34,6 +35,14 @@ beforeEach(() => {
   sent = [];
 });
 afterEach(() => { sessions.close(); rmSync(dir, { recursive: true, force: true }); });
+
+function openPreview(key: KeyObject, sealed: string): string {
+  const raw = Buffer.from(sealed, "base64url");
+  const shared = diffieHellman({ privateKey: key, publicKey: createPublicKey({ key: { kty: "OKP", crv: "X25519", x: raw.subarray(0, 32).toString("base64url") }, format: "jwk" }) });
+  const decipher = createDecipheriv("aes-256-gcm", Buffer.from(hkdfSync("sha256", shared, PUSH_PREVIEW_SEAL.salt, PUSH_PREVIEW_SEAL.info, 32)), raw.subarray(32, 44));
+  decipher.setAuthTag(raw.subarray(raw.length - 16));
+  return Buffer.concat([decipher.update(raw.subarray(44, raw.length - 16)), decipher.final()]).toString("utf8");
+}
 
 function link(extra: Partial<Parameters<typeof createMobileLink>[0]> = {}) {
   return createMobileLink({
@@ -284,6 +293,34 @@ describe("mobile link", () => {
     vi.useRealTimers();
   });
 
+  it("seals each push's preview to the phone's own key, counts the unread for the badge, and has Android draw it", async () => {
+    vi.useFakeTimers();
+    let unread = 3;
+    const mobile = link({ unreadCount: () => unread });
+    const answer = (await call(mobile, owner, "POST", "/api/mobile/pairing")).body as MobilePairingResponse;
+    const phone = (await redeem(mobile, { secret: answer.payload.grant.secret, attemptId: "attempt-0201", device: { name: "p", platform: "android" } })).body as MobileRedeemResponse;
+    const auth: RequestAuth = { kind: "session", session: sessions.authenticate(phone.token)!, via: "bearer", scopes: phone.scopes };
+    const keys = generateKeyPairSync("x25519");
+    const previewKey = keys.publicKey.export({ format: "jwk" }).x!;
+    expect((await call(mobile, auth, "PUT", "/api/mobile/push", { service: "fcm", token: "fcm-token-0123456789", previewKey: Buffer.alloc(32).toString("base64url") })).status).toBe(400);
+    expect((await call(mobile, auth, "PUT", "/api/mobile/push", { service: "fcm", token: "fcm-token-0123456789", previewKey, draws: true })).status).toBe(200);
+    await mobile.notify({ id: "n7", at: 1, read: false, kind: "done", botId: "b1", botName: "Nova", threadId: "t1", title: "Nova finished", body: "The flights are booked for Friday" });
+    await vi.advanceTimersByTimeAsync(PUSH_GRACE_MS);
+    vi.useRealTimers();
+    const [{ target, message }] = sent;
+    expect(target).toEqual({ service: "fcm", token: "fcm-token-0123456789", draws: true });
+    expect(message).toMatchObject({ id: "n7", botName: "Nova", threadId: "t1", badge: 3 });
+    expect(JSON.stringify(message).includes("flights")).toBe(false);
+    expect(openPreview(keys.privateKey, message.sealed!)).toBe("The flights are booked for Friday");
+    unread = 0;
+  });
+
+  it("shows what a bot said, and for an ask what it is with its detail", () => {
+    expect(pushPreview({ kind: "done", title: "Nova finished", body: "All  set\nfor Friday" })).toBe("All set for Friday");
+    expect(pushPreview({ kind: "approval", title: "Nova needs your OK", body: "Send the invoice" })).toBe("Nova needs your OK: Send the invoice");
+    expect(pushPreview({ kind: "done", title: "Nova", body: "x".repeat(300) })).toHaveLength(240);
+  });
+
   it("a phone paired again with its install id replaces the pairing it made before, push or not", async () => {
     const mobile = link();
     const pairOnce = async (attemptId: string, install: string) => {
@@ -395,6 +432,46 @@ describe("mobile link", () => {
       expect(sent.map((one) => one.message.id)).toEqual(["n3"]);
     });
 
+    it("clears a conversation read anywhere on each Android phone that was shown it, even with its app closed", async () => {
+      vi.useFakeTimers();
+      const mobile = link({ unreadCount: () => 1, push: { configured: ["fcm"], send: async (target, message) => { sent.push({ target, message }); return "sent"; } } });
+      const android = async (attempt: string, token: string) => {
+        const answer = (await call(mobile, owner, "POST", "/api/mobile/pairing")).body as MobilePairingResponse;
+        const phone = (await redeem(mobile, { secret: answer.payload.grant.secret, attemptId: attempt, device: { name: "p", platform: "android" } })).body as MobileRedeemResponse;
+        const auth: RequestAuth = { kind: "session", session: sessions.authenticate(phone.token)!, via: "bearer", scopes: phone.scopes };
+        await call(mobile, auth, "PUT", "/api/mobile/push", { service: "fcm", token, draws: true });
+      };
+      await android("attempt-0111", "fcm-token-phone-a");
+      await android("attempt-0112", "fcm-token-phone-b");
+      await mobile.notify(note("n1"));
+      await vi.advanceTimersByTimeAsync(PUSH_GRACE_MS);
+      await mobile.notify(note("n2"));
+      await mobile.notify(note("n3", "t2"));
+      await vi.advanceTimersByTimeAsync(PUSH_GRACE_MS);
+      sent.length = 0;
+      // part of a conversation read: its notification still has news
+      mobile.read(["n1"]);
+      expect(sent).toHaveLength(0);
+      mobile.read(["n2"]);
+      expect(sent.map((one) => [one.target.token, one.message.kind, one.message.threadId, one.message.id])).toEqual([
+        ["fcm-token-phone-a", "read", "t1", "n2"], ["fcm-token-phone-b", "read", "t1", "n2"],
+      ]);
+      expect(sent[0].target.draws).toBe(true);
+      expect(sent[0].message).toMatchObject({ botName: "Nova", badge: 1 });
+      mobile.read(["n1", "n2"]);
+      expect(sent).toHaveLength(2);
+    });
+
+    it("never sends a read to a phone whose app does not draw its own notifications", async () => {
+      vi.useFakeTimers();
+      const mobile = link();
+      await pushPhone(mobile, "attempt-0113");
+      await mobile.notify(note("n1"));
+      await vi.advanceTimersByTimeAsync(PUSH_GRACE_MS);
+      mobile.read(["n1"]);
+      expect(sent.map((one) => one.message.kind)).toEqual(["mention"]);
+    });
+
     it("sends one push per conversation, the newest, when several land within the grace", async () => {
       vi.useFakeTimers();
       const mobile = link();
@@ -461,6 +538,19 @@ describe("mobile link", () => {
       expect(tries).toEqual(["n1", "n1", "n1"]);
       await vi.advanceTimersByTimeAsync(120_000);
       expect(tries).toHaveLength(3);
+    });
+
+    it("keeps trying a push the service could not take for five minutes, past a relay's bad patch", async () => {
+      vi.useFakeTimers();
+      const outcomes = ["failed", "failed", "failed", "sent"] as const;
+      const tries: number[] = [];
+      const mobile = link({ push: { configured: ["apns"], send: async () => { tries.push(Date.now()); return outcomes[tries.length - 1] ?? "sent"; } } });
+      await pushPhone(mobile, "attempt-0106");
+      await mobile.notify(note("n1"));
+      await vi.advanceTimersByTimeAsync(PUSH_GRACE_MS + 10_000 + 60_000);
+      expect(tries).toHaveLength(3);
+      await vi.advanceTimersByTimeAsync(300_000);
+      expect(tries).toHaveLength(4);
     });
 
     it("takes presence only from a paired phone", async () => {

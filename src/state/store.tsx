@@ -18,7 +18,7 @@ import { withOneChief } from "../../shared/bot-owner";
 import { DATA_ROUTES, type DataSheet, type DataTable } from "../../shared/data-surface";
 import type { NotificationLogEntry } from "../../shared/notification";
 import { isNotificationFeedAction, reduceNotificationFeed, type NotificationFeedAction } from "./notification-feed";
-import { bumpThreadUpdatedAt, mergeTaskStamps, rewindThreadUpdatedAt } from "./thread-stamps";
+import { bumpThreadUpdatedAt, mergeTaskStamps, previewOtherThread, rewindThreadUpdatedAt } from "./thread-stamps";
 import { botOpensTo, openBot, openThread, visibleNotificationThread } from "./thread-navigation";
 import { patchGroupTask } from "./thread-edits";
 import { optimisticMessageId, optimisticUserMessage, sendAnswerLost, sendArrived, sendNotDelivered, sendReconciled } from "./optimistic-send";
@@ -139,7 +139,7 @@ export interface Message extends Pick<import("../../shared/wire").WireMessage, "
   goalRun?: GroupGoalRunCardData;
   call?: import("../../shared/wire").LiveCallRecord;
   channelMode?: "chat" | "goal";
-  tool?: { name: string; ok?: boolean; spoken?: string; setup?: boolean; signIn?: boolean; claudeUpdate?: boolean; place?: PlaceRow; resolvedAt?: number; limitResetsAt?: number; limitHold?: import("../../shared/wire").LimitHoldState; partial?: boolean; owned?: boolean; reason?: import("../../shared/failed-turn").FailedReplyReason; blocker?: import("../../shared/failed-turn").BrowserBlocker; errorRef?: string; summary?: string; input?: string; output?: string ; itemId?: string; outputPath?: string; fullResult?: boolean; clipped?: boolean; ms?: number; rescue?: import("../../shared/first-reply-rescue").FirstReplyRescue; step?: import("../../shared/turn-progress").LiveStep; whose?: { person: string; app: string }; label?: string };
+  tool?: { name: string; ok?: boolean; spoken?: string; setup?: boolean; signIn?: boolean; newSession?: true; claudeUpdate?: boolean; place?: PlaceRow; resolvedAt?: number; limitResetsAt?: number; limitHold?: import("../../shared/wire").LimitHoldState; partial?: boolean; owned?: boolean; reason?: import("../../shared/failed-turn").FailedReplyReason; blocker?: import("../../shared/failed-turn").BrowserBlocker; errorRef?: string; summary?: string; input?: string; output?: string ; itemId?: string; outputPath?: string; fullResult?: boolean; clipped?: boolean; ms?: number; rescue?: import("../../shared/first-reply-rescue").FirstReplyRescue; step?: import("../../shared/turn-progress").LiveStep; whose?: { person: string; app: string }; label?: string };
   steered?: boolean;
   via?: "api" | "call";
   callId?: string;
@@ -253,7 +253,7 @@ export interface Task extends Pick<WireTask, "private" | "setupRequest" | "inbox
   pinnedMessageId?: string;
   surface?: "cloud" | "vm" | "local" | "browser";
   surfaceAuto?: true;
-  openedBy?: ThreadOpener;
+  openedBy?: ThreadOpener; side?: true;
   closedBy?: ThreadCloser;
   archivedAt?: number;
   snoozedUntil?: number;
@@ -337,6 +337,7 @@ export interface Bot extends DefaultBotFields, Pick<WireBot, "mascotFaceColor" |
   outbound?: { policy: "ask" | "allow"; dailyCap: number };
   fallback?: Array<{ instanceId: string; model: string }>;
   limitMode?: WireBot["limitMode"];
+  freshSession?: WireBot["freshSession"] | null; compactAt?: number | null;
   browser?: boolean;
   recordBrowserSteps?: boolean;
   readsOtherChats?: boolean;
@@ -868,7 +869,7 @@ export function reducer(state: AppState, action: Action): AppState {
     const owner = state.bots.find((bot) => (bot.threadId !== action.threadId || bot.awaitingThreadSnapshot) && bot.tasks?.some((task) => task.threadId === action.threadId));
     if (owner) {
       const frames = [...(state.backgroundThreadEvents[action.threadId] ?? []), action].slice(-256);
-      const buffered = { ...state, backgroundThreadEvents: { ...state.backgroundThreadEvents, [action.threadId]: frames } };
+      const buffered = { ...previewOtherThread(state, "bots", owner.id, action), backgroundThreadEvents: { ...state.backgroundThreadEvents, [action.threadId]: frames } };
       return (action.type === "messageAdded" || action.type === "messagePatched") && movesThreadToTop(action.message)
         ? bumpThreadUpdatedAt(buffered, action.threadId, action.message.at, true, action.message.turnCompletedAt ?? action.message.at)
         : action.type === "messageAdded" ? bumpThreadUpdatedAt(buffered, action.threadId, action.message.at) : buffered;
@@ -1240,7 +1241,7 @@ export function reducer(state: AppState, action: Action): AppState {
         if (!group) return state;
         if (group.threadId === action.threadId && group.messages.some((m) => m.id === action.message.id)) return state;
         const stamped = bumpThreadUpdatedAt(state, action.threadId, action.message.at, movesThreadToTop(action.message), action.message.turnCompletedAt ?? action.message.at);
-        if (group.threadId !== action.threadId) return stamped;
+        if (group.threadId !== action.threadId) return previewOtherThread(stamped, "groups", group.id, action);
         const optimisticIndex = action.message.sendId
           ? group.messages.findIndex(
               (message) => message.id === optimisticMessageId(action.message.sendId!),

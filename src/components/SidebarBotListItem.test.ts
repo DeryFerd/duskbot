@@ -246,7 +246,7 @@ describe("archive / delete confirmation", () => {
     expect(markup).toContain("Delete Willow?");
     expect(markup).toContain(">Cancel</button>");
     expect(markup).toContain(">Delete</button>");
-    expect(markup).toContain("bg-danger");
+    expect(markup).toContain("bg-[#e72e3b]");
   });
 });
 

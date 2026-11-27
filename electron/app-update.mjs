@@ -89,6 +89,8 @@ export function storedBucket(file, random = Math.random) {
   return bucket;
 }
 export const QUIET_IDLE_MS = 10 * 60_000;
+/** the idle wait once the app's own linked server already runs the downloaded version: the two should not stay apart */
+export const SKEWED_IDLE_MS = 2 * 60_000;
 
 /** `{ version, sums }` from a desktop release manifest signed by a pinned key, or null */
 export function verifiedRelease(body, keys = RELEASE_KEYS) {
@@ -192,8 +194,18 @@ const NOT_UNPACKED = "the update did not unpack in time";
  * `unpacked(since)`, the bytes Squirrel has written since `since`, not growing), or after `longestMs` in all, so a slow disk is waited on.
  */
 export function squirrelInstaller({ autoUpdater, timeoutMs = 15 * 60_000, longestMs = 90 * 60_000, unpacked = () => null, pollMs = 20_000, timers = globalThis }) {
+  const refused = new Set();
+  const refusedForSignature = (error) => /code signature|did not pass validation/i.test(error instanceof Error ? error.message : String(error));
   return {
+    /** Squirrel.Mac unpacked `version` and its code signature did not match this app's: the same zip is refused again, so it is not downloaded again */
+    failed: (version) => refused.has(version),
     async prepare(file, version) {
+      try { await unpack(file, version); } catch (error) { if (refusedForSignature(error)) refused.add(version); throw error; }
+    },
+    install() { autoUpdater.quitAndInstall(); },
+  };
+
+  async function unpack(file, version) {
       const token = randomBytes(16).toString("hex"), size = statSync(file).size;
       let port = 0, asked = false, sent = 0;
       let done, failed;
@@ -237,9 +249,7 @@ export function squirrelInstaller({ autoUpdater, timeoutMs = 15 * 60_000, longes
         autoUpdater.removeListener("update-not-available", none);
         server.close();
       }
-    },
-    install() { autoUpdater.quitAndInstall(); },
-  };
+  }
 }
 
 /**
@@ -247,9 +257,10 @@ export function squirrelInstaller({ autoUpdater, timeoutMs = 15 * 60_000, longes
  * and the screen is locked, or no window of this app is focused and nobody touched this mac or typed in the app for
  * QUIET_IDLE_MS
  */
-export async function quietNow(signals, now = Date.now()) {
+export async function quietNow(signals, now = Date.now(), { skewed = false } = {}) {
   if (signals.busy?.()) return false;
-  const away = signals.locked() || (!signals.focused?.() && signals.idleMs() >= QUIET_IDLE_MS && now - (signals.typedAt() ?? 0) >= QUIET_IDLE_MS);
+  const wait = skewed ? SKEWED_IDLE_MS : QUIET_IDLE_MS;
+  const away = signals.locked() || ((skewed || !signals.focused?.()) && signals.idleMs() >= wait && now - (signals.typedAt() ?? 0) >= wait);
   if (!away) return false;
   try { return (await signals.work()) === null; } catch { return false; }
 }
@@ -463,7 +474,9 @@ export function createAppUpdater({ current, arch, dir, fetchImpl = fetch, keys =
     const look = async () => {
       quietTimer = null;
       if (installing) return;
-      if (!holds(ready) && await quiet().catch(() => false)) return restart();
+      const server = serverRuns();
+      const skewed = typeof server === "string" && SEMVER.test(server) && !newer(ready, server);
+      if (!holds(ready) && await quiet({ skewed }).catch(() => false)) return restart();
       quietTimer = timers.setTimeout(look, quietEveryMs);
       quietTimer?.unref?.();
     };

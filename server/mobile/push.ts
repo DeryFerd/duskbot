@@ -4,7 +4,8 @@ import { connect, constants, type ClientHttp2Session } from "node:http2";
 import type { PushService } from "../../shared/mobile-link.ts";
 import { pushCategory, TURN_ACTIVITY_TYPE, type TurnActivityAttributes, type TurnActivityState } from "../../shared/phone-activity.ts";
 
-/** What a push carries: never a message body, so a lock screen shows who wrote, not what. */
+/** What a push carries: never a message body in the clear. The preview line goes sealed to the phone's own key, so only
+ * that phone shows what was said; the relay, Apple and Google see who wrote. */
 export interface PushMessage {
   id: string;
   kind: string;
@@ -15,6 +16,10 @@ export interface PushMessage {
   groupId?: string;
   /** an approval's or question's ask, so the notification's buttons answer that one */
   requestId?: string;
+  /** the preview line sealed to the phone's push key (PUSH_PREVIEW_SEAL) */
+  sealed?: string;
+  /** the app icon's count: unread notifications */
+  badge?: number;
 }
 
 /** One Live Activity push: an update, the end, or (push-to-start) the start of one. Never carries `line`. */
@@ -35,6 +40,8 @@ export interface PushTarget {
   service: PushService;
   token: string;
   environment?: "sandbox" | "production";
+  /** FCM: the app draws the notification itself, so the push is data-only and wakes it while it is closed */
+  draws?: boolean;
 }
 
 /** `gone`: the service says the token is dead, so the phone's registration is dropped. */
@@ -68,6 +75,11 @@ export function activityApnsBody(push: ActivityPush): object {
   };
 }
 
+/** One APNs or FCM request; a dead connection is dropped and the push tried once more on a new one. */
+export const SERVICE_TIMEOUT_MS = 6_000;
+/** The relay's answer: above its two tries of SERVICE_TIMEOUT_MS, so a slow push is not abandoned while it goes. */
+export const RELAY_TIMEOUT_MS = 20_000;
+
 /** How long a relay that said it has no keys for a service is left alone before it is asked again. */
 export const RELAY_RECHECK_MS = 30 * 60_000;
 
@@ -85,28 +97,48 @@ function jwt(header: object, claims: object, key: KeyObject): string {
   return `${input}.${signature.toString("base64url")}`;
 }
 
-function collapseId(threadId: string): string {
-  let value = "";
-  for (const character of threadId) {
-    if (Buffer.byteLength(value + character) > 64) break;
-    value += character;
-  }
-  return value;
-}
-
 function messageData(message: PushMessage): Record<string, string> {
   return {
     kind: message.kind, botId: message.botId, threadId: message.threadId, id: message.id,
     ...(message.groupId !== undefined ? { groupId: message.groupId } : {}),
     ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
+    ...(message.sealed !== undefined ? { sealed: message.sealed } : {}),
   };
 }
 
+const badgeOf = (message: PushMessage) => message.badge !== undefined && Number.isSafeInteger(message.badge) && message.badge >= 0 ? Math.min(message.badge, 9999) : undefined;
+
+/** Each push stacks under its conversation (`thread-id`); the app's extension opens the sealed preview (`mutable-content`). */
 export function apnsAlertBody(message: PushMessage): object {
   const category = pushCategory(message);
+  const badge = badgeOf(message);
   return {
-    aps: { alert: { title: message.botName, body: "New message" }, sound: "default", "thread-id": message.threadId, ...(category ? { category } : {}) },
+    aps: {
+      alert: { title: message.botName, body: "New message" }, sound: "default", "thread-id": message.threadId, "mutable-content": 1,
+      ...(badge !== undefined ? { badge } : {}), ...(category ? { category } : {}),
+    },
     dusk: messageData(message),
+  };
+}
+
+/** A data-only push to an Android app that draws its own notifications: this conversation was read, up to `id`. */
+export const READ_KIND = "read";
+
+/** The FCM message. An app that draws its own gets data only, which Android hands it even while it is closed; an older
+ * app gets the system-drawn notification. */
+export function fcmMessage(target: PushTarget, message: PushMessage): object {
+  if (target.draws) {
+    const badge = badgeOf(message);
+    return {
+      token: target.token,
+      data: { dusk: "1", ...messageData(message), botName: message.botName, ...(badge !== undefined ? { badge: String(badge) } : {}) },
+      // FCM deprioritizes an app whose high priority messages show nothing, and a read only takes a notification away
+      android: { priority: message.kind === READ_KIND ? "normal" : "high", ttl: "2419200s" },
+    };
+  }
+  return {
+    token: target.token, notification: { title: message.botName, body: "New message" }, data: messageData(message),
+    android: { priority: "high", notification: { channel_id: "messages", tag: message.threadId } },
   };
 }
 
@@ -118,7 +150,10 @@ export function createPushSender(env: NodeJS.ProcessEnv = process.env, deps: {
   log?: (message: string) => void;
   /** the push relay, asked at each send: it holds the app's own APNs and FCM keys */
   relay?: () => string | null;
+  /** SERVICE_TIMEOUT_MS */
+  serviceTimeoutMs?: number;
 } = {}): PushSender {
+  const serviceTimeoutMs = deps.serviceTimeoutMs ?? SERVICE_TIMEOUT_MS;
   const readFile = deps.readFile ?? readFileSync;
   const now = deps.now ?? Date.now;
   const log = deps.log ?? console.warn;
@@ -170,7 +205,7 @@ export function createPushSender(env: NodeJS.ProcessEnv = process.env, deps: {
     return current;
   }
 
-  async function sendApns(target: PushTarget, kind: { type: "alert"; collapse: string } | { type: "liveactivity"; priority: 5 | 10 }, payload: object): Promise<PushOutcome> {
+  async function sendApns(target: PushTarget, kind: { type: "alert" } | { type: "liveactivity"; priority: 5 | 10 }, payload: object, again = true): Promise<PushOutcome> {
     const credentials = apns!;
     const timestamp = now();
     if (!providerToken || timestamp - providerToken.createdAt >= 50 * 60_000) {
@@ -186,17 +221,20 @@ export function createPushSender(env: NodeJS.ProcessEnv = process.env, deps: {
         ":method": "POST", ":path": `/3/device/${target.token}`,
         authorization: `bearer ${providerToken!.value}`,
         ...(kind.type === "alert"
-          ? { "apns-topic": credentials.topic, "apns-push-type": "alert", "apns-priority": "10", "apns-collapse-id": collapseId(kind.collapse) }
+          ? { "apns-topic": credentials.topic, "apns-push-type": "alert", "apns-priority": "10" }
           : { "apns-topic": `${credentials.topic}.push-type.liveactivity`, "apns-push-type": "liveactivity", "apns-priority": String(kind.priority) }),
       });
       let status = 0;
       let body = "";
-      const finish = (outcome: PushOutcome) => { clearTimeout(timer); resolve(outcome); };
+      let settled = false;
+      const finish = (outcome: PushOutcome) => { if (settled) return; settled = true; clearTimeout(timer); resolve(outcome); };
+      // a connection that went quiet (a NAT or APNs dropped it) answers nothing; it is dropped so the next push opens a new one
       const timer = setTimeout(() => {
-        finish("failed");
         request.close(constants.NGHTTP2_CANCEL);
-        if (current.connecting) current.destroy();
-      }, 10_000);
+        if (session === current) session = undefined;
+        current.destroy();
+        if (again) { settled = true; resolve(sendApns(target, kind, payload, false)); } else finish("failed");
+      }, serviceTimeoutMs);
       request.setEncoding("utf8");
       request.on("response", (headers) => { status = Number(headers[":status"]); });
       request.on("data", (chunk: string) => { body += chunk; });
@@ -229,7 +267,7 @@ export function createPushSender(env: NodeJS.ProcessEnv = process.env, deps: {
       const response = await fetch(credentials.tokenUri, {
         method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion }),
-        signal: AbortSignal.timeout(10_000),
+        signal: AbortSignal.timeout(serviceTimeoutMs),
       });
       if (!response.ok) throw new Error("token exchange failed");
       const token = await response.json() as { access_token?: unknown; expires_in?: unknown } | null;
@@ -245,11 +283,8 @@ export function createPushSender(env: NodeJS.ProcessEnv = process.env, deps: {
     const origin = env.DUSK_FCM_HOST ?? "https://fcm.googleapis.com";
     const response = await fetch(`${origin}/v1/projects/${encodeURIComponent(fcm!.projectId)}/messages:send`, {
       method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify({ message: {
-        token: target.token, notification: { title: message.botName, body: "New message" }, data: messageData(message),
-        android: { collapse_key: message.threadId, priority: "high", notification: { channel_id: "messages" } },
-      } }),
-      signal: AbortSignal.timeout(10_000),
+      body: JSON.stringify({ message: fcmMessage(target, message) }),
+      signal: AbortSignal.timeout(serviceTimeoutMs),
     });
     if (response.status === 200) return "sent";
     if (response.status === 404) return "gone";
@@ -264,8 +299,8 @@ export function createPushSender(env: NodeJS.ProcessEnv = process.env, deps: {
   async function sendRelay(base: string, target: PushTarget, what: { message: Omit<PushMessage, "title"> } | { activity: ActivityPush }): Promise<PushOutcome> {
     const response = await fetch(`${base}/v1/push`, {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ service: target.service, token: target.token, ...(target.environment ? { environment: target.environment } : {}), ...what }),
-      signal: AbortSignal.timeout(10_000),
+      body: JSON.stringify({ service: target.service, token: target.token, ...(target.environment ? { environment: target.environment } : {}), ...(target.draws ? { draws: true } : {}), ...what }),
+      signal: AbortSignal.timeout(RELAY_TIMEOUT_MS),
     });
     const answer = await response.json().catch(() => null) as { outcome?: unknown; code?: unknown } | null;
     if (response.status === 503 && answer?.code === "not_configured") {
@@ -310,7 +345,7 @@ export function createPushSender(env: NodeJS.ProcessEnv = process.env, deps: {
       try {
         const { title: _title, ...shown } = message;
         if (relay) return await sendRelay(relay, target, { message: shown });
-        return await (target.service === "apns" ? sendApns(target, { type: "alert", collapse: message.threadId }, apnsAlertBody(message)) : sendFcm(target, message));
+        return await (target.service === "apns" ? sendApns(target, { type: "alert" }, apnsAlertBody(message)) : sendFcm(target, message));
       } catch {
         return "failed";
       }

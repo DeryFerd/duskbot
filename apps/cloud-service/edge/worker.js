@@ -11,7 +11,7 @@
 // (secret, its DUSK_MANAGED_EDGE_TOKEN, or one per origin in the same order),
 // PUBLIC_DOMAIN (the wildcard's parent, e.g. desktops.example.com), and for the queue HOOK_QUEUE (Durable Object,
 // class HookQueue) with HOOK_SEAL_KEY (secret, 32+ characters, only here). Route: *.<PUBLIC_DOMAIN>/*.
-import { DOWN, LABEL, askWake, lookupRoute, upstreamRequest } from "./route.js";
+import { DOWN, LABEL, askWake, lookupRoute, providerPausePage, upstreamRequest } from "./route.js";
 import { envelope, queueReady } from "./hook-queue.js";
 
 export { HookQueue, QUEUE_LIMITS } from "./hook-queue.js";
@@ -198,6 +198,12 @@ async function answer(request, env, ctx) {
   }
   if (route.awake) {
     const response = await forward(request, url, route.upstream, body).catch(() => null);
+    // the service reads the home as running but the provider paused its machine: its own page is never shown; the service resumes it
+    if (response && await providerPausePage(response)) {
+      ctx.waitUntil(globalThis.caches?.default?.delete(cacheKey(label)) ?? Promise.resolve());
+      const asked = await askWake(label, "paused", env);
+      return waking(asked === 429 ? 429 : 503);
+    }
     if (response && !DOWN.includes(response.status)) return response;
     // a cached route can outlive the home's sleep: ask again, and wake it if it sleeps
     ctx.waitUntil(globalThis.caches?.default?.delete(cacheKey(label)) ?? Promise.resolve());

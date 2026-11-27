@@ -179,12 +179,12 @@ const cfg = (tts: AppConfig["tts"]): AppConfig => ({ tts });
 describe("configuration", () => {
   it("needs both a key and a voice before it can speak", async () => {
     const { voiceConfigured, voiceReady } = await voice();
-    expect(voiceConfigured({})).toBe(false);
+    expect(voiceConfigured(cfg({ provider: "elevenlabs" }))).toBe(false);
     expect(voiceConfigured(cfg({ key: "k" }))).toBe(false);
-    expect(voiceConfigured(cfg({ voice: "v-1" }))).toBe(false);
+    expect(voiceConfigured(cfg({ provider: "elevenlabs", voice: "v-1" }))).toBe(false);
     expect(voiceConfigured(cfg({ key: "k", voice: "v-1" }))).toBe(true);
     expect(voiceReady(cfg({ key: "k" }), "v-per-bot")).toBe(true);
-    expect(voiceReady({}, "v-per-bot")).toBe(false);
+    expect(voiceReady(cfg({ provider: "elevenlabs" }), "v-per-bot")).toBe(false);
   });
 
   it("never reports the key itself", async () => {
@@ -196,8 +196,9 @@ describe("configuration", () => {
 
   it("distinguishes 'no key' from 'no voice picked'", async () => {
     const { speak, NoVoiceConfigured } = await voice();
-    expect(() => speak({}, "hi")).toThrow(NoVoiceConfigured);
-    expect(() => speak({}, "hi")).toThrow(
+    const noKey = cfg({ provider: "elevenlabs" });
+    expect(() => speak(noKey, "hi")).toThrow(NoVoiceConfigured);
+    expect(() => speak(noKey, "hi")).toThrow(
       "Add an ElevenLabs key in Settings on the computer to turn on voice.",
     );
     expect(() => speak(cfg({ key: "k" }), "hi")).toThrow(
@@ -208,7 +209,7 @@ describe("configuration", () => {
   it("lists no voices without a key, rather than calling out", async () => {
     seen.length = 0;
     const { listVoices } = await voice();
-    expect(await listVoices({})).toEqual([]);
+    expect(await listVoices(cfg({ provider: "elevenlabs" }))).toEqual([]);
     expect(seen).toHaveLength(0);
   });
 });
@@ -487,6 +488,39 @@ describe("Fish Audio", () => {
   });
 });
 
+describe("default voice provider", () => {
+  it("is the built-in voice for a bot with no choice on a Mac", async () => {
+    const { voiceProvider } = await voice();
+    expect(voiceProvider({}, "darwin")).toBe("system");
+    expect(voiceProvider(cfg({ voice: "v-1" }), "darwin")).toBe("system");
+    expect(voiceProvider(cfg({ provider: undefined }), "darwin")).toBe("system");
+  });
+
+  it("falls back to ElevenLabs where the host has no built-in voice", async () => {
+    const { voiceProvider } = await voice();
+    expect(voiceProvider({}, "linux")).toBe("elevenlabs");
+    expect(voiceProvider({}, "win32")).toBe("elevenlabs");
+  });
+
+  it("keeps an explicit choice, even ElevenLabs on a Mac", async () => {
+    const { voiceProvider } = await voice();
+    expect(voiceProvider(cfg({ provider: "elevenlabs" }), "darwin")).toBe("elevenlabs");
+    expect(voiceProvider(cfg({ provider: "fish" }), "darwin")).toBe("fish");
+    expect(voiceProvider(cfg({ provider: "system" }), "linux")).toBe("system");
+  });
+
+  it("keeps ElevenLabs for someone whose key is already saved without a provider", async () => {
+    const { voiceProvider } = await voice();
+    expect(voiceProvider(cfg({ key: "saved" }), "darwin")).toBe("elevenlabs");
+  });
+
+  it("reports the built-in voice as ready for a fresh bot on a Mac", async () => {
+    if (process.platform !== "darwin") return;
+    const { describeVoice } = await voice();
+    expect(describeVoice({})).toMatchObject({ provider: "system", configured: true, ready: true });
+  });
+});
+
 describe("built-in macOS voices", () => {
   // The header above `say -v ?`'s table is localized, and some voice names contain spaces.
   const LISTING = [
@@ -556,12 +590,18 @@ describe("built-in macOS voices", () => {
     await expect(access(dirname(args[1]))).rejects.toThrow();
   });
 
-  it("still demands a picked voice, and says so", async () => {
-    const { speak, NoVoiceConfigured } = await voice();
-    expect(() => speak(cfg({ provider: "system" }), "hi", undefined, fakeSay([]))).toThrow(NoVoiceConfigured);
-    expect(() => speak(cfg({ provider: "system" }), "hi", undefined, fakeSay([]))).toThrow(
-      "Pick a voice in the agent profile.",
-    );
+  it("speaks with the system default voice when none is picked", async () => {
+    const { speak } = await voice();
+    const record: string[][] = [];
+    const audio = await speak(cfg({ provider: "system" }), "hi", undefined, fakeSay(record));
+    expect(audio.mime).toBe("audio/wav");
+    expect(record.find((argv) => argv[0] === "-o")).not.toContain("-v");
+  });
+
+  it("is ready with no voice picked", async () => {
+    const { voiceConfigured, voiceReady } = await voice();
+    expect(voiceConfigured(cfg({ provider: "system" }))).toBe(onMac);
+    expect(voiceReady(cfg({ provider: "system" }))).toBe(onMac);
   });
 });
 
@@ -757,6 +797,6 @@ describe("included voice", () => {
     expect(describeVoice(cfg({ provider: "fish", voice: "v-1" }))).toMatchObject({ configured: false });
     expect(describeVoice(cfg({ provider: "fish", voice: "v-1" }))).not.toHaveProperty("included");
     vi.stubEnv("DUSK_CLOUD_VOICE_TOKEN", undefined);
-    expect(describeVoice(cfg({ voice: "v-1" }))).toMatchObject({ configured: false, ready: false });
+    expect(describeVoice(cfg({ provider: "elevenlabs", voice: "v-1" }))).toMatchObject({ configured: false, ready: false });
   });
 });

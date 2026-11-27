@@ -24,7 +24,7 @@ export async function startFakeInstaboxApi(options: { now?: () => number; key?: 
   const idem = new Map<string, unknown>();
   const queued = new Map<string, () => void>();
   let queueStarts = false;
-  let failNext = 0, limitNext = 0, busyNext = 0, startsBlockedUntil = 0, coldResume = false, refuseResume: string | null = null, growNeedsStop = false, usedGiB = 0, snapshotListReads = 0;
+  let failNext = 0, limitNext = 0, busyNext = 0, startsBlockedUntil = 0, coldResume = false, refuseResume: string | null = null, workspacePaused: string | null = null, growNeedsStop = false, usedGiB = 0, snapshotListReads = 0;
   const unlisted = new Map<string, { reads: number; operationId: string }>();
   const alphabet = "abcdefghijklmnopqrstuvwxyz234567";
   const ident = (prefix: string) => `${prefix}_${Array.from(randomBytes(26), b => alphabet[b % alphabet.length]).join("")}`;
@@ -94,6 +94,8 @@ export async function startFakeInstaboxApi(options: { now?: () => number; key?: 
       const seconds = Math.ceil((startsBlockedUntil - now()) / 1000);
       res.writeHead(429, { "content-type": "application/json", "retry-after": String(seconds) }); res.end(JSON.stringify({ error: { code: "rate_limited", retryable: true, retryAfterSeconds: seconds } })); return;
     }
+    // the workspace itself paused for the provider's billing: every start and resume is refused alike
+    if (workspacePaused && method === "POST" && (path === "/v1/machines" || /\/(start|resume)$/.test(path))) return error(res, 402, workspacePaused);
     if (busyNext > 0 && method === "POST" && /\/(start|resume|suspend|stop)$/.test(path)) { busyNext--; return error(res, 409, "operation_conflict"); }
     const needsKey = method !== "GET" && /\/(machines|suspend|resume|start|stop|snapshots)$/.test(path) || (method === "DELETE" && /^\/v1\/(machines|snapshots)\/[^/]+$/.test(path)) || (method === "PATCH");
     const idemKey = req.headers["idempotency-key"];
@@ -229,6 +231,8 @@ export async function startFakeInstaboxApi(options: { now?: () => number; key?: 
     limitNext(count: number) { limitNext = count; },
     /** every start is refused for the workspace's start limit until this time */
     limitStartsUntil(at: number) { startsBlockedUntil = at; },
+    /** the provider paused the whole workspace: every start and resume answers 402 with this code, until null */
+    pauseWorkspace(code: string | null = "payment_failed") { workspacePaused = code; },
     /** the next power changes find another operation running on the machine */
     busyNext(count: number) { busyNext = count; },
     /** starts and resumes are accepted (202) but the machine keeps reading as stopped until finishStarts() */

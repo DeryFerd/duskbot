@@ -184,7 +184,8 @@ describe("an input method in the composer's menus", () => {
       expect(textarea().value).toBe("/go");
     }
     expect(press(textarea()).defaultPrevented).toBe(true);
-    expect(textarea().value).toBe("");
+    // the picked /goal stays in the field as text, waiting for what to finish
+    expect(textarea().value).toBe("/goal ");
     expect(sends()).toEqual([]);
   });
 });

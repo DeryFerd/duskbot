@@ -3,7 +3,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const fixture = vi.hoisted(() => ({ state: { config: { cloudHome: true, botLimit: 5 } as Record<string, unknown>, bots: [] as unknown[] } }));
+const fixture = vi.hoisted(() => ({ state: { config: { cloudHome: true, botLimit: 12 } as Record<string, unknown>, bots: [] as unknown[] } }));
 vi.mock("@/state/store", () => ({ useStore: () => ({ state: fixture.state, dispatch: vi.fn() }) }));
 vi.mock("./Avatar", () => ({ MausAvatar: () => createElement("i", { "data-mark": "" }) }));
 vi.mock("@/lib/app-links", async (original) => ({ ...await original<typeof import("@/lib/app-links")>(), openExternalLink: vi.fn(async () => {}) }));
@@ -42,7 +42,7 @@ async function open(plan?: ReturnType<typeof bridge>) {
 
 beforeEach(() => {
   setLocale("en");
-  fixture.state = { config: { cloudHome: true, botLimit: 5 }, bots: made(5) };
+  fixture.state = { config: { cloudHome: true, botLimit: 12 }, bots: made(12) };
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -62,7 +62,7 @@ describe("the bot limit popup", () => {
   it("says they've reached Starter's bots and offers the in-app upgrade, with its price", async () => {
     await open(bridge({ status: "paid", tier: "starter", usage: STARTER }));
     expect(dialog()!.getAttribute("aria-modal")).toBe("true");
-    expect(dialog()!.querySelector("h2")?.textContent).toBe("You've reached starter's 5 bots");
+    expect(dialog()!.querySelector("h2")?.textContent).toBe("You've reached starter's 12 bots");
     expect(dialog()!.querySelector("p")?.textContent).toBe("To create more, upgrade this cloud. Every bot you have stays as it is.");
     expect(buttons()).toEqual(["Upgrade to Pro · $49/month", "Not now", "Close"]);
     expect(document.activeElement?.textContent).toBe("Upgrade to Pro · $49/month");
@@ -101,7 +101,7 @@ describe("the bot limit popup", () => {
   });
 
   it("a template too big for the room left says so, and doesn't claim the limit is reached", async () => {
-    fixture.state = { config: { cloudHome: true, botLimit: 5 }, bots: made(4) };
+    fixture.state = { config: { cloudHome: true, botLimit: 12 }, bots: made(11) };
     await open(bridge({ status: "paid", tier: "starter", usage: STARTER }));
     expect(dialog()!.querySelector("h2")?.textContent).toBe("That's more bots than starter has room for");
   });

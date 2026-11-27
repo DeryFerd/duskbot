@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } fro
 import { DialogScrimLayer, DialogSheet } from "./ui/SheetMotion";
 import { ContinueInBrowserSheet } from "./SignInSheet";
 import { continueInBrowser } from "@/lib/account-intent";
-import { Check, LogOut, Pencil, Plus, X } from "../icons";
+import { Check, LogOut, Pencil, Plus } from "../icons";
 import type { AccountFace, AccountPlanLine, AccountRow, AccountsView, AccountSwitchResult, RailOpenResult } from "../../electron/cloud-account.mjs";
 import { cn } from "@/lib/cn";
 import type { CloudSignInPhase } from "@/lib/cloud-plan";
@@ -10,10 +10,12 @@ import { t } from "@/lib/i18n";
 import { cloudPlanLabel } from "@/lib/cloud-plan";
 import { AvatarPicker } from "./AvatarPicker";
 import { UserFace } from "./UserAvatar";
-import { CLOSE, Heading, PRIMARY, QUIET, SCREEN, SHEET } from "./cloud-buy/parts";
+import { Heading, PRIMARY, QUIET, SCREEN, SHEET } from "./cloud-buy/parts";
 import { codeDigits, SignInScreen } from "./cloud-buy/SignInScreen";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { PixelIcon } from "./ui/PixelIcon";
+import { Icon } from "./Icon";
+import "../styles/settings.css";
 import type { SidebarMenuItem } from "./SidebarPopoverMenu";
 
 export interface AccountsAccess {
@@ -217,9 +219,10 @@ export function AccountsSheet({ onClose, adding = null, note: given = null }: { 
   const active = view?.active ?? null;
   // nobody signed in here: the sign-in continues in the browser at once, never a pointer to somewhere else
   if (view && !active && !given && add === null && window.duskDesktop?.cloudAccount?.continueInBrowser) return <SignInInBrowser onClose={onClose} />;
-  return <DialogScrimLayer className="ui-scrim fixed inset-0 z-[60] flex items-center justify-center p-4" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-    <DialogSheet role="dialog" aria-modal="true" aria-labelledby="cloud-add-title" data-accounts-sheet className={cn(SHEET, "relative w-full max-w-[420px]")}>
-      <button type="button" onClick={onClose} aria-label={t("accounts.close")} className={cn(CLOSE, "absolute end-4 top-4 z-10")}><X size={16} /></button>
+  return <DialogScrimLayer className="settings-scrim" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+    <div aria-hidden="true" className="settings-backdrop pointer-events-none" />
+    <DialogSheet role="dialog" aria-modal="true" aria-labelledby="cloud-add-title" data-accounts-sheet className={cn(SHEET, "settings-dialog")} style={{ width: "min(420px, 100vw - 32px)", overflowY: "auto", borderRadius: 14 }}>
+      <button type="button" onClick={onClose} aria-label={t("accounts.close")} className="settings-close"><Icon name="close" size={14} /></button>
       {add !== null
         ? <AddAccount start={add} onBack={() => (adding !== null ? onClose() : setAdd(null))} onDone={(said) => { setAdd(null); if (said) setNote(said); else onClose(); }} />
         : <div className={SCREEN}>
@@ -262,7 +265,7 @@ function AccountCard({ account }: { account: AccountRow }) {
   const faceRef = useRef<HTMLButtonElement>(null);
   const editable = Boolean(window.duskDesktop?.accounts?.setAvatar) && !account.signIn;
   const face = <UserFace account={account} size={52} className="inset-ring inset-ring-ink/[0.08]" />;
-  return <div data-accounts-active className="flex items-center gap-3.5 rounded-2xl bg-ink/[0.04] p-4">
+  return <div data-accounts-active className="flex items-center gap-3.5 rounded-[12px] bg-composer p-3">
     {editable
       ? <button ref={faceRef} type="button" data-accounts-avatar="" aria-label={t("accounts.avatar.change")} aria-haspopup="dialog" aria-expanded={picking}
         className="group/face relative shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" onClick={() => setPicking((open) => !open)}>

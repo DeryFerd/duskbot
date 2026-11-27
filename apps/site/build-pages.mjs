@@ -222,6 +222,7 @@ export const release = {
   date: rel.date || '',
 };
 // the android app has its own version, which latest.json names once a release carries the apk
+release.trialDays = (() => { const d = Number(process.env.DUSK_TRIAL_DAYS || rel.trialDays); return Number.isInteger(d) && d >= 1 && d <= 30 ? d : 0; })();
 release.androidVersion = /^\d+(\.\d+){1,3}$/.test(latest.android?.version || '') ? latest.android.version : '';
 release.sums = release.version && fs.existsSync(path.join(site, 'releases', release.version, 'SHA256SUMS')) ? `/releases/${release.version}/SHA256SUMS` : `${rel.base}${rel.checksums}`;
 const withRelease = (html) => {
@@ -229,7 +230,7 @@ const withRelease = (html) => {
   for (let before; before !== html;) { before = html; html = html.replace(/\{\{([#^])([\w]+)\}\}((?:(?!\{\{[#^])[\s\S])*?)\{\{\/\2\}\}/g, (_, mark, key, inner) => (Boolean(release[key]) === (mark === '#') ? inner : '')); }
   return html.replace(/\{\{dl ([\w-]+)\}\}/g, (_, key) => { if (!rel.files[key]) throw new Error(`releases.json has no file ${key}`); return rel.files[key].startsWith('https://') ? rel.files[key] : rel.base + rel.files[key]; })
     .replace(/\{\{file ([\w-]+)\}\}/g, (_, key) => rel.files[key].split('/').pop()).replace(/\{\{(ios|android)-link\}\}/g, (_, key) => rel[key])
-    .replace(/\{\{size ([\w-]+)\}\}/g, (_, key) => (rel.sizes?.[key] ? `${Math.round(rel.sizes[key] / 1e6)} mb` : '')).replace(/\{\{android-version\}\}/g, release.androidVersion ? ` · ${release.androidVersion}` : '').replace(/\{\{version\}\}/g, release.version).replace(/\{\{released-on\}\}/g, release.date).replace(/\{\{sums\}\}/g, release.sums);
+    .replace(/\{\{size ([\w-]+)\}\}/g, (_, key) => (rel.sizes?.[key] ? `${Math.round(rel.sizes[key] / 1e6)} mb` : '')).replace(/\{\{android-version\}\}/g, release.androidVersion ? ` · ${release.androidVersion}` : '').replace(/\{\{trial-days\}\}/g, String(release.trialDays)).replace(/\{\{version\}\}/g, release.version).replace(/\{\{released-on\}\}/g, release.date).replace(/\{\{sums\}\}/g, release.sums);
 };
 // {{crew}} on the brand page is the twenty pixel bots, kit first, each in its own colour with its name and a link to its svg
 const CREW = [...CROWD.filter(([name]) => name === 'kit'), ...CROWD.filter(([name]) => name !== 'kit')].map(([name, colour]) => [name, colour]);
@@ -379,7 +380,7 @@ for (const page of pages) {
 }
 
 // the changelog is releases/changelog.json (written at release time, newest first): per release its version, date, an
-// optional title, and its items grouped by where they apply. a missing or empty file shows the empty state
+// optional title, and its items grouped by where they apply (a release with no items, a silent one, is not listed). a missing or empty file shows the empty state
 {
   let log = {};
   try { log = JSON.parse(fs.readFileSync(path.join(site, 'releases', 'changelog.json'), 'utf8')); } catch {}
@@ -387,7 +388,7 @@ for (const page of pages) {
   const GH = 'https://github.com/DuskBotAI/duskbot';
   const num = (n) => Number.isInteger(n) && n > 0;
   const day = (date) => { const d = new Date(`${date}T12:00:00Z`); return /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).toLowerCase() : ''; };
-  const releases = (Array.isArray(log.releases) ? log.releases : []).filter((r) => typeof r?.version === 'string' && /^[\w.-]+$/.test(r.version));
+  const releases = (Array.isArray(log.releases) ? log.releases : []).filter((r) => typeof r?.version === 'string' && /^[\w.-]+$/.test(r.version) && Array.isArray(r.items) && r.items.some((it) => typeof it?.text === 'string' && it.text.trim()));
   const entries = releases.map((r, i) => {
     const items = (Array.isArray(r.items) ? r.items : []).filter((it) => typeof it?.text === 'string' && it.text.trim());
     const groups = AREAS.map(([area, label]) => [label, items.filter((it) => (AREAS.some(([a]) => a === it.area) ? it.area : 'all') === area)]).filter(([, list]) => list.length);

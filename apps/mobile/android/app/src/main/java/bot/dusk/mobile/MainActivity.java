@@ -20,6 +20,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(InsetsPlugin.class);
         registerPlugin(ShortcutsPlugin.class);
         registerPlugin(SseStreamPlugin.class);
+        registerPlugin(NotificationsPlugin.class);
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         NotificationChannels.ensure(this);

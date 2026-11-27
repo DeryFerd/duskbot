@@ -31,13 +31,15 @@
       <img class="plan-art" src="/art/p-meadow.webp" alt="" width="800" height="354">
       <h2>plus</h2>
       <p class="why">your bots keep working with the laptop shut.</p>
+      {{#trialDays}}<p class="trial-pill">{{trial-days}} days free</p>{{/trialDays}}
       <p class="plan-price"><span class="amt">$<span data-m="20" data-y="200">20</span></span><span class="per" data-m="a month" data-y="a year. two months free.">a month</span><span class="per">+ tax where applicable</span></p>
       <a class="btn light" href="{{app /signup?plan=plus}}" data-dusk-value="plus">get started</a>
       <ul class="has">
         <li>{{i check}}everything in free</li>
-        <li>{{i check}}your bots work in dusk cloud</li>
+        <li>{{i check}}your bots keep working with your laptop shut</li>
+        <li>{{i check}}daily backups</li>
+        <li>{{i check}}always available, wakes on its own in under a minute</li>
         <li>{{i check}}2 vcpu, 4 gb ram, 20 gb disk</li>
-        <li>{{i check}}always available, wakes in seconds</li>
         <li class="no">{{i minus}}no work license</li>
       </ul>
     </article>
@@ -46,12 +48,13 @@
       <img class="plan-art" src="/art/p-peaks.webp" alt="" width="800" height="354">
       <h2>pro</h2>
       <p class="why">for heavy workloads, and for work.</p>
+      {{#trialDays}}<p class="trial-pill">{{trial-days}} days free</p>{{/trialDays}}
       <p class="plan-price"><span class="amt">$<span data-m="50" data-y="500">50</span></span><span class="per" data-m="a month" data-y="a year. two months free.">a month</span><span class="per">+ tax where applicable</span></p>
       <a class="btn light" href="{{app /signup?plan=pro}}" data-dusk-value="pro">get started</a>
       <ul class="has">
         <li>{{i check}}everything in plus</li>
-        <li>{{i check}}4 vcpu, 8 gb ram, 60 gb disk</li>
         <li>{{i check}}always available, priority wake</li>
+        <li>{{i check}}4 vcpu, 8 gb ram, 60 gb disk</li>
         <li>{{i check}}a work license for one person</li>
       </ul>
     </article>

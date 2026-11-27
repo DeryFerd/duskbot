@@ -6,7 +6,8 @@ import { setLocale } from "@/lib/i18n";
 import type { ConnectState } from "./connect-flow";
 
 vi.mock("@/state/store", () => ({ api: vi.fn(), useStore: () => ({ dispatch: vi.fn(), refreshModels: vi.fn() }) }));
-const { ConnectPanel, openSignInPage } = await import("./SignInPill");
+const { ConnectPanel } = await import("./SignInPill");
+const { openSignInPage } = await import("@/lib/app-links");
 type Handle = Parameters<typeof ConnectPanel>[0]["flow"];
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

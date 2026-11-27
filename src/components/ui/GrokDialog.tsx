@@ -13,6 +13,7 @@ import { Icon, type IconName } from "../Icon";
 import { useIsPresent, usePresence } from "motion/react";
 import { dialogMotion, phoneDialogMotion } from "@/lib/motion-presets";
 import { ScrimMotion, SheetMotion, useMotionReduced } from "./SheetMotion";
+import "../../styles/settings.css";
 
 const buttonBase = "dusk-press inline-flex shrink-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-[9999px] font-normal outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus disabled:cursor-default";
 const sizeLg = "h-9 px-4 text-[14px] leading-5 tracking-[0.01em]";
@@ -34,28 +35,31 @@ export const mdSecondaryCls = cn(buttonBase, sizeMd, secondaryTone);
 export const mdDangerCls = cn(buttonBase, sizeMd, dangerTone);
 export const confirmCancelCls = cn(buttonBase, sizeMd, kitSecondaryTone);
 export const rowButtonCls = cn(buttonBase, sizeRow, secondaryTone);
+/** Settings' own 30px pill beside a row: the quiet fill, the ink one, the red one. */
+export const rowPrimaryCls = cn(buttonBase, sizeRow, primaryTone);
+export const rowDangerCls = cn(buttonBase, sizeRow, "bg-[#e72e3b] text-white enabled:hover:bg-[#c82532] disabled:opacity-50");
 export const smallButtonCls = cn(buttonBase, sizeSm, secondaryTone);
 
 export const rowTitleCls = "text-[13px] leading-[18px] tracking-[-0.08px] text-ink";
-export const rowHintCls = "text-[13px] leading-[18px] tracking-[-0.08px] text-ink/68";
+export const rowHintCls = "text-[13px] leading-[18px] tracking-[-0.08px] text-ink-secondary";
 export const footnoteCls = "m-0 pl-2 text-[12px] leading-4 tracking-[0.01em] text-ink/56";
-export const listCardCls = "flex flex-col rounded-[14px] bg-menu py-2 outline-1 -outline-offset-1 outline-transparent [outline-style:solid]";
+export const listCardCls = "flex flex-col rounded-[14px] bg-ink/[0.0275] p-1";
 /** A text field: Grok's 32px box at 10px corners, borderless like the composer, a soft ink/4 fill that deepens to ink/7
  * on focus (with the caret, the focus cue), no ring. */
 export const textFieldCls = "block h-8 w-full min-w-0 rounded-[10px] border border-transparent bg-transparent px-[9px] text-[13px] leading-[18px] tracking-[0.195px] text-ink outline-none placeholder:text-ink/40 disabled:opacity-50";
 /** The same field grown into a few lines. */
 export const textAreaCls = "block w-full resize-none rounded-[10px] border border-transparent bg-transparent px-[9px] py-[7px] text-[13px] leading-[18px] tracking-[0.195px] text-ink outline-none [scrollbar-width:thin] placeholder:text-ink/40 disabled:opacity-50";
 /** A field's label, 4px over it; an "(Optional)" beside it reads ink/40. */
-export const fieldLabelCls = "text-[11px] leading-4 tracking-[0.01em] text-ink/68";
+export const fieldLabelCls = "px-3 text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary";
 
 /** Grok's form dialog (New login), for a dialog that does not use GrokDialog itself: a white sheet on a 1px ink/12
  * edge at 14px corners, a 14/20 600 title beside a 24px close, a 16px-wide body and a borderless footer. */
-export const formSheetCls = "relative flex max-h-[calc(100dvh-32px)] w-full flex-col overflow-hidden rounded-[14px] border border-transparent bg-menu text-[13px] font-[425] leading-[18px] text-ink outline-none focus-visible:outline-none!";
-export const formHeaderCls = "flex shrink-0 items-start gap-2 py-3 pl-4 pr-3";
-export const formTitleCls = "m-0 min-w-0 flex-1 truncate text-[14px] font-semibold leading-5 tracking-[0.01em] text-ink";
-export const formCloseCls = "flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-ink/68 transition-[color,background-color] duration-[120ms] ease-[ease] hover:bg-ink/6 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus";
-export const formBodyCls = "min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-1.5 pt-1 [scrollbar-width:thin]";
-export const formFooterCls = "flex shrink-0 items-center justify-end gap-2 px-4 pb-4 pt-2.5";
+export const formSheetCls = "relative flex max-h-[calc(100dvh-32px)] w-full flex-col overflow-hidden rounded-[14px] border border-transparent bg-app text-[13px] font-[425] leading-[18px] text-ink outline-none focus-visible:outline-none!";
+export const formHeaderCls = "flex shrink-0 items-start gap-2 pb-1.5 pl-6 pr-3 pt-4";
+export const formTitleCls = "m-0 min-w-0 flex-1 truncate pl-2.5 pt-1.5 text-[15px] font-medium leading-[22px] tracking-[-0.006em] text-ink";
+export const formCloseCls = "flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-ink/56 transition-[color,background-color] duration-150 ease-[ease] hover:bg-ink/[0.11] hover:text-ink-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
+export const formBodyCls = "min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pb-2 pt-2 [scrollbar-width:none]";
+export const formFooterCls = "flex shrink-0 items-center justify-end gap-2 px-6 pb-5 pt-3";
 
 const FOCUSABLE = "button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])";
 
@@ -263,6 +267,7 @@ function SheetView({ title, description, art, width = 440, onClose, footer, chil
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
+        data-settings-look="simple"
         style={{ maxWidth: `min(${width}px, calc(100vw - 32px))` }}
         className={cn(formSheetCls, phone && "max-h-full!")}
       >
@@ -275,7 +280,7 @@ function SheetView({ title, description, art, width = 440, onClose, footer, chil
           </button>
         </header>
         <div className={cn(formBodyCls, "flex flex-col", notice && "pt-0", !footer && "pb-4")}>
-          {description && <p id={descriptionId} className={cn(rowHintCls, "m-0 mb-3 text-pretty")}>{description}</p>}
+          {description && <p id={descriptionId} className={cn(rowHintCls, "m-0 mb-3 px-2.5 text-pretty")}>{description}</p>}
           {children}
         </div>
         {footer && <div className={formFooterCls}>{footer}</div>}

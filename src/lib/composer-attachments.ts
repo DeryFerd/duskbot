@@ -229,7 +229,9 @@ const TEXT_EXTENSIONS: ReadonlySet<string> = new Set([
   "c", "h", "cpp", "cc", "hpp", "cs", "php", "pl", "lua", "r", "sql", "yaml", "yml", "toml", "ini", "log", "xml", "html", "htm",
   "css", "scss", "less", "vue", "svelte", "conf", "cfg", "properties", "gradle", "proto", "graphql", "gql", "dart", "scala",
   "tf", "hcl", "ex", "exs", "hs", "zig", "env", "gitignore", "dockerignore", "editorconfig", "diff", "patch", "srt", "vtt",
+  "jsonl", "ndjson", "jsonc", "json5", "geojson",
 ]);
+const ROTATED_LOG = /\.log\.\d+$/i;
 const TEXT_NAMES = /^(?:dockerfile|containerfile|makefile|procfile|gemfile|rakefile|vagrantfile|brewfile|justfile|license|readme|changelog|notice|authors|codeowners)$/i;
 const TEXT_DECLARED = new Set(["application/xml", "application/javascript", "application/x-javascript", "application/x-sh", "application/x-yaml", "application/yaml", "application/toml", "application/sql", "application/x-python-code"]);
 
@@ -239,7 +241,7 @@ export function textFileMime(file: Pick<File, "name" | "type">): string | null {
   const name = file.name.trim();
   const dot = name.lastIndexOf(".");
   const extension = dot >= 0 ? name.slice(dot + 1).toLowerCase() : "";
-  if (declared.startsWith("text/") || TEXT_DECLARED.has(declared) || TEXT_EXTENSIONS.has(extension)) return "text/plain";
+  if (declared.startsWith("text/") || TEXT_DECLARED.has(declared) || TEXT_EXTENSIONS.has(extension) || ROTATED_LOG.test(name)) return "text/plain";
   return dot < 0 && TEXT_NAMES.test(name) ? "text/plain" : null;
 }
 

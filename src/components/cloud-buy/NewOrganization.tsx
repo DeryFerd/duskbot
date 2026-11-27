@@ -52,7 +52,7 @@ export function NewOrganization({ onBack, onClose }: { onBack: (() => void) | nu
       <span aria-hidden="true" className="text-[13px] font-medium text-ink">{t("rail.orgColor")}</span>
       <SwatchRadios value={color} onChange={setColor} label={t("rail.orgColor")} disabled={busy} />
     </div>
-    <div className="flex items-center gap-3 rounded-xl border border-transparent bg-card/70 px-4 py-3">
+    <div className="flex items-center gap-3 rounded-[12px] bg-ink/[0.035] px-4 py-3">
       <span aria-hidden="true" className={cn("grid size-10 shrink-0 place-items-center rounded-full text-[14px] font-semibold", color === "slate" ? "bg-raised text-ink" : "text-white")}
         style={color === "slate" ? undefined : { background: swatchFill(color) }}>{placeInitials(shown || t("rail.org"))}</span>
       <span className="min-w-0">

@@ -9,11 +9,15 @@ enum NotificationPresentation {
         return [.banner, .sound, .list]
     }
 
-    /// The conversation a notification is about: the bot host's `dusk.threadId`, else the APNs `thread-id`.
+    /// One field of the bot host's block on a push: `dusk`, or `omb` from older relays.
+    static func field(_ name: String, of userInfo: [AnyHashable: Any]) -> String? {
+        let block = (userInfo["dusk"] as? [AnyHashable: Any]) ?? (userInfo["omb"] as? [AnyHashable: Any])
+        guard let value = block?[name] as? String, !value.isEmpty else { return nil }
+        return value
+    }
+
+    /// The conversation a notification is about: the bot host's `threadId`, else the APNs `thread-id`.
     static func threadId(of content: UNNotificationContent) -> String? {
-        if let dusk = content.userInfo["dusk"] as? [AnyHashable: Any], let thread = dusk["threadId"] as? String, !thread.isEmpty {
-            return thread
-        }
-        return content.threadIdentifier.isEmpty ? nil : content.threadIdentifier
+        field("threadId", of: content.userInfo) ?? (content.threadIdentifier.isEmpty ? nil : content.threadIdentifier)
     }
 }

@@ -56,7 +56,7 @@ describe("dusk bot's own refusals", () => {
       ["The provider rejected this key. Change it in Settings → API keys.", "key_rejected"],
       ["upstream HTTP 401: Incorrect API key provided: sk-…", "key_rejected"],
       ["Invalid API key · Please run /login", undefined],
-      ["This Cloud's Starter plan includes 5 bots and has no room for another", "plan_limit"],
+      ["This Cloud's Starter plan includes 12 bots and has no room for another", "plan_limit"],
       ["Weekly limit reached, so new tasks wait until Monday (3 days). Turn on saver mode in usage to keep chatting on a cheaper model.", "plan_limit"],
       ["queued message could not start: This bot's folder launch was moved or deleted. Pick a folder in the bot's settings.", "folder_gone"],
       ["This room's folder notes was moved or deleted. Pick a folder in the room's settings.", "folder_gone"],

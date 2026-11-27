@@ -4,7 +4,7 @@ import { connect, createServer, type ClientHttp2Session, type Http2Server, type 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { createPushSender, pushRelayBase, RELAY_RECHECK_MS, type PushMessage } from "./push.ts";
+import { createPushSender, pushRelayBase, READ_KIND, RELAY_RECHECK_MS, RELAY_TIMEOUT_MS, SERVICE_TIMEOUT_MS, type PushMessage } from "./push.ts";
 
 const ec = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
 const rsa = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -108,8 +108,10 @@ describe("APNs push", () => {
     const { headers, body } = received[0];
     expect(headers).toMatchObject({
       ":method": "POST", ":path": "/3/device/fixture-device", "apns-topic": "com.example.dusk",
-      "apns-push-type": "alert", "apns-priority": "10", "apns-collapse-id": "thread-1",
+      "apns-push-type": "alert", "apns-priority": "10",
     });
+    // each message stacks under its conversation instead of replacing the one before
+    expect(headers["apns-collapse-id"]).toBeUndefined();
     const authorization = String(headers.authorization);
     expect(authorization.startsWith("bearer ")).toBe(true);
     const decoded = checkJwt(authorization.slice(7), "ES256");
@@ -118,8 +120,16 @@ describe("APNs push", () => {
     expect(received[1].headers.authorization === headers.authorization).toBe(true);
     expect(body.includes("body text")).toBe(false);
     expect(JSON.parse(body)).toEqual({
-      aps: { alert: { title: "Maus", body: "New message" }, sound: "default", "thread-id": "thread-1" }, dusk: data,
+      aps: { alert: { title: "Maus", body: "New message" }, sound: "default", "thread-id": "thread-1", "mutable-content": 1 }, dusk: data,
     });
+  });
+
+  it("carries the sealed preview for the app's extension and the app icon's count", async () => {
+    expect(await sender().send(target, { ...message, sealed: "s".repeat(90), badge: 3 })).toBe("sent");
+    const body = JSON.parse(received[0].body);
+    expect(body.aps).toMatchObject({ "mutable-content": 1, badge: 3, alert: { title: "Maus", body: "New message" } });
+    expect(body.dusk.sealed).toBe("s".repeat(90));
+    expect(received[0].body.includes("body text")).toBe(false);
   });
 
   it("gives an approval its buttons and its ask id", async () => {
@@ -159,10 +169,9 @@ describe("APNs push", () => {
     expect(decoded.claims.iat).toBe(clock / 1000);
   });
 
-  it("truncates the collapse id at a utf8 boundary and omits absent group ids", async () => {
+  it("keeps the whole conversation id as the thread and omits absent group ids", async () => {
     const threadId = "a".repeat(61) + "😀😀";
     expect(await sender().send(target, { ...message, threadId, groupId: undefined })).toBe("sent");
-    expect(received[0].headers["apns-collapse-id"]).toBe("a".repeat(61));
     expect(JSON.parse(received[0].body).aps["thread-id"]).toBe(threadId);
     expect(JSON.parse(received[0].body).dusk).not.toHaveProperty("groupId");
   });
@@ -207,15 +216,34 @@ describe("APNs push", () => {
     expect(await push.send(target, message)).toBe("failed");
   });
 
-  it("fails and cancels a stalled stream after 10 seconds", async () => {
+  it("drops a connection that stopped answering and sends the push again on a new one", async () => {
+    const answer = server.listeners("stream");
+    server.removeAllListeners("stream");
+    let stalls = 1;
+    server.on("stream", (stream, headers) => {
+      if (stalls-- > 0) { stream.resume(); return; }
+      for (const listener of answer) (listener as (...args: unknown[]) => void)(stream, headers);
+    });
+    const push = createPushSender({ ...apnsEnv, DUSK_APNS_HOST: origin }, {
+      now: () => clock, serviceTimeoutMs: 200,
+      http2Connect: ((...args: Parameters<typeof connect>) => { const client = connect(...args); clients.push(client); return client; }) as typeof connect,
+    });
+    expect(await push.send(target, message)).toBe("sent");
+    expect(clients).toHaveLength(2);
+    expect(clients[0].destroyed).toBe(true);
+    expect(received).toHaveLength(1);
+  });
+
+  it("fails a push whose second connection does not answer either, inside the workspace's wait for the relay", async () => {
     server.removeAllListeners("stream");
     server.on("stream", (stream) => { stream.resume(); });
     const push = sender();
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       const outcome = push.send(target, message);
-      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.advanceTimersByTimeAsync(SERVICE_TIMEOUT_MS * 2);
       expect(await outcome).toBe("failed");
+      expect(SERVICE_TIMEOUT_MS * 2).toBeLessThan(RELAY_TIMEOUT_MS);
     } finally {
       vi.useRealTimers();
     }
@@ -271,9 +299,29 @@ describe("FCM push", () => {
     expect(body.includes("body text")).toBe(false);
     expect(JSON.parse(body)).toEqual({ message: {
       token: target.token, notification: { title: "Maus", body: "New message" }, data,
-      android: { collapse_key: "thread-1", priority: "high", notification: { channel_id: "messages" } },
+      android: { priority: "high", notification: { channel_id: "messages", tag: data.threadId } },
     } });
     expect(Object.values(JSON.parse(body).message.data).every((value) => typeof value === "string")).toBe(true);
+  });
+
+  it("sends data only to an app that draws its own notifications, so Android wakes it while it is closed", async () => {
+    const push = createPushSender(fcmEnv, { fetch, now: () => clock, log: () => {} });
+    expect(await push.send({ ...target, draws: true }, { ...message, sealed: "s".repeat(90), badge: 2 })).toBe("sent");
+    const sent = JSON.parse(String(requests.at(-1)!.init.body)).message;
+    expect(sent).toEqual({
+      token: target.token, android: { priority: "high", ttl: "2419200s" },
+      data: { dusk: "1", ...data, sealed: "s".repeat(90), botName: "Maus", badge: "2" },
+    });
+    expect(sent.notification).toBeUndefined();
+    expect(JSON.stringify(sent).includes("body text")).toBe(false);
+  });
+
+  it("sends a conversation's read to an app that draws its own notifications at normal priority, as it shows nothing", async () => {
+    const push = createPushSender(fcmEnv, { fetch, now: () => clock, log: () => {} });
+    expect(await push.send({ ...target, draws: true }, { ...message, kind: READ_KIND })).toBe("sent");
+    const sent = JSON.parse(String(requests.at(-1)!.init.body)).message;
+    expect(sent.android).toEqual({ priority: "normal", ttl: "2419200s" });
+    expect(sent.data).toMatchObject({ dusk: "1", kind: "read", threadId: data.threadId });
   });
 
   it("refreshes five minutes before expiry", async () => {

@@ -209,3 +209,18 @@ describe("a usage-limit refusal", () => {
     expect(f.stopped).not.toHaveBeenCalled();
   });
 });
+
+it("a first refusal on a login that is still saved is not a sign-out: the turn is neither held nor rejected", async () => {
+  const events: RuntimeEvent[] = [];
+  const stopped = vi.fn(async () => true);
+  const recovery = claudeAuthRecovery(event => events.push(event), stopped, () => false, () => false);
+  const sent = recovery.send({ threadId: "thread", text: "hi", startupRecovery: true }, async () => {
+    recovery.emit({ ...base, type: "turn.started" });
+    recovery.frame("thread", { type: "system", subtype: "status" });
+    recovery.frame("thread", auth);
+    recovery.emit(completed);
+    return { turnId: "turn" };
+  });
+  await expect(sent).resolves.toEqual({ turnId: "turn" });
+  expect(stopped).not.toHaveBeenCalled();
+});

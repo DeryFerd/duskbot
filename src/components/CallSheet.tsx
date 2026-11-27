@@ -11,6 +11,7 @@ import { activityStepLabel } from "@/lib/live-activity";
 import type { Message } from "@/state/store";
 import { approvalCardOutcome, toolLabel } from "./ApprovalCard";
 import { ChatMarkdown } from "./ChatMarkdown";
+import { formCloseCls } from "./ui/GrokDialog";
 import { WorkingDots } from "./WorkingIndicator";
 
 type LineState = "done" | "stopped" | "open" | "neutral";
@@ -112,28 +113,29 @@ export function CallSheet({ message, transcript, botName, threadId, busy, partia
         aria-modal="true"
         aria-labelledby="call-sheet-title"
         data-testid="call-sheet"
-        className="flex max-h-[min(720px,calc(100dvh-2rem))] w-full max-w-[640px] flex-col overflow-hidden rounded-[14px] border border-transparent bg-menu text-ink"
+        data-settings-look="simple"
+        className="flex max-h-[min(720px,calc(100dvh-2rem))] w-full max-w-[640px] flex-col overflow-hidden rounded-[14px] border border-transparent bg-app text-ink"
         style={{ outline: "none" }}
       >
-        <header className="flex items-start justify-between gap-4 border-b border-transparent px-5 pb-3.5 pt-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 text-[12px] font-medium leading-4 text-ink-secondary">
+        <header className="flex items-start justify-between gap-4 border-b border-transparent pb-2 pl-6 pr-3 pt-4">
+          <div className="min-w-0 pl-2.5 pt-1.5">
+            <div className="flex items-center gap-1.5 text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary">
               <AudioLines size={13} aria-hidden="true" />
               <span>{t("chat.callSheet.kicker")}</span>
             </div>
-            <h2 id="call-sheet-title" className="mt-0.5 truncate text-[16px] font-semibold">{title}</h2>
-            <p className="mt-0.5 text-[13px] tabular-nums text-ink-secondary">{`${formatCallDuration(call.seconds)} · ${when}`}</p>
+            <h2 id="call-sheet-title" className="mt-0.5 truncate text-[15px] font-medium leading-[22px] tracking-[-0.006em]">{title}</h2>
+            <p className="mt-0 text-[13px] leading-[18px] tabular-nums text-ink-secondary">{`${formatCallDuration(call.seconds)} · ${when}`}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label={t("common.close")}
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-ink-secondary hover:bg-raised hover:text-ink"
+            className={formCloseCls}
           >
-            <X size={17} />
+            <X size={16} />
           </button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-3">
           {partial && <p className="mb-3 text-center text-[12px] text-ink-tertiary">{t("chat.callRecord.partial")}</p>}
           {blocks.length === 0 ? (
             <p className="py-10 text-center text-[13px] text-ink-secondary">{t("chat.callSheet.empty")}</p>
@@ -143,7 +145,7 @@ export function CallSheet({ message, transcript, botName, threadId, busy, partia
             </div>
           )}
         </div>
-        <footer className="border-t border-transparent px-5 py-3 text-[12px] text-ink-tertiary">
+        <footer className="border-t border-transparent pb-5 pl-[34px] pr-6 pt-2 text-[12px] leading-4 text-ink-tertiary">
           {t("chat.callSheet.kept", { name: botName })}
         </footer>
       </div>
@@ -173,7 +175,7 @@ function SheetBlock({ block, busy, threadId }: { block: Block; busy: boolean; th
   if (!text.trim()) return null;
   return (
     <div className="flex justify-start">
-      <div className="w-fit min-w-0 max-w-[85%] rounded-2xl bg-card px-3.5 py-2 text-[14px] leading-relaxed text-ink">
+      <div className="w-fit min-w-0 max-w-[85%] rounded-2xl bg-ink/[0.0275] px-3.5 py-2 text-[14px] leading-relaxed text-ink">
         <ChatMarkdown text={text} message={threadId ? { threadId, messageId: block.message.id } : undefined} />
       </div>
     </div>

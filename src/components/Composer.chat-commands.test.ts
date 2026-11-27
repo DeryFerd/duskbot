@@ -135,6 +135,79 @@ describe("/new and /compact in the composer", () => {
     expect(actions().find((action) => action.type === "send")).toMatchObject({ text: "/new ideas for the launch" });
   });
 
+  const mirror = () => container.querySelector<HTMLElement>(".mention-editor-mirror")!;
+  const command = () => mirror().querySelector<HTMLElement>(".slash-command");
+  const hint = () => mirror().querySelector<HTMLElement>(".slash-hint")?.textContent?.trim();
+  const type = (value: string) => {
+    flushSync(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(input(), value);
+      input().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+
+  it("shows a built-in command as plain coloured text, no chip, with its hint after it while its argument is empty", () => {
+    for (const [text, name, words] of [["/compact ", "/compact", "What to keep (optional)"], ["/setup ", "/setup", "What to set up (optional)"], ["/learn ", "/learn", "What to learn (optional)"], ["/goal ", "/goal", "Describe what the bot should finish"]] as const) {
+      type(text);
+      expect(command()?.textContent, text).toBe(name);
+      expect(hint(), text).toBe(words);
+      expect(mirror().textContent).toContain(`${text}${words}`);
+      type(text.trimEnd());
+      expect(command()?.textContent, text).toBe(name);
+      expect(hint(), `${text} without its space`).toBeUndefined();
+    }
+    for (const text of ["/new", "/new "]) {
+      type(text);
+      expect(command()?.textContent, text).toBe("/new");
+      expect(hint(), text).toBeUndefined();
+    }
+    type("/goal ");
+    expect(container.querySelector("[data-goal-chip]")).toBeNull();
+    expect(input().value).toBe("/goal ");
+  });
+
+  it("drops the hint once an argument is typed, keeps the colour, and sends /compact's focus", () => {
+    type("/compact keep the pricing decisions and Ram's feedback");
+    expect(command()?.textContent).toBe("/compact");
+    expect(hint()).toBeUndefined();
+    input().setSelectionRange(input().value.length, input().value.length);
+    enter();
+    expect(spies.api).toHaveBeenCalledWith("/api/bots/cmd-bot/compact", { method: "POST", body: JSON.stringify({ threadId: "cmd-thread", focus: "keep the pricing decisions and Ram's feedback" }) });
+  });
+
+  it("colours the command the moment it is complete, and plain text again once a character is deleted", () => {
+    type("/goa");
+    expect(command()).toBeNull();
+    type("/goal");
+    expect(command()?.textContent).toBe("/goal");
+    type("/goa");
+    expect(command()).toBeNull();
+    expect(hint()).toBeUndefined();
+    type("/goalie");
+    expect(command()).toBeNull();
+  });
+
+  it("leaves /new with words after it, and commands that are not at the start, uncoloured", () => {
+    type("/new ideas for the launch");
+    expect(command()).toBeNull();
+    type("tell me about /goal ");
+    expect(command()).toBeNull();
+  });
+
+  it("sends a /goal typed inline as a goal, with the command in the text", () => {
+    type("/goal ship the release");
+    input().setSelectionRange(input().value.length, input().value.length);
+    enter();
+    expect(actions().find((action) => action.type === "send")).toMatchObject({ mode: "goal" });
+  });
+
+  it("puts /goal in the field from the menu, as text", () => {
+    fill("/go");
+    flushSync(() => options().find((option) => option.textContent?.includes("/goal"))!.click());
+    expect(input().value).toBe("/goal ");
+    expect(command()?.textContent).toBe("/goal");
+    expect(container.querySelector("[data-goal-chip]")).toBeNull();
+  });
+
   it("in a room, /new opens a new room conversation and /compact is not offered", () => {
     const room: Group = { id: "room", threadId: "room-thread", name: "Launch", memberIds: [bot.id], defaultResponder: { kind: "member", botId: bot.id },
       bulletin: "", unread: false, createdAt: 1, setupCompletedAt: 1, messages: [] };

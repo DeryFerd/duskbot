@@ -1,9 +1,10 @@
 import { appSlug, COMMAND_KINDS } from "../../../../shared/dashboard-protocol";
 import type { CommandKind, CommandView, ConnectFinishAnswer, ConnectorsAnswer, WorkspaceDetail } from "../../../../shared/dashboard-protocol";
+import { ACCOUNT_RECAP_PATH } from "../../../../shared/account-recap";
 import { PULSE_INTERVAL_MS, PULSE_SIZE, type PulseAnswer, type PulseSample } from "../../../../shared/machine-pulse";
 import { ApiError, FIXTURE } from "../lib/api";
 import type { BundleId, CheckoutRequest, CloudDesktop, DesktopId, MachineSpec, NotificationPrefs, Selection, Subscription } from "./contracts";
-import { fixtureAccount, fixtureAppsInApp, fixtureBilling, fixtureCatalog, fixtureClouds, fixtureConnections, fixturePendingApps, fixtureWorkspace, fixtureWorkspaces } from "./fixtures";
+import { fixtureAccount, fixtureAppsInApp, fixtureBilling, fixtureCatalog, fixtureClouds, fixtureConnections, fixturePendingApps, fixtureRecap, fixtureWorkspace, fixtureWorkspaces } from "./fixtures";
 import { desktopOf, licenseOf, priceCart } from "./pricing";
 import { CANCEL_ANSWERS } from "./wire";
 
@@ -295,12 +296,6 @@ function route(method: string, path: string, body: unknown, query: URLSearchPara
     return s.billing;
   }
   if (method === "POST" && path === "/v1/billing/retention") return { ok: true };
-  if (method === "POST" && path === "/v1/billing/discount") {
-    const offer = s.billing.retention?.offer;
-    if (!s.billing.subscription || !offer) fail("This account already used its discount.", 409, "discount_used");
-    s.billing.retention = { offer: null, applied: { ...offer!, at: now } };
-    return s.billing;
-  }
   if (method === "POST" && path === "/v1/billing/cancel") {
     if (b.survey !== undefined) {
       const survey = b.survey as { answer?: unknown } | null;
@@ -370,6 +365,7 @@ function route(method: string, path: string, body: unknown, query: URLSearchPara
     }
     return { ...found!, outcome } satisfies ConnectFinishAnswer;
   }
+  if (method === "GET" && path === ACCOUNT_RECAP_PATH) return fixtureRecap(now);
   if (method === "GET" && path === "/v1/connectors") {
     const ids = [...s.workspaces.keys()], each = <T,>(value: (id: string) => T) => Object.fromEntries(ids.map((id) => [id, value(id)]));
     return { byWorkspace: each((id) => s.connections[id] ?? []), inApp: each((id) => fixtureAppsInApp()[id] ?? []), pending: each((id) => s.pendingApps[id] ?? []), available: each(() => true), at: each(() => now) } satisfies ConnectorsAnswer;

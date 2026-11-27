@@ -1,10 +1,12 @@
-import { useEffect, useRef } from "react";
-import { Monitor } from "../icons";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronRight, Monitor } from "../icons";
 import { useStore, type Bot, type Group } from "@/state/store";
 import { ChatView } from "@/components/ChatView";
 import { GroupView } from "@/components/GroupView";
 import { BotAvatar } from "@/components/Avatar";
 import { GroupAvatar } from "@/components/GroupAvatar";
+import { botConversations, conversationLabel } from "@/lib/bot-conversations";
+import { ConversationSwitcher } from "@/components/ConversationSwitcher";
 import { t } from "@/lib/i18n";
 import { BackGlyph, RoundButton } from "./RoundButton";
 import { ConnectionPill, useLiveConnection } from "./connection/ConnectionProblem";
@@ -29,6 +31,16 @@ export function ChatScreen({ bot, group, members, onBack, onProfile, onComputer 
 }) {
   const { state } = useStore();
   const name = group?.name ?? bot?.name ?? "";
+  // a bot with a second conversation names the one on screen beside its name, the main chat included
+  const conversations = bot && !group ? botConversations(bot) : [];
+  const crumb = conversations.length > 1 ? conversationLabel(conversations.find((entry) => entry.current) ?? { main: true, title: "" }) : null;
+  const [switching, setSwitching] = useState(false);
+  const pillAnchor = useRef<HTMLDivElement>(null);
+  const crumbButton = useRef<HTMLButtonElement>(null);
+  const closeSwitcher = useCallback((restoreFocus: boolean) => {
+    setSwitching(false);
+    if (restoreFocus) crumbButton.current?.focus();
+  }, []);
   const live = Boolean(bot && (bot.busy || state.computerControl[bot.id]?.held));
   const link = useLiveConnection();
   const leaving = useNavLeaving();
@@ -57,7 +69,34 @@ export function ChatScreen({ bot, group, members, onBack, onProfile, onComputer 
         <RoundButton floating glass data-glass="back" label={t("mobile.chat.back")} onClick={onBack} className="pointer-events-auto">
           <BackGlyph size={22} strokeWidth={2} />
         </RoundButton>
-        <div className="relative flex min-w-0 justify-center">
+        <div ref={pillAnchor} className="relative flex min-w-0 justify-center">
+          {crumb && !glass && bot ? (
+            <div data-glass="title" data-phone-crumb-pill="" className="m-glass pointer-events-auto flex h-11 min-w-0 max-w-[calc(100vw-136px)] items-center rounded-full text-ink">
+              <button
+                type="button"
+                onPointerDown={(event) => { if (event.button === 0) { pressedAt.current = performance.now(); onProfile(); } }}
+                onClick={() => { if (performance.now() - pressedAt.current > PRESS_CLICK_MS) onProfile(); }}
+                aria-label={t("mobile.chat.openProfile", { name })}
+                className="mobile-press flex h-full min-w-0 max-w-[55%] shrink-0 items-center gap-2 rounded-full pl-2 pr-0.5 text-left"
+              >
+                <span data-glass-avatar="" className="flex shrink-0"><BotAvatar bot={bot} size={24} state="idle" animated={false} /></span>
+                <span data-glass-name="" className="min-w-0 truncate text-[17px] font-medium">{name}</span>
+              </button>
+              <ChevronRight size={10} aria-hidden="true" className="ml-1 shrink-0 text-ink/[0.56]" />
+              <button
+                ref={crumbButton}
+                type="button"
+                data-chathead-crumb=""
+                onClick={() => setSwitching((value) => !value)}
+                aria-label={t("chat.conversations.switch", { name: crumb })}
+                aria-haspopup="menu"
+                aria-expanded={switching}
+                className="mobile-press flex h-full min-w-0 items-center rounded-full pl-0.5 pr-2.5 text-left"
+              >
+                <span data-chathead-conversation="" dir="auto" className="min-w-0 truncate text-[15px] font-medium text-ink-secondary">{crumb}</span>
+              </button>
+            </div>
+          ) : (
           <button
             type="button"
             // the sheet rises as the finger lands, not when it lifts; the click that follows (or a key, or the native pill's
@@ -73,8 +112,10 @@ export function ChatScreen({ bot, group, members, onBack, onProfile, onComputer 
                 ? <GroupAvatar members={members} size={24} />
                 : bot && <BotAvatar bot={bot} size={24} state="idle" animated={false} />}
             </span>
-            <span data-glass-name="" className="min-w-0 truncate text-[17px] font-medium">{name}</span>
+            <span data-glass-name="" className="min-w-0 truncate text-[17px] font-medium">{crumb ? `${name} \u203a ${crumb}` : name}</span>
           </button>
+          )}
+          {bot && crumb && !glass && <ConversationSwitcher bot={bot} open={switching} onClose={closeSwitcher} anchor={pillAnchor} />}
           <ConnectionPill notice={link.notice === "reconnecting" ? null : link.notice} trying={link.trying} onRetry={link.retry} testId="mobile-chat-cloud-status" className="absolute top-[calc(100%+8px)] h-8 px-3" />
         </div>
         <div className="flex justify-end gap-2">

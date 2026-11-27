@@ -6,7 +6,7 @@ import { CLOUD_LINK_SETTINGS, openBot, StoreProvider, useStore } from "@/state/s
 import { SignInSheetHost } from "./components/SignInSheet";
 import { openSignIn } from "@/lib/sign-in-sheet";
 
-import { nextShortcutBot, shortcutBots, shownBotIds } from "@/lib/sidebar-shortcut-order";
+import { nextShortcutBot, shortcutBots, shortcutTargets, shownBotIds, shownRowIds } from "@/lib/sidebar-shortcut-order";
 import { useWelcomeIncoming, useWelcomeViewer, WelcomeGate } from "@/components/onboarding/WelcomeGate";
 import { LateCloudPlan } from "@/components/onboarding/LateCloudPlan";
 import { IslandIntroHost } from "@/components/onboarding/IslandIntroHost";
@@ -218,10 +218,11 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
         e.preventDefault();
         openCreateBot();
       } else if (/^[1-9]$/.test(e.key)) {
-        const target = bots[Number(e.key) - 1];
+        const target = shortcutTargets(state.bots.filter((b) => !b.hidden), state.groups, shownRowIds(document.querySelector("[data-sidebar-root]")))[Number(e.key) - 1];
         if (target) {
           e.preventDefault();
-          openBot(dispatch, target);
+          if (target.kind === "bot") openBot(dispatch, target.bot);
+          else dispatch({ type: "select", id: target.group.id });
         }
       } else if (step !== null) {
         const next = nextShortcutBot(bots, state.selectedId, step);
@@ -233,7 +234,7 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [state.bots, state.selectedId, state.shortcutsOpen, dispatch]);
+  }, [state.bots, state.groups, state.selectedId, state.shortcutsOpen, dispatch]);
 
   useReadShownChatOnFocus();
   // Grok Bot widens its window for the panel rather than squeezing the chat; a browser tab can't, so there it overlays.

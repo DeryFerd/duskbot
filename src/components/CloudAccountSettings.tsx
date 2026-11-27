@@ -123,12 +123,11 @@ function accountMessage(account: CloudAccountState | null, view: CloudPlanView, 
   return null;
 }
 
-/** The card's browser button, or null while a plan runs: its controls live in Settings > Account > Plan & billing. */
-function dashboardLabel(account: CloudAccountState, view: CloudPlanView): string | null {
+function dashboardLabel(account: CloudAccountState, view: CloudPlanView): string {
   const trial = account.trial && !account.renewal?.cancelled ? cloudTrialView(account.trial).action : null;
   if (trial) return trial.label;
+  if (view.kind === "paid" || (view.kind === "unverified" && view.label)) return t("cloudAccount.manage");
   if (account.machine?.status === "payment-problem" && !account.payment) return t("cloudAccount.updatePayment");
-  if (view.kind === "paid" || (view.kind === "unverified" && view.label)) return null;
   return t("cloudAccount.dashboard");
 }
 
@@ -150,9 +149,6 @@ export function CloudPlanOnCloud({ bridge, onConnectPhone }: { bridge: CloudPlan
     : plan?.status === "checking" ? t("cloudAccount.lastPlan", { plan: label }) : plan?.status === "signin" ? (plan.tier ? t("cloudAccount.planName", { plan: label }) : null)
       : plan ? t(home ? "cloudAccount.onCloudNoneHome" : "cloudAccount.onCloudNone") : null;
   const act = (action: () => Promise<void>) => { setFailed(false); void action().catch(() => setFailed(true)); };
-  // a running plan's controls live in Settings > Account > Plan & billing; a trial still says Subscribe or Check payment here
-  const trialAction = plan?.trial && !plan.renewal?.cancelled ? cloudTrialView(plan.trial).action : null;
-  const browserLabel = trialAction ? trialAction.label : plan?.status === "paid" ? null : t("cloudAccount.manageInBrowser");
   return <Card title={t("settings.section.cloudAccount")} subtitle={t(home ? "cloudAccount.onCloudHome" : "cloudAccount.onCloud")}>
     <div data-cloud-plan={plan?.status ?? "loading"} className="flex flex-col items-start gap-3">
       {line ? <p role="status" className="text-[15px] font-medium text-ink">{line}</p> : !plan && <p role="status" className="text-[13px] text-ink-secondary">{t("cloudAccount.loading")}</p>}
@@ -160,7 +156,7 @@ export function CloudPlanOnCloud({ bridge, onConnectPhone }: { bridge: CloudPlan
       {trialLines(plan?.trial)}
       <div className="flex flex-wrap gap-2">
         {plan?.status === "signin" && bridge.signIn && <button type="button" className="ui-button ui-button-primary" onClick={() => act(() => bridge.signIn!())}>{t("cloudAccount.signInAgain")}</button>}
-        {browserLabel && <button type="button" className="ui-button" onClick={() => act(() => bridge.manage())}>{browserLabel}</button>}
+        <button type="button" className="ui-button" onClick={() => act(() => bridge.manage())}>{(plan?.trial && !plan.renewal?.cancelled && cloudTrialView(plan.trial).action?.label) || t("cloudAccount.manageInBrowser")}</button>
         {plan && onConnectPhone && <button type="button" className="ui-button" onClick={onConnectPhone}>{t("cloudPhone.action")}</button>}
       </div>
       {failed && <p role="alert" className="text-[13px] text-danger">{t("cloudAccount.actionFailed")}</p>}
@@ -259,7 +255,6 @@ export function CloudAccountSettings({ linkRequest = 0, cloudHome = false, teamH
   const signed = account && ["connected", "unavailable", "reauth-required"].includes(account.status);
   const message = accountMessage(account, view, platform);
   const line = cloudPlanLine(view);
-  const dashboard = account ? dashboardLabel(account, view) : null;
   const onTeamPlan = teamPlan(account), team = planTeam(account);
   const setUp: CloudMachine | undefined = view.kind === "paid" ? { status: "provisioning" } : undefined;
   const machine: CloudMachine | undefined = onTeamPlan ? team?.machine ?? setUp : account?.status === "connected" ? account.machine ?? setUp : undefined;
@@ -303,7 +298,7 @@ export function CloudAccountSettings({ linkRequest = 0, cloudHome = false, teamH
           {view.kind === "reauth"
             ? <button type="button" disabled={busy} className="ui-button" onClick={() => void perform(() => bridge.signInAgain())}>{t("cloudAccount.signInAgain")}</button>
             : <>
-              {!(view.kind === "free" && addCloudButton) && (view.kind === "free" || dashboard) && <button type="button" disabled={busy} className="ui-button" onClick={() => void perform(() => bridge.openDashboard())}>{view.kind === "free" ? t("cloudAccount.dashboard") : dashboard}</button>}
+              {!(view.kind === "free" && addCloudButton) && <button type="button" disabled={busy} className="ui-button" onClick={() => void perform(() => bridge.openDashboard())}>{view.kind === "free" ? t("cloudAccount.dashboard") : dashboardLabel(account, view)}</button>}
             </>}
           {!confirm && <button type="button" disabled={busy} className="ui-button" onClick={() => setConfirm(true)}>{t("cloudAccount.signOut")}</button>}
         </div>

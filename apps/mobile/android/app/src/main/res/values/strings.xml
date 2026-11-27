@@ -5,4 +5,10 @@
     <string name="package_name">bot.dusk.mobile</string>
     <string name="custom_url_scheme">bot.dusk.mobile</string>
     <string name="notification_channel_messages">Messages</string>
+    <string name="notification_new_message">New message</string>
+    <string name="notification_you">You</string>
+    <plurals name="notification_summary">
+        <item quantity="one">%d new message</item>
+        <item quantity="other">%d new messages</item>
+    </plurals>
 </resources>

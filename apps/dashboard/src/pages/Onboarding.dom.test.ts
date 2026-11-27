@@ -12,14 +12,19 @@ const state = vi.hoisted(() => ({
   moved: [] as string[],
   finish: vi.fn(async (_home?: string) => {}),
   checkout: vi.fn(async () => true),
+  profileName: "Sam",
+  signInName: undefined as string | undefined,
+  update: vi.fn(async (_name: string) => {}),
+  tracked: [] as unknown[][],
+  query0: "",
 }));
 vi.mock("../data/cloud", () => ({
-  useCloud: () => ({ account: { profile: { name: "Sam", onboarded: false } }, catalog: { ...fixtureCatalog, checkoutOpen: true }, billing: null, clouds: [],
-    checkout: state.checkout, updateProfile: async () => {}, finishOnboarding: state.finish }),
+  useCloud: () => ({ account: { profile: { name: state.profileName, onboarded: false } }, catalog: { ...fixtureCatalog, checkoutOpen: true }, billing: null, clouds: [],
+    checkout: state.checkout, updateProfile: state.update, finishOnboarding: state.finish }),
 }));
-vi.mock("../data/session", () => ({ useSession: () => ({ account: { id: "a", email: "sam@qa.dusk.test" }, setAccount: () => {}, toast: () => {} }) }));
+vi.mock("../data/session", () => ({ useSession: () => ({ account: { id: "a", email: "sam@qa.dusk.test", ...(state.signInName !== undefined ? { name: state.signInName } : {}) }, setAccount: () => {}, toast: () => {} }) }));
 vi.mock("../lib/router", () => ({ useLocation: () => ({ path: "/welcome", query: new URLSearchParams(state.query) }), navigate: (path: string) => void state.moved.push(path) }));
-vi.mock("../lib/analytics", () => ({ track: () => {}, trackOnboardingStep: () => {} }));
+vi.mock("../lib/analytics", () => ({ track: () => {}, trackOnboardingStep: (...args: unknown[]) => void state.tracked.push(args) }));
 vi.mock("../ui/Frame", () => ({ SplitFrame: ({ children }: { children: ReactNode }) => createElement("div", null, children) }));
 vi.mock("../ui/Mascot", () => ({ Mascot: () => null }));
 vi.mock("../ui/Downloads", async (actual) => ({ ...(await actual<typeof import("../ui/Downloads")>()), Downloads: () => null }));
@@ -27,7 +32,7 @@ vi.mock("../lib/downloads", async (actual) => ({ ...(await actual<typeof import(
 vi.mock("../ui/Digits", () => ({ StretchPill: () => null }));
 
 const roots: Root[] = [];
-afterEach(async () => { for (const root of roots.splice(0)) await act(async () => root.unmount()); document.body.innerHTML = ""; state.moved = []; state.query = "step=plan"; state.os = "windows"; sessionStorage.clear(); vi.clearAllMocks(); vi.useRealTimers(); });
+afterEach(async () => { for (const root of roots.splice(0)) await act(async () => root.unmount()); document.body.innerHTML = ""; state.moved = []; state.query = "step=plan"; state.os = "windows"; state.profileName = "Sam"; state.signInName = undefined; state.tracked = []; sessionStorage.clear(); vi.clearAllMocks(); vi.useRealTimers(); });
 
 async function open() {
   const { Onboarding } = await import("./Onboarding");
@@ -85,4 +90,40 @@ test("on a phone the app step keeps every download in the list and the dashboard
   const host = await open();
   expect([...host.querySelectorAll("a")].some((a) => a.textContent?.includes("download for"))).toBe(false);
   expect(press(host, "go to the dashboard").className).toContain("bg-primary");
+});
+
+test("a name from the sign-in is saved and the name step is skipped, recorded as skipped", async () => {
+  state.query = "step=name"; state.profileName = "Ada Lovelace";
+  await open();
+  expect(state.moved.at(-1)).toContain("step=plan");
+  expect(state.tracked).toEqual([["name", false, true]]);
+});
+
+test("a plan picked on the site goes from a sign-in name straight to checkout", async () => {
+  state.query = "step=name&plan=plus"; state.profileName = "Ada";
+  await open();
+  expect(state.checkout).toHaveBeenCalledOnce();
+});
+
+test("with no name from the sign-in the name step stays, and shows as reached", async () => {
+  state.query = "step=name"; state.profileName = "";
+  const host = await open();
+  expect(host.querySelector("#onb-name")).not.toBeNull();
+  expect(state.update).not.toHaveBeenCalled();
+  expect(state.tracked).toEqual([["name", false, false]]);
+});
+
+test("back to the name step after it was skipped shows it, so the plan step's back never loops", async () => {
+  state.query = "step=name"; state.profileName = "Ada";
+  sessionStorage.setItem("dusk-onboarding-name-skipped", "1");
+  const host = await open();
+  expect(host.querySelector("#onb-name")).not.toBeNull();
+  expect(state.tracked).toEqual([["name", false, false]]);
+});
+
+test("a sign-in name the profile does not hold yet is saved before the step is skipped", async () => {
+  state.query = "step=name"; state.profileName = ""; state.signInName = "Ada Lovelace";
+  await open();
+  expect(state.update).toHaveBeenCalledWith("Ada Lovelace");
+  expect(state.moved.at(-1)).toContain("step=plan");
 });

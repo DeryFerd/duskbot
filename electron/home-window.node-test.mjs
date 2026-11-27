@@ -520,9 +520,6 @@ function pageIpc(overrides = {}) {
     ensureCloudAccount: () => ({ openDashboard: async () => { calls.push(["dashboard"]); return account; }, state: () => account,
       upgradePreview: async (...args) => { calls.push(["upgrade-preview", ...args]); return { outcome: "failed" }; },
       upgrade: async (...args) => { calls.push(["upgrade", ...args]); return { outcome: "failed" }; },
-      cancelPlan: async (...args) => { calls.push(["cancel", ...args]); return { outcome: "failed" }; },
-      keepPlan: async (...args) => { calls.push(["keep", ...args]); return { outcome: "failed" }; },
-      retention: async (...args) => { calls.push(["retention", ...args]); return true; },
       roomNotNow: async (...args) => { calls.push(["room-not-now", ...args]); return true; },
       restartNow: async (...args) => { calls.push(["restart-now", ...args]); return "restarting"; } }),
     homeWindow: { homePage: () => false },
@@ -543,14 +540,14 @@ test("no page gets a control over lending this computer: not My Cloud's, another
 
 test("Settings on the person's own Cloud shows the plan read only, says when it is home, and can open the Plan page or sign in again; never switch away", async () => {
   const page = preload(CLOUD);
-  assert.deepEqual(Object.keys(page.bridge.cloudPlan), ["state", "manage", "signIn", "noticeSeen", "phoneSignIn", "signedIn", "openPage", "upgradePreview", "upgrade", "cancel", "keep", "retention", "roomNotNow", "restartNow"]);
+  assert.deepEqual(Object.keys(page.bridge.cloudPlan), ["state", "manage", "signIn", "noticeSeen", "phoneSignIn", "signedIn", "openPage", "upgradePreview", "upgrade", "roomNotNow", "restartNow"]);
   assert.equal(page.bridge.cloudAccount, undefined, "no account, credential or address reaches the Cloud's page");
   await page.bridge.cloudPlan.state({ origin: "https://evil.example.test" });
   await assert.rejects(page.bridge.cloudPlan.manage(), /Choose Manage/);
   const ipc = pageIpc();
   const event = { sender: ipc.cloudContents, senderFrame: ipc.cloudFrame };
   assert.deepEqual(Object.keys(Object.fromEntries(ipc.handlers)), ["cloud-plan:phone-sign-in", "cloud-plan:signed-in", "cloud-plan:state", "cloud-plan:notice-seen", "cloud-plan:manage", "cloud-plan:open-page",
-    "cloud-plan:upgrade-preview", "cloud-plan:upgrade", "cloud-plan:cancel", "cloud-plan:keep", "cloud-plan:retention", "cloud-plan:room-not-now", "cloud-plan:restart-now"]);
+    "cloud-plan:upgrade-preview", "cloud-plan:upgrade", "cloud-plan:room-not-now", "cloud-plan:restart-now"]);
   assert.deepEqual(plain(await ipc.handlers.get("cloud-plan:state")(event, { tier: "personal" })), { status: "paid", tier: "max" });
   ipc.context.homeWindow = { homePage: (asked) => asked === event };
   assert.deepEqual(plain(await ipc.handlers.get("cloud-plan:state")(event)), { status: "paid", tier: "max", home: true });
@@ -846,35 +843,14 @@ test("the usage meter's Upgrade: only from the person's click, only to a plan th
   assert.equal(ipc.calls.length, 2);
 });
 
-test("Cancel and Keep my plan on the Cloud's own page: only from the person's click there, the survey's words only, and the plan's renewal shown read only", async () => {
-  const page = preload(CLOUD);
-  await assert.rejects(page.bridge.cloudPlan.cancel({ answer: "price" }), /Choose Cancel/, "the Cloud's page cancels only from the person's click");
-  await assert.rejects(page.bridge.cloudPlan.keep(), /Choose Keep my plan/);
-  assert.equal(await page.bridge.cloudPlan.retention({ reason: "price", step: "reason", outcome: "shown" }), false, "a step is logged only from the person's click, and never in the way");
-  assert.deepEqual(page.invoked ?? [], []);
+test("the plan's renewal on the Cloud's own page is shown read only; cancelling is on the account website, never from the page", async () => {
   const clicked = preload(CLOUD, { activation: true });
-  await clicked.bridge.cloudPlan.cancel({ answer: "price", improve: "words" }, { cloudId: "someone-elses" });
-  await clicked.bridge.cloudPlan.cancel();
-  await clicked.bridge.cloudPlan.keep({ cloudId: "someone-elses" });
-  await clicked.bridge.cloudPlan.retention({ reason: "price", step: "help", outcome: "kept", offer: "downgrade" });
-  assert.deepEqual(clicked.invoked, [["cloud-plan:cancel", { answer: "price", improve: "words" }], ["cloud-plan:cancel", null], ["cloud-plan:keep"],
-    ["cloud-plan:retention", { reason: "price", step: "help", outcome: "kept", offer: "downgrade" }]]);
-  const local = preload(LOCAL);
-  await local.bridge.cloudPlan.cancel({ answer: "later" });
-  await local.bridge.cloudPlan.keep();
-  assert.deepEqual(local.invoked, [["cloud-plan:cancel", { answer: "later" }], ["cloud-plan:keep"]]);
+  for (const method of ["cancel", "keep", "retention", "recap"]) assert.equal(clicked.bridge.cloudPlan[method], undefined, method);
   const ipc = pageIpc();
   const event = { sender: ipc.cloudContents, senderFrame: ipc.cloudFrame };
   ipc.account.renewal = { trial: true, cancelled: false, renewsAt: 1_900_000_000_000, endsAt: null, keptDays: 3 };
   assert.deepEqual(plain(await ipc.handlers.get("cloud-plan:state")(event)).renewal, ipc.account.renewal);
-  await ipc.handlers.get("cloud-plan:cancel")(event, { answer: "setup" }, "https://evil.example.test");
-  await ipc.handlers.get("cloud-plan:keep")(event, { cloudId: "someone-elses" });
-  await ipc.handlers.get("cloud-plan:retention")(event, { reason: "skip", step: "reason", outcome: "shown" }, "https://evil.example.test");
-  assert.deepEqual(ipc.calls, [["cancel", { answer: "setup" }], ["keep"], ["retention", { reason: "skip", step: "reason", outcome: "shown" }]]);
-  for (const sender of [{ sender: ipc.cloudContents, senderFrame: { url: "https://other.example.test/" } }, { sender: {}, senderFrame: ipc.cloudFrame }]) {
-    for (const channel of ["cloud-plan:cancel", "cloud-plan:keep", "cloud-plan:retention"]) assert.throws(() => ipc.handlers.get(channel)(sender, { answer: "price" }), /only available/);
-  }
-  assert.equal(ipc.calls.length, 3);
+  for (const channel of ["cloud-plan:cancel", "cloud-plan:keep", "cloud-plan:retention", "cloud-plan:recap"]) assert.equal(ipc.handlers.has(channel), false, channel);
 });
 
 test("the room card on the person's own Cloud: the offer read only, Not now and Restart now only from their click there, for the session's own Cloud", async () => {

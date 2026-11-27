@@ -66,6 +66,7 @@ export { skipSubscriptionAuthForLocalInject, type AccountErrorCode, type AcpConf
 import { recoveryPromptFor } from "../../resume-recovery.ts";
 import { engineIdleMs, keepWarm, sessionIdlePolicy, stopIdleClose } from "../session-idle.ts";
 import { classifyError } from "../retry.ts";
+import { authenticateWithRetry, type AuthenticateRetryPolicy } from "./authenticate-retry.ts";
 import { engineFailureKind, engineFailureMessage, stopCause } from "../engine-errors.ts";
 import { cliExitCode, failureCode, rpcCode } from "../../../shared/usage-signals.ts";
 import { narrowsNativeTools, parseToolScope } from "../../../shared/tool-scope.ts";
@@ -208,6 +209,9 @@ export interface AcpSupport {
    * "fail-request": cached API credentials need no method, but a requested
    * OAuth login must succeed. "continue": proceed on an ambient login. */
   authFailure: "fail" | "fail-request" | "continue";
+  authenticateRetry?: AuthenticateRetryPolicy["authenticateRetry"];
+  authenticateRetryDelaysMs?: readonly number[];
+  momentaryAuthNote?: string;
   /** A turn the CLI refused for want of a login: what isAuthenticated answers goes signed out until a sign-in. */
   noteSignedOut?(env: Record<string, string | undefined>, config: AcpConfig): void;
   /** The app's own sign-in finished for this engine. */
@@ -1305,12 +1309,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                   : [];
                 const methodId = support.pickAuthMethod(methods, spawnEnv);
                 if (methodId) {
-                  try {
-                    await session.host.once("authenticate", () => request("authenticate", { methodId }, INIT_TIMEOUT));
-                    session.authenticated = true;
-                  } catch {
-                    if (support.authFailure !== "continue") throw new Error(support.loginNote);
-                  }
+                  session.authenticated = await authenticateWithRetry(support, () => session.host.once("authenticate", () => request("authenticate", { methodId }, INIT_TIMEOUT)), requireRunning);
                 } else if (support.authFailure === "fail") {
                   throw new Error(support.loginNote);
                 }

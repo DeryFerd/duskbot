@@ -15,13 +15,39 @@ The workspace (your computer or server) decides, per phone:
 - Every other push waits 4 seconds first. It is dropped if, by then, the notification was read anywhere (the desktop
   window open on that chat, the phone, "mark all read") or the phone opened that conversation. Several in one
   conversation within those seconds send once, the newest.
-- A push the service could not take is tried again after 10 seconds and after 60 seconds, while it is still unread and
-  not on screen. A token APNs or FCM calls dead is dropped; the app registers again next time it opens.
+- A push the service could not take is tried again after 10 seconds, 60 seconds and 5 minutes, while it is still unread
+  and not on screen. A token APNs or FCM calls dead is dropped; the app registers again next time it opens.
+- An app in the background is not reading the chat it last showed, even where Android keeps its page and stream
+  running: a reply there stays unread and pushes, and its notification stays until the person comes back.
+
+## What a push looks like
+
+The bot's name is the title, the line under it is what the bot said (for an ask or a problem, what it is and its
+detail), the bot's picture is beside it, and the app icon counts the unread notifications. A conversation's pushes
+stack together, one notification per conversation on Android with its lines in it.
+
+- The preview line travels sealed to the phone's own key (`previewKey` in `PUT /api/mobile/push`, X25519, the Live
+  Activity line's seal with the salt in `PUSH_PREVIEW_SEAL`), so only that phone can read it. Without a key (Android
+  before 12, an older app) the line is "New message".
+- iPhone: an APNs alert with `mutable-content`, `thread-id` the conversation, `badge` the unread count and no collapse
+  id; the app's Notification Service Extension opens the preview and attaches the bot's picture.
+- Android: a phone that registered with `draws: true` gets data-only high priority FCM messages, which Android hands to
+  the app even when it is closed; the app draws the notification itself (MessagingStyle, the bot as the person). An
+  older app gets the system-drawn notification on the `messages` channel.
+- The app keeps each bot's picture (its photo, or its mark) where the notification code reads it while the app is not
+  running, and sets the icon's count from its own unread list when it is open.
+- A tap opens that conversation, whether the app was open, in the background or not running.
 
 On the iPhone, a push that lands while the app is open shows as the system's own banner, unless it is about the
 conversation on screen, which shows nothing. Pushes already in Notification Center are removed once read: when that
 conversation opens, when a read arrives from another device while the app is open, and each time the app comes back.
-A phone that stays locked keeps a push read elsewhere until the app next opens.
+An iPhone that stays locked keeps a push read elsewhere until the app next opens.
+
+On Android, a conversation read anywhere (the desktop, another phone, "mark all read") also clears its notification on
+every other Android phone that was shown it, with the app closed too: once every line a phone got there is read, the
+workspace sends that phone a data-only `read` push (normal priority, as it shows nothing) naming the newest line, and the
+app takes the notification away unless a newer line arrived since. An older app's system-drawn notifications carry the
+conversation as their tag, so a conversation still shows as one notification there.
 
 The desktop app posts its own system banners from the main process (`electron/desktop-notifications.mjs`), except while
 its window has focus; the dock, island and unread dots carry the rest.
@@ -48,9 +74,11 @@ APNs and FCM accept pushes only from whoever holds the app's keys. A workspace s
    else `DUSK_MOBILE_RELAY`, else `https://link.dusk.bot`.
 
 The relay is `POST /v1/push` on the link service (`apps/link-service/src/push-relay.mjs`). It sees the device token, APNs or
-FCM, the bot's name and the ids a tap opens (notification, bot, conversation, room). It never gets a notification's
-title or any message text, keeps nothing, and logs no token. Apple and Google see the same: the lock screen shows the
-bot's name and "New message". It allows 60 pushes a minute per device token and 600 per address.
+FCM, the bot's name, the ids a tap opens (notification, bot, conversation, room) and the unread count. It never gets a
+notification's title or any message text in the clear (the preview comes sealed), keeps nothing, and logs no token.
+Apple and Google see the same. It allows 60 pushes a minute per device token and 600 per address. Each APNs or FCM
+request gets 6 seconds; an APNs connection that does not answer is dropped and the push sent once more on a new one,
+and the workspace waits 20 seconds for the relay's answer.
 
 A relay sends only for the services it holds keys for; `GET /v1/push` lists them. When it answers a push with
 `not_configured`, the workspace logs once (`mobile push: the push relay at ... has no FCM keys, so Android phones get
@@ -131,7 +159,7 @@ token sandbox only when its web part was built in development mode, so for a pus
 
 1. Pair the phone, allow notifications when asked, and open Settings, Notifications in the app once.
 2. Put the app in the background, then make a bot answer you (or ask you something) from the desktop.
-3. The phone should get "{bot name}: New message" within a few seconds; tapping it opens that conversation.
+3. The phone should get the bot's name with what it said within a few seconds; tapping it opens that conversation.
 
 If nothing arrives, the workspace log says `mobile push: no APNs or FCM credentials and no push relay on this server`
 when it has neither, or `mobile push: the push relay at ... has no FCM keys` (or APNs) when the relay lacks that

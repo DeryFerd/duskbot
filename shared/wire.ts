@@ -10,7 +10,7 @@ import type { BotAvatarCrop, MascotFaceColor } from "./bot-avatar.ts";
 import type { StoredBodyId } from "./bot-body.ts";
 import type { ReplyStyle } from "./reply-style.ts";
 import type { CredentialTargetId, CUSTOM_SECRET_TARGET, SecretDelivery } from "./credential-request.ts";
-import type { TeamSetupRequest } from "./team-setup.ts"; import type { DefaultBotFields, HelperIntroField } from "./default-bot.ts";
+import type { TeamSetupRequest } from "./team-setup.ts"; import type { DefaultBotFields, HelperIntroField } from "./default-bot.ts"; import type { FreshKind, SessionSettingsFields } from "./session-settings.ts";
 import type { SetupCardFields } from "./setup-card.ts"; import type { BugReportField } from "./devs-report-status.ts"; import type { AccessRequestCardField, BotAccessFields } from "./bot-access.ts";
 import type { RoutineRequestCardData } from "./routine-request.ts";
 import type { WebhookRequestCardData } from "./webhook-request.ts"; import type { WaitCardField, WaitLineField } from "./wait-request.ts"; import type { PurchaseCardField } from "./purchase.ts"; import type { EmailCardField } from "./email-review.ts"; import type { MessageCardField } from "./message-review.ts"; import type { ProductsField } from "./products.ts"; import type { OfferField } from "./offer.ts";
@@ -150,7 +150,7 @@ export interface WireTask extends InboxTask {
   /** Detached routine execution, reachable through its visible results card. */ routineRunId?: string;
   /** Work from outside (a webhook, an app's event) reached this conversation: what it starts or runs stays confined, for good. */ outside?: true;
   /** An outside caller opened this thread through the bot's API, so only it may continue it; such a thread is outside too. */ botApi?: true;
-  /** Set when a bot, not a person, opened this thread. */ openedBy?: TaskOpenedBy;
+  /** Set when a bot, not a person, opened this thread. */ openedBy?: TaskOpenedBy; /** Started by the person beside another open conversation (/new): writing here never makes it main. */ side?: true;
   /** On a team's server: one person's conversation, seen by them alone (never by another member or an admin). */
   private?: true;
   /** Set by close_thread; absent while the thread is open. */
@@ -277,7 +277,7 @@ export const helperModelAllowed = (bot: { helperModel?: unknown }): boolean => b
 
 /** A bot as a client may see it. avatarUrl is always present (null when the
  * bot has none). */
-export interface WireBot extends DefaultBotFields, BotAccessFields {
+export interface WireBot extends DefaultBotFields, BotAccessFields, SessionSettingsFields {
   waitingForTeammates?: boolean;
   id: string;
   /** The task selected in the UI; running turns keep their own thread id. */
@@ -476,7 +476,7 @@ export interface WireMessage extends HelperIntroField, SetupCardFields, WaitLine
     firstKeptId: string;
     foldedThroughId: string;
     tokensBefore: number;
-    by: "person" | "harness"; awayHours?: number; // awayHours: written after the person was away that long (server/idle-compaction.ts)
+    by: "person" | "harness"; awayHours?: number; fresh?: FreshKind; // fresh: a freshSession started it (server/fresh-session.ts), nothing folded is summarized. awayHours: written after the person was away that long (server/idle-compaction.ts)
   };
   /** Renderers receive only the allowlisted /api/attachments URL. `file`
    * entries are opened through the message-scoped file route, never by path. */
@@ -526,7 +526,7 @@ export interface WireMessage extends HelperIntroField, SetupCardFields, WaitLine
   call?: LiveCallRecord;
   /** activity messages: tool name + outcome. */
   tool?: {
-    name: string; ok?: boolean; spoken?: string; setup?: boolean; terminal?: boolean; summary?: string;
+    name: string; ok?: boolean; spoken?: string; setup?: boolean; terminal?: boolean; summary?: string; newSession?: true; // newSession: the line /new leaves in the chat it opened, never news for the notice card, the sidebar or the mascot
     /** A notice whose way out is signing in to an AI: the chat offers Sign in beside it. */
     signIn?: boolean;
     /** error rows: the turn waits for its AI's usage limit to reset and carries on by itself; Stop ends the wait. */

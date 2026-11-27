@@ -24,7 +24,10 @@ import { inputCls } from "./bot-settings/field";
 import { RoutineForm } from "./routines/RoutineForm";
 import { SharePresetDialog } from "./SharePresetDialog";
 import { Select } from "./Select";
-import { formCloseCls, formFooterCls, formHeaderCls, formTitleCls, mdPrimaryCls, mdSecondaryCls, rowButtonCls } from "./ui/GrokDialog";
+import { rowButtonCls } from "./ui/GrokDialog";
+import { SIMPLE_BUTTONS, SettingRow, SettingsRows } from "./SettingsPrimitives";
+import { compactBackdropStyle } from "./compact-settings-sheet";
+import "../styles/settings.css";
 import { friendlyError } from "@/lib/plain-error";
 
 const SECTIONS = ["Identity", "Soul", "Skills", "Memory", "Routines", "Access", "Permissions", "Voice & alerts"] as const;
@@ -112,36 +115,37 @@ export function BotDefaultsDialog({ onClose }: { onClose: () => void }) {
     },
   };
   const title = t("newBot.defaults");
-  return <ModalLayer><div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4">
-    <div aria-hidden="true" className="ui-dialog-scrim pointer-events-none absolute inset-0" />
-    <div ref={dialog} role="dialog" aria-modal="true" aria-label={title} aria-busy={saving} tabIndex={-1}
-      className="relative flex h-[min(700px,94dvh)] w-full max-w-[900px] flex-col overflow-hidden rounded-[14px] border border-transparent bg-app text-[13px] font-[425] leading-[18px] text-ink outline-none focus-visible:outline-none!">
-      <div className={formHeaderCls}>
-        <h2 className={formTitleCls}>{title}</h2>
-        <button type="button" onClick={() => closeRef.current()} aria-label={t("common.close")}
-          className={cn(formCloseCls, "disabled:opacity-40")}><X size={16} className="pointer-events-none" /></button>
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
-        <nav aria-label={t("newBot.sections")} className="flex shrink-0 gap-0.5 overflow-x-auto border-b border-transparent px-3 py-2 sm:w-44 sm:flex-col sm:border-b-0 sm:border-r">
+  return <ModalLayer><div data-settings-sheet data-settings-look="simple" className="settings-scrim z-[70]">
+    <div aria-hidden="true" className="settings-backdrop" style={compactBackdropStyle} />
+    <div ref={dialog} role="dialog" aria-modal="true" aria-label={title} aria-busy={saving} tabIndex={-1} className="settings-dialog">
+      <div className="settings-layout max-sm:flex-col">
+        <nav aria-label={t("newBot.sections")} style={{ paddingTop: 24 }} className="settings-nav max-sm:w-full max-sm:flex-none! max-sm:flex-row max-sm:overflow-x-auto max-sm:p-2 max-sm:pe-12">
           {SECTIONS.map(label => <button key={label} type="button" onClick={() => setActive(label)} aria-current={active === label ? "page" : undefined}
-            className={cn("flex h-8 shrink-0 cursor-pointer items-center rounded-[8px] px-[9px] text-left text-[13px] leading-[18px] tracking-[0.195px] text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus", active === label ? "bg-ink/6" : "hover:bg-ink/[0.035]")}>{t(SECTION_KEYS[label])}</button>)}
+            className="settings-nav-item max-sm:w-auto max-sm:whitespace-nowrap"><span>{t(SECTION_KEYS[label])}</span></button>)}
         </nav>
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-3 sm:px-6 sm:py-4">
-          {!ready && !error && <div role="status" className="flex items-center gap-2 text-[13px] leading-[18px] text-ink/68"><Loader2 size={14} className="animate-spin" />{t("newBot.loading")}</div>}
-          {ready && <fieldset disabled={saving} className="min-w-0">
-            <BotEditorStore value={scopedStore}><BotEditorContext.Provider value={{ request: draft.request, draft: true, uploadAvatar: draft.uploadAvatar }}>
-              <DraftSection active={active} draft={draft} />
-            </BotEditorContext.Provider></BotEditorStore>
-          </fieldset>}
-        </div>
-      </div>
-      {error && <p role="alert" className="m-0 max-h-24 shrink-0 overflow-y-auto px-4 pt-2.5 text-[12px] leading-4 text-danger">{error}</p>}
-      <div className={formFooterCls}>
-        <button type="button" onClick={() => closeRef.current()} className={mdSecondaryCls}>{t("common.cancel")}</button>
-        <button type="button" disabled={!ready || saving} onClick={() => void save()}
-          className={cn(mdPrimaryCls, "gap-1.5")}>
-          {saving && <Loader2 size={14} className="animate-spin" />}{t("newBot.saveDefaults")}
-        </button>
+        <section className="settings-panel min-h-0">
+          <button type="button" onClick={() => closeRef.current()} aria-label={t("common.close")} className="settings-close"><X size={14} className="pointer-events-none" /></button>
+          <div className="settings-pane-header">
+            <h2 className="settings-pane-title">{title}</h2>
+          </div>
+          <div className="settings-scroll">
+            <div className={cn("settings-pane", SIMPLE_BUTTONS)} style={{ paddingBottom: 12 }}>
+              {!ready && !error && <div role="status" className="flex items-center gap-2 px-2.5 text-[13px] leading-[18px] text-ink-secondary"><Loader2 size={14} className="animate-spin" />{t("newBot.loading")}</div>}
+              {ready && <fieldset disabled={saving} className="min-w-0 border-0 p-0">
+                <BotEditorStore value={scopedStore}><BotEditorContext.Provider value={{ request: draft.request, draft: true, uploadAvatar: draft.uploadAvatar }}>
+                  <DraftSection active={active} draft={draft} />
+                </BotEditorContext.Provider></BotEditorStore>
+              </fieldset>}
+            </div>
+          </div>
+          {error && <p role="alert" className="m-0 max-h-24 shrink-0 overflow-y-auto px-6 pb-2 text-[13px] leading-[18px] text-danger">{error}</p>}
+          <div className={cn("flex shrink-0 items-center justify-end gap-2 px-6 pb-5 pt-1", SIMPLE_BUTTONS)}>
+            <button type="button" onClick={() => closeRef.current()} className="ui-button">{t("common.cancel")}</button>
+            <button type="button" disabled={!ready || saving} onClick={() => void save()} className="ui-button ui-button-primary">
+              {saving && <Loader2 size={14} className="animate-spin" />}{t("newBot.saveDefaults")}
+            </button>
+          </div>
+        </section>
       </div>
     </div>
   </div></ModalLayer>;
@@ -170,12 +174,12 @@ function StartingRole({ draft }: { draft: BotCreationDraft }) {
     const look = role && readyBot(role.id)?.look;
     if (role) draft.patch({ ...roleProfilePatch(role), ...look });
   };
-  return <label className="block text-[13px] text-ink-secondary">{t("newBot.startingRole")}
-    <Select size="lg" className="mt-1.5 w-full" value={draft.role ?? ""} onChange={event => choose(event.target.value)}>
+  return <SettingsRows><SettingRow title={t("newBot.startingRole")}>
+    <Select className="w-[220px]" aria-label={t("newBot.startingRole")} value={draft.role ?? ""} onChange={event => choose(event.target.value)}>
       <option value="">{t("newBot.customSettings")}</option>
       {BOT_ROLES.map(role => <option key={role.id} value={role.id}>{role.title}</option>)}
     </Select>
-  </label>;
+  </SettingRow></SettingsRows>;
 }
 
 function DraftMemory({ draft }: { draft: BotCreationDraft }) {

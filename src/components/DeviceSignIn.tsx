@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Copy, ExternalLink, Loader2, LogIn, X } from "../icons";
 import { api, ApiError, useStore } from "@/state/store";
 import { t } from "@/lib/i18n";
-import { openExternalLink } from "@/lib/app-links";
+import { openExternalLink, openSignInPage } from "@/lib/app-links";
 import { useCopyFeedback } from "@/lib/copy-text";
 import { engineSignedIn } from "@/lib/product-events";
 import type { LocaleKey } from "@/locales";
@@ -124,7 +124,10 @@ export function codexDeviceLink(value: string | null): string | null {
 
 const chatgptButton = "flex w-full items-center justify-center gap-2 rounded-lg border border-black/20 bg-white px-3 py-2 text-[13px] font-semibold text-black hover:opacity-85 disabled:opacity-50";
 
-export function DeviceSignInProgress({ auth, browserPkce = false, provider = "codex" }: { auth: DeviceSignInStatus; browserPkce?: boolean; provider?: DeviceSignInProvider }) {
+/** `opened`: false when the page this sign-in opened by itself was blocked (a plain browser tab); `onOpen` hears the
+ * person open it from here. */
+export function DeviceSignInProgress({ auth, browserPkce = false, provider = "codex", opened = true, onOpen }: { auth: DeviceSignInStatus; browserPkce?: boolean; provider?: DeviceSignInProvider;
+  opened?: boolean; onOpen?: () => void }) {
   const { state: codeCopy, copy: copyCode } = useCopyFeedback(auth.userCode ?? "");
   const copy = DEVICE_SIGN_IN_COPY[provider];
   const viaBrowser = !browserPkce ? loopbackLink(auth) : null;
@@ -158,14 +161,15 @@ export function DeviceSignInProgress({ auth, browserPkce = false, provider = "co
           {codeCopy === "copied" ? <Check size={15} className="text-success" /> : codeCopy === "failed" ? <X size={15} className="text-danger" /> : <Copy size={15} />}
         </button>
       </div></>}
-      <a href={link} target="_blank" rel="noopener noreferrer" onClick={(event) => {
+      <a href={link} target="_blank" rel="noopener noreferrer" data-device-open="" onClick={(event) => {
+        onOpen?.();
         if (window.duskDesktop?.openExternal) { event.preventDefault(); void openExternalLink(link); }
       }} className={browserPkce ? chatgptButton : "flex items-center justify-center gap-2 rounded-lg bg-ink px-3 py-2 text-[13px] font-semibold text-app hover:bg-ink/85"}>
         {browserPkce && <CodexMark size={16} className="fill-current" />}
         {t(browserPkce ? "engineSetup.chatgpt.start" : copy.open)} <ExternalLink size={13} />
       </a>
       <p role="status" className="flex items-center gap-1.5 text-[12px] text-ink-secondary">
-        <Loader2 size={12} className="animate-spin" /> {t("engineSetup.device.waiting")}
+        <Loader2 size={12} className="animate-spin" /> {t(opened ? "engineSetup.device.waiting" : "engineSetup.device.notOpened")}
       </p>
       {auth.expiresAt && Number.isFinite(Date.parse(auth.expiresAt)) && (
         <p className="text-[11px] text-ink-secondary">{t(browserPkce ? "engineSetup.chatgpt.expires" : "engineSetup.device.expires", { time: new Date(auth.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) })}</p>
@@ -186,6 +190,7 @@ export function DeviceSignIn({ instanceId, browserPkce = false, provider = "code
   const { refreshInstances, refreshModels } = useStore();
   const [auth, setAuth] = useState<DeviceSignInStatus | null>(null);
   const [busy, setBusy] = useState(autoStart);
+  const [opened, setOpened] = useState(true);
   const started = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const base = `/api/instances/${encodeURIComponent(instanceId)}/auth`;
@@ -239,10 +244,11 @@ export function DeviceSignIn({ instanceId, browserPkce = false, provider = "code
     try {
       const next: DeviceSignInStatus = browserPkce || provider !== "codex" ? (await api(`${base}/start`, { method: "POST" })).auth : await startDeviceSignIn(api, base);
       setAuth(next);
+      setOpened(true);
       if (next.phase === "succeeded") await refresh();
       else if (next.phase === "waiting") {
         const link = browserPkce ? chatgptPlanLink(next.authorizationUrl) : loopbackLink(next);
-        if (link) await openExternalLink(link);
+        if (link) setOpened(await openSignInPage(link));
       }
     } catch (cause) {
       setError(friendlyError(cause, failed));
@@ -275,7 +281,7 @@ export function DeviceSignIn({ instanceId, browserPkce = false, provider = "code
 
   return (
     <div className="mt-3 space-y-2" data-device-sign-in={provider} data-chatgpt-plan-sign-in={browserPkce || undefined}>
-      {auth && <DeviceSignInProgress auth={auth} browserPkce={browserPkce} provider={provider} />}
+      {auth && <DeviceSignInProgress auth={auth} browserPkce={browserPkce} provider={provider} opened={opened} onOpen={() => setOpened(true)} />}
       {auth?.phase === "waiting" ? (
         <button type="button" disabled={busy} onClick={() => void cancel()} className="w-full rounded-lg bg-control px-3 py-2 text-[12px] font-medium text-ink disabled:opacity-50">
           {busy ? t("engineSetup.device.cancelling") : t("engineSetup.device.cancel")}

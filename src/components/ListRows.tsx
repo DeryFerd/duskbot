@@ -9,7 +9,7 @@ import { BAR_RANK, useChrome, useNativeBar, useSheetPushDepth } from "@/mobile/c
 import { useNativeTrail } from "@/mobile/native-push";
 import type { MobileChrome } from "@/mobile/platform";
 import { Icon } from "./Icon";
-import { DialogPane, GrokDialog, mdPrimaryCls, mdSecondaryCls, rowButtonCls } from "./ui/GrokDialog";
+import { DialogPane, fieldLabelCls, GrokDialog, rowButtonCls, rowPrimaryCls } from "./ui/GrokDialog";
 import { SelectPill, type SelectPillOption } from "./ui/SelectPill";
 import { Toggle } from "./ui/Toggle";
 import { ArtState, HeadArt, type ArtName } from "./ui/Art";
@@ -632,8 +632,8 @@ export function FormDialog({ title, description, saveLabel, cancelLabel, canSave
         }}
         footer={(
           <>
-            {onSave && <button type="button" className={mdSecondaryCls} onClick={onClose}>{cancelLabel ?? t("common.cancel")}</button>}
-            <button type="submit" form={formId} disabled={Boolean(onSave) && (!canSave || busy)} className={mdPrimaryCls}>{onSave ? saveLabel ?? t("common.save") : t("common.done")}</button>
+            {onSave && <button type="button" className={rowButtonCls} onClick={onClose}>{cancelLabel ?? t("common.cancel")}</button>}
+            <button type="submit" form={formId} disabled={Boolean(onSave) && (!canSave || busy)} className={rowPrimaryCls}>{onSave ? saveLabel ?? t("common.save") : t("common.done")}</button>
           </>
         )}
       >
@@ -690,7 +690,7 @@ function NativeFormDialog({ title, description, saveLabel, cancelLabel, nativeFo
 export function FormField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[11px] leading-4 tracking-[0.01em] text-ink/68">{label}</span>
+      <span className={fieldLabelCls}>{label}</span>
       {children}
     </label>
   );

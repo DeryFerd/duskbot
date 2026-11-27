@@ -10,10 +10,12 @@ import { archivableChief } from "./bot-archive";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { PixelIcon } from "./ui/PixelIcon";
 import { cn } from "@/lib/cn";
-import { footnoteCls, formBodyCls, formCloseCls, formHeaderCls, formSheetCls, formTitleCls, rowHintCls, smallButtonCls } from "./ui/GrokDialog";
+import { SIMPLE_BUTTONS, SIMPLE_CARD, SettingsGroup } from "./SettingsPrimitives";
+import { compactBackdropStyle, compactSheetStyle } from "./compact-settings-sheet";
+import "../styles/settings.css";
 import { friendlyError } from "@/lib/plain-error";
 
-const dangerSmallCls = "dusk-press inline-flex h-6 shrink-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-full px-2 text-[12px] leading-4 tracking-[0.01em] text-danger outline-none hover:bg-danger/10 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus disabled:cursor-default disabled:opacity-40";
+const dangerPillCls = "ui-button text-danger! enabled:hover:bg-danger/10!";
 
 export type BotConfirmKind = "archive" | "delete";
 
@@ -81,19 +83,14 @@ export function ArchivedBotRow({
   onDelete: () => void;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-3 rounded-[10px] px-2 py-2 hover:bg-ink/[0.035]">
+    <div className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-1.5">
       <BotAvatar bot={bot} state="happy" size={32} animated={false} />
-      <div className="flex min-w-0 flex-1 flex-col gap-px">
-        <div className="truncate text-[13px] font-medium leading-[18px] text-ink">{bot.name}</div>
-        <div className="truncate text-[13px] leading-[18px] text-ink/68">{bot.title || t("sidebar.archived.botFallback")}</div>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="truncate text-[13px] leading-[18px] tracking-[0.015em] text-ink">{bot.name}</div>
+        <div className="truncate text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary">{bot.title || t("sidebar.archived.botFallback")}</div>
       </div>
       <div className="flex shrink-0 items-center gap-1">
-        <button
-          type="button"
-          onClick={onRestore}
-          disabled={disabled || deleting}
-          className={smallButtonCls}
-        >
+        <button type="button" onClick={onRestore} disabled={disabled || deleting} className="ui-button">
           {restoring && <Loader2 size={12} className="animate-spin" />}
           {t("sidebar.archived.restore")}
         </button>
@@ -102,7 +99,7 @@ export function ArchivedBotRow({
           onClick={onDelete}
           disabled={disabled || deleting}
           aria-label={t("sidebar.archived.deleteAria", { name: bot.name })}
-          className={dangerSmallCls}
+          className={dangerPillCls}
         >
           {deleting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
           {t("common.delete")}
@@ -210,74 +207,64 @@ export function ArchivedBotsPanel({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      data-settings-sheet
+      data-settings-look="simple"
+      className="settings-scrim z-50"
       onMouseDown={(event) => event.target === event.currentTarget && !locked && onClose()}
     >
-      <div aria-hidden="true" className="ui-dialog-scrim pointer-events-none absolute inset-0" />
+      <div aria-hidden="true" className="settings-backdrop" style={compactBackdropStyle} />
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="archived-bots-title"
         tabIndex={-1}
-        className={cn(formSheetCls, "max-h-[min(640px,calc(100dvh-32px))] max-w-[560px]")}
+        className="settings-dialog"
+        style={{ ...compactSheetStyle(560), maxHeight: "min(640px, calc(100dvh - 32px))" }}
       >
-        <header className={formHeaderCls}>
-          <div className="min-w-0 flex-1">
-            <h2 id="archived-bots-title" className={formTitleCls}>{t("sidebar.archived.title")}</h2>
-            <p className={cn(rowHintCls, "m-0")}>{t("sidebar.archived.subtitle")}</p>
+        <section className="settings-panel min-h-0">
+          <button type="button" onClick={onClose} disabled={locked} className="settings-close disabled:opacity-40" aria-label={t("sidebar.archived.close")}>
+            <X size={14} />
+          </button>
+          <header className="settings-pane-header">
+            <h2 id="archived-bots-title" className="settings-pane-title">{t("sidebar.archived.title")}</h2>
+            <div className={cn("flex items-center gap-1", SIMPLE_BUTTONS)}>
+              {bots.length > 1 && (
+                <button type="button" onClick={() => void restoreAll()} disabled={locked} className="ui-button">
+                  {restoringAll && <Loader2 size={12} className="animate-spin" />}
+                  {t("sidebar.archived.restoreAll")}
+                </button>
+              )}
+              {bots.length > 0 && (
+                <button type="button" onClick={() => setPendingDelete("all")} disabled={locked} className={dangerPillCls}>
+                  <Trash2 size={12} />
+                  {t("sidebar.archived.deleteAll")}
+                </button>
+              )}
+            </div>
+          </header>
+          <div className="settings-scroll">
+            <div className={cn("settings-pane", SIMPLE_BUTTONS)} style={{ gap: 20, paddingBottom: 20 }}>
+              <p className="m-0 px-2.5 text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary text-pretty">{t("sidebar.archived.subtitle")}</p>
+              <SettingsGroup label={t("sidebar.archived.count", { count: bots.length })}>
+                <div className={cn(SIMPLE_CARD, "flex flex-col")}>
+                  {bots.map((bot) => (
+                    <ArchivedBotRow
+                      key={bot.id}
+                      bot={bot}
+                      restoring={busyId === bot.id}
+                      deleting={Boolean(state.deletingBots[bot.id])}
+                      disabled={locked}
+                      onRestore={() => void restore(bot)}
+                      onDelete={() => setPendingDelete(bot)}
+                    />
+                  ))}
+                </div>
+              </SettingsGroup>
+              {error && <p role="alert" className="m-0 px-3 text-[13px] leading-[18px] text-danger">{error}</p>}
+            </div>
           </div>
-          <div className="flex items-center gap-1">
-            {bots.length > 1 && (
-              <button
-                type="button"
-                onClick={() => void restoreAll()}
-                disabled={locked}
-                className={smallButtonCls}
-              >
-                {restoringAll && <Loader2 size={12} className="animate-spin" />}
-                {t("sidebar.archived.restoreAll")}
-              </button>
-            )}
-            {bots.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setPendingDelete("all")}
-                disabled={locked}
-                className={dangerSmallCls}
-              >
-                <Trash2 size={12} />
-                {t("sidebar.archived.deleteAll")}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={locked}
-              className={cn(formCloseCls, "disabled:opacity-40")}
-              aria-label={t("sidebar.archived.close")}
-            >
-              <X size={16} />
-            </button>
-          </div>
-        </header>
-        <div className={cn(formBodyCls, "px-2 pb-3")}>
-          <div className={cn(footnoteCls, "pb-1")}>{t("sidebar.archived.count", { count: bots.length })}</div>
-          <div className="flex flex-col">
-            {bots.map((bot) => (
-              <ArchivedBotRow
-                key={bot.id}
-                bot={bot}
-                restoring={busyId === bot.id}
-                deleting={Boolean(state.deletingBots[bot.id])}
-                disabled={locked}
-                onRestore={() => void restore(bot)}
-                onDelete={() => setPendingDelete(bot)}
-              />
-            ))}
-          </div>
-          {error && <p role="alert" className="m-0 px-2 pt-2 text-[12px] leading-4 text-danger">{error}</p>}
-        </div>
+        </section>
       </div>
       <ConfirmDialog
         open={pendingDelete !== null}

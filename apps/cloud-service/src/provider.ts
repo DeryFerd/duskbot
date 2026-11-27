@@ -55,6 +55,10 @@ export class ProviderError extends Error {
   readonly code: string;
   constructor(status: number, code: string) { super(`The provider refused the request: ${code}.`); this.name = "ProviderError"; this.status = status; this.code = code; }
 }
+/** the provider refuses to start the machine for its own account's sake (an unpaid workspace, a suspended key), not the home's */
+export class ProviderPausedError extends ProviderError {
+  constructor(status: number, code: string) { super(status, code); this.name = "ProviderPausedError"; }
+}
 export class ProviderBusyError extends RetryableCloudError {
   constructor(code: string) { super(`The provider is busy: ${code}.`); this.name = "ProviderBusyError"; }
 }

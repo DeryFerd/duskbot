@@ -12,6 +12,7 @@ import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { killCliTree } from "../procs.ts";
+import { enterRenewal, type RenewalClock, type RenewalHold, type RenewalSource } from "./login-renewal.ts";
 
 /** Claude Code renews within 5 minutes of expiry (2.1.288); the extra minutes cover a slow start. */
 export const CLAUDE_RENEWAL_MARGIN_MS = 10 * 60_000;
@@ -92,4 +93,47 @@ export async function killClaudeTree(
 ): Promise<boolean> {
   await settleClaudeRenewal(claudeCredentialsFile(env), { gone: () => child.exitCode !== null || child.signalCode !== null });
   return kill(child, timeoutMs);
+}
+
+/** The renewal of the login `env` signs Claude in with, null when it has none in a file (a Mac keeps it in the Keychain,
+ * where the CLI alone reads it, and a token in the environment never renews). */
+export function claudeRenewalSource(env: NodeJS.ProcessEnv): RenewalSource | null {
+  const file = claudeCredentialsFile(env);
+  if (!file) return null;
+  const read = () => readClaudeStoredLogin(file);
+  return {
+    key: file,
+    due: (now) => claudeRenewalDue(read(), now),
+    version: () => { const login = read(); return login.state === "oauth" ? login.accessHash : null; },
+  };
+}
+
+/** Taken before a Claude process starts: only one of them renews a due login at a time, on the whole install. */
+export function enterClaudeRenewal(env: NodeJS.ProcessEnv, clock?: RenewalClock): Promise<RenewalHold> {
+  return enterRenewal(claudeRenewalSource(env), clock);
+}
+
+const AUTH_FAILURE_DEDUPE_MS = 5_000;
+const authFailures = new Map<string, { at: number; count: number; signOut: boolean }>();
+
+/** Whether a turn the CLI refused as signed out is a sign-out. A login whose file still holds its tokens is not one the
+ * first time: a refresh in another process, a provider's bad minute or a token the CLI has not renewed yet all answer
+ * 401 for one turn, and the next turn works. The same stored token refused again is a revoked login. A file that is
+ * blank or gone is a sign-out at once, and a login with no file here (Keychain, environment) says nothing more than
+ * the CLI did. Asking twice about one refusal (a few seconds apart) counts it once. */
+export function claudeRefusalIsSignOut(env: NodeJS.ProcessEnv, now = Date.now()): boolean {
+  const login = readClaudeStoredLogin(claudeCredentialsFile(env));
+  if (login.state !== "oauth" || !login.renewable) return true;
+  const known = authFailures.get(login.accessHash);
+  if (known && now - known.at < AUTH_FAILURE_DEDUPE_MS) return known.signOut;
+  const count = (known?.count ?? 0) + 1;
+  const verdict = { at: now, count, signOut: count >= 2 };
+  authFailures.set(login.accessHash, verdict);
+  if (authFailures.size > 32) authFailures.delete(authFailures.keys().next().value!);
+  return verdict.signOut;
+}
+
+export function claudeLoginRenewed(env: NodeJS.ProcessEnv): void {
+  const login = readClaudeStoredLogin(claudeCredentialsFile(env));
+  if (login.state === "oauth") authFailures.delete(login.accessHash);
 }

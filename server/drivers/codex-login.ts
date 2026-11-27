@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { execCli } from "../procs.ts";
 import { codexHome } from "./codex-identity.ts";
+import { enterRenewal, fingerprint, type RenewalClock, type RenewalHold, type RenewalSource } from "./login-renewal.ts";
 
 type Env = Record<string, string | undefined>;
 
@@ -60,4 +61,46 @@ export function codexLoginCheck(cli: string): { check: (env: Env) => Promise<"mi
     },
     forget: () => { forgets += 1; confirmedWithout = undefined; },
   };
+}
+
+/** Codex renews a ChatGPT login whose access token is about to end, or whose last renewal is over a week old (codex-cli
+ * 0.160 keeps 8 days); the margin covers a slow start. */
+export const CODEX_RENEWAL_MARGIN_MS = 10 * 60_000;
+export const CODEX_RENEWAL_AGE_MS = 7 * 86_400_000;
+
+function jwtExpiry(token: unknown): number | null {
+  if (typeof token !== "string") return null;
+  try {
+    const exp = (JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8")) as { exp?: unknown }).exp;
+    return typeof exp === "number" && Number.isFinite(exp) ? exp * 1000 : null;
+  } catch { return null; }
+}
+
+/** The ChatGPT login's renewal facts, read without starting Codex; tokens are only compared, never returned. */
+export function codexRenewalState(stored: string | null, now: number): { due: boolean; version: string | null } {
+  if (stored === null) return { due: false, version: null };
+  try {
+    const auth = JSON.parse(stored) as { tokens?: { access_token?: unknown; refresh_token?: unknown } | null; last_refresh?: unknown };
+    const refresh = auth.tokens?.refresh_token;
+    if (typeof refresh !== "string" || !refresh) return { due: false, version: null };
+    const expiry = jwtExpiry(auth.tokens?.access_token);
+    const last = typeof auth.last_refresh === "string" ? Date.parse(auth.last_refresh) : NaN;
+    const due = (expiry !== null && expiry - now <= CODEX_RENEWAL_MARGIN_MS) || (Number.isFinite(last) && now - last >= CODEX_RENEWAL_AGE_MS);
+    return { due, version: fingerprint(refresh) };
+  } catch { return { due: false, version: null }; }
+}
+
+export function codexRenewalSource(env: Env): RenewalSource | null {
+  const home = codexHome(env);
+  if (!home) return null;
+  return {
+    key: join(home, "auth.json"),
+    due: (now) => codexRenewalState(storedCodexLogin(env), now).due,
+    version: () => codexRenewalState(storedCodexLogin(env), Date.now()).version,
+  };
+}
+
+/** Taken before a Codex process starts: only one of them renews a due ChatGPT login at a time, on the whole install. */
+export function enterCodexRenewal(env: Env, clock?: RenewalClock): Promise<RenewalHold> {
+  return enterRenewal(codexRenewalSource(env), clock);
 }

@@ -129,7 +129,7 @@ export interface HomeWindow {
 export function createHomeWindow(deps: {
   journal(): unknown;
   frozen(): Promise<{ frozen: boolean; cloud?: string; place?: string } | null>;
-  account(): { state(): any; power(): any; wakeHome(intent: import("./cloud-account.mjs").WakeIntent): Promise<unknown>; setWaking(on: boolean): void; pairHome(cloudId?: string | null): Promise<{ origin: string; code: string; expiresAt: number }>;
+  account(): { state(): any; power(): any; wakeHome(intent: import("./cloud-account.mjs").WakeIntent, options?: { paused?: boolean }): Promise<unknown>; setWaking(on: boolean): void; pairHome(cloudId?: string | null): Promise<{ origin: string; code: string; expiresAt: number }>;
     pairTeam?(teamId: string): Promise<{ origin: string; code: string; expiresAt: number }>; signInAgain(): Promise<unknown>; begin(): Promise<unknown>; signOut?(): Promise<unknown>; reopen?(): Promise<unknown>;
     hideCloud?(cloudId: string): Promise<{ outcome: import("./cloud-account.mjs").CloudRemoveOutcome }> } | null;
   restored?(): Promise<unknown>;

@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Check, ExternalLink, LoaderCircle } from "../../icons";
-import { externalOpener, openExternalLink } from "@/lib/app-links";
+import { openSignInPage } from "@/lib/app-links";
 import { cloudAsleep, cloudWaking } from "@/lib/cloud-power";
 import { useCopyFeedback } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
@@ -25,16 +25,6 @@ export function siteName(driverKind: string): string {
     case "antigravityAgent": case "geminiAgent": return "Google";
     default: return "";
   }
-}
-
-/** Opens a sign-in page; false when it did not open. A plain browser tab blocks a page opened after the sign-in's start
- * answered (no click to carry it), and only a window.open without noopener says so. */
-export async function openSignInPage(link: string): Promise<boolean> {
-  if (externalOpener()) return openExternalLink(link).then(() => true, () => false);
-  const page = window.open(link, "_blank");
-  if (!page) return false;
-  try { page.opener = null; } catch {}
-  return true;
 }
 
 /** One connect at a time for a whole grid: a new one cancels the running one, and leaving the grid cancels it too. */

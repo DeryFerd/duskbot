@@ -49,12 +49,14 @@ if (dl) {
       const ph = $('[data-dl-phone]', dl), form = $('[data-dl-mail]', dl);
       if (!ph) return;
       $('.dl-cta', dl).hidden = true; note.hidden = true; ph.hidden = false;
+      for (const x of $$('[data-dl-mac]', dl)) x.hidden = true;
       if (/android/i.test(navigator.userAgent)) for (const x of $$('[data-dl-ios], [data-dl-android]', ph)) x.hidden = !x.hidden;
       sendToComputer(form, $('[data-dl-share]', ph));
       return;
     }
     const row = $(`#all [data-key="${key}"]`);
     if (!row) return;
+    for (const x of $$('[data-dl-mac]', dl)) x.hidden = !key.startsWith('mac');
     row.classList.add('is-yours');
     go.href = $('a', row).href;
     label.textContent = `download for ${$('.dl-name b', row).textContent}`;

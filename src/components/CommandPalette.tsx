@@ -5,7 +5,7 @@ import type { SearchHit } from "@/lib/search-hit";
 import { landOnSearchHit } from "@/lib/focus-message";
 import { imeComposing } from "@/lib/send-key";
 import { botUnreadCount } from "@/lib/bot-unread";
-import { shortcutBots, shownBotIds } from "@/lib/sidebar-shortcut-order";
+import { shortcutBots, shortcutTargets, shownBotIds, shownRowIds } from "@/lib/sidebar-shortcut-order";
 import { applySkinChoice, THEME_SKINS } from "@/lib/skins";
 import { openNewGroup } from "@/lib/new-group-request";
 import { t } from "@/lib/i18n";
@@ -22,6 +22,7 @@ import { desktopMotion } from "@/lib/desktop-motion";
 import { usePaletteExits } from "./palette-exits";
 import { pacedMs } from "@/lib/motion-speed";
 import { openSettings } from "@/lib/open-settings";
+import { localizedTaskTitle } from "@/lib/task-title";
 import { botPageCommands, settingsCommands } from "./palette-commands";
 
 const FORMER_PLACE_WORD = "workspace";
@@ -78,7 +79,7 @@ function Marked({ text, query }: { text: string; query: string }) {
 /** The conversation a message result is in, unless the message is the one that titled it and already says it. */
 function conversationOf(hit: SearchHit): string {
   const title = hit.task?.replace(/…$/, "").trim() ?? "";
-  return title && !hit.snippet.replace(/^…/, "").startsWith(title) ? hit.task ?? "" : "";
+  return title && !hit.snippet.replace(/^…/, "").startsWith(title) ? localizedTaskTitle(hit.task ?? "") : "";
 }
 
 export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {
@@ -188,7 +189,8 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
   const shownCommands = q ? ranked(commands, (command) => (command.also ? `${command.name} ${command.also}` : command.name), q) : commands.filter((command) => IDLE_COMMANDS.has(command.id));
   // The sidebar's order, as ⌘1 to ⌘9 count it, so each row names the shortcut that opens it from anywhere.
   const liveBots = shortcutBots(state.bots.filter((b) => !b.hidden), shownBotIds(document.querySelector("[data-sidebar-root]")));
-  const slot = new Map(liveBots.slice(0, 9).map((bot, index) => [bot.id, index + 1]));
+  const slot = new Map(shortcutTargets(liveBots, state.groups, shownRowIds(document.querySelector("[data-sidebar-root]")))
+    .map((target, index) => [target.kind === "bot" ? target.bot.id : target.group.id, index + 1]));
   const bots = q ? ranked(liveBots, (bot) => bot.name, q) : liveBots;
   const rooms = ranked(state.groups, (group) => group.name, q);
   const archived = q ? ranked(state.bots.filter((b) => b.hidden), (bot) => bot.name, q) : [];
@@ -349,7 +351,10 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
                   const members = group.memberIds.map((id) => state.bots.find((bot) => bot.id === id)).filter((bot): bot is Bot => Boolean(bot));
                   return row(`room:${group.id}`, index, entry, <GroupAvatar members={members} you={you} size={24} />, <Marked text={group.name} query={q} />,
                     group.description || groupPreview(group, state.bots, state.instances), t("composer.mention.channel"),
-                    group.unread ? <span role="img" aria-label={t("sidebar.grok.unreadActivity")} className="flex size-2 shrink-0 items-center"><span className="size-2 rounded-full bg-accent-text" /></span> : undefined);
+                    <>
+                      {group.unread && <span role="img" aria-label={t("sidebar.grok.unreadActivity")} className="flex size-2 shrink-0 items-center"><span className="size-2 rounded-full bg-accent-text" /></span>}
+                      {slot.has(group.id) && <span className="sr-only">Command {slot.get(group.id)}</span>}
+                    </>);
                 }
                 if (entry.kind === "message") {
                   const { hit } = entry;

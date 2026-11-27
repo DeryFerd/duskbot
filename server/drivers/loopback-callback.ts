@@ -90,17 +90,31 @@ export async function forwardLoopbackCallback(expected: Loopback, callbackUrl: s
 }
 
 /** A $BROWSER that records the link a CLI would open instead of opening anything, so a server never opens a window
- * and the app opens the link where the person is. POSIX only; Windows CLIs keep their own behaviour. */
-export function browserRecorder(): { env: Record<string, string>; read(): string | null; dispose(): void } | null {
-  if (process.platform === "win32") return null;
+ * and the app opens the link where the person is. On Windows a batch file: Claude Code there opened its own localhost
+ * tab next to the app's paste page, two sign-in tabs for one sign-in. */
+export function browserRecorder(platform: NodeJS.Platform = process.platform): { env: Record<string, string>; read(): string | null; dispose(): void } {
   const dir = mkdtempSync(join(tmpdir(), "dusk-signin-"));
   chmodSync(dir, 0o700);
-  const script = join(dir, "open");
   const file = join(dir, "link");
-  writeFileSync(script, `#!/bin/sh\nprintf '%s' "$1" > "${file}.tmp" && mv "${file}.tmp" "${file}"\n`, { mode: 0o700 });
+  const script = join(dir, platform === "win32" ? "open.cmd" : "open");
+  writeFileSync(script, platform === "win32" ? windowsRecorder() : `#!/bin/sh\nprintf '%s' "$1" > "${file}.tmp" && mv "${file}.tmp" "${file}"\n`, { mode: 0o700 });
   return {
     env: { BROWSER: script },
     read: () => { try { return readFileSync(file, "utf8").trim() || null; } catch { return null; } },
     dispose: () => { try { rmSync(dir, { recursive: true, force: true }); } catch {} },
   };
+}
+
+/** Security: the link is taken into a variable while delayed expansion is off and written while it is on, so its & | < >
+ * and ! are never read as commands; a single-pass %~1 does not expand its %3A escapes again. */
+function windowsRecorder(): string {
+  return [
+    "@echo off",
+    "setlocal DisableDelayedExpansion",
+    'set "link=%~1"',
+    "setlocal EnableDelayedExpansion",
+    '>"%~dp0link.tmp" echo(!link!',
+    'move /y "%~dp0link.tmp" "%~dp0link" >nul',
+    "",
+  ].join("\r\n");
 }

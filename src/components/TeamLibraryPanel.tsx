@@ -10,6 +10,7 @@ import { api, useStore, type Bot, type Group } from "@/state/store";
 import { ArrowLeft, Check, Compass, ExternalLink, FolderOpen, Github, Loader2, Search, UploadCloud, X } from "../icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import "../styles/settings.css";
 
 import { TEAM_GLYPHS, TeamImportDetails } from "./TeamImportDetails";
 import { ReadyBotGallery } from "./ReadyBotGallery";
@@ -410,9 +411,10 @@ export function TeamLibraryPanel({
         aria-modal="true"
         aria-labelledby="team-library-title"
         tabIndex={-1}
-        className="templates-sheet flex h-[min(700px,calc(100vh-32px))] w-[min(900px,calc(100vw-32px))] flex-col overflow-hidden rounded-[14px] border border-transparent bg-menu outline-none"
+        className="templates-sheet settings-dialog"
+        style={{ height: "min(700px, 100vh - 32px)" }}
       >
-        <header className="flex items-start justify-between gap-4 px-6 pb-3 pt-6 sm:px-8 sm:pt-7">
+        <header className="settings-pane-header" style={{ flexWrap: "nowrap", alignItems: "flex-start" }}>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               {pending && (
@@ -429,11 +431,11 @@ export function TeamLibraryPanel({
                   <ArrowLeft size={18} />
                 </button>
               )}
-              <h2 id="team-library-title" className="m-0 truncate pl-2 text-[17px] font-medium leading-6 tracking-[0.01em] text-ink">
+              <h2 id="team-library-title" className="settings-pane-title truncate">
                 {pending ? pending.name : t("templates.title")}
               </h2>
             </div>
-            {pending && <p className="m-0 ml-9 mt-1 text-[13px] leading-[18px] text-ink/68">
+            {pending && <p className="m-0 ml-9 mt-1 text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary">
                 {pending.kind === "backup"
                     ? t("templates.backupSummary", { bots: pending.members.length, conversations: pending.conversations ?? 0 })
                     : pending.kind === "package"
@@ -445,17 +447,10 @@ export function TeamLibraryPanel({
                     : t("templates.readyBots", { count: pending.members.length })}
             </p>}
           </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <button
-              onClick={leave}
-              disabled={importing}
-              className="rounded-lg p-2 text-ink-secondary hover:bg-raised hover:text-ink disabled:opacity-50"
-              aria-label={t("templates.close")}
-            >
-              <X size={21} />
-            </button>
-          </div>
         </header>
+        <button type="button" onClick={leave} disabled={importing} aria-label={t("templates.close")} className="settings-close disabled:opacity-50">
+          <X size={14} />
+        </button>
 
         {pending ? (
           <>

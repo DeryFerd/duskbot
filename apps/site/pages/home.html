@@ -1,5 +1,5 @@
 <section class="hero">
-  <a class="tag avail" href="#everywhere" data-mk-reveal><span class="avail-on">available on</span><span>{{os apple}}macos</span><i></i><span>{{os windows mono}}windows</span><i></i><span>{{os linux mono}}linux</span></a>
+  <a class="tag avail" href="#everywhere" data-mk-reveal><span class="avail-on">available on</span><span>{{os apple}}macos</span><i></i><span>{{os windows mono}}windows</span><i></i><span>{{os linux mono}}linux</span><i></i><span>{{os apple}}ios</span><i></i><span>{{os android mono}}android</span></a>
   <h1 data-mk-reveal>meet {{bot kit violet h-mark}} <a class="quiet" href="#demo">dusk bot</a></h1>
   <p class="lede" data-mk-reveal><a class="quiet" href="#team">your own crew of ai helpers</a>, on the <span class="ms"><a class="m m-chatgpt" href="/docs/getting-started#sign-in-to-your-ai">{{logo chatgpt}}chatgpt</a>, <a class="m m-claude" href="/docs/getting-started#sign-in-to-your-ai">{{logo claude}}claude</a>, <a class="m m-gemini" href="/docs/getting-started#sign-in-to-your-ai">{{logo gemini}}gemini</a> or <a class="m m-grok" href="/docs/getting-started#sign-in-to-your-ai">{{logo grok}}grok</a></span> you already use. each has its own computer and memory, so it gets real work&nbsp;done.</p>
   <div class="actions" data-mk-reveal>
@@ -215,13 +215,15 @@
       <img class="plan-art" src="/art/p-meadow.webp" alt="" width="800" height="354" loading="lazy">
       <h3>plus</h3>
       <p class="why">your bots keep working with the laptop shut.</p>
+      {{#trialDays}}<p class="trial-pill">{{trial-days}} days free</p>{{/trialDays}}
       <p class="plan-price"><span class="amt">$<span data-m="20" data-y="200">20</span></span><span class="per" data-m="a month" data-y="a year. two months free.">a month</span></p>
       <a class="btn light" href="{{app /signup?plan=plus}}" data-mk-press data-dusk-value="plus">get started</a>
       <ul class="has">
         <li>{{i check}}everything in free</li>
-        <li>{{i check}}your bots work in dusk cloud</li>
+        <li>{{i check}}your bots keep working with your laptop shut</li>
+        <li>{{i check}}daily backups</li>
+        <li>{{i check}}always available, wakes on its own in under a minute</li>
         <li>{{i check}}2 vcpu, 4 gb ram, 20 gb disk</li>
-        <li>{{i check}}always available, wakes in seconds</li>
         <li class="no">{{i minus}}no work license</li>
       </ul>
     </article>
@@ -230,12 +232,13 @@
       <img class="plan-art" src="/art/p-peaks.webp" alt="" width="800" height="354" loading="lazy">
       <h3>pro</h3>
       <p class="why">for heavy workloads, and for work.</p>
+      {{#trialDays}}<p class="trial-pill">{{trial-days}} days free</p>{{/trialDays}}
       <p class="plan-price"><span class="amt">$<span data-m="50" data-y="500">50</span></span><span class="per" data-m="a month" data-y="a year. two months free.">a month</span></p>
       <a class="btn light" href="{{app /signup?plan=pro}}" data-mk-press data-dusk-value="pro">get started</a>
       <ul class="has">
         <li>{{i check}}everything in plus</li>
-        <li>{{i check}}4 vcpu, 8 gb ram, 60 gb disk</li>
         <li>{{i check}}always available, priority wake</li>
+        <li>{{i check}}4 vcpu, 8 gb ram, 60 gb disk</li>
         <li>{{i check}}a work license for one person</li>
       </ul>
     </article>

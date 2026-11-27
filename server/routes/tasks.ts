@@ -16,6 +16,7 @@ import { titleConversationExcerpt, type ThreadTitleSource } from "../thread-titl
 import type { MessagePage } from "./channels.ts";
 import { bulkDeleteThreadIds, type BulkDeleteRefusal } from "./bulk-delete.ts";
 import { PASS, type RouteHandler } from "./table.ts";
+import { archiveEmptySideConversations, startsSideConversation } from "../side-conversations.ts";
 import { sawThread } from "../thread-presence.ts";
 import { readThreadNotifications } from "./notifications.ts";
 
@@ -23,7 +24,7 @@ export interface TaskRouteDeps {
   store: Pick<Store,
     | "bot" | "bots" | "taskByThread" | "project" | "projectBotForTask" | "patchTask" | "patchProject" | "tasks"
     | "switchTaskModel" | "switchTask" | "retitleTask" | "reorderProjects" | "refreshTaskPermissions" | "messagesTail"
-    | "messagesFor" | "deleteTasks" | "deleteProject" | "createTask" | "createProject">;
+    | "messagesFor" | "deleteTasks" | "deleteProject" | "createTask" | "createProject" | "activePath">;
   /** On a Cloud home only the owner changes how a bot asks for approval. */
   cloudHome: boolean;
   /** The desktop app owns this server, so a loopback caller is its owner. */
@@ -186,10 +187,12 @@ export function createTaskRoutes(deps: TaskRouteDeps): RouteHandler & { deleteTa
         return json(res, 400, { error: "from must be one of this bot's conversations" });
       }
       if (body.from !== undefined && cloudThreadRefusal(auth, body.from)) return json(res, 403, { error: cloudThreadRefusal(auth, body.from) });
-      const task = store.createTask(bot.id, typeof body.title === "string" ? body.title : undefined, body.select !== false, body.projectId, undefined, body.approvalMode, undefined, cwd);
+      const task = store.createTask(bot.id, typeof body.title === "string" ? body.title : undefined, body.select !== false, body.projectId, undefined, body.approvalMode, undefined, cwd,
+        startsSideConversation(store, bot.id));
       if (!task) return json(res, 500, { error: "couldn't create that task" });
       // Who opened it decides who may answer its cards on a shared workspace.
       if (auth.kind === "session") threadStarters.set(task.threadId, actorKey(auth));
+      archiveEmptySideConversations(store, bot.id, task.threadId, (threadId) => threadBusy(bot.id, threadId));
       if (typeof body.from === "string") deps.leftForNewChat?.(bot.id, body.from, task.threadId);
       return json(res, 201, { bot: publicBot(store.bot(bot.id)!), task: wireTask(task, store.bot(bot.id)!.modelSelection) });
     }
@@ -224,6 +227,7 @@ export function createTaskRoutes(deps: TaskRouteDeps): RouteHandler & { deleteTa
       if (switchLimit === null) return json(res, 400, { error: "messages must be a non-negative whole number" });
       const switched = store.switchTask(bot.id, m[2]);
       if (!switched) return json(res, 404, { error: "no such task" });
+      archiveEmptySideConversations(store, bot.id, m[2], (threadId) => threadBusy(bot.id, threadId));
       sawThread(m[2]);
       deps.threadRead?.(auth, m[2]);
       readThreadNotifications(m[2], broadcast, auth);

@@ -116,8 +116,23 @@ it("answers each run in the main chat as the bot's own reply, with no conversati
   const saved = await s.savedBot();
   expect(saved.tasks.map((task: any) => task.threadId)).toEqual([s.main]);
   expect(saved.tasks[0].routineRunId).toBeUndefined();
+  expect(saved.tasks[0].unread).toBe(true);
+  expect(saved.unread).toBe(true);
   expect(s.notified().filter((notification) => notification.kind === "done" && notification.threadId === s.main).map((notification) => notification.body))
     .toEqual(["Inbox watch: Acme replied: they need the invoice by Friday."]);
+}, 120_000);
+
+it("leaves the main chat read when a run there found nothing new", async () => {
+  const s = await server();
+  s.script([{ key: "run", match: [s.header("Inbox watch")], reply: "NOTHING NEW" }]);
+  expect((await s.savedBot()).unread).toBe(false);
+  const id = await s.runNow(await s.routine("Inbox watch"));
+  await s.settled(id);
+  expect(await s.run(id)).toMatchObject({ threadId: s.main });
+  const saved = await s.savedBot();
+  expect(saved.tasks[0].unread).toBe(false);
+  expect(saved.unread).toBe(false);
+  expect(s.notified().filter((notification) => notification.threadId === s.main)).toEqual([]);
 }, 120_000);
 
 it("waits for the person's own turn in the main chat, never interrupts it, and answers right after", async () => {

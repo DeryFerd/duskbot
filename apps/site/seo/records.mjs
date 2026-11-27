@@ -34,7 +34,7 @@ export const HUBS = {
     groups: [{ id: 'start-here', title: 'start here', types: ['pillar'] }, { id: 'how-and-why', title: 'how it works, and the fine print', types: ['guide'] }] },
   alternatives: { at: '/alternatives', nav: 'alternatives', title: 'Alternatives and comparisons, checked and dated / dusk bot',
     description: 'Honest comparisons of AI agent apps: OpenClaw, Hermes Agent, Manus, Claude Cowork, Poke and more, with dated sources and who should pick what.',
-    h1: 'alternatives and comparisons', lede: 'side by side, with a date and a source on every claim. where another tool fits you better, the page says so.',
+    h1: 'alternatives and comparisons', lede: 'side by side, with a date and a source on every claim. where another tool fits you better, the page says so. already running bots in grok bot, openclaw or hermes agent? dusk bot can bring them in, in settings.',
     groups: [{ id: 'alternatives', title: 'alternatives', types: ['alternative'] }, { id: 'comparisons', title: 'one on one', types: ['comparison'] }] },
   integrations: { at: '/integrations', nav: 'integrations', title: 'Connect AI bots to the apps you use / dusk bot',
     description: 'What your bots can do in Gmail, Google Calendar, Slack, Notion, GitHub and more: the real actions, what it asks first, and routines to copy.',

@@ -239,7 +239,6 @@ if (!app.isPackaged && process.platform === "darwin") {
   }
 }
 
-
 if (!app.requestSingleInstanceLock()) {
   console.log("[desktop] dusk bot is already running: focusing that window");
   process.exit(0);
@@ -537,6 +536,7 @@ import {
   stopCompanion,
 } from "./companion.mjs";
 import { autoStartCompanion } from "./companion-autostart.mjs";
+import { createCompanionWakeHold } from "./companion-wake.mjs";
 import { createRoutineWakeHold, rememberRoutineWake, routineWakePatch, routineWakeSettings } from "./routine-wake.mjs"; import { createSystemAwake } from "./system-awake.mjs";
 import { CREDENTIAL_PATCH, credentialSaveError } from "./credential-patch.mjs";
 import { createCappedLog } from "./capped-log.mjs";
@@ -565,17 +565,8 @@ const accountErrors = createAccountErrors({ origin: cloudTarget(process.env).ori
 accountErrors.watch(app, process, { ending: () => appEnding() });
 ipcMain.handle("error-reports:send", localOrHome("error-reports:send", (_event, report) => accountErrors.send(report)));
 
-let companionPowerBlocker = null;
-
-function syncCompanionKeepAwake(companionEnabled, keepAwake) {
-  const shouldBlock = companionEnabled && keepAwake;
-  if (shouldBlock && companionPowerBlocker === null) {
-    companionPowerBlocker = powerSaveBlocker.start("prevent-app-suspension");
-  } else if (!shouldBlock && companionPowerBlocker !== null) {
-    if (powerSaveBlocker.isStarted(companionPowerBlocker)) powerSaveBlocker.stop(companionPowerBlocker);
-    companionPowerBlocker = null;
-  }
-}
+const companionWake = createCompanionWakeHold({ blocker: powerSaveBlocker, isOnBattery: () => app.isReady() && powerMonitor.isOnBatteryPower(), log: (line) => slog(line) });
+const syncCompanionKeepAwake = (companionEnabled, keepAwake) => companionWake.sync(companionEnabled, keepAwake);
 
 const routineWake = createRoutineWakeHold({
   fetchStatus: () => (serverReady
@@ -2925,10 +2916,6 @@ ipcMain.handle("cloud-account:openTeam", localWorkspaceOnly("cloud-account:openT
   if (!team) throw new Error("You're not in that team.");
   await showHome({ place: { team: team.id, name: team.name } });
 }));
-// Cancel trial / Cancel plan and Keep my plan: the page sends the survey's words only; the Cloud is the verified session's own.
-ipcMain.handle("cloud-account:cancelPlan", localWorkspaceOnly("cloud-account:cancelPlan", (_event, survey) => ensureCloudAccount().cancelPlan(survey)));
-ipcMain.handle("cloud-account:keepPlan", localWorkspaceOnly("cloud-account:keepPlan", () => ensureCloudAccount().keepPlan()));
-ipcMain.handle("cloud-account:retention", localWorkspaceOnly("cloud-account:retention", (_event, step) => ensureCloudAccount().retention(step)));
 // this computer's CLI logins kept in a file, for the account's own Cloud being made; keychain logins (Claude Code among them) stay here
 ipcMain.handle("cloud-account:holdSignIns", localWorkspaceOnly("cloud-account:holdSignIns", async () => ensureCloudAccount().holdSignIns(await localAiSignIns())));
 ipcMain.handle("cloud-account:carriedAis", localWorkspaceOnly("cloud-account:carriedAis", async () => {
@@ -3698,6 +3685,7 @@ function startDemoUpdates() {
   appUpdater = createDemoUpdater({ flag, relaunch: relaunchAfterDesktopRemoteChange, onState: tellAppUpdate }); appUpdateMode = "self";
   appUpdater.start();
 }
+function linkedServerVersion() { try { return vpsLink.view().compat?.server ?? null; } catch { return null; } }
 function startAppUpdates(notice) {
   const updateDir = path.join(app.getPath("userData"), "app-update");
   const installedHere = () => (process.env.APPIMAGE ? swappedVersion(updateDir) === app.getVersion() : fs.existsSync(path.join(updateDir, process.platform === "win32" ? `DuskBot-${app.getVersion()}-setup.exe` : `DuskBot-${app.getVersion()}-${process.arch}.zip`)));
@@ -3712,7 +3700,7 @@ function startAppUpdates(notice) {
   const own = windowsInstaller ? { platform: "win32", signed: async () => true, blocked: async () => windowsPlace(app.getPath("exe")), asset: setupIn, sources: setupSources, keep: [TRIED], installer: windowsInstaller } : process.platform === "linux" && process.env.APPIMAGE ? appImageUpdates({ app, dir: updateDir, log: slog }) : null;
   if (own) {
     appUpdateMode = "self";
-    appUpdater = createAppUpdater({ current: app.getVersion(), arch: process.arch, dir: updateDir, ...own, quiet: () => quietNow(signals), fallback: notice, log: slog, onState: tellAppUpdate, onFailed });
+    appUpdater = createAppUpdater({ current: app.getVersion(), arch: process.arch, dir: updateDir, ...own, quiet: (o) => quietNow(signals, undefined, o), fallback: notice, log: slog, onState: tellAppUpdate, onFailed, serverRuns: linkedServerVersion });
     appUpdater.start();
     powerMonitor.on("resume", () => appUpdater?.soon?.());
     return;
@@ -3726,7 +3714,7 @@ function startAppUpdates(notice) {
   const bundle = path.resolve(path.dirname(app.getPath("exe")), "..", ".."), bundleId = macBundleId(bundle);
   appUpdateMode = "self";
   appUpdater = createAppUpdater({ current: app.getVersion(), arch: process.arch, dir: updateDir, signed: () => developerIdSigned(bundle), blocked: async () => updatePlace(bundle),
-    installer: squirrelInstaller({ autoUpdater, unpacked: since => squirrelBytes(os.tmpdir(), bundleId, since) }), awake: () => { const id = powerSaveBlocker.start("prevent-app-suspension"); return () => { if (powerSaveBlocker.isStarted(id)) powerSaveBlocker.stop(id); }; }, quiet: () => quietNow(signals), fallback: notice, log: slog, onState: tellAppUpdate, onFailed, serverRuns: () => { try { return vpsLink.view().compat?.server ?? null; } catch { return null; } } });
+    installer: squirrelInstaller({ autoUpdater, unpacked: since => squirrelBytes(os.tmpdir(), bundleId, since) }), awake: () => { const id = powerSaveBlocker.start("prevent-app-suspension"); return () => { if (powerSaveBlocker.isStarted(id)) powerSaveBlocker.stop(id); }; }, quiet: (o) => quietNow(signals, undefined, o), fallback: notice, log: slog, onState: tellAppUpdate, onFailed, serverRuns: linkedServerVersion });
   appUpdater.start();
   powerMonitor.on("resume", () => appUpdater?.soon?.());
 }
@@ -3739,6 +3727,7 @@ ipcMain.handle("app-update:move", localOrAppPage("app-update:move", () => { try 
 ipcMain.handle("app-update:seen", localOrAppPage("app-update:seen", () => { if (appUpdatedTo) { appUpdatedTo = null; tellAppUpdate(); } }));
 
 // powerMonitor is usable only once the app is ready.
+void app.whenReady().then(() => companionWake.watchPower(powerMonitor));
 void app.whenReady().then(() => installSessionEndFlush({ app, windows: () => BrowserWindow.getAllWindows(), powerMonitor, flusher: browsersFlush, quit: () => app.quit(), log: slog, onSessionEnd: () => { windowsSessionEnding = true; } }));
 app.on("before-quit", (e) => {
   talk.close(); ambientSurfaces.close();
@@ -3756,7 +3745,7 @@ app.on("before-quit", (e) => {
   // Cancel a scheduled recovery before yielding.
   const browsersQuit = process.platform === "win32" ? browsersFlush.flush() : Promise.resolve(true);
   const stoppingServer = browsersQuit.then(() => Promise.all([serverSupervisor.shutdown(), devServer?.stop() ?? true])).then((all) => all.every(Boolean));
-  syncCompanionKeepAwake(false, false);
+  companionWake.stop();
   routineWake.stop();
   try {
     desktopCompanionRelay?.close?.();

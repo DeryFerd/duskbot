@@ -48,15 +48,16 @@ export function CreateBotSheet({ open, onClose, onOpenChat }: SheetPageProps<"cr
   };
   return (
     <Sheet open={open} onClose={onClose} title={t("mobile.create.title")} full bodyClassName="flex flex-col">
-      <form onSubmit={(event) => { event.preventDefault(); create(); }} className="flex flex-1 flex-col gap-4 px-5 pt-1">
+      <form onSubmit={(event) => { event.preventDefault(); create(); }} className="flex flex-1 flex-col gap-4 px-4 pt-1">
         <div className="self-center">
           <MausAvatar bodyId={body} color={color} size={88} animated={false} label={t("mobile.create.preview")} />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor={nameId} className="px-1 text-[14px] font-semibold text-ink-secondary">{t("mobile.create.name")}</label>
-          <input id={nameId} name="botName" value={name} maxLength={80} autoComplete="off" enterKeyHint="done" onChange={(event) => setName(event.target.value)} placeholder={t("mobile.create.placeholder")} className="h-12 w-full rounded-[14px] border-0 bg-menu px-4 text-[17px] font-medium text-ink outline-none placeholder:text-ink-tertiary focus-visible:ring-2 focus-visible:ring-ink/30" />
+          <label htmlFor={nameId} className="px-4 text-[14px] font-medium text-ink-secondary">{t("mobile.create.name")}</label>
+          <input id={nameId} name="botName" value={name} maxLength={80} autoComplete="off" enterKeyHint="done" onChange={(event) => setName(event.target.value)} placeholder={t("mobile.create.placeholder")} className="h-12 w-full rounded-[16px] border-0 bg-menu px-4 text-[17px] font-medium text-ink outline-none placeholder:text-ink-tertiary focus-visible:ring-2 focus-visible:ring-ink/30" />
         </div>
-        <p id={`${nameId}-look`} className="-mb-1.5 px-1 text-[14px] font-semibold text-ink-secondary">{t("mobile.create.look")}</p>
+        <p id={`${nameId}-look`} className="-mb-2.5 px-4 text-[14px] font-medium text-ink-secondary">{t("mobile.create.look")}</p>
+        <div className="flex flex-col gap-2 rounded-[16px] bg-menu px-2 py-3">
         <div role="radiogroup" aria-label={t("mobile.create.body")} onKeyDown={moveRadio} className="grid grid-cols-5 justify-items-center gap-y-2">
           {BODIES.map((id) => (
             <button key={id} type="button" role="radio" aria-checked={id === body} aria-label={DUSK_BODY_NAMES[id]} tabIndex={id === body ? 0 : -1} onClick={() => { if (id !== body) { setBody(id); haptic("pick"); } }} className="mobile-press flex size-11 items-center justify-center rounded-full">
@@ -67,12 +68,13 @@ export function CreateBotSheet({ open, onClose, onOpenChat }: SheetPageProps<"cr
             </button>
           ))}
         </div>
-        <div role="radiogroup" aria-label={t("mobile.create.colour")} onKeyDown={moveRadio} className="grid grid-cols-5 justify-items-center pb-2">
+        <div role="radiogroup" aria-label={t("mobile.create.colour")} onKeyDown={moveRadio} className="grid grid-cols-5 justify-items-center">
           {COLORS.map((value) => (
             <button key={value} type="button" role="radio" aria-label={t(`mobile.create.colour.${value}`)} aria-checked={value === color} tabIndex={value === color ? 0 : -1} onClick={() => { if (value !== color) { setColor(value); haptic("pick"); } }} className="mobile-press flex size-11 items-center justify-center rounded-full">
-              <span className={cn("size-[30px] rounded-full", value === color && "ring-2 ring-ink ring-offset-[3px] ring-offset-(--m-sheet-page)")} style={{ background: colorSwatch(value) }} />
+              <span className={cn("size-[30px] rounded-full", value === color && "ring-2 ring-ink ring-offset-[3px] ring-offset-(--color-menu)")} style={{ background: colorSwatch(value) }} />
             </button>
           ))}
+        </div>
         </div>
         <div className="mt-auto pt-2">
           <button type="submit" disabled={!name.trim() || pending} aria-busy={pending} aria-describedby={!name.trim() ? `${nameId}-hint` : undefined} className="mobile-press flex h-12 w-full items-center justify-center rounded-full bg-ink text-[16px] font-semibold text-app disabled:opacity-40">

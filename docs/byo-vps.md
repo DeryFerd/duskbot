@@ -38,8 +38,9 @@ not one that also holds things you would not hand to the agent.
 
 ## The required SSH config alias
 
-dusk bot connects only through a named alias in your `~/.ssh/config` — you type the alias into
-Settings → API keys, nothing else. Every bot action becomes a `docker exec` over SSH, so the app
+dusk bot connects only through a named alias in your `~/.ssh/config`. You type the alias into a bot's
+own settings (Bot Settings → Access → **Server (SSH alias)**, shown once the **Self-hosted VPS** backend is
+chosen); that is the whole setup, and it needs no full dusk bot server on the VPS and no moving of bots. Every bot action becomes a `docker exec` over SSH, so the app
 supplies connection sharing and fail-fast timeouts itself: it runs each VPS command through its own
 `ssh_config` (under `~/.duskbot/ssh/`) that includes your file first and fills in `ControlMaster`,
 `ControlPersist`, keepalives and a connect timeout wherever your alias leaves them unset. Anything your
@@ -69,9 +70,13 @@ Host my-vps
 
 ### One server per bot
 
-The app-level alias (Settings → API keys) is the default server for every bot. A bot can also be pointed at
-its own alias: Bot Settings → Access → **Server (SSH alias)** appears whenever the **Self-hosted VPS**
-backend is chosen, and an empty field means "use the default". The bot's own server then wins for everything
+Each bot names its own server in Bot Settings → Access → **Server (SSH alias)**, which appears whenever the
+**Self-hosted VPS** backend is chosen. Bots that share a Docker host each get the same alias. The desktop app
+has no separate field for an app-wide default alias (Settings → API keys only lists the VPS row and opens
+Settings → Computer), and **Add your own server** under Computer → Where bots work is the other, full-server
+flow: it installs dusk bot on the VPS and moves bots there, so skip it for desktop-only use. If an app-wide
+default alias is set (a managed install or the server's own config), an empty field means "use the default".
+The bot's own server then wins for everything
 that matters to that bot — provisioning, status checks, previews, screenshots, watched desktop sessions, its
 computer tools, and deletion cleanup. The Settings inventory spans every server in play and tags each
 computer with the alias that holds it.

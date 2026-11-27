@@ -44,6 +44,9 @@ import { VERIFICATION_TEMP_KEY, antigravityTempDir, sweepAntigravityTemp } from 
 import {
   ANTIGRAVITY_INELIGIBLE_ACCOUNT,
   ANTIGRAVITY_INTERNAL_ERROR,
+  ANTIGRAVITY_MOMENTARY_AUTH,
+  antigravityAuthenticateRetry,
+  setAntigravityAuthenticateRetryDelays,
   ANTIGRAVITY_SLASH_COMMANDS,
   AntigravityDriver,
   antigravityAccountIneligible,
@@ -1203,6 +1206,70 @@ describe("Antigravity driver over shared ACP", () => {
     expect(done).toMatchObject({ ok: false });
     const error = recorder.events.find((event) => event.type === "runtime.error" && event.turnId === turnId);
     expect(error).toMatchObject({ message: ANTIGRAVITY_INELIGIBLE_ACCOUNT });
+  });
+
+  it("tells a momentary sign-in failure from a lost login", () => {
+    const rpc = (code: number, message: string) => Object.assign(new Error(message), { code });
+    expect(antigravityAuthenticateRetry(rpc(-32603, "Internal error: dial tcp: i/o timeout"))).toBe("momentary");
+    expect(antigravityAuthenticateRetry(new Error("request timed out"))).toBe("momentary");
+    expect(antigravityAuthenticateRetry(rpc(-32603, "No browser is available here"))).toBe("unconfirmed");
+    expect(antigravityAuthenticateRetry(rpc(-32000, "Authentication required"))).toBeUndefined();
+    expect(antigravityAuthenticateRetry(rpc(-32603, "invalid_grant"))).toBeUndefined();
+  });
+
+  describe("a failed sign-in check", () => {
+    const runAuthTurn = async (instanceId: string, error: object, failCount: number) => {
+      ensureDirs();
+      setAntigravityAuthenticateRetryDelays([5, 5, 5]);
+      const fake = fakeRuntime();
+      const tokenDirectory = join(antigravityProfileDirectory(instanceId), "antigravity-acp");
+      mkdirSync(tokenDirectory, { recursive: true });
+      const tokenFile = join(tokenDirectory, "antigravity-oauth-token");
+      writeFileSync(tokenFile, JSON.stringify({ token: { access_token: "ok", refresh_token: "r" } }), { mode: 0o600 });
+      const failure = join(fake.directory, "auth-failure.json");
+      writeFileSync(failure, JSON.stringify(error));
+      instance = await AntigravityDriver.create({
+        instanceId,
+        displayName: "Antigravity",
+        environment: {
+          FAKE_ACP_AUTH_METHOD: "oauth-personal", FAKE_ACP_MODES: "default",
+          FAKE_ACP_AUTH_FAILURE_FILE: failure, FAKE_ACP_AUTH_FAIL_UNTIL_FILE: join(fake.directory, "auth-count"), FAKE_ACP_AUTH_FAIL_COUNT: String(failCount),
+        },
+        enabled: true,
+        config: { cli: fake.executable, fullAuto: false },
+      });
+      recorder = recordEvents(instance.adapter);
+      const { turnId } = await instance.adapter.sendTurn({ threadId: `thread-${instanceId}`, text: "hello", approvalMode: "ask", cwd: fake.directory });
+      const done = await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId);
+      return { done, tokenFile, events: recorder.events.filter((event) => event.turnId === turnId) };
+    };
+    afterEach(() => setAntigravityAuthenticateRetryDelays([2_000, 6_000, 15_000]));
+
+    it("is tried again when Google could not be reached, and the turn runs", async () => {
+      const { done, events } = await runAuthTurn("antigravity-auth-network", { code: -32603, message: "Internal error: dial tcp: i/o timeout" }, 2);
+      expect(done).toMatchObject({ ok: true });
+      expect(events.filter((event) => event.type === "runtime.error")).toEqual([]);
+    });
+
+    it("is tried again when the CLI falls back to its browser sign-in after a failed renewal", async () => {
+      const { done } = await runAuthTurn("antigravity-auth-nobrowser", { code: -32603, message: "No browser is available here" }, 1);
+      expect(done).toMatchObject({ ok: true });
+    });
+
+    it("says Google could not be reached, not that the person is signed out, and keeps the sign-in", async () => {
+      const { done, events, tokenFile } = await runAuthTurn("antigravity-auth-down", { code: -32603, message: "Internal error: connection reset" }, 1000);
+      expect(done).toMatchObject({ ok: false });
+      const error = events.find((event) => event.type === "runtime.error");
+      expect(error).toMatchObject({ message: ANTIGRAVITY_MOMENTARY_AUTH });
+      expect(error).not.toHaveProperty("setup", true);
+      expect(readFileSync(tokenFile, "utf8")).toContain("refresh_token");
+      expect(await antigravityProfileAuthenticated({ tokenPath: tokenFile })).toBe(true);
+    });
+
+    it("shows the reconnect card once when the login is refused every time", async () => {
+      const { events } = await runAuthTurn("antigravity-auth-revoked", { code: -32000, message: "Authentication required" }, 1000);
+      expect(events.filter((event) => event.type === "runtime.error")).toEqual([expect.objectContaining({ message: expect.stringContaining("Sign in with Google"), setup: true })]);
+    });
   });
 
   describe("an internal error before anything reached the person", () => {

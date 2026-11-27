@@ -48,9 +48,15 @@ export class NoVoiceConfigured extends Error {
 
 const elevenLabs = (cfg: AppConfig) => voiceCredential(cfg.tts?.key);
 
-export function voiceProvider(cfg: AppConfig): VoiceProvider {
+/** An explicit choice always wins. With none, an ElevenLabs credential already on file (own key, env or included) keeps
+ * ElevenLabs; otherwise the OS voice, where this host has one. A host without it falls back to ElevenLabs, the only
+ * engine that can be included with the plan. */
+export function voiceProvider(cfg: AppConfig, platform: string = process.platform): VoiceProvider {
   const provider = cfg.tts?.provider;
-  return provider && OTHER_PROVIDERS.includes(provider) ? provider : "elevenlabs";
+  if (provider === "elevenlabs") return provider;
+  if (provider && OTHER_PROVIDERS.includes(provider)) return provider;
+  if (elevenLabs(cfg)) return "elevenlabs";
+  return systemVoices.systemVoicesAvailable(platform) ? "system" : "elevenlabs";
 }
 
 export function providerConfigured(cfg: AppConfig): boolean {
@@ -69,9 +75,7 @@ export function voiceConfigured(cfg: AppConfig): boolean {
   if (isKeyedVoice(provider)) return Boolean(keyFor(cfg, provider) && KEYED_VOICES[provider].module.isSupportedVoice(cfg.tts?.voice));
   if (provider === "gemini") return Boolean(cfg.tts?.geminiKey && gemini.isSupportedVoice(cfg.tts?.voice));
   if (provider === "xai") return Boolean(cfg.xai?.key && cfg.tts?.voice);
-  if (provider === "system") {
-    return systemVoices.systemVoicesAvailable() && Boolean(cfg.tts?.voice);
-  }
+  if (provider === "system") return systemVoices.systemVoicesAvailable();
   if (provider === "chatterbox") return Boolean(cfg.tts?.baseUrl?.trim() && cfg.tts?.voice);
   if (provider === "fish") return Boolean(cfg.tts?.fishKey && cfg.tts?.voice);
   return Boolean(elevenLabs(cfg) && cfg.tts?.voice);
@@ -82,9 +86,7 @@ export function voiceReady(cfg: AppConfig, voiceId?: string): boolean {
   if (isKeyedVoice(provider)) return Boolean(keyFor(cfg, provider) && KEYED_VOICES[provider].module.isSupportedVoice(voiceId || cfg.tts?.voice));
   if (provider === "gemini") return Boolean(cfg.tts?.geminiKey && gemini.isSupportedVoice(voiceId || cfg.tts?.voice));
   if (provider === "xai") return Boolean(cfg.xai?.key && (voiceId || cfg.tts?.voice));
-  if (provider === "system") {
-    return systemVoices.systemVoicesAvailable() && Boolean(voiceId || cfg.tts?.voice);
-  }
+  if (provider === "system") return systemVoices.systemVoicesAvailable();
   if (provider === "chatterbox") return Boolean(cfg.tts?.baseUrl?.trim() && (voiceId || cfg.tts?.voice));
   if (provider === "fish") return Boolean(cfg.tts?.fishKey && (voiceId || cfg.tts?.voice));
   return Boolean(elevenLabs(cfg) && (voiceId || cfg.tts?.voice));
@@ -175,10 +177,8 @@ export function speak(cfg: AppConfig, text: string, voiceId?: string, run?: syst
     return grok.synthesize(text, voice, key);
   }
   if (provider === "system") {
-    const voice = voiceId || cfg.tts?.voice;
     if (!systemVoices.systemVoicesAvailable() && !run) throw new NoVoiceConfigured("key");
-    if (!voice) throw new NoVoiceConfigured("voice");
-    return systemVoices.synthesizeSystem(text, voice, run);
+    return systemVoices.synthesizeSystem(text, voiceId || cfg.tts?.voice, run);
   }
   if (provider === "chatterbox") {
     const baseUrl = cfg.tts?.baseUrl?.trim();

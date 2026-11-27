@@ -14,7 +14,7 @@ import { boundedJson, RetryableCloudError } from "../../dashboard/server/clouds/
 import type { ProviderServer } from "../../dashboard/server/clouds/types.ts";
 import { INSTABOX_HOME_VOLUME, INSTABOX_SETUP_FILE, INSTABOX_SETUP_LOG, INSTABOX_SETUP_STATUS, INSTABOX_SNAPSHOT_FILE, INSTABOX_USER_HOME, SNAPSHOT_COMMAND, SNAPSHOT_DONE_COMMAND } from "./home.ts";
 import type { ProviderCostProfile } from "./power/cost.ts";
-import { ProviderBusyError, ProviderError, ProviderLimitError, type MachineCreateInput, type MachineProvider, type MachineRecord, type MachineState } from "./provider.ts";
+import { ProviderBusyError, ProviderError, ProviderLimitError, ProviderPausedError, type MachineCreateInput, type MachineProvider, type MachineRecord, type MachineState } from "./provider.ts";
 
 export const INSTABOX_SIZES = [
   { vcpu: 2, memMiB: 4096 }, { vcpu: 4, memMiB: 8192 }, { vcpu: 8, memMiB: 16384 }, { vcpu: 16, memMiB: 32768 }, { vcpu: 32, memMiB: 65536 },
@@ -70,6 +70,9 @@ const LIVE_SNAPSHOT = /^live-([a-z0-9]{26})-(\d{13})$/;
 const SNAPSHOT_ID = /^sn_[a-z0-9]{26}$/;
 const SNAPSHOT_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const time = (value: unknown) => typeof value === "string" && Number.isFinite(Date.parse(value)) ? Date.parse(value) : null;
+
+/** InstaBox refuses every start of a workspace it paused for its own billing (seen 2026-11-27: `payment_failed`) */
+const PAUSED_CODES = new Set(["payment_failed", "payment_required", "billing_suspended", "account_suspended", "workspace_suspended", "workspace_paused"]);
 
 export class InstaboxError extends ProviderError {
   constructor(status: number, code: string) { super(status, code); this.message = `InstaBox refused the request: ${code}.`; this.name = "InstaboxError"; }
@@ -164,6 +167,7 @@ export function createInstaboxProvider(options: InstaboxProviderOptions): Machin
       throw new ProviderLimitError(retryMs, { nextStartAt: retryMs === null ? null : (options.now ?? Date.now)() + retryMs, window: code === "rate_limited" ? "minute" : null, cause: code, startLimit: code === "rate_limited" });
     if (response.status === 409 && ["operation_conflict", "idempotency_conflict"].includes(code)) throw new ProviderBusyError(code);
     if (response.status >= 500) throw new RetryableCloudError();
+    if (response.status === 402 || PAUSED_CODES.has(code)) throw new ProviderPausedError(response.status, code);
     throw new InstaboxError(response.status, code);
   }
   async function call(method: string, path: string, init: Init = {}): Promise<Record<string, any> | null> {

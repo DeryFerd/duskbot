@@ -5,6 +5,9 @@ import { activeLocale, t } from "@/lib/i18n";
 import { collectWorkspaceClientState, WORKSPACE_RESTORE_MARKER } from "@/lib/workspace-backup-client";
 import { Card as RowsCard, ItemRow, NoteRow, SwitchRow } from "./ListRows";
 import { textFieldCls } from "./ui/GrokDialog";
+import { SIMPLE_BUTTONS } from "./SettingsPrimitives";
+import { cn } from "@/lib/cn";
+import "../styles/settings.css";
 import { WorkspaceBackupRestartNotice, WorkspaceBackupSummaryView } from "./WorkspaceBackupSettings";
 import { ArtState } from "./ui/Art";
 
@@ -273,9 +276,12 @@ export function ConnectedCompanyBackupSettings({ connection, bridge }: { connect
     {dialog && <dialog ref={nativeDialog} aria-labelledby="company-backup-dialog-title" onKeyDown={(event) => {
       // The enclosing Settings dialog has its own window-level keyboard trap.
       if (event.key === "Escape" || event.key === "Tab") event.stopPropagation();
-    }} onCancel={(event) => { event.preventDefault(); if (!action) closeDialog(); }} className="ui-dialog fixed inset-0 m-auto max-h-[85dvh] w-[min(30rem,calc(100vw-2rem))] overflow-y-auto p-5 text-[13px] leading-[18px] text-ink backdrop:bg-black/50">
-      <div className="flex flex-col gap-3">
-        <h3 id="company-backup-dialog-title" className="text-[15px] font-medium leading-[22px]">{title}</h3>
+    }} onCancel={(event) => { event.preventDefault(); if (!action) closeDialog(); }} data-settings-look="simple" className="settings-dialog m-auto p-0 backdrop:bg-black/50" style={{ position: "fixed", inset: 0, width: "min(480px, 100vw - 32px)", maxHeight: "calc(100dvh - 32px)" }}>
+      <div className="settings-pane-header">
+        <h3 id="company-backup-dialog-title" className="settings-pane-title">{title}</h3>
+      </div>
+      <div className="settings-scroll">
+      <div className={cn("settings-pane", SIMPLE_BUTTONS)} style={{ gap: 12, paddingBottom: 20 }}>
         {needsRestart && <WorkspaceBackupRestartNotice />}
         {(dialog.kind === "restore" || dialog.kind === "delete") && <div className="text-[13px] text-ink-secondary"><p>{dateLabel(dialog.entry)} · {bytes(dialog.entry.sizeBytes)}</p><code className="break-all text-[11px]">{dialog.entry.id}</code></div>}
         {(dialog.kind === "create" || dialog.kind === "schedule") && <form className="flex flex-col gap-3" onSubmit={(event) => { event.preventDefault(); if (dialog.kind === "schedule") void configureSchedule(true); else create(); }}>
@@ -303,6 +309,7 @@ export function ConnectedCompanyBackupSettings({ connection, bridge }: { connect
         {busyView}
         {statusMessage && <p role="alert" className="break-words text-[13px] text-danger">{statusMessage}</p>}
         <button type="button" autoFocus className="ui-button self-end" disabled={action !== null} onClick={closeDialog}>{t("companyBackup.cancel")}</button>
+      </div>
       </div>
     </dialog>}
   </RowsCard>;

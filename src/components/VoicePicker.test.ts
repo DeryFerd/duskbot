@@ -180,7 +180,7 @@ describe("VoicePicker", () => {
 
   it("names a selected voice the list has not loaded yet", async () => {
     await mount({ value: "c".repeat(32), voices: [] });
-    expect(trigger().textContent).toBe("Current agent voice");
+    expect(trigger().textContent).toBe("Current bot voice");
   });
 
   it("shows the library voice being added in the field and holds the field until it is", async () => {

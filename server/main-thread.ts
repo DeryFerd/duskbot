@@ -7,6 +7,8 @@ interface MainThreadCandidate {
   chatApp?: boolean;
   /** Set on a thread a bot opened (start_thread, a teammate's hand-off): a job beside the person's chat, not their chat. */
   openedBy?: unknown;
+  /** Set on a conversation the person started beside another one (/new): never main by being written in, only by their choice. */
+  side?: boolean;
 }
 
 export function oldestThread(tasks: readonly MainThreadCandidate[]): string | undefined {
@@ -25,11 +27,12 @@ export function wasOldestThread(tasks: readonly MainThreadCandidate[], threadId:
 /** The thread a bot opens to when threads are hidden: the one the person chose (while it is open), else the open thread
  * they last wrote in, else the selected one, else the oldest. A chat app's thread (Telegram, Discord) and a job a bot
  * opened are the last one written in, or the selected one, only when the bot has no open thread of the person's own:
- * writing in a job to steer it never hides the chat the person started from. */
+ * writing in a job to steer it never hides the chat the person started from. The same holds for a side
+ * conversation (/new): only "Set as main thread" moves main to it. */
 export function mainThread(tasks: readonly MainThreadCandidate[], selectedId?: string, chosenId?: string): string | undefined {
   const open = tasks.filter((task) => !task.routineRunId && task.archivedAt === undefined);
   if (chosenId && open.some((task) => task.threadId === chosenId)) return chosenId;
-  const own = open.filter((task) => !task.chatApp && !task.openedBy);
+  const own = open.filter((task) => !task.chatApp && !task.openedBy && !task.side);
   const notChatApp = open.filter((task) => !task.chatApp);
   const pool = own.length ? own : notChatApp.length ? notChatApp : open;
   const asked = pool.reduce<MainThreadCandidate | undefined>(

@@ -79,16 +79,18 @@ window.duskBuild = async () => {
   return 'mac-arm64';
 };
 
-// plus and pro start free while the account service runs a trial (DUSK_TRIAL_DAYS); without one the cards stay as built
+// plus and pro start free while the account service runs a trial (DUSK_TRIAL_DAYS). the pill is built into the page; this keeps it true to the live trial
 {
   const buys = [...document.querySelectorAll('.plan a[href*="/signup?plan="]')];
   if (buys.length) fetch('/api/public/config').then((r) => (r.ok ? r.json() : null)).then((config) => {
-    const days = config?.plans?.find((plan) => plan.trialDays)?.trialDays;
-    if (!Number.isInteger(days) || days < 1) return;
+    if (!config?.plans) return;
+    const days = config.plans.find((plan) => plan.trialDays)?.trialDays;
+    const on = Number.isInteger(days) && days >= 1;
     for (const a of buys) {
+      const pill = a.closest('.plan')?.querySelector('.trial-pill');
+      if (!on) { pill?.remove(); continue; }
       a.textContent = 'start free trial';
-      const price = a.closest('.plan')?.querySelector('.plan-price');
-      if (price && !price.querySelector('.per-trial')) price.prepend(Object.assign(document.createElement('span'), { className: 'per per-trial', textContent: `${days} ${days === 1 ? 'day' : 'days'} free, then` }));
+      if (pill) pill.textContent = `${days} ${days === 1 ? 'day' : 'days'} free`;
     }
   }).catch(() => {});
 }

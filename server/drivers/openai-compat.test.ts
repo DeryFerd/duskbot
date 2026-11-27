@@ -347,6 +347,21 @@ describe("OpenAICompatDriver", () => {
     await inst.dispose();
   });
 
+  it("marks a fixed model list as custom, so an access: custom picker shows it", async () => {
+    const inst = await OpenAICompatDriver.create({
+      instanceId: "test-managed",
+      displayName: "Managed",
+      enabled: true,
+      config: OpenAICompatDriver.decodeConfig({ url: "https://example.test/v1", key: "secret", managedModels: ["a", "b"] }),
+      environment: {},
+    });
+    expect(inst.models).toEqual({
+      default: "a",
+      options: [{ id: "a", label: "a", custom: true }, { id: "b", label: "b", custom: true }],
+    });
+    await inst.dispose();
+  });
+
   it("lists LM Studio chat keys from the native catalog and skips the OpenAI variant id", async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
