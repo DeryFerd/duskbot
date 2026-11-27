@@ -204,7 +204,8 @@ export async function runRoomHandoffAgent(argv: string[], planPath: string, prom
       evidence.push(await call("tools/list"));
       evidence.push(await call("tools/call", { name: "list_room_targets", arguments: {} }));
       // `server` names another server the turn mounted ("browser", or a person's own MCP server); `capture` { name: regex }
-      // keeps the first group of the result for later steps' `{{name}}`; `delayMs` waits that long before the step.
+      // keeps the first group of the result for later steps' `{{name}}`; `delayMs` waits that long before the step; `anyOutcome`
+      // records a step that may fail or not without ending the turn.
       const captured: Record<string, string> = {};
       for (const step of steps) {
         if (typeof step.delayMs === "number") await new Promise((resolve) => setTimeout(resolve, step.delayMs));
@@ -216,7 +217,7 @@ export async function runRoomHandoffAgent(argv: string[], planPath: string, prom
         const response = server ? await serverToolCall(server, step.tool, args) : await call("tools/call", { name: step.tool ?? "coordinate_bots", arguments: args });
         if (shown) toolCall!("end", { ...shown, ok: !(response.error || response.result?.isError), text: (response.result?.content ?? []).map((part: any) => part?.text ?? "").join("\n") });
         evidence.push({ step, response });
-        if (Boolean(response.error || response.result?.isError) !== Boolean(step.expectError)) throw new Error(`Unexpected tool outcome: ${JSON.stringify(response)}`);
+        if (!step.anyOutcome && Boolean(response.error || response.result?.isError) !== Boolean(step.expectError)) throw new Error(`Unexpected tool outcome: ${JSON.stringify(response)}`);
         for (const [name, pattern] of Object.entries((step.capture ?? {}) as Record<string, string>)) {
           const text = (response.result?.content ?? []).map((part: any) => part?.text ?? "").join("\n");
           const found = new RegExp(pattern).exec(text)?.[1];
