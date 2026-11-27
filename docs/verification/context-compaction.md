@@ -31,7 +31,10 @@ record is newer than the last reply).
   captures what it taught to memory at once (not after its quiet minutes)
   and stays in the bot's conversations as it was, where `session_search`
   still finds it. Typed in a chat with nothing said yet, it keeps that chat.
-  `/reset` is read the same way.
+  The chat it lands in gets one centered line, "New session started" (an
+  activity row marked `newSession`: never the notice card, the sidebar's
+  line or the mascot's news, never read by the model). `/reset` is read the
+  same way.
 - **`/compact [focus]`** summarizes the conversation now, as Compact now does;
   the words after it go to the summary writer as what to keep in full
   (`POST /api/bots/:id/compact` takes the same as `focus`, at most 1,000
@@ -67,7 +70,17 @@ record is newer than the last reply).
   `compacting`); a message sent meanwhile queues, and Stop ends it with no
   late summary.
 - **Threshold:** 80% of the model's window, never past 200,000 tokens unless
+  the bot's own `compactAt` (its Sessions page: 50%, 70%, 90%) or
   `context.compactAt` names one (a 1M model used to fold at 800k).
+- **Fresh session** (the bot's Sessions page, `freshSession`, server/fresh-session.ts):
+  never by default; every day (the person's first message from 4 am in their
+  time zone) or after 6 or 24 hours with no message from them, that message
+  starts the bot's context empty. A hidden compaction record with `fresh`
+  and no summary marks where; the replay gives the model only a line saying
+  the earlier messages are saved and `session_search` finds them. Silent,
+  once per message (a retried turn adds none), direct chats only (not rooms,
+  routines or a bot's own jobs). Hours away skips a bot whose idle span is
+  no longer than its own.
 - **Reading a long chat:** a fold off the person's time (asked for, warm, or
   hours away) gives the summary writer up to 160 KB per call, oldest first,
   carrying the checkpoint so far, at most 8 calls of 90 s each; a fold at a
@@ -76,7 +89,7 @@ record is newer than the last reply).
 
 ```sh
 pnpm exec vitest run server/idle-compaction.test.ts server/compaction-summary.test.ts server/context-budget.test.ts server/context-rebuild.test.ts
-pnpm exec vitest run server/chat-commands.e2e.test.ts server/messengers/telegram.test.ts src/components/Composer.chat-commands.test.ts
+pnpm exec vitest run server/chat-commands.e2e.test.ts server/fresh-session.test.ts server/messengers/telegram.test.ts src/components/Composer.chat-commands.test.ts src/components/bot-panel/modals/SessionsModal.test.ts src/lib/receipts.test.ts
 ```
 
 `server/chat-commands.e2e.test.ts` runs the real server with the fake Claude

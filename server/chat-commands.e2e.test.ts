@@ -63,7 +63,7 @@ it("/compact with a focus and /new act on the conversation, never reach the bot 
     expect(old.some((m) => m.role === "user" && m.text === "/new")).toBe(false);
     // the new chat says so in one centered line, and the model never reads it
     const started = (await f.messages(fresh.threadId)).filter((m) => m.kind === "activity");
-    expect(started.map((m) => m.tool?.name)).toEqual(["recovery: New session started"]);
+    expect(started.map((m) => m.tool)).toEqual([{ name: "recovery: New session started", ok: true, newSession: true }]);
     // a /new in a chat with nothing said yet keeps it, and says so once
     expect(await f.api(`/api/bots/${f.bot.id}/messages`, { threadId: fresh.threadId, text: "/new" })).toMatchObject({ threadId: fresh.threadId, fresh: false });
     expect((await f.messages(fresh.threadId)).filter((m) => m.kind === "activity")).toHaveLength(1);

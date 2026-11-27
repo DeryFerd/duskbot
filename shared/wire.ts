@@ -538,6 +538,8 @@ export interface WireMessage extends HelperIntroField, SetupCardFields, WaitLine
     name: string; ok?: boolean; spoken?: string; setup?: boolean; terminal?: boolean; summary?: string;
     /** A notice whose way out is signing in to an AI: the chat offers Sign in beside it. */
     signIn?: boolean;
+    /** The line /new leaves in the chat it opened: a record, never news for the notice card, the sidebar or the mascot. */
+    newSession?: true;
     /** error rows: the turn waits for its AI's usage limit to reset and carries on by itself; Stop ends the wait. */
     limitHold?: LimitHoldState;
     input?: string; output?: string; clipped?: boolean; ms?: number;
