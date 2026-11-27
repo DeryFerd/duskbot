@@ -1,5 +1,5 @@
 {
-  "_about": "the release gate (seo/jobs/release.mjs). owner, 12 november 2026: grow as fast as search console allows, toward a realistic 2k to 5k pages this month. a cohort is measured 7 days after it goes out; the next one may be up to 3 times bigger and goes out in one day if the gate is green. thresholds are a starting calibration (playbook 3.4), not google rules.",
+  "_about": "the release gate (seo/jobs/release.mjs). owner, 12 november 2026: grow as fast as search console allows, toward a realistic 2k to 5k pages this month. a cohort is measured 7 days after it goes out; the next one may be up to 2 times bigger, at most 150 pages a day, if the gate is green (tightened 27 november 2026 after the first search console read: ship in daily slices, never a dump). thresholds are a starting calibration (playbook 3.4), not google rules.",
   "hold_days_after_seed": 14,
   "measure_day": 7,
   "gate": {
@@ -31,8 +31,8 @@
   },
   "caps": {
     "max_share_of_indexed": 1.0,
-    "max_growth_vs_last": 3,
-    "per_day": 500
+    "max_growth_vs_last": 2,
+    "per_day": 150
   },
   "freeze": [],
   "prune": {

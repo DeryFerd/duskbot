@@ -13,6 +13,12 @@ function once(el, fn, threshold = 0.4) {
   io.observe(el);
 }
 
+// a call to action names the page that sent someone in data-dusk-source; the waitlist form reads it back
+document.addEventListener('click', (e) => {
+  const from = e.target.closest?.('a[data-dusk-source]')?.getAttribute('data-dusk-source');
+  if (from) try { sessionStorage.setItem('dusk:source', from.slice(0, 100)); } catch {}
+});
+
 // copy: a button with data-copy copies its own value, or else the command it sits beside
 async function copy(text) {
   try { await navigator.clipboard.writeText(text); return true; } catch { return false; }

@@ -48,11 +48,22 @@ async function get(url) {
   return { status: r.status, headers: Object.fromEntries(r.headers), body: await r.text() };
 }
 
-export async function checkSite(base, { concurrency = 8 } = {}) {
+// an internal link whose address carries a tracking query (?source=, ?ref=, utm_) is one more crawlable copy of its page;
+// who sent someone rides on a data attribute instead (seo/templates.mjs ctaLink)
+export const trackingLink = (href) => /^\/[^?#]*\?(?:[^#]*&)?(?:source|ref|utm_[a-z]+)=/i.test(String(href).replace(/&amp;/g, '&'));
+
+// every child sitemap on disk is in the index, so none is left unchecked (and unseen by search engines)
+export function unlistedSitemaps(dir, indexXml) {
+  const listed = new Set(locs(indexXml).map((u) => u.split('/').pop()));
+  return fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.xml') && !listed.has(f)) : [];
+}
+
+export async function checkSite(base, { concurrency = 8, sitemapDir = null } = {}) {
   const bad = new Map(), note = (k, why) => bad.set(k, [...(bad.get(k) || []), why]);
   const index = await get(`${base}/sitemap.xml`);
   if (index.status !== 200) { note('/sitemap.xml', `answers ${index.status}`); return { bad, count: 0 }; }
   const maps = /<sitemapindex/.test(index.body) ? locs(index.body) : [];
+  if (sitemapDir) for (const f of unlistedSitemaps(sitemapDir, index.body)) note(`/sitemaps/${f}`, 'is not listed in /sitemap.xml');
   const addresses = maps.length ? [] : locs(index.body);
   for (const m of maps) {
     if (!m.startsWith(`${SITE_URL}/`)) { note(m, `sitemap is not on ${SITE_URL}`); continue; }
@@ -98,7 +109,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const live = at > 0 ? process.argv[at + 1]?.replace(/\/+$/, '') : null;
   const served = live ? null : await serveBuild();
   try {
-    const { bad, count } = await checkSite(live || served.base);
+    const { bad, count } = await checkSite(live || served.base, { sitemapDir: live ? null : path.join(here, 'public', 'landing', 'sitemaps') });
     if (bad.size) {
       for (const [address, why] of bad) console.log(`problem: ${address}: ${why.join('; ')}`);
       console.log(`${bad.size} of ${count} sitemap addresses cannot be indexed`);

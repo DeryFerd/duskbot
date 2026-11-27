@@ -48,7 +48,8 @@
       "lane": "action",
       "week": "2026w47",
       "label": "app actions, batch 2: gmail, notion, slack and sheets actions near real queries (gated on cohort 05)",
-      "planned": "2026-11-20"
+      "planned": "2026-11-20",
+      "hold": "held 27 november 2026: 40 action pages of cohort 05 are still discovered but not crawled; no more action pages until they are"
     }
   ],
   "pages": {

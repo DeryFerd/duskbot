@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { problems, MIN_WORDS } from './check-index.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { problems, unlistedSitemaps, trackingLink, MIN_WORDS } from './check-index.mjs';
 
 const at = 'https://dusk.bot/integrations/gmail';
 const words = (n) => Array.from({ length: n }, (_, i) => `word${i}`).join(' ');
@@ -35,4 +38,17 @@ test('a thin page or an empty state fails', () => {
 
 test('script and svg text does not count toward the words', () => {
   assert.match(problems(at, ok(page({ main: `<script>${words(500)}</script><svg>${words(500)}</svg><p>hi</p>` })))[0], /thin/);
+});
+
+test('a child sitemap on disk that the index does not list is caught', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sitemaps-'));
+  for (const f of ['core.xml', 'cohort-01.xml', 'cohort-02.xml']) fs.writeFileSync(path.join(dir, f), '');
+  const index = '<sitemapindex><sitemap><loc>https://dusk.bot/sitemaps/core.xml</loc></sitemap><sitemap><loc>https://dusk.bot/sitemaps/cohort-01.xml</loc></sitemap></sitemapindex>';
+  assert.deepEqual(unlistedSitemaps(dir, index), ['cohort-02.xml']);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('an internal link with a tracking query is caught, a plain or asset one is not', () => {
+  for (const bad of ['/?source=seo:/guides/grok-tasks', '/?ref=producthunt', '/waitlist?source=download', '/download?plan=pro&amp;utm_source=x']) assert.ok(trackingLink(bad), bad);
+  for (const ok of ['/', '/download', '/site.css?v=46e9899c', '/dashboard/signup?plan=pro', '#source=x', 'https://x.com/?ref=a']) assert.ok(!trackingLink(ok), ok);
 });

@@ -5,7 +5,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { GONE, SUBSCRIPTION, jaccard, ownText } from '../quality.mjs';
-import { evaluateGate, sliceSize, frozen, lastInLane } from '../jobs/release.mjs';
+import { evaluateGate, sliceSize, frozen, lastInLane, nextCohort } from '../jobs/release.mjs';
+import { ctaLink } from '../templates.mjs';
+import { trackingLink } from '../../check-index.mjs';
 import { changes } from '../jobs/indexnow.mjs';
 import { decide } from '../jobs/prune-report.mjs';
 import { writeSitemaps, robotsTxt, llmsTxt, SEARCH_BOTS } from '../sitemaps.mjs';
@@ -170,4 +172,35 @@ test('each lane is gated on its own last released cohort', () => {
   assert.equal(lastInLane(cohorts, cohorts[2]).id, '04');
   assert.equal(lastInLane(cohorts, cohorts[3]).id, '05');
   assert.equal(lastInLane([{ id: '01' }], { id: '01' }), null);
+});
+
+test('a held cohort waits and the next one without a hold goes first', () => {
+  const cohorts = [{ id: '06', released: '2026-11-20' }, { id: '07', hold: 'actions not crawled yet' }, { id: '08' }];
+  const queued = (id) => ({ '06': 0, '07': 15, '08': 4 })[id];
+  assert.equal(nextCohort(cohorts, queued).next.id, '08');
+  assert.deepEqual(nextCohort(cohorts, queued).held.map((c) => c.id), ['07']);
+  assert.equal(nextCohort(cohorts.slice(0, 2), queued).next, null);
+  assert.equal(nextCohort([{ id: '07' }], queued).next.id, '07');
+});
+
+test('the call to action links to a clean address and carries the page in data-dusk-source', () => {
+  const esc = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  for (const cta of [{ href: '/', button: 'join the waitlist' }, { href: '/waitlist', button: 'join the waitlist' }, { href: '/download', button: 'download dusk bot' }]) {
+    const a = ctaLink(cta, '/guides/grok-tasks', esc);
+    assert.equal(/href="([^"]*)"/.exec(a)[1], cta.href);
+    assert.ok(!trackingLink(cta.href));
+    assert.match(a, /data-dusk-source="seo:\/guides\/grok-tasks"/);
+  }
+});
+
+test('no built page links to a home page copy with ?source= or ?ref=', () => {
+  const root = path.join(site, 'public', 'landing'), bad = [];
+  (function walk(dir) {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const f = path.join(dir, e.name);
+      if (e.isDirectory()) walk(f);
+      else if (e.name.endsWith('.html')) for (const [, href] of fs.readFileSync(f, 'utf8').matchAll(/\shref="([^"]+)"/g)) if (trackingLink(href)) bad.push(`${path.relative(root, f)}: ${href}`);
+    }
+  })(root);
+  assert.deepEqual(bad, []);
 });
