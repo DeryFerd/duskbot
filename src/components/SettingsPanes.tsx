@@ -369,15 +369,17 @@ function ServerUpdatesRow() {
   </>;
 }
 
-/** What's new: this app's release notes (changelog.json); with none to show, the changelog page on dusk.bot */
-function WhatsNewRow() {
+/** What's new: this version's notes (the newest there are, on a build without its own); with none, the changelog page on dusk.bot */
+export function WhatsNewRow() {
   const releases = useReleases(DESKTOP_AREAS);
   const [open, setOpen] = useState(false);
-  const notes = releases ?? [];
+  const current = window.duskDesktop?.app?.version ?? appVersion();
+  const own = releases?.filter((release) => release.version === current) ?? [];
+  const notes = own.length ? own : (releases ?? []).slice(0, 1);
   return <>
     <NavRow data-settings-open="whats-new" title={t("whatsNew.title")} external={releases !== null && notes.length === 0}
       onClick={() => (notes.length ? setOpen(true) : void openExternalLink(RELEASES_URL))} />
-    <WhatsNewDialog open={open} releases={notes.slice(0, 12)} current={window.duskDesktop?.app?.version ?? appVersion()} onClose={() => setOpen(false)} />
+    <WhatsNewDialog open={open} releases={notes} version={notes[0]?.version ?? current} onClose={() => setOpen(false)} />
   </>;
 }
 

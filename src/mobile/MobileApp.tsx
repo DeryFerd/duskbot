@@ -341,7 +341,7 @@ function Shell() {
         <PhoneBrowserTakeover bot={takeoverBot} signIn={browserTakeover.signIn} onClose={() => setBrowserTakeover(null)} />
       )}
       <AiConsentSheet />
-      <PhoneUpdatedLine onOpen={() => openSheet({ kind: "settings", page: "whatsNew" })} />
+      <PhoneUpdatedLine />
       <Sheet open={desktopOnly} onClose={() => setDesktopOnly(false)} title={t("mobile.desktopOnly.title")}>
         <div className="px-5 pb-[calc(var(--m-safe-bottom)+16px)]">
           <p className="text-[15px] leading-6 text-ink-secondary">{t("mobile.desktopOnly.body")}</p>

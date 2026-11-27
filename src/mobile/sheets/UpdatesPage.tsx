@@ -5,9 +5,9 @@ import { RELEASES_URL } from "@/lib/app-links";
 import { productName } from "@/lib/brand";
 import { copyText } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
-import { PHONE_AREAS, loadLatestFeed, useReleases, type LatestFeed } from "@/lib/release-notes";
+import { PHONE_AREAS, loadLatestFeed, useReleases, type LatestFeed, type Release } from "@/lib/release-notes";
 import { serverCheckPhase, type ServerUpdateCheck } from "@/lib/server-update";
-import { ReleaseNotes } from "@/components/WhatsNewDialog";
+import { UpdateArt, UpdateNotes } from "@/components/WhatsNewDialog";
 import { api } from "@/state/store";
 import { apkBehind } from "../../../shared/release-notes";
 import { ExternalLink, Server, Smartphone } from "../../icons";
@@ -98,18 +98,28 @@ export function UpdatesPage({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function WhatsNewPage({ onClose }: { onClose: () => void }) {
+/** the newest notes for the phone, as the desktop's What's new: the scene, then New, Better and Fixed */
+export function WhatsNewPage({ onClose, notes, updatedTo }: { onClose: () => void; notes?: readonly Release[]; updatedTo?: string }) {
   const platform = usePlatform();
-  const releases = useReleases(PHONE_AREAS, { native: platform.native });
+  const read = useReleases(PHONE_AREAS, { native: platform.native, enabled: !notes });
+  const releases = notes ?? read?.slice(0, 1) ?? null;
+  const version = releases?.[0]?.version;
   return (
     <Sheet open onClose={onClose} title={t("whatsNew.title")}>
-      <div data-whats-new="" className="pb-6">
-        {releases && releases.length > 0 && (
-          <div className="mx-4 rounded-[16px] bg-menu px-4 py-4 [&_h3]:text-[15px] [&_h3]:leading-5 [&_li]:text-[15px] [&_li]:leading-[21px] [&_li]:before:top-[9px]">
-            <ReleaseNotes releases={releases.slice(0, 8)} />
+      <div data-whats-new="" data-whats-new-updated={updatedTo ? "" : undefined} className="pb-6">
+        {releases && version && (
+          <div className="mx-4">
+            <UpdateArt updated={Boolean(updatedTo)} className="rounded-[16px]" />
+            <div className="px-1 pt-4">
+              <UpdateNotes phone releases={releases} label={updatedTo ? t("updates.updated", { version: updatedTo }) : t("whatsNew.version", { version })} />
+            </div>
+            <button type="button" data-whats-new-done="" onClick={onClose}
+              className="mt-5 flex h-12 w-full cursor-pointer items-center justify-center rounded-full border-0 bg-ink text-[16px] font-semibold text-app active:opacity-80">
+              {t("whatsNew.gotIt")}
+            </button>
           </div>
         )}
-        {releases && releases.length === 0 && <p className="mx-8 mb-2 text-[15px] text-ink-secondary">{t("whatsNew.none")}</p>}
+        {releases && !version && <p className="mx-8 mb-2 text-[15px] text-ink-secondary">{t("whatsNew.none")}</p>}
         {releases && (
           <SettingsSection card>
             <SettingsRow icon={<ExternalLink />} label={t("whatsNew.allReleases")} onClick={() => void platform.openExternal(RELEASES_URL)} chevron={false} />
