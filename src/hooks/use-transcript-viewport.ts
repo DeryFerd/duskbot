@@ -32,11 +32,15 @@ import { phoneApp } from "@/lib/store-app";
 
 export const AUTO_EXPAND_TOP_THRESHOLD = 250;
 
-/** A row's drawn box: a `display: contents` row has none of its own, so its first drawn descendant stands for it. */
-function rowBox(row: Element): DOMRect | null {
-  for (let node: Element | null = row, depth = 0; node && depth < 4; node = node.firstElementChild, depth++) {
-    const box = node.getBoundingClientRect();
-    if (box.height > 0 || box.width > 0) return box;
+/** A row's drawn box: a `display: contents` row has none of its own, so its last drawn child stands for it, the
+ * message itself rather than a day line or stamp above it, which a page landing above can take away. */
+function rowBox(row: Element, depth = 0): DOMRect | null {
+  const box = row.getBoundingClientRect();
+  if (box.height > 0 || box.width > 0) return box;
+  if (depth >= 3) return null;
+  for (let child = row.lastElementChild; child; child = child.previousElementSibling) {
+    const inner = rowBox(child, depth + 1);
+    if (inner) return inner;
   }
   return null;
 }
