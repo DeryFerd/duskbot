@@ -324,10 +324,10 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
   metadata: { displayName: "Codex", supportsMultipleInstances: true },
   install: {
     command: {
-      darwin: "npm install -g @openai/codex",
-      linux: "npm install -g @openai/codex",
+      darwin: "npm install -g @openai/codex", linux: "npm install -g @openai/codex",
       win32: "npm install -g @openai/codex",
     },
+    installer: { win32: "irm https://github.com/openai/codex/releases/latest/download/install.ps1 | iex" },
     needsNode: true,
     docsUrl: "https://github.com/openai/codex",
     signInCommand: "codex login",

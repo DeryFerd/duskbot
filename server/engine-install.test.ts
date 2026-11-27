@@ -6,6 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StandaloneRelease } from "./contracts.ts";
 import { enginesBinDir, enginesPrefix, installNpmEngine, npmPackageOf, registerEnginesBinDir, serverInstallFor, standaloneEnginePath } from "./engine-install.ts";
 import { standaloneEngineDir, standalonePlatformKey } from "./engine-standalone.ts";
+import { scriptInstallerOf } from "./engine-script-install.ts";
+import { clientInstall } from "./contracts.ts";
+import { CodexDriver } from "./drivers/codex.ts";
 import { augmentedPath, findCliCandidates, registerPathDir, resetPathCacheForTests } from "./env-path.ts";
 import { removeTempDir } from "./testing/cleanup.ts";
 import * as procs from "./procs.ts";
@@ -217,6 +220,15 @@ describe("which installer Settings offers", () => {
     const elsewhere = release("plan9-x64");
     expect(serverInstallFor({ command: npm, standalone: elsewhere }, true)).toEqual({ package: "fake-engine" });
     expect(serverInstallFor({ command: npm, standalone: elsewhere }, false)).toBeNull();
+  });
+
+  it("installs Codex on a Windows PC without Node.js with OpenAI's own installer, and with npm where npm is", () => {
+    const codex = CodexDriver.install;
+    expect(serverInstallFor(codex, false, "win32")).toEqual({ script: true });
+    expect(scriptInstallerOf(codex, "win32")).toEqual({ url: "https://github.com/openai/codex/releases/latest/download/install.ps1", shell: "powershell" });
+    expect(serverInstallFor(codex, true, "win32")).toEqual({ package: "@openai/codex" });
+    expect(clientInstall(codex)?.command?.win32, "the command a person copies stays npm's").toBe("npm install -g @openai/codex");
+    expect(clientInstall(codex)).not.toHaveProperty("installer");
   });
 
   it("leaves a managed engine to its own installer", () => {

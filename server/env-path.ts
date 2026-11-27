@@ -68,6 +68,7 @@ function windowsKnownDirs(): string[] {
     join(home, ".kimi-code", "bin"), // recover Kimi installs after a GUI launch too
     join(home, ".grok", "bin"), // x.ai installer
     join(localAppData, "agy", "bin"), // Antigravity installer
+    join(localAppData, "Programs", "OpenAI", "Codex", "bin"), // codex install.ps1
     // Cursor installer: cursor-agent.* and its `agent` copies
     join(localAppData, "cursor-agent"),
     join(home, ".local", "bin"), // claude native installer
