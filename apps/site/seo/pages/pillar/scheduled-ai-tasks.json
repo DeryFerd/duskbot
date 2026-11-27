@@ -1,21 +1,23 @@
 {
   "path": "/scheduled-ai-tasks",
   "type": "pillar",
-  "title": "Scheduled AI tasks: compare four vendors and dusk bot",
+  "title": "Scheduled AI tasks: ChatGPT, Claude, Gemini and Grok compared",
   "nav": "scheduled ai tasks",
   "h1": "scheduled ai tasks: what runs, where and when",
-  "description": "Compare Claude, ChatGPT, Gemini and Grok schedulers with dusk bot routines, including current limits and ten small jobs worth repeating.",
+  "description": "ChatGPT schedules, Claude scheduled tasks, Gemini actions and Grok Bot routines side by side: plan limits, laptop-closed rules and ten jobs to repeat.",
   "keyword": "claude scheduled tasks",
   "keywords": [
     "chatgpt scheduled tasks",
+    "scheduled tasks chatgpt",
+    "chatgpt schedules",
     "gemini scheduled actions",
     "grok tasks",
     "claude cowork scheduled tasks",
     "ai cron jobs",
     "schedule ai tasks"
   ],
-  "answer": "**stop asking for the same morning brief every morning.** claude, chatgpt, gemini and grok can repeat work, with different timers, triggers and limits as of 12 november 2026. dusk routines belong to a bot whose ai you choose. start in the app you already use if it fits. choose a separate bot when its own job, chats and memory help.",
-  "updated": "2026-11-12",
+  "answer": "**chatgpt, claude, gemini and grok can all repeat work on a schedule, with different limits as of 12 november 2026.** stop asking for the same morning brief every morning. start in the app you already use if its limits fit the job. dusk routines belong to a bot whose ai you choose. pick one when its own job, chats and memory help.",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent: read against seo/facts, automated gate, independent fact-check pass",
@@ -124,6 +126,10 @@
       "md": "**use a clock for deadlines and an event for arrivals.** a breakfast digest has a useful delivery time. a new issue needs attention only after it opens. don't pay for frequent empty checks when a quieter review would do.\n\nas of 12 november 2026, chatgpt supports event tasks on plus, pro, business, enterprise and edu. free and go do not. claude code cloud tasks support github events and api calls.[^2][^3]\n\nchoose the trigger for the app that will actually run the job. compare [claude tasks](/guides/claude-scheduled-tasks) or [chatgpt limits](/guides/chatgpt-scheduled-tasks) before choosing a plan."
     },
     {
+      "h": "chatgpt schedules in short",
+      "md": "**chatgpt counts active tasks, and free plans get the loosest timing.** as of 12 november 2026, the limits are:[^3]\n\n- free and go: 3 active tasks, at most once a day, in flexible windows\n- plus: 5\n- business and edu: 10\n- pro and enterprise: 15\n\nhourly schedules and exact times need a paid plan. tasks that start from a gmail, slack or github event need plus or higher.[^3]\n\nyou manage tasks on the **scheduled** page. if it is missing in the desktop app, use chatgpt on the web. results arrive by push or email.[^3] the [chatgpt limits guide](/guides/chatgpt-scheduled-tasks) has 25 task ideas."
+    },
+    {
       "h": "ten jobs with something new to read",
       "md": "**repeat the job, not the same stale answer.** these are prompts to adapt, not measured results or vendor feature promises. give the bot access to the named files or connected app first.\n\n- **daily priority, weekdays at 8:** read the current plan in the project folder. suggest the first decision. stay quiet if nothing changed.\n- **meeting rehearsal, tuesdays at 9:** read this week's new briefing files. give three questions to practise. skip old briefs.\n- **friday reflection at 4:** read this week's project log. ask what went well and what to change. don't infer outcomes from task names.\n- **evening study check:** read new study notes in the course folder. quiz me on five terms. use memory notes to avoid repeating mastered terms.\n- **monday writing nudge:** read drafts changed this week in the writing folder. give one prompt for the unfinished part.\n- **wednesday vocabulary:** read new project documents. explain one unfamiliar term and keep a memory note of terms covered.\n- **thursday contradiction check:** inspect changed proposals in the proposals folder. flag conflicting statements. skip unchanged files.\n- **saturday travel prep:** until the trip, read the current travel checklist file. ask which unresolved items need a decision.\n- **sunday reading review:** compare articles added to the reading folder this week. list disagreements. skip weeks with fewer than two articles.\n- **monthly reset:** on the first, read the current goals file and last month's log. ask what to keep before suggesting new goals.\n\nkeep the first version read only. a question can help without granting permission to edit your work."
     },
@@ -138,8 +144,12 @@
   ],
   "faq": [
     {
-      "q": "what are people actually using scheduled ai tasks for?",
-      "a": "**start with reading, practice or planning.** choose one repeat result you can judge quickly. keep it only if it earns the interruption."
+      "q": "how many scheduled tasks can chatgpt run?",
+      "a": "**it depends on your plan, as of 12 november 2026.** free and go allow 3 active tasks, plus 5, business and edu 10, pro and enterprise 15. free tasks run at most once a day in flexible windows; exact times and hourly runs need a paid plan.[^3]"
+    },
+    {
+      "q": "where do i find my chatgpt schedules?",
+      "a": "**on the scheduled page in chatgpt.** as of 12 november 2026, openai says you manage tasks there. if scheduled does not show up in the desktop app, open chatgpt on the web instead. task results reach you as push notifications or email.[^3]"
     },
     {
       "q": "can scheduled tasks run when my laptop is closed?",
@@ -244,5 +254,30 @@
       "the running machine will be available"
     ]
   },
-  "voice": 2
+  "voice": 2,
+  "decide": {
+    "h": "which scheduler fits the job?",
+    "cols": [
+      "you want",
+      "start with"
+    ],
+    "rows": [
+      [
+        "a daily digest inside the chat app you already pay for",
+        "chatgpt, claude or gemini schedules"
+      ],
+      [
+        "coding work that starts from a github event",
+        "claude code cloud scheduled tasks"
+      ],
+      [
+        "a cloud routine without choosing the model",
+        "grok bot routines"
+      ],
+      [
+        "a bot with its own job, memory and your pick of ai",
+        "dusk routines"
+      ]
+    ]
+  }
 }
