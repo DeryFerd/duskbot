@@ -129,11 +129,12 @@ const withChips = (html) => html.replace(/\{\{logo (\w+)( eager)?\}\}/g, (_, nam
 const withParts = (html) => html.replace(/\{\{include ([\w-]+)\}\}/g, (_, name) => {
   const file = path.join(here, 'pages', 'partials', `${name}.html`);
   if (!fs.existsSync(file)) return '';
-  // the live demo's script runs right after its markup, so the demo answers clicks the moment it shows, not after the page's
-  // other scripts (safari holds async scripts until deferred ones finish, so this one is a plain script)
+  // the live demo's script is deferred, so it never holds up the rest of the home page; it sits before the page's other
+  // deferred scripts, so it is still the first to run once the page is read (never async: safari holds async scripts
+  // until deferred ones finish)
   // {{stamp file}} in a partial is that file's stamped address
   const part = fs.readFileSync(file, 'utf8').replace(/\{\{stamp ([\w./-]+)\}\}/g, (_, f) => stamped(f));
-  return part + (name === 'home-window' && has('home-window.js') ? `<script src="${stamped('home-window.js')}"></script>` : '');
+  return part + (name === 'home-window' && has('home-window.js') ? `<script src="${stamped('home-window.js')}" defer></script>` : '');
 });
 const has = (file) => fs.existsSync(path.join(site, file));
 // the first-party analytics tracker (apps/dashboard/tracker/dusk.js in the Dusk Bot repo), served as /a.js; its beacons go to
@@ -281,7 +282,7 @@ export function layout({ title, description, body, page, at, section = page, og 
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(description)}">
-<meta name="theme-color" content="#ffffff">${noindex ? '\n<meta name="robots" content="noindex">' : `\n<link rel="canonical" href="${SITE_URL}${address === '/' ? '/' : address}">`}
+<meta name="theme-color" content="#ffffff">${noindex ? '\n<meta name="robots" content="noindex">' : `\n<meta name="robots" content="max-image-preview:large">\n<link rel="canonical" href="${SITE_URL}${address === '/' ? '/' : address}">`}
 <meta property="og:site_name" content="dusk bot">
 <meta property="og:type" content="${ogType}">
 <meta property="og:url" content="${SITE_URL}${address}">
@@ -338,10 +339,15 @@ const faqLd = (html) => {
   const qs = [...html.matchAll(/<details[^>]*><summary>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/g)].map((m) => ({ '@type': 'Question', name: text(m[1]), acceptedAnswer: { '@type': 'Answer', text: text(m[2]) } }));
   return qs.length ? [{ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: qs }] : [];
 };
-// who makes the site, on the home and about pages; sameAs lists only profiles the site itself links to
-const orgLd = { '@context': 'https://schema.org', '@type': 'Organization', name: 'dusk bot', url: `${SITE_URL}/`, logo: `${SITE_URL}/art/icon-512.png`, email: 'hello@dusk.bot' };
+// who makes the site, on the home and about pages, and the app itself on the home page. "dusk" alone is several other
+// brands, so both carry the exact name, its other spellings and the profiles that are dusk bot's own (sameAs: the code,
+// the x account, the product hunt listing); seo pages point at the same @id
+export const SAME_AS = ['https://github.com/DuskBotAI/duskbot', 'https://x.com/duskbot_hq', 'https://www.producthunt.com/products/dusk-bot'];
+export const ORG_ID = `${SITE_URL}/#organization`;
+const orgLd = { '@context': 'https://schema.org', '@type': 'Organization', '@id': ORG_ID, name: 'dusk bot', alternateName: ['duskbot', 'dusk.bot'], url: `${SITE_URL}/`, logo: `${SITE_URL}/art/icon-512.png`, email: 'hello@dusk.bot', sameAs: SAME_AS };
 const appLd = {
-  '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'dusk bot', url: `${SITE_URL}/`, image: `${SITE_URL}/art/og.jpg`,
+  '@context': 'https://schema.org', '@type': 'SoftwareApplication', '@id': `${SITE_URL}/#app`, name: 'dusk bot', alternateName: ['duskbot', 'dusk.bot'], url: `${SITE_URL}/`, image: `${SITE_URL}/art/og.jpg`,
+  publisher: { '@id': ORG_ID }, sameAs: SAME_AS, downloadUrl: `${SITE_URL}/download`,
   applicationCategory: 'ProductivityApplication', operatingSystem: 'macOS, Windows, Linux',
   description: 'A desktop app where you run a team of AI bots and message them like teammates. It runs on your computer, your own server or a dusk cloud computer, on the AI accounts you already have.',
   offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
@@ -411,8 +417,10 @@ const LEGAL_ABOUT = {
   'acceptable-use': 'What you may not use dusk bot, its bots or dusk cloud desktops for, and what happens when someone does.',
   subprocessors: 'The outside services that process data for dusk bot, what each one does, and where.',
   license: 'The dusk bot license: free for personal use, what needs a work license, and the notices that come with the code.',
-  security: 'How to report a security problem in dusk bot, what is in scope, and what to expect from us.',
+  security: 'Found a security issue in dusk bot? Email security@dusk.bot. What is in scope, what to include, when we reply (3 business days) and whether there is a bug bounty.',
 };
+// a search title where people look for the page by its task rather than its name
+const LEGAL_TITLE = { security: 'report a security vulnerability in dusk bot / security policy' };
 const licenseSummary = `<section class="lic-sum" aria-label="the license in short">
 <p class="lic-lead">dusk bot's code is free for personal, non-commercial use. commercial use is not allowed without a separate written license from us.</p>
 <dl>
@@ -433,7 +441,7 @@ for (const [name, title] of legal) {
   if (name === 'license') html = licenseSummary + html + licenseText(own(fs.readFileSync(path.join(repo, 'LICENSE'), 'utf8')));
   const toc = [...html.matchAll(/<h2 id="([^"]+)">([\s\S]*?)<\/h2>/g)].map((m) => `<li><a href="#${m[1]}">${m[2]}</a></li>`).join('');
   const others = legal.map(([n, , s]) => `<a href="/${n}"${n === name ? ' aria-current="page"' : ''}>${s}</a>`).join('');
-  write(`/${name}`, layout({ title: `${title.toLowerCase()} / dusk bot`, description: LEGAL_ABOUT[name], page: name, section: 'legal', og: 'legal', kind: 'p-legal',
+  write(`/${name}`, layout({ title: LEGAL_TITLE[name] || `${title.toLowerCase()} / dusk bot`, description: LEGAL_ABOUT[name], page: name, section: 'legal', og: 'legal', kind: 'p-legal',
     body: `<header class="phead wrap"><h1>${title.toLowerCase()}</h1></header>
 ${strip('layers', 'circle blue, hex orange', 'short')}
 <div class="legal-wrap wrap">
@@ -451,7 +459,7 @@ for (const [name, colour] of CREW) fs.writeFileSync(path.join(bots_, `${name}.sv
 fs.writeFileSync(path.join(bots_, 'kit-white.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="400" height="400" shape-rendering="crispEdges">${pixelBot('kit').replace('fill="#fff" d', 'fill="#212121" d').replace('currentColor', '#fff')}</svg>\n`);
 
 const docs = buildDocs({ here, site, markdown, layout, macros, strip, slug, text, write, esc, icon });
-const seo = buildSeo({ site, markdown, layout, macros, text, write, esc, icon, bot, SITE_URL, release, waitlistHome: WAITLIST_HOME });
+const seo = buildSeo({ site, markdown, layout, macros, text, write, esc, icon, bot, SITE_URL, release, waitlistHome: WAITLIST_HOME, sameAs: SAME_AS });
 
 // the rest of what a site answers: where robots may go, every page, the installable-app manifest, and the short addresses
 fs.writeFileSync(path.join(site, 'robots.txt'), robotsTxt(SITE_URL));

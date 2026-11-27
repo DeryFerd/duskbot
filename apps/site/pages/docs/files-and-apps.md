@@ -32,7 +32,7 @@ then just ask:
 - "find the latest invoice from acme in my email and file it in drive."
 - "open an issue in linear for the checkout bug and assign it to me."
 
-each app has its own page in [integrations](/integrations): what a bot can do there, what it asks first, and routines to copy.
+each app has its own page in [integrations](/integrations): what a bot can do there, what it asks first, and routines to copy. the ones people open most: [gmail](/integrations/gmail), [google calendar](/integrations/google-calendar), [outlook](/integrations/outlook), [slack](/integrations/slack), [notion](/integrations/notion), [github](/integrations/github), [google sheets](/integrations/google-sheets), [excel](/integrations/excel), [linear](/integrations/linear), [salesforce](/integrations/salesforce) and [whatsapp](/integrations/whatsapp).
 
 reading and drafting happen freely. sending (emails, messages, posts, payments) asks you first, unless you set a daily amount it may send on its own.
 
