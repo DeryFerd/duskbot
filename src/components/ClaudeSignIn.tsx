@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ExternalLink, Loader2, LogIn } from "../icons";
 import { api, ApiError, useStore } from "@/state/store";
 import { t } from "@/lib/i18n";
-import { openExternalLink } from "@/lib/app-links";
+import { openExternalLink, openSignInPage } from "@/lib/app-links";
 import { engineSignedIn } from "@/lib/product-events";
 import { type DeviceSignInStatus } from "./DeviceSignIn";
 import { friendlyError } from "@/lib/plain-error";
@@ -40,6 +40,7 @@ export function ClaudeSignIn({ instanceId, autoStart = false, onDone }: {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState<"start" | "finish" | "cancel" | null>(autoStart ? "start" : null);
   const [error, setError] = useState<string | null>(null);
+  const [opened, setOpened] = useState(true);
   const started = useRef(false);
   const base = `/api/instances/${encodeURIComponent(instanceId)}/auth`;
   const link = claudeSignInLink(auth?.authorizationUrl);
@@ -70,8 +71,8 @@ export function ClaudeSignIn({ instanceId, autoStart = false, onDone }: {
       setCode("");
       if (next.phase === "succeeded") return await succeeded();
       setAuth(next);
-      const opened = claudeSignInLink(next.authorizationUrl);
-      if (opened) await openExternalLink(opened).catch(() => {});
+      const page = claudeSignInLink(next.authorizationUrl);
+      setOpened(page ? await openSignInPage(page) : true);
     } catch (cause) {
       setError(friendlyError(cause, t("engineSetup.device.failed")));
     } finally {
@@ -134,8 +135,9 @@ export function ClaudeSignIn({ instanceId, autoStart = false, onDone }: {
     return (
       <form data-claude-sign-in className="mt-3 space-y-3 rounded-xl border border-transparent bg-app p-3" onSubmit={(event) => { event.preventDefault(); void finish(); }}>
         <div className="space-y-1.5">
-          <p className="text-[12px] font-medium text-ink">{t("accounts.claude.step1")}</p>
-          <a href={link} target="_blank" rel="noopener noreferrer" onClick={(event) => {
+          <p className="text-[12px] font-medium text-ink">{t(opened ? "accounts.claude.step1" : "accounts.claude.step1NotOpened")}</p>
+          <a href={link} target="_blank" rel="noopener noreferrer" data-claude-open="" onClick={(event) => {
+            setOpened(true);
             if (window.duskDesktop?.openExternal) { event.preventDefault(); void openExternalLink(link); }
           }} className="flex w-fit items-center gap-1.5 rounded-lg bg-control px-3 py-1.5 text-[12px] font-medium text-ink hover:bg-raised-hover">
             {t("accounts.claude.openAgain")} <ExternalLink size={12} />

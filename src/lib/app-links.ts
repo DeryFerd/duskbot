@@ -55,3 +55,13 @@ export async function openExternalLink(url: string): Promise<void> {
   }
   window.open(url, "_blank", "noopener,noreferrer");
 }
+
+/** Opens a sign-in page; false when it did not open. A plain browser tab blocks a page opened after the sign-in's start
+ * answered (no click to carry it), and only a window.open without noopener says so. */
+export async function openSignInPage(link: string): Promise<boolean> {
+  if (externalOpener()) return openExternalLink(link).then(() => true, () => false);
+  const page = window.open(link, "_blank");
+  if (!page) return false;
+  try { page.opener = null; } catch {}
+  return true;
+}
