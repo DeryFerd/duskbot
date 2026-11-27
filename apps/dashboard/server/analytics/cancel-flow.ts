@@ -28,9 +28,10 @@ export interface CancelSaves { saved: number; cancelled: number; rate: number | 
 type FlowEntry = Pick<RetentionInput, "step" | "outcome"> & { subscriptionId: string; at: number };
 /** a step this long after the last one starts a new cancel flow */
 const FLOW_GAP_MS = 6 * 3_600_000;
-const ENDS_FLOW = new Set<RetentionInput["outcome"]>(["cancelled", "kept", "discount", "downgrade"]);
+/** a save ends its flow; a cancel does not, so a restart right after it (confirm, kept) makes that flow a save */
+const ENDS_FLOW = new Set<RetentionInput["outcome"]>(["kept", "discount", "downgrade"]);
 
-/** cancel flows (one plan's steps, split where a flow ended, a new reason was given after an answer, or six quiet hours)
+/** cancel flows (one plan's steps, split after a save, where a new reason was given after an answer, or six quiet hours)
  *  that ended in [from, to): saved when the last thing in the flow was not a cancel. `rate`: saved / (saved + cancelled) */
 export function cancelSaves(entries: ReadonlyArray<FlowEntry>, from: number, to: number): CancelSaves {
   const sorted = [...entries].sort((a, b) => a.subscriptionId.localeCompare(b.subscriptionId) || a.at - b.at);
