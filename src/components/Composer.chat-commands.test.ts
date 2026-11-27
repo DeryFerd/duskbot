@@ -104,6 +104,22 @@ describe("/new and /compact in the composer", () => {
     expect(spies.api).toHaveBeenCalledWith("/api/bots/cmd-bot/compact", { method: "POST", body: JSON.stringify({ threadId: "cmd-thread" }) });
   });
 
+  it("compacts on one Enter with the / menu open on /compact, and with it closed", () => {
+    fill("/compact");
+    expect(options()[0]?.getAttribute("aria-selected") === "true" && options()[0]?.textContent).toContain("/compact");
+    enter();
+    expect(spies.api).toHaveBeenCalledWith("/api/bots/cmd-bot/compact", { method: "POST", body: JSON.stringify({ threadId: "cmd-thread" }) });
+    expect(actions().some((action) => action.type === "send")).toBe(false);
+    expect(input().value).toBe("");
+    spies.api.mockClear();
+    fill("/compact");
+    flushSync(() => input().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
+    expect(options()).toHaveLength(0);
+    enter();
+    expect(spies.api).toHaveBeenCalledTimes(1);
+    expect(input().value).toBe("");
+  });
+
   it("asks to finish the reply first when /compact is sent mid-reply", () => {
     render(true);
     fill("/compact ");

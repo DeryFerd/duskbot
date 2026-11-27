@@ -440,8 +440,14 @@ export const Composer = memo(function Composer({
     });
   };
 
-  const pickCommand = (command: ComposerSlashCommand | undefined) => {
+  const pickCommand = (command: ComposerSlashCommand | undefined, enter = false) => {
     if (!slash || !command) return;
+    // Enter on /compact runs it at once; a click or Tab puts it in the field so a focus can follow
+    if (enter && bot && !attachments.length && !replyTo && !quote && command.kind === "command" && command.id === "compact" && !text.slice(slash.end).trim()) {
+      setDismissedSlashAt(slash.start);
+      runChatCommand({ text: "/compact", target: { botId: bot.id }, threadId, busy, dispatch, clear: clearField, restore: editText });
+      return;
+    }
     // More opens in place: the highlight stays on its row, now the first of the other tools' skills
     if (command.kind === "more") { setSlashMoreAt(slash.start); return; } if (command.kind === "command" && command.id === "new" && !text.slice(slash.end).trim()) { setDismissedSlashAt(slash.start); const target = group ? { groupId: group.id } : bot ? { botId: bot.id } : null; if (target) startNewChat(target, threadId, dispatch, clearField); return; }
     const spaceAfter = /^\s/.test(text.slice(slash.end)) ? "" : " ";
@@ -1050,7 +1056,7 @@ export const Composer = memo(function Composer({
               }
               if (e.key === "Enter" || e.key === "Tab") {
                 e.preventDefault();
-                pickCommand(commandCandidates[highlight]);
+                pickCommand(commandCandidates[highlight], e.key === "Enter");
                 return;
               }
               if (e.key === "Escape") {
