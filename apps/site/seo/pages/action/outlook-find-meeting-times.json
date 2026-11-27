@@ -12,7 +12,7 @@
     "claude suggest outlook meeting slots"
   ],
   "answer": "**skip another round of “does tuesday work?”** give the bot attendee emails, duration and a time window. outlook returns meeting options without booking anything. this action needs a work or school microsoft account. tell it everyone must be free when everyone matters: the default can suggest a time with only half the attendees available.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,7 +45,7 @@
     "toolkit": "outlook",
     "slug": "OUTLOOK_FIND_MEETING_TIMES"
   },
-  "what": "**get a shortlist you can put in front of the group.** name the people, room or location limits, meeting length and your time zone. ask for reasons beside each option.\n\noutlook’s defaults can surprise you:\n- no attendees means it looks only at your calendar\n- the meeting length starts at 30 minutes\n- times come back in utc\n- half the group free can be enough\n\nset those choices before the search and spare everyone another scheduling round.",
+  "what": "**get a shortlist you can put in front of the group.** name the people, room or location limits, meeting length and your time zone. ask for reasons beside each option.\n\noutlook’s defaults can surprise you:\n- no attendees means it looks only at your calendar\n- the meeting length starts at 30 minutes\n- times come back in utc\n- half the group free can be enough\n\nset those choices before the search and spare everyone another scheduling round.\n\npicked a slot? [create calendar event](/integrations/outlook/create-calendar-event) books it with the same start, end and time zone.",
   "uses": [
     "**include the people who matter.** find a supplier call with both buyer and workshop lead.",
     "**make room for a longer session.** search agreed afternoon windows instead of accepting 30 minutes.",
@@ -114,5 +114,9 @@
   "tip": {
     "text": "say “all named attendees” before searching, rather than discovering a missing person after you book."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "jonas needs 90 minutes with kasia and the hazelby workshop lead next week.\nhe asks for options in europe/berlin, with everyone required.",
+    "after": "options, with reasons:\nwed 13:00 to 14:30, everyone free\nthu 09:30 to 11:00, everyone free\nfriday left out: the workshop lead is busy\nnothing booked yet."
+  }
 }

@@ -12,7 +12,7 @@
     "claude get outlook attached file"
   ],
   "answer": "**get the delivery note out of the email before the van arrives.** a bot can find an outlook message, list its attachments and download the file you name. give the copy a filename you will recognise next week. read-only outlook access is enough. this action needs an actual attached file; cloud links and embedded items need a different route.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,11 +45,12 @@
     "toolkit": "outlook",
     "slug": "OUTLOOK_DOWNLOAD_OUTLOOK_ATTACHMENT"
   },
-  "what": "**you name the email and file. the bot finds the rest.** describe the sender, subject and attachment you want.\n\nit finds the message, lists what's attached and saves the chosen file under a name you'll recognise. if two files look alike, ask it to show the choices before downloading.",
+  "what": "**you name the email and file. the bot finds the rest.** describe the sender, subject and attachment you want.\n\nit finds the message, often with [query emails](/integrations/outlook/query-emails) on the right folder, lists what's attached and saves the chosen file under a name you'll recognise. if two files look alike, ask it to show the choices before downloading.\n\nfile saved? [move message to folder](/integrations/outlook/move-message-to-folder) can then file the email where it belongs.",
   "uses": [
     "**delivery paperwork:** get the supplier's attached note before a shipment arrives.",
     "**a print proof:** retrieve the image attached to the customer's email.",
-    "**signed forms:** collect the file without forwarding the conversation."
+    "**signed forms:** collect the file without forwarding the conversation.",
+    "**a month of receipts:** download them in a steady run. microsoft slows down bursts of parallel downloads from one mailbox."
   ],
   "routine": {
     "message": "each friday at 13:15, search outlook for this week's delivery-note emails from beth at coldbrook fittings. list each message's attachments. download only actual pdf files and name the copies with their delivery references. return the files and subjects here. report links and embedded items as unsupported. never forward mail or move it to another folder.",
@@ -107,6 +108,10 @@
     {
       "mistake": "trusting \"final.pdf\"",
       "fix": "match it to the email, sender and other attachments first."
+    },
+    {
+      "mistake": "asking for the picture inside the email text",
+      "fix": "embedded images are not attached files. ask for real attachments only."
     }
   ],
   "tip": {

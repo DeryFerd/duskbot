@@ -12,7 +12,7 @@
     "ai outlook email with attachments"
   ],
   "answer": "**get the final dispatch note to the customer without another round of copying.** give the bot an outlook recipient, subject and text, plus files and any cc or bcc. it prepares a preview and sends after you allow it by default. you can also set a daily amount. this action sends immediately rather than saving a draft.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -43,7 +43,7 @@
     "toolkit": "outlook",
     "slug": "OUTLOOK_SEND_EMAIL"
   },
-  "what": "**turn the agreed words and final file into a ready-to-send email.** the bot needs a recipient, subject and body. it can attach one file or several; each needs content, a valid name and a file type.\n\na different from address needs send-as or send-on-behalf permission. typing an address grants nothing. use plain text unless formatting matters; the body and chosen format must match.",
+  "what": "**turn the agreed words and final file into a ready-to-send email.** the bot needs a recipient, subject and body. it can attach one file or several; each needs content, a valid name and a file type.\n\na different from address needs send-as or send-on-behalf permission. typing an address grants nothing. use plain text unless formatting matters; the body and chosen format must match.\n\nanswering an email someone sent you? [reply to email](/integrations/outlook/reply-to-email) keeps the thread. want to read it in outlook first? [create email draft](/integrations/outlook/create-email-draft) saves it unsent.",
   "uses": [
     "email an agreed delivery note to the warehouse address you name",
     "send a workshop access letter with its final pdf",
@@ -112,5 +112,9 @@
   "tip": {
     "text": "look in sent items before retrying. the customer may already have the first email."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "the delivery note for jessop yard is final.\nyou ask for it to go to the warehouse address, with greta on cc.",
+    "after": "to: the warehouse address you gave\ncc: greta\nsubject: delivery note for thursday\nattached: jessop-delivery-note.pdf\nsent after your ok."
+  }
 }

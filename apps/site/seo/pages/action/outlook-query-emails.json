@@ -22,7 +22,7 @@
     "/integrations/outlook/search-calendar-events"
   ],
   "og_line": "one mail folder, with a clear filter.",
-  "what": "**conditions beat a vague search when you need a repeatable list.** choose one folder and the properties that matter. the bot can return just the details your report needs. built-in folders like inbox work by name; custom folders need a lookup first.\n\n- the default request covers up to 100 messages\n- each batch can hold at most 1,000\n- large results need more batches\n- if microsoft rejects sorting, the bot sorts the returned mail and tells you",
+  "what": "**conditions beat a vague search when you need a repeatable list.** choose one folder and the properties that matter. the bot can return just the details your report needs. built-in folders like inbox work by name; custom folders need a lookup first.\n\n- the default request covers up to 100 messages\n- each batch can hold at most 1,000\n- large results need more batches\n- if microsoft rejects sorting, the bot sorts the returned mail and tells you\n\na query is usually step one. save a file from a match with [download outlook attachment](/integrations/outlook/download-outlook-attachment), or file the matches with [move message to folder](/integrations/outlook/move-message-to-folder).",
   "uses": [
     "**find unread intake mail with attachments.** keep the report inside the named folder.",
     "**read urgent inbox messages.** leave them where they are.",
@@ -61,7 +61,7 @@
       "a": "**no. microsoft can reject the requested order.** the query can continue without sorting. ask the bot to say so and sort the returned results itself."
     }
   ],
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -127,5 +127,9 @@
       "the received times run in the requested order"
     ]
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "kemal wants every unread invoice email in his finance folder since the 1st.\nthe folder holds 240 matches.",
+    "after": "first batch: 100 messages, the default\nthe bot keeps reading until no batch is left\nreport: 240 senders and subjects, oldest first\nnothing moved or marked read."
+  }
 }
