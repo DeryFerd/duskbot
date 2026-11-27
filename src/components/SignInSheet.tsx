@@ -1,6 +1,9 @@
 import { ModalLayer } from "./ui/ModalLayer";
 import { useEffect, useState } from "react";
-import { X } from "../icons";
+import { Icon } from "./Icon";
+import { cn } from "@/lib/cn";
+import { SIMPLE_BUTTONS } from "./SettingsPrimitives";
+import "../styles/settings.css";
 import { t } from "@/lib/i18n";
 import { stopWaitingInBrowser, useWaitingInBrowser } from "@/lib/account-intent";
 import { signedInNow } from "@/lib/sign-in-sheet";
@@ -10,16 +13,25 @@ import { signedInNow } from "@/lib/sign-in-sheet";
 export function ContinueInBrowserSheet({ kind, onClose }: { kind: "signin" | "upgrade" | "billing"; onClose: () => void }) {
   const bridge = window.duskDesktop?.cloudAccount;
   const [busy, setBusy] = useState(false);
-  return <ModalLayer><div className="ui-scrim fixed inset-0 z-[70] flex items-center justify-center p-4">
-    <div role="dialog" aria-modal="true" aria-labelledby="continue-browser-title" data-continue-in-browser={kind} className="relative w-full max-w-[400px] rounded-[20px] bg-app p-7 shadow-xl">
-      <button type="button" onClick={onClose} aria-label={t("accounts.close")} className="absolute end-4 top-4 grid size-8 place-items-center rounded-full text-ink-secondary hover:bg-ink/[0.06] hover:text-ink"><X size={16} /></button>
-      <h2 id="continue-browser-title" className="m-0 text-[17px] font-medium leading-6 text-ink">{t("continueBrowser.title")}</h2>
-      <p className="mt-2 text-[14px] leading-5 text-ink-secondary">{t(kind === "upgrade" ? "continueBrowser.upgrade" : kind === "billing" ? "continueBrowser.billing" : "continueBrowser.signin")}</p>
-      <p className="mt-2 text-[13px] leading-[18px] text-ink-tertiary">{t("continueBrowser.note")}</p>
-      <div className="mt-5 flex flex-wrap gap-2">
-        <button type="button" data-continue-open="" className="ui-button ui-button-primary" disabled={busy} onClick={() => { setBusy(true); void bridge?.reopen().finally(() => setBusy(false)); }}>{t("continueBrowser.open")}</button>
-        <button type="button" data-continue-cancel="" className="ui-button" disabled={busy} onClick={() => { void bridge?.cancel().catch(() => {}); onClose(); }}>{t("continueBrowser.cancel")}</button>
-      </div>
+  return <ModalLayer><div data-settings-sheet data-settings-look="simple" className="settings-scrim">
+    <div aria-hidden="true" className="settings-backdrop" />
+    <div role="dialog" aria-modal="true" aria-labelledby="continue-browser-title" data-continue-in-browser={kind} className="settings-dialog" style={{ width: "min(420px, 100vw - 32px)" }}>
+      <section className="settings-panel min-h-0">
+        <button type="button" onClick={onClose} aria-label={t("accounts.close")} className="settings-close"><Icon name="close" size={14} /></button>
+        <div className="settings-pane-header">
+          <h2 id="continue-browser-title" className="settings-pane-title">{t("continueBrowser.title")}</h2>
+        </div>
+        <div className="settings-scroll">
+          <div className={cn("settings-pane", SIMPLE_BUTTONS)} style={{ paddingBottom: 20 }}>
+            <div className="flex flex-col gap-1.5"><p className="m-0 px-2.5 text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary text-pretty">{t(kind === "upgrade" ? "continueBrowser.upgrade" : kind === "billing" ? "continueBrowser.billing" : "continueBrowser.signin")}</p>
+            <p className="m-0 px-2.5 text-[12px] leading-4 text-ink-tertiary text-pretty">{t("continueBrowser.note")}</p></div>
+            <div className="flex flex-wrap gap-2 px-2.5">
+              <button type="button" data-continue-open="" className="ui-button ui-button-primary" disabled={busy} onClick={() => { setBusy(true); void bridge?.reopen().finally(() => setBusy(false)); }}>{t("continueBrowser.open")}</button>
+              <button type="button" data-continue-cancel="" className="ui-button" disabled={busy} onClick={() => { void bridge?.cancel().catch(() => {}); onClose(); }}>{t("continueBrowser.cancel")}</button>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   </div></ModalLayer>;
 }
