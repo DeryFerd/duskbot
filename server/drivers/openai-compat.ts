@@ -238,7 +238,7 @@ export const OpenAICompatDriver: ProviderDriver<OpenAICompatConfig> = {
     const seeded = config.catalog === "openai" ? OPENAI_MODELS : seedFor(config.url);
     let listed: string[] | null = null;
     let catalog: ModelCatalog = config.managedModels
-      ? { default: config.managedModels[0], options: config.managedModels.map(id => ({ id, label: id })) }
+      ? { default: config.managedModels[0], options: config.managedModels.map(id => ({ id, label: id, custom: true })) }
       : config.model
       ? {
           default: config.model,
