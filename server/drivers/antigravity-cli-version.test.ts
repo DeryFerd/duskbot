@@ -86,6 +86,14 @@ describe("Antigravity CLI versions", () => {
       .resolves.toEqual({ executablePath: join(current, "antigravity.exe"), source: "path", version: "1.5.16" });
   });
 
+  it("tries a CLI on PATH whose --version could not even start, as one whose version could not be read", async () => {
+    const bin = folder();
+    const executable = script(bin, process.platform === "win32" ? "antigravity.exe" : "antigravity", "");
+    const env = { PATH: bin, UNSTARTABLE: "a\0b" };
+    await expect(resolveAntigravityRuntime(undefined, env, folder()))
+      .resolves.toEqual({ executablePath: executable, source: "path", version: null });
+  });
+
   it("asks the CLI itself with --version, auto-update off", async () => {
     const bin = folder();
     script(bin, "antigravity", 'process.stdout.write(process.argv[2] === "--version" && process.env.AGY_CLI_DISABLE_AUTO_UPDATE === "1" ? "1.3.5\\n" : "")');

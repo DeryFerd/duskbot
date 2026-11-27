@@ -230,12 +230,17 @@ const probeVersion: AntigravityVersionProbe = async (executablePath, env) => {
   const cached = versionProbes.get(key);
   if (cached) return cached;
   const running = new Promise<string | null>((resolveProbe) => {
-    execFile(executablePath, ["--version"], {
-      env: { ...env, AGY_CLI_DISABLE_AUTO_UPDATE: "1" },
-      timeout: VERSION_PROBE_MS,
-      windowsHide: true,
-      maxBuffer: 64 * 1024,
-    }, (error, stdout) => resolveProbe(error ? null : parseAntigravityVersion(String(stdout))));
+    // Node throws from spawn itself, not through the callback, for some failures (a file Windows cannot run as a program)
+    try {
+      execFile(executablePath, ["--version"], {
+        env: { ...env, AGY_CLI_DISABLE_AUTO_UPDATE: "1" },
+        timeout: VERSION_PROBE_MS,
+        windowsHide: true,
+        maxBuffer: 64 * 1024,
+      }, (error, stdout) => resolveProbe(error ? null : parseAntigravityVersion(String(stdout))));
+    } catch {
+      resolveProbe(null);
+    }
   });
   versionProbes.set(key, running);
   return running;
