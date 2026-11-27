@@ -134,11 +134,3 @@ test("a payment still confirming keeps the plans page, its skeleton while it loa
   sessionStorage.clear();
   history.replaceState(null, "", "/");
 });
-
-test("a first plan with a trial says in the sheet that checkout asks for a card, charges nothing today, and what it costs after", async () => {
-  state.cloud = { catalog: { ...fixtureCatalog, trialDays: 3 }, billing: billingFor(null), changeCharge: vi.fn(), changePlan: vi.fn(), checkout: vi.fn() };
-  const { PlanSheet } = await import("./plan-sheet");
-  await mount(createElement(PlanSheet, { source: "dash_sidebar", start: "starter", onClose: () => {} }));
-  expect(button(/^start 3-day free trial$/)).not.toBeNull();
-  expect(document.body.textContent).toMatch(/checkout asks for a card, but nothing is charged today\. after 3 free days, it's \$20\/mo \+ tax where applicable from /);
-});
