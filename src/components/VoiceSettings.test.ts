@@ -87,17 +87,17 @@ describe("VoiceSettings", () => {
     expect(onPatch).not.toHaveBeenCalled();
   });
 
-  const lead = () => host.querySelector<HTMLButtonElement>("button[aria-pressed]")!;
-  const others = () => host.querySelector<HTMLSelectElement>('select[aria-label="Use another provider"]')!;
+  const provider = () => host.querySelector<HTMLButtonElement>('[role="combobox"][aria-label="Voice provider"]')!;
   const keyField = () => host.querySelector('input[type="password"]');
+  const choices = () => [...document.querySelectorAll<HTMLElement>('[role="listbox"]:not([inert]) [role="option"]')];
 
   it("leads with the built-in voice, chosen and with no key field, for a bot with no saved choice", async () => {
     fixture.config = { tts: { configured: true, ready: true, voice: "" } };
     fixture.api.mockResolvedValue({ voices: [] });
     await render(bot("pepper"), vi.fn());
-    expect(lead().textContent).toContain("Built-in Mac voices");
-    expect(lead().getAttribute("aria-pressed")).toBe("true");
+    expect(provider().textContent).toContain("Built-in Mac voices");
     expect(keyField()).toBeNull();
+    expect(host.textContent).toContain("Works now, no key needed");
     expect(host.textContent).not.toContain("belongs to this agent");
   });
 
@@ -105,17 +105,17 @@ describe("VoiceSettings", () => {
     fixture.config = { tts: { configured: false, provider: "elevenlabs", voice: "" } };
     fixture.api.mockResolvedValue({ voices: [] });
     await render(bot("pepper"), vi.fn());
-    expect(lead().getAttribute("aria-pressed")).toBe("false");
-    expect(others().value).toBe("elevenlabs");
+    expect(provider().textContent).toContain("ElevenLabs");
     expect(keyField()).not.toBeNull();
   });
 
-  it("lists the other eight providers under one calm choice", async () => {
+  it("lists the built-in voice and the other eight providers under one select", async () => {
     fixture.config = { tts: { configured: true, provider: "system", voice: "" } };
     fixture.api.mockResolvedValue({ voices: [] });
     await render(bot("pepper"), vi.fn());
-    expect([...others().options].map((option) => option.textContent)).toEqual([
-      "Use another provider", "ElevenLabs", "Fish Audio", "Grok (xAI)", "Gemini", "OpenAI", "Deepgram", "Cartesia", "Chatterbox (local)",
+    await act(async () => provider().click());
+    expect(choices().map((option) => option.textContent)).toEqual([
+      "Built-in Mac voices", "ElevenLabs", "Fish Audio", "Grok (xAI)", "Gemini", "OpenAI", "Deepgram", "Cartesia", "Chatterbox (local)",
     ]);
   });
 
@@ -125,19 +125,17 @@ describe("VoiceSettings", () => {
     fixture.api.mockResolvedValue({ voices: [] });
     await render(bot("pepper"), vi.fn());
     fixture.platform = "darwin";
-    expect(host.querySelector("button[aria-pressed]")).toBeNull();
-    expect(host.querySelector<HTMLSelectElement>('select[aria-label="Voice provider"]')?.value).toBe("elevenlabs");
+    expect(provider().textContent).toContain("ElevenLabs");
+    await act(async () => provider().click());
+    expect(choices().map((option) => option.textContent)).not.toContain("Built-in Mac voices");
   });
 
-  it("saves the provider picked under the other-providers choice", async () => {
+  it("saves the provider picked in the select", async () => {
     fixture.config = { tts: { configured: true, provider: "system", voice: "" } };
     fixture.api.mockResolvedValue({ voices: [] });
     await render(bot("pepper"), vi.fn());
-    const select = others();
-    await act(async () => {
-      select.value = "fish";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    await act(async () => provider().click());
+    await act(async () => choices().find((option) => option.textContent === "Fish Audio")!.click());
     expect(fixture.api).toHaveBeenCalledWith("/api/config", { method: "PUT", body: JSON.stringify({ tts: { provider: "fish" } }) });
   });
 });

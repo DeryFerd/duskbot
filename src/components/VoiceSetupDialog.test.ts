@@ -77,8 +77,8 @@ class FakeElement {
   querySelector = vi.fn((_selector: string): FakeElement | null => null);
   querySelectorAll = vi.fn((): FakeElement[] => []);
 }
-const VOICE_PICKER = "[data-voice-picker]:not([disabled])";
-const FIRST_FIELD = "input:not([disabled]), select:not([disabled])";
+const VOICE_PICKER = '[data-voice-picker]:not([disabled]), [data-settings-select="voice"]:not([disabled])';
+const FIRST_FIELD = "input:not([disabled]), select:not([disabled]), [data-settings-select]:not([disabled])";
 function paneWith(fields: { voicePicker?: FakeElement; firstField?: FakeElement }) {
   const pane = new FakeElement();
   pane.querySelector.mockImplementation((selector) =>
@@ -99,11 +99,11 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("voice set-up pop-up", () => {
-  it("is Grok's form dialog holding the bot's own voice settings", () => {
+  it("is the Settings sheet holding the bot's own voice settings", () => {
     const { html } = render();
-    expect(html).toContain("glass-popup-frame");
-    expect(html).toContain("ui-dialog-scrim");
-    expect(html).toContain("rounded-[14px]");
+    expect(html).toContain("settings-scrim");
+    expect(html).toContain("settings-dialog");
+    expect(html).toContain("settings-close");
     expect(html).not.toContain("glass-surface");
     expect(html).toMatch(/role="dialog" aria-modal="true"/);
     expect(html).toContain("Give Pepper a voice");
@@ -159,7 +159,7 @@ describe("voice set-up pop-up", () => {
     const view = render();
     click(byAttribute(view, "aria-label", "Close voice set-up"));
     expect(view.props.onClose).toHaveBeenCalledTimes(1);
-    const frame = view.nodes.find((node) => String(node.props.className).split(" ").includes("glass-popup-frame"))!;
+    const frame = view.nodes.find((node) => String(node.props.className).split(" ").includes("settings-scrim"))!;
     const onMouseDown = frame.props.onMouseDown as (event: { target: unknown; currentTarget: unknown }) => void;
     onMouseDown({ target: {}, currentTarget: frame });
     expect(view.props.onClose).toHaveBeenCalledTimes(1);

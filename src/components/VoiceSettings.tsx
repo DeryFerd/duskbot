@@ -1,6 +1,6 @@
 // Security: the harness holds the cloud provider keys; the renderer never talks to ElevenLabs or Fish Audio itself.
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Check, Loader2, Volume2 } from "../icons";
+import { useEffect, useRef, useState } from "react";
+import { Loader2, Volume2 } from "../icons";
 
 import { api, useStore, type Bot, type ConfigStatus } from "@/state/store";
 import { useDesktopCapabilities } from "@/components/DesktopCapabilities";
@@ -19,11 +19,12 @@ import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { voiceKeyDraftValue, type VoiceKeyDraft } from "@/lib/voice-key-draft";
 import { VoicePicker, type PickerVoice } from "./VoicePicker";
-import { Select } from "./Select";
-import { Switch } from "./SettingsPrimitives";
+import { SettingRow, SettingsGroup, SettingsRows, SIMPLE_BUTTONS, Switch } from "./SettingsPrimitives";
+import { SettingsSelect } from "./SettingsSelect";
 import { KeysLink } from "./keys/KeysLink";
 import { friendlyError } from "@/lib/plain-error";
 
+const FIELD = "h-[30px] w-[150px] min-w-0 rounded-lg border-0 bg-ink/[0.06] px-2.5 text-[13px] leading-[18px] text-ink outline-none placeholder:text-ink-tertiary hover:bg-ink/10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus";
 const SAMPLE = "Morning. Overnight the tests went green, and I left two notes for you in the thread.";
 const FISH_MODELS = [
   { value: "s2.1-pro", label: "voice.fish.modelPro" },
@@ -41,22 +42,6 @@ const PROVIDERS: ReadonlyArray<{ value: Exclude<ProviderChoice, "system">; label
   { value: "cartesia", label: () => "Cartesia" },
   { value: "chatterbox", label: () => t("voice.chatterboxLocal") },
 ];
-
-function Reveal({ open, children }: { open: boolean; children: ReactNode }) {
-  const [mounted, setMounted] = useState(open);
-  if (open && !mounted) setMounted(true);
-  return (
-    <div
-      inert={!open}
-      className={cn(
-        "grid transition-[grid-template-rows,opacity] duration-[220ms] ease-[var(--dusk-ease-out)] motion-reduce:transition-none",
-        open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
-      )}
-    >
-      <div className="min-h-0 overflow-hidden">{mounted && children}</div>
-    </div>
-  );
-}
 
 export function VoiceSettings({
   bot,
@@ -128,9 +113,7 @@ export function VoiceSettings({
           keyUrl: "https://elevenlabs.io/app/settings/api-keys",
         }
       : null;
-  const lastKeyProvider = useRef(cloudProvider);
-  if (cloudProvider) lastKeyProvider.current = cloudProvider;
-  const keyProvider = cloudProvider ?? lastKeyProvider.current;
+  
   const key = cloudProvider ? voiceKeyDraftValue(keyDraft, cloudProvider.id) : "";
   const hostProviderLabel = provider === "gemini" || provider === "openai" || provider === "deepgram" || provider === "cartesia"
     ? t("voice.hostLabel", { provider: provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : cloudProvider?.name ?? "" }) : provider === "fish"
@@ -308,320 +291,239 @@ export function VoiceSettings({
   const selectedVoice = usesLocalSystem ? deviceVoice : (bot.voice ?? "");
   const ready = usesLocalSystem || (hostConfigured && (provider === "system" || Boolean(selectedVoice || tts.voice)));
   const selectedDescription = voices.find((voice) => voice.id === selectedVoice)?.description;
+  const providerOptions = [
+    ...(systemVoicesAvailable ? [{ value: "system", label: t("voice.macBuiltIn") }] : []),
+    ...PROVIDERS.map((option) => ({ value: option.value, label: option.label() })),
+  ];
+  const voiceHint = selectedDescription && !searchable ? selectedDescription : t("voice.description");
+  const saveLabel = (busy: boolean) => (busy ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : t("common.save"));
 
   return (
-    <div className="rounded-xl bg-card p-4">
-      <div className="text-[15px] font-medium text-ink">{t("voice.title")}</div>
-      <div className="mt-0.5 text-[13px] text-ink-secondary">
-        {localMacClient
-          ? t("voice.macChoice")
-          : workspaceConfigurationLocked
-            ? t("voice.agentChoice")
-            : provider === "system" && !systemVoicesAvailable
-              ? t("voice.nativeGone")
-              : t("voice.description")}
-      </div>
-
-      {localMacClient && (
-        <div className="mt-4">
-          <div className="mb-2 text-[13px] text-ink-secondary">{t("voice.macOutput")}</div>
-          <div className="inline-flex rounded-xl bg-inset p-1" role="radiogroup" aria-label={t("voice.macOutput")}>
-            {([
-              { value: "system", label: t("voice.macBuiltIn"), available: true },
-              { value: "host", label: hostProviderLabel, available: hostConfigured },
-            ] as const).map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                role="radio"
-                aria-checked={deviceProvider === option.value}
-                disabled={!option.available}
-                title={!option.available ? t("voice.hostNotConfigured") : undefined}
-                onClick={() => chooseDeviceProvider(option.value)}
-                className={cn(
-                  "rounded-lg px-3.5 py-1.5 text-[13px] transition-colors disabled:opacity-50",
-                  deviceProvider === option.value ? "bg-raised text-ink shadow" : "text-ink-secondary hover:text-ink",
-                )}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {!workspaceConfigurationLocked && (
-        <div className="mt-4 flex flex-col gap-2">
-          {systemVoicesAvailable && (
-            <button
-              type="button"
-              aria-pressed={provider === "system"}
-              disabled={switching}
-              onClick={() => setProvider("system")}
-              className={cn(
-                "flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-3 text-left transition-colors duration-[120ms] ease-[ease] disabled:opacity-50",
-                provider === "system" ? "bg-raised shadow" : "bg-inset hover:bg-ink/[0.07]",
-              )}
-            >
-              <span className="min-w-0">
-                <span className="block text-[14px] font-medium text-ink">{t("voice.macBuiltIn")}</span>
-                <span className="mt-0.5 block text-[12px] text-ink-secondary">{t("voice.nativeHint")}</span>
-              </span>
-              {provider === "system" && <Check size={15} aria-hidden="true" className="shrink-0 text-ink" />}
-            </button>
-          )}
-          <Select
-            variant="quiet"
-            value={provider === "system" ? "" : provider}
-            disabled={switching}
-            onChange={(e) => setProvider(e.target.value as ProviderChoice)}
-            aria-label={systemVoicesAvailable ? t("voice.otherProviders") : t("voice.engine")}
-            className={cn(
-              "w-full",
-              provider !== "system" && systemVoicesAvailable && "[&_select]:bg-raised [&_select]:shadow",
-            )}
-          >
-            {provider === "system" && <option value="">{t("voice.otherProviders")}</option>}
-            {PROVIDERS.map((option) => (
-              <option key={option.value} value={option.value}>{option.label()}</option>
-            ))}
-          </Select>
-        </div>
-      )}
-
-      <Reveal open={!workspaceConfigurationLocked && cloudProvider !== null}>
-        {keyProvider && (
-        <div className="pt-4">
-        <div className="mb-1.5 flex items-center gap-2 text-[13px] text-ink-secondary">
-          <span className={cn("size-1.5 rounded-full", configured ? "bg-success" : "bg-raised-hover")} />
-          <span>{t("voice.providerKey", { provider: keyProvider.name })}</span>
-          {configured && <span className="text-[11px] text-success">{included ? t("keys.includedWithCloudPro") : t("voice.connected")}</span>}
-        </div>
-        {!included && (
-        <div className="flex gap-2">
-          <input
-            type="password"
-            value={key}
-            onChange={(e) => setKeyDraft({ provider: keyProvider.id, value: e.target.value })}
-            onKeyDown={(e) => e.key === "Enter" && key.trim() && void saveKey()}
-            placeholder={configured && !included ? "••••••••  (paste to replace)" : keyProvider.placeholder}
-            aria-label={`${keyProvider.name} key`}
-            autoComplete="off"
-            className="w-full rounded-lg border border-transparent bg-inset px-3 py-2 text-[13px] text-ink placeholder:text-ink-secondary focus:outline-none"
-          />
-          <button
-            onClick={() => void saveKey()}
-            disabled={saving || !key.trim()}
-            className="flex w-[72px] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-control py-2 text-[13px] text-ink hover:bg-raised-hover disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {saving ? <Loader2 size={13} className="animate-spin" /> : <><Check size={13} />{t("common.save")}</>}
-          </button>
-        </div>
-        )}
-        {!configured && (
-          <a
-            href={keyProvider.keyUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-1.5 inline-block text-[12px] font-medium text-accent hover:underline"
-          >
-            {t("voice.getKey", { provider: keyProvider.name })}
-          </a>
-        )}
-        </div>
-      )}
-      </Reveal>
-
-      {!workspaceConfigurationLocked && provider === "fish" && (
-        <div className="mt-4">
-          <div className="mb-1.5 text-[13px] text-ink-secondary">{t("voice.fish.model")}</div>
-          <Select
-            value={tts.fishModel ?? "s2.1-pro"}
-            onChange={(e) => saveFishModel(e.target.value as FishModel)}
-            disabled={savingFishModel}
-            aria-label={t("voice.fish.model")}
-            className="w-full"
-          >
-            {FISH_MODELS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {t(option.label)}
-              </option>
-            ))}
-          </Select>
-          <div className="mt-1.5 text-[12px] leading-relaxed text-ink-secondary">{t("voice.fish.modelHint")}</div>
-        </div>
-      )}
-
-      {provider === "xai" && (
-        <p className="mt-4 text-[13px] text-ink-secondary">
-          {hostConfigured ? t("voice.grok.ready") : <>{t("voice.grok.missingKey")} <KeysLink id="xai" /></>}
-        </p>
-      )}
-
-      {provider === "openai" && (
-        <p className="mt-4 text-[13px] text-ink-secondary">
-          {hostConfigured ? t("voice.openai.ready") : <>{t("voice.openai.missingKey")} <KeysLink id="openai" /></>}
-        </p>
-      )}
-
-      {!workspaceConfigurationLocked && provider === "chatterbox" && (
-        <div className="mt-4">
-        <div className="mb-1.5 flex items-center gap-2 text-[13px] text-ink-secondary">
-          <span className={cn("size-1.5 rounded-full", configured ? "bg-success" : "bg-raised-hover")} />
-          <span>{t("voice.chatterboxServer")}</span>
-          {configured && <span className="text-[11px] text-success">{t("common.saved")}</span>}
-        </div>
-        <div className="flex gap-2">
-          <input
-            type="url"
-            value={serverUrl}
-            onChange={(e) => setServerUrl(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && void saveServer()}
-            placeholder="http://127.0.0.1:4123"
-            aria-label={t("voice.chatterboxAddress")}
-            autoComplete="off"
-            spellCheck={false}
-            className="w-full rounded-lg border border-transparent bg-inset px-3 py-2 text-[13px] text-ink placeholder:text-ink-secondary focus:outline-none"
-          />
-          <button
-            onClick={() => void saveServer()}
-            disabled={savingServer || !serverUrl.trim()}
-            className="flex w-[72px] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-control py-2 text-[13px] text-ink hover:bg-raised-hover disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {savingServer ? <Loader2 size={13} className="animate-spin" /> : <><Check size={13} />{t("common.save")}</>}
-          </button>
-        </div>
-        <input
-          type="text"
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && void saveServer()}
-          placeholder={t("voice.chatterboxModelPlaceholder")}
-          aria-label={t("voice.chatterboxModel")}
-          autoComplete="off"
-          spellCheck={false}
-          className="mt-2 w-full rounded-lg border border-transparent bg-inset px-3 py-2 text-[13px] text-ink placeholder:text-ink-secondary focus:outline-none"
-        />
-        <div className="mt-1.5 text-[12px] leading-relaxed text-ink-secondary">
-          {t("voice.chatterboxHelp")}{" "}
-          <a
-            href="https://github.com/resemble-ai/chatterbox"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-medium text-accent hover:underline"
-          >
-            {t("voice.chatterboxHowTo")}
-          </a>
-        </div>
-        </div>
-      )}
-
-      {!workspaceConfigurationLocked && provider === "gemini" && (
-        <label className="mt-4 block text-[13px] text-ink-secondary">
-          {t("voice.gemini.model")}
-          <Select value={tts.model || "gemini-3.8-flash-lite-tts"} className="mt-2 w-full" onChange={(event) => {
-            void api("/api/config", { method: "PUT", body: JSON.stringify({ tts: { model: event.target.value } }) })
-              .then((status: ConfigStatus) => dispatch({ type: "configStatus", config: status }))
-              .catch((error: unknown) => setError(friendlyError(error)));
-          }}>
-            <option value="gemini-3.8-flash-lite-tts">Gemini 3.8 Flash-Lite TTS</option>
-            <option value="gemini-3.8-flash-tts">Gemini 3.8 Flash TTS</option>
-          </Select>
-        </label>
-      )}
-
-      <Reveal open={configured}>
-        <div className="pt-4">
-          <div className="mb-1.5 text-[13px] text-ink-secondary">{t("voice.title")}</div>
-          <div className="flex gap-2">
-            {searchable ? (
-              <VoicePicker
-                key={provider}
-                value={selectedVoice}
-                voices={fixedVoices ? voices.filter((voice) => voice.label.toLowerCase().includes(voiceQuery.trim().toLowerCase())) : voices}
-                loading={loadingVoices || (!fixedVoices && voiceQuery.trim() !== searchedQuery)}
-                query={voiceQuery}
-                onQuery={setVoiceQuery}
-                onPick={pickVoice}
-                pending={addingVoice ?? undefined}
-                defaultLabel={tts.voice ? t("voice.installDefault") : t("voice.pick")}
-                ariaLabel={`${bot.name}'s voice`}
+    <div data-settings-look="simple" className={cn("flex flex-col gap-7", SIMPLE_BUTTONS)}>
+      <SettingsGroup>
+        <SettingsRows>
+          {localMacClient && (
+            <SettingRow title={t("voice.macOutput")} subtitle={t("voice.macChoice")}>
+              <SettingsSelect
+                variant="segmented"
+                value={deviceProvider}
+                aria-label={t("voice.macOutput")}
+                onChange={(e) => chooseDeviceProvider(e.target.value as RemoteVoiceProvider)}
+                options={[
+                  { value: "system", label: t("voice.macBuiltIn") },
+                  { value: "host", label: hostProviderLabel, disabled: !hostConfigured },
+                ]}
               />
-            ) : (
-              <Select
-                value={selectedVoice}
-                onChange={(e) => chooseVoice(e.target.value)}
-                aria-label={`${bot.name}'s voice`}
-                data-voice-picker
-                className="w-full"
-              >
-                <option value="">
-                  {loadingVoices
-                    ? t("voice.loading")
-                    : usesLocalSystem || provider === "system"
-                      ? t("voice.macDefault")
-                      : tts.voice
-                        ? t("voice.installDefault")
-                        : t("voice.pick")}
-                </option>
-                {selectedVoice && !voices.some((voice) => voice.id === selectedVoice) && (
-                  <option value={selectedVoice}>{t("voice.current")}</option>
-                )}
-                {voices.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.label}
-                  </option>
-                ))}
-              </Select>
-            )}
-            <button
-              onClick={() => void speaker.speak(SAMPLE, { voiceId: bot.voice, botId: bot.id })}
-              disabled={!ready || preparingSample}
-              aria-busy={preparingSample}
-              title={ready ? t("voice.hear") : t("voice.pickFirst")}
-              aria-label={t("voice.hear")}
-              className="flex w-[72px] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-control py-2 text-[13px] text-ink hover:bg-raised-hover disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {preparingSample ? <Loader2 size={14} className="animate-spin" /> : <Volume2 size={14} />} {t("voice.try")}
-            </button>
-          </div>
-          {listError && <div role="alert" className="mt-1.5 text-[12px] text-danger">{listError}</div>}
-          {addError && <div role="alert" className="mt-1.5 text-[12px] text-danger">{addError}</div>}
-          {!searchable && selectedDescription && (
-            <div className="mt-1.5 text-[12px] leading-relaxed text-ink-secondary">{selectedDescription}</div>
+            </SettingRow>
           )}
-        </div>
-      </Reveal>
 
-      <div className="mt-4 flex items-center justify-between gap-4 border-t border-transparent pt-4">
-        <div>
-          <div className="text-[13px] font-medium text-ink">{t("voice.readReplies")}</div>
-          <div className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">
-            {t("voice.readRepliesHelp")}
-          </div>
-        </div>
-        <Switch
-          checked={Boolean(bot.speakReplies)}
-          aria-label={t("voice.readReplies")}
-          onClick={() => onPatch({ speakReplies: !bot.speakReplies })}
-        />
-      </div>
+          {!workspaceConfigurationLocked && (
+            <SettingRow
+              title={t("voice.engine")}
+              subtitle={provider === "system" ? t("voice.nativeHint") : undefined}
+            >
+              <SettingsSelect
+                value={provider}
+                disabled={switching}
+                onChange={(e) => setProvider(e.target.value as ProviderChoice)}
+                aria-label={t("voice.engine")}
+                options={providerOptions}
+              />
+            </SettingRow>
+          )}
 
-      <div className="mt-4 flex items-center justify-between gap-4">
-        <div>
-          <div className="text-[13px] font-medium text-ink">{t("voice.notes")}</div>
-          <div className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">
-            {t("voice.notesHelp")}
-          </div>
-        </div>
-        <Switch
-          checked={bot.voiceNotes !== false}
-          aria-label={t("voice.notes")}
-          onClick={() => onPatch({ voiceNotes: bot.voiceNotes === false })}
-        />
-      </div>
+          {!workspaceConfigurationLocked && cloudProvider && (
+              <SettingRow
+                title={t("voice.providerKey", { provider: cloudProvider.name })}
+                subtitle={configured
+                  ? (included ? t("keys.includedWithCloudPro") : t("voice.connected"))
+                  : (
+                    <a href={cloudProvider.keyUrl} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+                      {t("voice.getKey", { provider: cloudProvider.name })}
+                    </a>
+                  )}
+              >
+                {!included && (
+                  <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); if (key.trim()) void saveKey(); }}>
+                    <input
+                      type="password"
+                      value={key}
+                      onChange={(e) => setKeyDraft({ provider: cloudProvider.id, value: e.target.value })}
+                      placeholder={configured && !included ? "••••••••  (paste to replace)" : cloudProvider.placeholder}
+                      aria-label={`${cloudProvider.name} key`}
+                      autoComplete="off"
+                      className={FIELD}
+                    />
+                    <button type="submit" className="ui-button" disabled={saving || !key.trim()}>{saveLabel(saving)}</button>
+                  </form>
+                )}
+              </SettingRow>
+          )}
 
-      {error && <div role="alert" className="mt-2 text-[12px] text-danger">{error}</div>}
+          {!workspaceConfigurationLocked && provider === "fish" && (
+            <SettingRow title={t("voice.fish.model")} subtitle={t("voice.fish.modelHint")}>
+              <SettingsSelect
+                value={tts.fishModel ?? "s2.1-pro"}
+                onChange={(e) => saveFishModel(e.target.value as FishModel)}
+                disabled={savingFishModel}
+                aria-label={t("voice.fish.model")}
+                options={FISH_MODELS.map((option) => ({ value: option.value, label: t(option.label) }))}
+              />
+            </SettingRow>
+          )}
+
+          {provider === "xai" && (
+            <SettingRow
+              title={t("voice.providerKey", { provider: "Grok" })}
+              subtitle={hostConfigured ? t("voice.grok.ready") : <>{t("voice.grok.missingKey")} <KeysLink id="xai" /></>}
+            >{null}</SettingRow>
+          )}
+
+          {provider === "openai" && (
+            <SettingRow
+              title={t("voice.providerKey", { provider: "OpenAI" })}
+              subtitle={hostConfigured ? t("voice.openai.ready") : <>{t("voice.openai.missingKey")} <KeysLink id="openai" /></>}
+            >{null}</SettingRow>
+          )}
+
+          {!workspaceConfigurationLocked && provider === "chatterbox" && (
+            <>
+              <SettingRow title={t("voice.chatterboxServer")} subtitle={configured ? t("common.saved") : undefined}>
+                <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); void saveServer(); }}>
+                  <input
+                    type="url"
+                    value={serverUrl}
+                    onChange={(e) => setServerUrl(e.target.value)}
+                    placeholder="http://127.0.0.1:4123"
+                    aria-label={t("voice.chatterboxAddress")}
+                    autoComplete="off"
+                    spellCheck={false}
+                    className={FIELD}
+                  />
+                  <button type="submit" className="ui-button" disabled={savingServer || !serverUrl.trim()}>{saveLabel(savingServer)}</button>
+                </form>
+              </SettingRow>
+              <SettingRow
+                title={t("voice.chatterboxModel")}
+                subtitle={<>
+                  {t("voice.chatterboxHelp")}{" "}
+                  <a href="https://github.com/resemble-ai/chatterbox" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+                    {t("voice.chatterboxHowTo")}
+                  </a>
+                </>}
+              >
+                <input
+                  type="text"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && void saveServer()}
+                  placeholder={t("voice.chatterboxModelPlaceholder")}
+                  aria-label={t("voice.chatterboxModel")}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className={FIELD}
+                />
+              </SettingRow>
+            </>
+          )}
+
+          {!workspaceConfigurationLocked && provider === "gemini" && (
+            <SettingRow title={t("voice.gemini.model")}>
+              <SettingsSelect
+                value={tts.model || "gemini-3.8-flash-lite-tts"}
+                aria-label={t("voice.gemini.model")}
+                options={[
+                  { value: "gemini-3.8-flash-lite-tts", label: "Gemini 3.8 Flash-Lite TTS" },
+                  { value: "gemini-3.8-flash-tts", label: "Gemini 3.8 Flash TTS" },
+                ]}
+                onChange={(event) => {
+                  void api("/api/config", { method: "PUT", body: JSON.stringify({ tts: { model: event.target.value } }) })
+                    .then((status: ConfigStatus) => dispatch({ type: "configStatus", config: status }))
+                    .catch((error: unknown) => setError(friendlyError(error)));
+                }}
+              />
+            </SettingRow>
+          )}
+
+          {configured && (
+            <SettingRow
+              title={t("voice.title")}
+              subtitle={voiceHint}
+              message={(listError || addError) && <div role="alert" className="text-danger">{listError ?? addError}</div>}
+            >
+              <div className="flex items-center gap-2">
+                {searchable ? (
+                  <VoicePicker
+                    key={provider}
+                    value={selectedVoice}
+                    voices={fixedVoices ? voices.filter((voice) => voice.label.toLowerCase().includes(voiceQuery.trim().toLowerCase())) : voices}
+                    loading={loadingVoices || (!fixedVoices && voiceQuery.trim() !== searchedQuery)}
+                    query={voiceQuery}
+                    onQuery={setVoiceQuery}
+                    onPick={pickVoice}
+                    pending={addingVoice ?? undefined}
+                    defaultLabel={tts.voice ? t("voice.installDefault") : t("voice.pick")}
+                    ariaLabel={`${bot.name}'s voice`}
+                  />
+                ) : (
+                  <SettingsSelect
+                    value={selectedVoice}
+                    onChange={(e) => chooseVoice(e.target.value)}
+                    aria-label={`${bot.name}'s voice`}
+                    data-settings-select="voice"
+                    options={[
+                      {
+                        value: "",
+                        label: loadingVoices
+                          ? t("voice.loading")
+                          : usesLocalSystem || provider === "system"
+                            ? t("voice.macDefault")
+                            : tts.voice ? t("voice.installDefault") : t("voice.pick"),
+                      },
+                      ...(selectedVoice && !voices.some((voice) => voice.id === selectedVoice)
+                        ? [{ value: selectedVoice, label: t("voice.current") }]
+                        : []),
+                      ...voices.map((v) => ({ value: v.id, label: v.label })),
+                    ]}
+                  />
+                )}
+                <button
+                  type="button"
+                  onClick={() => void speaker.speak(SAMPLE, { voiceId: bot.voice, botId: bot.id })}
+                  disabled={!ready || preparingSample}
+                  aria-busy={preparingSample}
+                  title={ready ? t("voice.hear") : t("voice.pickFirst")}
+                  aria-label={t("voice.hear")}
+                  className="ui-button"
+                >
+                  {preparingSample ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : <Volume2 size={13} aria-hidden="true" />}
+                  {t("voice.try")}
+                </button>
+              </div>
+            </SettingRow>
+          )}
+        </SettingsRows>
+      </SettingsGroup>
+
+      <SettingsGroup>
+        <SettingsRows>
+          <SettingRow title={t("voice.readReplies")} subtitle={t("voice.readRepliesHelp")}>
+            <Switch
+              checked={Boolean(bot.speakReplies)}
+              aria-label={t("voice.readReplies")}
+              onClick={() => onPatch({ speakReplies: !bot.speakReplies })}
+            />
+          </SettingRow>
+          <SettingRow title={t("voice.notes")} subtitle={t("voice.notesHelp")}>
+            <Switch
+              checked={bot.voiceNotes !== false}
+              aria-label={t("voice.notes")}
+              onClick={() => onPatch({ voiceNotes: bot.voiceNotes === false })}
+            />
+          </SettingRow>
+        </SettingsRows>
+        {error && <div role="alert" className="px-3 text-[12px] leading-4 text-danger">{error}</div>}
+      </SettingsGroup>
     </div>
   );
 }

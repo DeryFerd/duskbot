@@ -1,8 +1,7 @@
 import { useEffect, useId, useRef, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { CheckCircle2, ChevronRight, Loader2, Phone, X } from "../icons";
+import { CheckCircle2, ChevronRight, Loader2, Phone } from "../icons";
 
-import { glassPopupFrameStyle } from "@/lib/glass-popup";
 import { t } from "@/lib/i18n";
 import { openBot, useStore, type Bot } from "@/state/store";
 import { useDesktopCapabilities } from "./DesktopCapabilities";
@@ -10,12 +9,14 @@ import { VoiceSettings } from "./VoiceSettings";
 import { useBotSettingsDerived } from "./bot-settings/useBotSettingsDerived";
 import { openBotSettings } from "./bot-panel/panel-link";
 import { cn } from "@/lib/cn";
-import { formBodyCls, formCloseCls, formFooterCls, formHeaderCls, formSheetCls, formTitleCls, mdPrimaryCls, rowHintCls } from "./ui/GrokDialog";
+import { Icon } from "./Icon";
+import { SIMPLE_BUTTONS } from "./SettingsPrimitives";
+import "../styles/settings.css";
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
-const VOICE_PICKER = "[data-voice-picker]:not([disabled])";
-const FIRST_FIELD = "input:not([disabled]), select:not([disabled])";
+const VOICE_PICKER = '[data-voice-picker]:not([disabled]), [data-settings-select="voice"]:not([disabled])';
+const FIRST_FIELD = "input:not([disabled]), select:not([disabled]), [data-settings-select]:not([disabled])";
 
 export function VoiceSetupDialog({
   bot,
@@ -96,12 +97,12 @@ export function VoiceSetupDialog({
 
   return createPortal(
     <div
-      className="glass-popup-frame"
-      style={glassPopupFrameStyle()}
+      className="settings-scrim"
+      data-settings-sheet
+      data-settings-look="simple"
       onMouseDown={(event) => event.target === event.currentTarget && close()}
     >
-      {/* A sibling, not the parent: a backdrop-filter on an ancestor would stop the pop-up's own glass from seeing the app behind it. */}
-      <div aria-hidden="true" className="ui-dialog-scrim pointer-events-none absolute inset-0" />
+      <div aria-hidden="true" className="settings-backdrop" />
       <div
         ref={dialogRef}
         role="dialog"
@@ -110,68 +111,60 @@ export function VoiceSetupDialog({
         aria-describedby={subtitleId}
         tabIndex={-1}
         data-voice-setup-dialog={bot.id}
-        className={cn(formSheetCls, "max-h-full w-[min(480px,100%)] focus-visible:outline-none!")}
+        className="settings-dialog"
+        style={{ width: "min(520px, 100vw - 32px)" }}
       >
-        <header className={formHeaderCls}>
-          <h2 id={titleId} className={formTitleCls}>
-            {t("call.voiceSetup.title", { name: bot.name })}
-          </h2>
-          <button
-            type="button"
-            onClick={close}
-            aria-label={t("call.voiceSetup.close")}
-            className={formCloseCls}
-          >
-            <X size={16} />
+        <section className="settings-panel min-h-0">
+          <button type="button" onClick={close} aria-label={t("call.voiceSetup.close")} className="settings-close">
+            <Icon name="close" size={14} />
           </button>
-        </header>
+          <div className="settings-pane-header">
+            <h2 id={titleId} className="settings-pane-title">
+              {t("call.voiceSetup.title", { name: bot.name })}
+            </h2>
+          </div>
+          <div className="settings-scroll">
+            <div className={cn("settings-pane", SIMPLE_BUTTONS)} style={{ paddingBottom: 20 }}>
+              <p id={subtitleId} className="m-0 px-2.5 text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary text-pretty">
+                {t(capabilities.host.platform === "darwin" ? "call.voiceSetup.subtitle" : "call.voiceSetup.subtitleKey")}
+              </p>
+              {state.config?.tts ? (
+                <VoiceSettings bot={bot} onPatch={patch} />
+              ) : (
+                <div className="flex items-center justify-center gap-2 py-8 text-[13px] leading-[18px] text-ink-secondary">
+                  <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                  {t("call.voiceSetup.loading")}
+                </div>
+              )}
 
-        <div className={formBodyCls}>
-          <p id={subtitleId} className={cn(rowHintCls, "m-0 mb-3 text-pretty")}>
-            {t(capabilities.host.platform === "darwin" ? "call.voiceSetup.subtitle" : "call.voiceSetup.subtitleKey")}
-          </p>
-          {state.config?.tts ? (
-            <VoiceSettings bot={bot} onPatch={patch} />
-          ) : (
-            <div className="flex items-center justify-center gap-2 py-8 text-[13px] leading-[18px] text-ink/68">
-              <Loader2 size={14} className="animate-spin" aria-hidden="true" />
-              {t("call.voiceSetup.loading")}
-            </div>
-          )}
-        </div>
+              {/* Mounted before it has anything to say: a live region announces only changes made after it exists. */}
+              <div role="status" aria-live="polite" className="empty:hidden">
+                {ready && (
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-3">
+                    <CheckCircle2 size={14} className="shrink-0 text-success" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 text-[13px] leading-[18px] tracking-[0.015em] text-ink">
+                      {t("call.voiceSetup.ready", { name: callName })}
+                    </span>
+                    <button type="button" data-voice-setup-start onClick={onStartCall} className="ui-button ui-button-primary">
+                      <Phone size={13} aria-hidden="true" />
+                      {t("call.voiceSetup.startCall")}
+                    </button>
+                  </div>
+                )}
+              </div>
 
-        {/* Mounted before it has anything to say: a live region announces only changes made after it exists. */}
-        <div role="status" aria-live="polite">
-          {ready && (
-            <div className="mx-4 mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-2 py-1.5">
-              <CheckCircle2 size={14} className="shrink-0 text-success" aria-hidden="true" />
-              <span className="min-w-0 flex-1 text-[13px] leading-[18px] text-ink">
-                {t("call.voiceSetup.ready", { name: callName })}
-              </span>
               <button
                 type="button"
-                data-voice-setup-start
-                onClick={onStartCall}
-                className={cn(mdPrimaryCls, "gap-1.5")}
+                data-voice-setup-all-settings
+                onClick={openAllSettings}
+                className="-mt-2 inline-flex items-center gap-0.5 self-start rounded-sm px-3 text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary transition-[color] duration-[120ms] ease-[ease] hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
               >
-                <Phone size={14} aria-hidden="true" />
-                {t("call.voiceSetup.startCall")}
+                {t("call.voiceSetup.allSettings")}
+                <ChevronRight size={12} aria-hidden="true" />
               </button>
             </div>
-          )}
-        </div>
-
-        <footer className={cn(formFooterCls, "justify-start")}>
-          <button
-            type="button"
-            data-voice-setup-all-settings
-            onClick={openAllSettings}
-            className="inline-flex items-center gap-0.5 rounded-sm pl-0.5 text-[12px] leading-4 tracking-[0.01em] text-ink/68 transition-[color] duration-[120ms] ease-[ease] hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-          >
-            {t("call.voiceSetup.allSettings")}
-            <ChevronRight size={12} aria-hidden="true" />
-          </button>
-        </footer>
+          </div>
+        </section>
       </div>
     </div>,
     document.body,
