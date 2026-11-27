@@ -9355,8 +9355,7 @@ async function beginTurn(
         : integrations.agents && sectionPeers.length > 0
           ? peerRosterSystemPrompt(sectionPeers, bot)
           : "";
-      const credentialPrompt = integrations.agents ? oneToOneCredentialPrompt({ team: Boolean(CLOUD_TEAM), guest: guestConfined, chatApp: Boolean(messengerHost.platformOf(threadId)),
-        member: Boolean(userMessage.sender?.member), personAsked: requestOrigin.kind === "user" }) + THREADS_PROMPT + WIDGET_PROMPT : "";
+      const credentialPrompt = integrations.agents ? oneToOneCredentialPrompt({ team: Boolean(CLOUD_TEAM), guest: guestConfined, chatApp: Boolean(messengerHost.platformOf(threadId)), member: Boolean(userMessage.sender?.member), personAsked: requestOrigin.kind === "user" }) + THREADS_PROMPT + WIDGET_PROMPT : "";
       const routinePrompt = integrations.agents ? TRIGGER_PROMPT : "";
       const profilePrompt = integrations.agents ? PROFILE_PROMPT + workspacePrompt(chiefLevel(bot)) : "";
       const recallPrompt = integrations.agents && bot.memoryEnabled !== false ? SESSION_SEARCH_SYSTEM_PROMPT : "";
