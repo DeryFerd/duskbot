@@ -6,6 +6,7 @@ import { normalizePhoneApps } from "../../shared/phone-apps.ts";
 import { parseToolScope, toolScopeWidens } from "../../shared/tool-scope.ts";
 import { isMausColor, LIMIT_MODES, MAUS_COLOR_NAMES, type LimitMode, type WireBot, type WireGroup } from "../../shared/wire.ts";
 import { validateBotCwd } from "../bot-cwd.ts";
+import { parseCompactAt, parseFreshSession } from "../fresh-session.ts";
 import { parseBotProfilePatch } from "../bot-profile.ts";
 import { accessFromVisibility } from "../../shared/bot-access.ts";
 import { parseVisibility } from "../bot-visibility.ts";
@@ -244,6 +245,12 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
         if (body.limitMode !== null && !(LIMIT_MODES as readonly unknown[]).includes(body.limitMode)) return json(res, 400, { error: "limitMode must be wait, ask or free" });
         patch.limitMode = body.limitMode === null || body.limitMode === "wait" ? undefined : body.limitMode as LimitMode;
       }
+      const freshSession = parseFreshSession(body.freshSession);
+      if (freshSession && "error" in freshSession) return json(res, 400, { error: freshSession.error });
+      if (freshSession !== undefined) patch.freshSession = freshSession ?? undefined;
+      const compactAt = parseCompactAt(body.compactAt);
+      if (compactAt !== null && typeof compactAt === "object") return json(res, 400, { error: compactAt.error });
+      if (compactAt !== undefined) patch.compactAt = compactAt ?? undefined;
       // null clears back to every connected app.
       if (body.connectorScopes !== undefined) {
         if (body.connectorScopes === null) patch.connectorScopes = undefined;

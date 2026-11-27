@@ -308,6 +308,7 @@
   "server.batch.continuing": "Weiter: {progress}, der Rest folgt",
   "server.batch.paused": "Pausiert bei {progress}: die Seite bat um Pause, weiter in etwa {minutes} Min.",
   "server.reconnect.carryOn": "Wieder verbunden, es geht weiter",
+  "server.newChat.started": "Neue Sitzung gestartet",
   "server.spend.botCap": "{bot} hat sein Wochenlimit erreicht. Seine Routinen warten, bis die Kosten der letzten 7 Tage wieder darunter liegen oder du das Limit unter Nutzung erhöhst. Er antwortet dir weiterhin.",
   "server.spend.routineSpike": "Deine Routine „{routine}“ hat in {runs} Läufen {percent} % der heutigen Nutzung verbraucht, weit mehr als sonst. Öffne sie, um ihren Zeitplan zu prüfen, oder gib ihr eine Adresse, damit sie nur läuft, wenn etwas passiert.",
   "server.spend.routineSpikeInterval": "Deine Routine „{routine}“ hat in {runs} Läufen {percent} % der heutigen Nutzung verbraucht, weit mehr als sonst. Öffne sie und lass sie seltener laufen, oder gib ihr eine Adresse, damit sie nur läuft, wenn etwas passiert.",

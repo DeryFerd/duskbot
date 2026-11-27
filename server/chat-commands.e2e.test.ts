@@ -61,12 +61,17 @@ it("/compact with a focus and /new act on the conversation, never reach the bot 
     const old = await f.messages(thread);
     expect(old.at(-1)).toMatchObject({ kind: "compaction" });
     expect(old.some((m) => m.role === "user" && m.text === "/new")).toBe(false);
-    // a /new in a chat with nothing said yet keeps it
+    // the new chat says so in one centered line, and the model never reads it
+    const started = (await f.messages(fresh.threadId)).filter((m) => m.kind === "activity");
+    expect(started.map((m) => m.tool?.name)).toEqual(["recovery: New session started"]);
+    // a /new in a chat with nothing said yet keeps it, and says so once
     expect(await f.api(`/api/bots/${f.bot.id}/messages`, { threadId: fresh.threadId, text: "/new" })).toMatchObject({ threadId: fresh.threadId, fresh: false });
+    expect((await f.messages(fresh.threadId)).filter((m) => m.kind === "activity")).toHaveLength(1);
     // the new chat starts clean: its first turn carries no earlier summary
     await f.send(fresh.threadId, "What's on today?");
     const first = f.turns().at(-1);
     expect(String(first.prompt.message.content)).not.toContain("Earlier conversation summary");
+    expect(String(first.prompt.message.content)).not.toContain("New session started");
     expect(first.resumed).toBe(false);
   } finally { await f.session.close(); }
 }, 120_000);
@@ -96,5 +101,50 @@ it("summarizes a chat the person left in the background, then the next message s
     expect(prompt).toContain("2,400 EUR");
     expect(prompt).toContain("look it up with session_search");
     expect(prompt).toContain("Keep flights under 300 EUR each");
+  } finally { await f.session.close(); }
+}, 120_000);
+
+it("New chat from /new in the app says so too; the bot's fresh session setting starts its context over silently", async () => {
+  const f = await setup({ DUSK_IDLE_COMPACT_HOURS: "0" });
+  const patch = async (body: unknown) => await request(`/api/bots/${f.bot.id}`, { method: "PATCH", body: JSON.stringify(body) }, f.session.info.url).catch((error: unknown) => error) as any;
+  try {
+    const thread = f.bot.activeTaskId;
+    await f.send(thread, "First thing: my locker code is 4471");
+    // the app's /new: a new chat made from this one
+    const made = await f.api(`/api/bots/${f.bot.id}/tasks`, { from: thread });
+    expect((await f.messages(made.task.threadId)).map((m) => m.tool?.name)).toEqual(["recovery: New session started"]);
+    // New chat from anywhere else says nothing
+    const plain = await f.api(`/api/bots/${f.bot.id}/tasks`, {});
+    expect(await f.messages(plain.task.threadId)).toEqual([]);
+
+    expect(await patch({ freshSession: { every: "week" } })).toMatchObject({ status: 400 });
+    expect(await patch({ compactAt: 2 })).toMatchObject({ status: 400 });
+    await patch({ freshSession: { idleHours: 0.0005 }, compactAt: 0.5 });
+    const saved = (await f.api("/api/bots?messages=0")).bots.find((b: any) => b.id === f.bot.id);
+    expect(saved).toMatchObject({ freshSession: { idleHours: 0.0005 }, compactAt: 0.5 });
+
+    await f.send(thread, "Second thing: the meeting moved to room B7");
+    await new Promise((resolve) => setTimeout(resolve, 2_500));
+    await f.send(thread, "Good morning");
+    const next = f.turns().at(-1);
+    const prompt = String(next.prompt.message.content);
+    expect(prompt).toContain("A fresh session starts here");
+    expect(prompt).not.toContain("4471");
+    expect(prompt).not.toContain("room B7");
+    const rows = await f.messages(thread);
+    const record = rows.findLast((m) => m.kind === "compaction");
+    expect(record.compaction).toMatchObject({ by: "harness", fresh: "idle", summary: "" });
+    // silent: no line in the chat
+    expect(rows.filter((m) => m.kind === "activity")).toEqual([]);
+    // within the idle hours, the next message carries on in that session
+    await patch({ freshSession: { idleHours: 1 } });
+    await f.send(thread, "And the weather?");
+    expect(String(f.turns().at(-1).prompt.message.content)).not.toContain("A fresh session starts here");
+    expect((await f.messages(thread)).filter((m) => m.kind === "compaction")).toHaveLength(1);
+
+    await patch({ freshSession: null, compactAt: null });
+    const cleared = (await f.api("/api/bots?messages=0")).bots.find((b: any) => b.id === f.bot.id);
+    expect(cleared.freshSession).toBeUndefined();
+    expect(cleared.compactAt).toBeUndefined();
   } finally { await f.session.close(); }
 }, 120_000);

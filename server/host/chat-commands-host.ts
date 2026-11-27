@@ -15,19 +15,32 @@ export function createNewChat(deps: {
   store(): ChatStore;
   /** Captures the thread's waiting memory now (memoryUpkeep.flushThread). */
   flushMemory(threadId: string): void;
+  /** The chat's centered line saying /new started it, in the person's language. */
+  newSessionLine(threadId: string): string;
+  appendLine(threadId: string, line: string): void;
 }) {
   const said = (threadId: string) => deps.store().activePath(threadId).some((m) => m.role === "user");
+  /** /new answers in the chat it opened, as Hermes Agent answers it, once. */
+  function confirm(threadId: string): void {
+    const line = `recovery: ${deps.newSessionLine(threadId)}`;
+    if (deps.store().activePath(threadId).at(-1)?.tool?.name === line) return;
+    deps.appendLine(threadId, line);
+  }
   /** `/new` (or New chat with the chat it left): what the old chat taught is captured now rather than after its quiet
    * minutes. It stays saved as it was, and session_search still finds it. */
   function leftForNewChat(botId: string, fromThreadId: string, newThreadId: string): void {
     const store = deps.store();
     if (fromThreadId === newThreadId || !store.taskByThread(botId, fromThreadId) || store.groupByThread(fromThreadId)) return;
     deps.flushMemory(fromThreadId);
+    if (newThreadId && store.taskByThread(botId, newThreadId)) confirm(newThreadId);
   }
   /** `/new` sent as a message (the API, an older app): a fresh conversation for the bot, selected. A chat with nothing
    * said in it yet is already fresh and is kept. `starter`: who opened it, as for New chat on a shared workspace. */
   function startNewChat(botId: string, fromThreadId: string, starter?: string, setStarter?: (threadId: string, key: string) => void): { threadId: string; fresh: boolean } | null {
-    if (!said(fromThreadId)) return { threadId: fromThreadId, fresh: false };
+    if (!said(fromThreadId)) {
+      if (deps.store().taskByThread(botId, fromThreadId)) confirm(fromThreadId);
+      return { threadId: fromThreadId, fresh: false };
+    }
     const task = deps.store().createTask(botId, undefined, true);
     if (!task) return null;
     if (starter) setStarter?.(task.threadId, starter);
@@ -81,7 +94,8 @@ export function createAwayCompaction<I extends Instance>(deps: {
   return createIdleCompaction({
     now: () => Date.now(), log: deps.log ?? ((line) => console.info(line)), hours,
     ...(Number(env.DUSK_IDLE_SWEEP_MS) > 0 ? { sweepMs: Number(env.DUSK_IDLE_SWEEP_MS) } : {}),
-    candidates: (askedBefore) => deps.store.bots.flatMap((bot) => (bot.tasks ?? []).flatMap((task) => {
+    // a bot whose chats start fresh by then reads none of the summary
+    candidates: (askedBefore) => deps.store.bots.filter((bot) => !(bot.freshSession && "idleHours" in bot.freshSession && bot.freshSession.idleHours <= hours())).flatMap((bot) => (bot.tasks ?? []).flatMap((task) => {
       if (task.askedAt === undefined || task.askedAt > askedBefore || task.routineRunId || task.archivedAt !== undefined || task.openedBy !== undefined) return [];
       if (deps.store.groupByThread(task.threadId)) return [];
       const warm = deps.warm.state(task.threadId)?.last;

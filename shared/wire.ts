@@ -392,6 +392,13 @@ export interface WireBot extends DefaultBotFields, BotAccessFields {
   /** What a turn does when its AI's usage limit refuses it and no backup can take over: "wait" (absent) holds it and
    * carries on by itself at the reset, "ask" offers the free model or the wait on a card, "free" moves to the free model. */
   limitMode?: LimitMode;
+  /** When a direct chat starts a fresh session by itself, silently: the person's first message of a new day (from 4 am
+   * in their time zone) or after `idleHours` without one starts the bot's context empty; the chat stays as it was and
+   * session_search still finds it. Absent: never. */
+  freshSession?: FreshSession;
+  /** How full the model's context gets before the chat is compacted by itself, as a fraction of its window. Absent:
+   * config.json's `context.compactAt`, else 80% and at most 200,000 tokens. */
+  compactAt?: number;
   /** Whether this bot gets the app's built-in browser. */
   browser?: boolean;
   /** Record a screenshot and a short note of each browser action, kept with the conversation. Off unless true. */
@@ -477,6 +484,8 @@ export interface WireMessage extends HelperIntroField, SetupCardFields, WaitLine
     foldedThroughId: string;
     tokensBefore: number;
     by: "person" | "harness"; awayHours?: number; // awayHours: written after the person was away that long (server/idle-compaction.ts)
+    /** A fresh session the bot's `freshSession` started: nothing before `firstKeptId` reaches the model, and no summary. */
+    fresh?: "day" | "idle";
   };
   /** Renderers receive only the allowlisted /api/attachments URL. `file`
    * entries are opened through the message-scoped file route, never by path. */
@@ -768,6 +777,14 @@ export interface OptionCardData extends WaitCardField, AccessRequestCardField, O
  * message to resend, `rootId` the failed request's job-runtime root. */
 /** A held turn as its card shows it: when the limit resets, when known, and when a resumed turn refused again tries next. */
 export interface LimitHoldState { resetsAt?: number; retryAt?: number }
+
+export type FreshSession = { every: "day" } | { idleHours: number };
+export const FRESH_SESSION_IDLE_HOURS = [6, 24] as const;
+export const FRESH_SESSION_MAX_IDLE_HOURS = 24 * 30;
+/** The choices the bot's settings offer; the server takes any fraction from 0.3 to 0.9. */
+export const COMPACT_AT_CHOICES = [0.5, 0.7, 0.9] as const;
+export const COMPACT_AT_MIN = 0.3;
+export const COMPACT_AT_MAX = 0.9;
 
 export const LIMIT_MODES = ["wait", "ask", "free"] as const;
 export type LimitMode = (typeof LIMIT_MODES)[number];
