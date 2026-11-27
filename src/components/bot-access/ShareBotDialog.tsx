@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Lock, Users } from "../../icons";
+import { Lock, Users, X } from "../../icons";
 
 import type { BotAccess, BotAccessLevel, GrantedLevel } from "../../../shared/bot-access";
 import { botOwner } from "../../../shared/bot-owner";
@@ -11,6 +11,9 @@ import { wakeSystemControls } from "@/lib/system-control";
 import { useStore, type Bot } from "@/state/store";
 import { mayChangeOwner, ownerChanged, ownerOf, useTeamPeople, type TeamPeople, type TeamPerson } from "@/state/team-people";
 import { MENU_SHEET } from "../menu-recipe";
+import { SIMPLE_BUTTONS, SIMPLE_CARD, SettingsGroup } from "../SettingsPrimitives";
+import { compactBackdropStyle, compactSheetStyle } from "../compact-settings-sheet";
+import "../../styles/settings.css";
 import { accessOfBot, addablePeople, canShare, levelWhenAdded, nameOf, personOf, saveAccess, saveOwner, withPerson } from "./access";
 import { choiceItem, EntryFace, PersonMenu, QuietMenu } from "./ShareControls";
 import { friendlyError } from "@/lib/plain-error";
@@ -87,7 +90,7 @@ export function ShareBotDialog({ bot, teamName, onClose, onChanged, headerMenu, 
     ? <PersonRow person={team.me} you data-share-yours trailing={null} /> : null;
 
   const peopleList = (
-    <ul data-share-people className={cn("flex flex-col", !embedded && "max-h-[min(264px,40vh)] overflow-y-auto")}>
+    <ul data-share-people className="flex flex-col">
       {owner && <PersonRow person={owner} you={owner.you === true} trailing={<span className="px-2 text-[13px] text-ink-secondary">{t("lookedAfter.badge")}</span>} />}
       {yourRow}
       {editable && Object.keys(access.people).sort((a, b) => nameOf(a, team).localeCompare(nameOf(b, team))).map((entry) => {
@@ -155,10 +158,22 @@ export function ShareBotDialog({ bot, teamName, onClose, onChanged, headerMenu, 
   }
 
   const portalRoot = phone ? (document.querySelector?.(".dusk-mobile") ?? document.body) : document.body;
+  const general = editable && (
+    <SettingsGroup label={t("botAccess.general")}>
+      <div className={cn(SIMPLE_CARD, "px-2 py-1.5")}>
+        <GeneralAccess access={access} teamName={teamName} disabled={busy}
+          onChange={(everyone) => void apply({ everyone, people: access.people }, everyone === "none"
+            ? t("botAccess.toast.onlyAdded")
+            : t("botAccess.toast.everyoneUse", { team: teamName }))} />
+      </div>
+    </SettingsGroup>
+  );
   return createPortal(
     <div
       data-phone-modal-layer={phone ? "" : undefined}
-      className={cn("ui-dialog-scrim fixed inset-0 flex items-center justify-center p-4", phone ? "z-[80]" : "z-[60]")}
+      data-settings-sheet
+      data-settings-look="simple"
+      className={cn("settings-scrim", phone ? "z-[80]" : "z-[60]")}
       style={phone ? { paddingTop: "max(var(--m-safe-top, 0px), 16px)", paddingBottom: "max(calc(var(--m-kb, 0px) + 12px), var(--m-safe-bottom, 0px), 16px)" } : undefined}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -167,8 +182,9 @@ export function ShareBotDialog({ bot, teamName, onClose, onChanged, headerMenu, 
         if (phone && event.target === event.currentTarget) onClose();
       }}
     >
+      <div aria-hidden="true" className="settings-backdrop" style={compactBackdropStyle} />
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="share-bot-title" tabIndex={-1} data-share-bot={bot.id}
-        className="ui-dialog flex max-h-full w-full max-w-[480px] flex-col text-ink outline-none"
+        className="settings-dialog" style={compactSheetStyle(480)}
         onKeyDown={(event) => {
           event.stopPropagation();
           if (event.key === "Escape" && !event.defaultPrevented) {
@@ -177,35 +193,34 @@ export function ShareBotDialog({ bot, teamName, onClose, onChanged, headerMenu, 
           if (event.key === "Tab") trapTab(event, dialogRef.current);
         }}>
         {newOwner ? (
-          <MakeOwner person={newOwner} bot={bot} busy={busy} error={error} onCancel={keepOwner} onConfirm={() => void handOver(newOwner)} />
-        ) : <>
-          <header className="flex items-center justify-between gap-3 px-5 pb-3 pt-4">
-            <h2 id="share-bot-title" className="min-w-0 truncate text-[17px] font-semibold">{t("botAccess.title", { bot: bot.name })}</h2>
-            {headerMenu}
-          </header>
-          {editable && team && (
-            <div className="relative z-10 shrink-0 px-5 pb-1">
-              <AddPerson team={team} access={access} owner={botOwner(bot)} disabled={busy}
-                onAdd={(person, level) => void apply(withPerson(access, person.email, level), t("botAccess.toast.addedPlain", { name: person.name }))} />
+          <MakeOwner person={newOwner} bot={bot} busy={busy} error={error} onCancel={keepOwner} onConfirm={() => void handOver(newOwner)} dialog />
+        ) : (
+          <section className="settings-panel min-h-0">
+            <button type="button" onClick={onClose} aria-label={t("common.close")} className="settings-close"><X size={14} /></button>
+            <header className="settings-pane-header">
+              <h2 id="share-bot-title" className="settings-pane-title min-w-0 truncate">{t("botAccess.title", { bot: bot.name })}</h2>
+              {headerMenu}
+            </header>
+            {editable && team && (
+              <div className="relative z-10 shrink-0 px-6 pb-1 pt-2">
+                <AddPerson team={team} access={access} owner={botOwner(bot)} disabled={busy}
+                  onAdd={(person, level) => void apply(withPerson(access, person.email, level), t("botAccess.toast.addedPlain", { name: person.name }))} />
+              </div>
+            )}
+            <div className="settings-scroll">
+              <div className="settings-pane" style={{ gap: 24, paddingTop: 12, paddingBottom: 12 }}>
+                <SettingsGroup label={t("botAccess.people")} footnote={t("botAccess.admins")}>
+                  <div className={cn(SIMPLE_CARD, "px-2")}>{peopleList}</div>
+                </SettingsGroup>
+                {general}
+                {error && <p role="alert" className="m-0 px-3 text-[13px] leading-[18px] text-danger">{error}</p>}
+              </div>
             </div>
-          )}
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-2 pt-3">
-            <h3 className="mb-1 text-[13px] font-semibold">{t("botAccess.people")}</h3>
-            {peopleList}
-            <p className="mt-1.5 text-[12px] leading-relaxed text-ink-secondary">{t("botAccess.admins")}</p>
-            {editable && <>
-              <h3 className="mb-1.5 mt-4 text-[13px] font-semibold">{t("botAccess.general")}</h3>
-              <GeneralAccess access={access} teamName={teamName} disabled={busy}
-                onChange={(everyone) => void apply({ everyone, people: access.people }, everyone === "none"
-                  ? t("botAccess.toast.onlyAdded")
-                  : t("botAccess.toast.everyoneUse", { team: teamName }))} />
-            </>}
-            {error && <p role="alert" className="mt-3 text-[13px] text-danger">{error}</p>}
-          </div>
-          <footer className="flex shrink-0 justify-end px-5 pb-4 pt-3">
-            <button type="button" onClick={onClose} className="ui-button ui-button-primary rounded-full px-4">{t("common.done")}</button>
-          </footer>
-        </>}
+            <footer className={cn("flex shrink-0 justify-end px-6 pb-5 pt-1", SIMPLE_BUTTONS)}>
+              <button type="button" onClick={onClose} className="ui-button ui-button-primary">{t("common.done")}</button>
+            </footer>
+          </section>
+        )}
       </div>
     </div>,
     portalRoot,
@@ -220,9 +235,22 @@ function trapTab(event: React.KeyboardEvent, dialog: HTMLElement | null) {
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 }
 
-function MakeOwner({ person, bot, busy, error, onCancel, onConfirm }: {
-  person: TeamPerson; bot: Bot; busy: boolean; error: string; onCancel: () => void; onConfirm: () => void;
+function MakeOwner({ person, bot, busy, error, onCancel, onConfirm, dialog = false }: {
+  person: TeamPerson; bot: Bot; busy: boolean; error: string; onCancel: () => void; onConfirm: () => void; dialog?: boolean;
 }) {
+  if (dialog) {
+    return (
+      <div data-share-make-owner={person.email} className={cn("flex flex-col px-6 pb-5 pt-7", SIMPLE_BUTTONS)}>
+        <h2 id="share-bot-title" className="settings-pane-title m-0 ps-2.5">{t("lookedAfter.makeTitle", { name: person.name, bot: bot.name })}</h2>
+        <p className="m-0 mt-3 px-2.5 text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary">{t("lookedAfter.makeBody", { name: person.name, bot: bot.name })}</p>
+        {error && <p role="alert" className="m-0 mt-3 px-2.5 text-[13px] leading-[18px] text-danger">{error}</p>}
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" autoFocus disabled={busy} onClick={onCancel} className="ui-button">{t("common.cancel")}</button>
+          <button type="button" disabled={busy} onClick={onConfirm} className="ui-button ui-button-primary">{t("lookedAfter.make", { name: person.name })}</button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div data-share-make-owner={person.email} className="px-5 pb-4 pt-4">
       <h2 id="share-bot-title" className="text-[17px] font-semibold">{t("lookedAfter.makeTitle", { name: person.name, bot: bot.name })}</h2>
@@ -242,8 +270,8 @@ function PersonRow({ person, entry, you, trailing, ...data }: { person: TeamPers
     <li className="flex min-h-[40px] shrink-0 items-center gap-3 py-1" data-share-person={person?.email ?? entry} {...data}>
       <EntryFace person={person} size={32} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[14px] leading-[18px] text-ink">{you ? t("botAccess.you", { name }) : name}</span>
-        {person && <span className="block truncate text-[12px] leading-4 text-ink-secondary">{person.email}</span>}
+        <span className="block truncate text-[13px] leading-[18px] tracking-[0.015em] text-ink">{you ? t("botAccess.you", { name }) : name}</span>
+        {person && <span className="block truncate text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary">{person.email}</span>}
       </span>
       <span className="min-w-0 shrink-0">{trailing}</span>
     </li>
@@ -260,7 +288,7 @@ function GeneralAccess({ access, teamName, disabled, onChange }: {
   const only = t("botAccess.onlyAdded"), all = t("botAccess.everyoneUse", { team: teamName });
   return (
     <div className="flex items-center gap-3" data-share-general={access.everyone}>
-      <span aria-hidden="true" className={cn("inline-flex size-8 shrink-0 items-center justify-center rounded-full", everyone ? "bg-accent/15 text-accent" : "bg-ink/[0.08] text-ink-secondary")}>
+      <span aria-hidden="true" className={cn("inline-flex size-8 shrink-0 items-center justify-center rounded-full", "bg-ink/[0.06] text-ink-secondary")}>
         {everyone ? <Users size={16} /> : <Lock size={16} />}
       </span>
       <div className="min-w-0 flex-1">
@@ -271,7 +299,7 @@ function GeneralAccess({ access, teamName, disabled, onChange }: {
               choiceItem("everyone", all, everyone, () => { if (!everyone) onChange("chat"); }, { disabled }),
             ]} />
         </div>
-        <p className="text-[12px] leading-4 text-ink-secondary">{hint}</p>
+        <p className="text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary">{hint}</p>
       </div>
     </div>
   );
