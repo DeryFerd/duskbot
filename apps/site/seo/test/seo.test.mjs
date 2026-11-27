@@ -8,7 +8,7 @@ import { GONE, SUBSCRIPTION, jaccard, ownText } from '../quality.mjs';
 import { evaluateGate, sliceSize, frozen, lastInLane } from '../jobs/release.mjs';
 import { changes } from '../jobs/indexnow.mjs';
 import { decide } from '../jobs/prune-report.mjs';
-import { writeSitemaps, robotsTxt, SEARCH_BOTS } from '../sitemaps.mjs';
+import { writeSitemaps, robotsTxt, llmsTxt, SEARCH_BOTS } from '../sitemaps.mjs';
 import { scene, signature, altText } from '../art/scene.mjs';
 import { isRead, kindOf, parse } from '../scripts/fetch-composio.mjs';
 
@@ -120,9 +120,22 @@ test('sitemaps: an index, a file per group, and a lastmod that moves only when t
 });
 test('robots lets every search and answer engine in and names the sitemap', () => {
   const r = robotsTxt('https://dusk.bot');
-  for (const bot of ['OAI-SearchBot', 'ChatGPT-User', 'PerplexityBot', 'Claude-SearchBot', 'Googlebot', 'Bingbot']) assert.ok(SEARCH_BOTS.includes(bot) && r.includes(`User-agent: ${bot}\nAllow: /`), bot);
+  for (const bot of ['OAI-SearchBot', 'ChatGPT-User', 'PerplexityBot', 'Claude-SearchBot', 'Googlebot', 'Bingbot', 'GPTBot', 'ClaudeBot', 'Google-Extended', 'Applebot', 'YandexBot']) assert.ok(SEARCH_BOTS.includes(bot) && r.includes(`User-agent: ${bot}\nAllow: /`), bot);
   assert.match(r, /Sitemap: https:\/\/dusk\.bot\/sitemap\.xml/);
   assert.doesNotMatch(r, /Disallow: \/\n/);
+});
+test('llms.txt lists the main pages, docs and guides, never the cohort pages', () => {
+  const t = llmsTxt('https://dusk.bot', [
+    { address: '/', group: 'core', title: 'dusk bot', description: 'bots in a chat app' },
+    { address: '/docs/memory', group: 'core', title: 'memory / docs', description: '' },
+    { address: '/integrations', group: 'hubs', title: 'integrations', description: 'every app' },
+    { address: '/integrations/gmail', group: '01', title: 'gmail', description: 'x' },
+  ]);
+  assert.match(t, /^# dusk bot\n\n> /);
+  assert.match(t, /## pages\n\n- \[dusk bot\]\(https:\/\/dusk\.bot\/\): bots in a chat app/);
+  assert.match(t, /## docs\n\n- \[memory \/ docs\]\(https:\/\/dusk\.bot\/docs\/memory\)\n/);
+  assert.match(t, /## guides\n\n- \[integrations\]/);
+  assert.doesNotMatch(t, /gmail/);
 });
 
 test('scenes are the same every time and differ between pages', () => {

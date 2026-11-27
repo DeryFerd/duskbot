@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import { DuskPixel, CROWD, COLOURS, bodyName, colourName } from './mascot-src/pixel/crowd.js';
 import { buildDocs } from './build-docs.mjs';
 import { buildSeo, seoFooter } from './seo/build-seo.mjs';
-import { writeSitemaps, robotsTxt } from './seo/sitemaps.mjs';
+import { writeSitemaps, robotsTxt, llmsTxt } from './seo/sitemaps.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const site = path.join(here, 'public', 'landing');
@@ -457,6 +457,12 @@ const seo = buildSeo({ site, markdown, layout, macros, text, write, esc, icon, b
 fs.writeFileSync(path.join(site, 'robots.txt'), robotsTxt(SITE_URL));
 // the sitemap index, one sitemap for the core pages, one for the hubs and one per seo cohort, each with real lastmod dates
 writeSitemaps({ site, SITE_URL, built, cohorts: seo.cohorts, persist: !WAITLIST_HOME });
+// the main pages, docs and guides for ai assistants, with each page's own title and description
+const unesc = (s) => s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+fs.writeFileSync(path.join(site, 'llms.txt'), llmsTxt(SITE_URL, built.filter((b) => b.index && (b.group === 'core' || b.group === 'hubs')).map((b) => {
+  const html = fs.readFileSync(b.address === '/' ? path.join(site, 'index.html') : path.join(site, b.address, 'index.html'), 'utf8');
+  return { ...b, title: unesc(/<title>([^<]*)<\/title>/.exec(html)?.[1] || b.address), description: unesc(/<meta name="description" content="([^"]*)"/.exec(html)?.[1] || '') };
+})));
 // the indexnow key, at the site root where search engines look for it (seo/jobs/indexnow.mjs uses it)
 const indexNowKey = fs.readFileSync(path.join(here, 'seo', 'indexnow-key.txt'), 'utf8').trim();
 for (const f of fs.readdirSync(site)) if (/^[0-9a-f]{32}\.txt$/.test(f) && f !== `${indexNowKey}.txt`) fs.rmSync(path.join(site, f));
