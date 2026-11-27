@@ -56,7 +56,7 @@ describe("push relay", () => {
     expect(sent.url).toBe("https://fcm.example/v1/projects/fixture-project/messages:send");
     expect(JSON.parse(sent.body).message).toEqual({
       token: "fixture-token", notification: { title: "Nova", body: "New message" },
-      data: { id: "n1", kind: "mention", botId: "b1", threadId: "t1" }, android: { priority: "high", notification: { channel_id: "messages" } },
+      data: { id: "n1", kind: "mention", botId: "b1", threadId: "t1" }, android: { priority: "high", notification: { channel_id: "messages", tag: "t1" } },
     });
     expect(sent.body).not.toContain("should not travel");
     fcmStatus = 404;
@@ -72,6 +72,8 @@ describe("push relay", () => {
       token: "fixture-token", android: { priority: "high", ttl: "2419200s" },
       data: { dusk: "1", id: "n1", kind: "mention", botId: "b1", threadId: "t1", sealed, botName: "Nova", badge: "4" },
     });
+    expect(await (await post({ service: "fcm", token: "fixture-token", draws: true, message: { ...message, kind: "read" } })).json()).toEqual({ outcome: "sent" });
+    expect(JSON.parse(calls.filter((one) => one.url.startsWith("https://fcm.example")).at(-1).body).message.android).toEqual({ priority: "normal", ttl: "2419200s" });
     expect((await post({ service: "fcm", token: "fixture-token", message: { ...message, sealed: "not sealed!" } })).status).toBe(400);
     expect((await post({ service: "fcm", token: "fixture-token", message: { ...message, badge: -1 } })).status).toBe(400);
   });

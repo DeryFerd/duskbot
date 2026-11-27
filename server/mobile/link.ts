@@ -193,9 +193,40 @@ export function createMobileLink(deps: MobileLinkDeps) {
     }, Math.max(0, presence.overdueIn(device.id)));
     timer.unref?.();
   }
+  /** what each Android phone that draws its own notifications was sent and still shows, per conversation */
+  const shown = new Map<string, Map<string, { ids: string[]; botId: string; botName: string }>>();
+  function remember(device: DeviceRecord, message: PushMessage) {
+    const threads = shown.get(device.id) ?? new Map<string, { ids: string[]; botId: string; botName: string }>();
+    shown.set(device.id, threads);
+    const thread = threads.get(message.threadId) ?? { ids: [], botId: message.botId, botName: message.botName };
+    threads.delete(message.threadId);
+    threads.set(message.threadId, { ...thread, ids: [...thread.ids.filter((id) => id !== message.id), message.id].slice(-20) });
+    if (threads.size > 100) threads.delete(threads.keys().next().value!);
+  }
+  /** a conversation read anywhere clears its notification on every Android phone that was shown it, even with the app
+   * closed: a data-only `read` push naming the newest line it got */
+  function clearElsewhere(done: ReadonlySet<string>) {
+    for (const device of devices) {
+      const threads = shown.get(device.id);
+      const registration = device.push;
+      if (!threads || !registration?.draws) continue;
+      for (const [threadId, thread] of threads) {
+        const left = thread.ids.filter((id) => !done.has(id));
+        if (left.length === thread.ids.length) continue;
+        if (left.length) { thread.ids = left; continue; }
+        threads.delete(threadId);
+        const badge = deps.unreadCount?.();
+        void push.send({ service: registration.service, token: registration.token, draws: true }, {
+          id: thread.ids[thread.ids.length - 1], kind: "read", title: "", botId: thread.botId, botName: thread.botName, threadId,
+          ...(badge !== undefined ? { badge } : {}),
+        }).catch(() => "failed" as const);
+      }
+    }
+  }
   function read(ids: readonly string[]) {
     const done = new Set(ids);
     for (const [key, one] of waiting) if (done.has(one.id)) { clearTimeout(one.timer); waiting.delete(key); }
+    clearElsewhere(done);
   }
   const activities = createTurnActivities({
     now,
@@ -229,6 +260,7 @@ export function createMobileLink(deps: MobileLinkDeps) {
       .catch(() => "failed" as const)
       .then((outcome) => {
         if (outcome === "gone" && device.push === registration) { device.push = null; persist(); }
+        if (outcome === "sent" && registration.draws) remember(device, message);
         const wait = PUSH_RETRY_MS[attempt];
         if (outcome !== "failed" || wait === undefined) return;
         const timer = setTimeout(() => {
@@ -478,6 +510,7 @@ export function createMobileLink(deps: MobileLinkDeps) {
     if (!device) return false;
     presence.forget(id);
     activities.forgetDevice(id);
+    shown.delete(id);
     devices = devices.filter((one) => one.id !== id);
     persist();
     bump();

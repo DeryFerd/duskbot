@@ -41,7 +41,13 @@ stack together, one notification per conversation on Android with its lines in i
 On the iPhone, a push that lands while the app is open shows as the system's own banner, unless it is about the
 conversation on screen, which shows nothing. Pushes already in Notification Center are removed once read: when that
 conversation opens, when a read arrives from another device while the app is open, and each time the app comes back.
-A phone that stays locked keeps a push read elsewhere until the app next opens.
+An iPhone that stays locked keeps a push read elsewhere until the app next opens.
+
+On Android, a conversation read anywhere (the desktop, another phone, "mark all read") also clears its notification on
+every other Android phone that was shown it, with the app closed too: once every line a phone got there is read, the
+workspace sends that phone a data-only `read` push (normal priority, as it shows nothing) naming the newest line, and the
+app takes the notification away unless a newer line arrived since. An older app's system-drawn notifications carry the
+conversation as their tag, so a conversation still shows as one notification there.
 
 The desktop app posts its own system banners from the main process (`electron/desktop-notifications.mjs`), except while
 its window has focus; the dock, island and unread dots carry the rest.

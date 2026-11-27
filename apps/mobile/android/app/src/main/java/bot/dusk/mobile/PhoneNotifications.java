@@ -61,6 +61,7 @@ public final class PhoneNotifications {
     static final String GROUP = "dusk.messages";
     static final int MESSAGE_ID = 7101;
     static final int SUMMARY_ID = 7100;
+    static final String READ_KIND = "read";
     private static final int KEEP_LINES = 6;
     private static final String EXTRA_IDS = "dusk.ids";
     private static final String EXTRA_COUNT = "dusk.count";
@@ -79,9 +80,11 @@ public final class PhoneNotifications {
         return "1".equals(data.get("dusk")) && notEmpty(data.get("threadId"));
     }
 
-    /** a data-only dusk push: append its line to its thread's notification, or post nothing while that chat is on screen */
+    /** a data-only dusk push: append its line to its thread's notification, or post nothing while that chat is on screen;
+     * a read takes the thread's notification away */
     public static synchronized void show(Context context, Map<String, String> data) {
         String threadId = data.get("threadId");
+        if (READ_KIND.equals(data.get("kind"))) { clearRead(context, threadId, value(data, "id")); return; }
         if (foreground && threadId.equals(viewing)) return;
         NotificationChannels.ensure(context);
         NotificationManager manager = context.getSystemService(NotificationManager.class);
@@ -145,6 +148,20 @@ public final class PhoneNotifications {
         manager.notify(threadId, MESSAGE_ID, builder.build());
         summarize(context, manager);
         if (shortcut != null) offLauncher(context, shortcut);
+    }
+
+    /** the conversation was read on another device up to `id`: its notification goes unless a newer line came since */
+    static void clearRead(Context context, String threadId, String id) {
+        NotificationManager manager = context.getSystemService(NotificationManager.class);
+        if (manager == null) return;
+        for (StatusBarNotification item : ours(manager)) {
+            if (readClears(threadId, id, item.getTag(), latestId(item))) manager.cancel(item.getTag(), MESSAGE_ID);
+        }
+        summarize(context, manager);
+    }
+
+    static boolean readClears(String threadId, String id, String tag, String latest) {
+        return notEmpty(id) && threadId.equals(tag) && id.equals(latest);
     }
 
     /** the group summary across conversations: shown while two or more are, quiet itself (the conversations alert) */

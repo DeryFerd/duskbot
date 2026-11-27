@@ -62,11 +62,12 @@ export function alertBody(message) {
 export function fcmBody(token, message, draws) {
   if (draws) {
     return {
-      token, android: { priority: "high", ttl: "2419200s" },
+      // FCM deprioritizes an app whose high priority messages show nothing, and a read only takes a notification away
+      token, android: { priority: message.kind === "read" ? "normal" : "high", ttl: "2419200s" },
       data: { dusk: "1", ...idsOf(message), botName: message.botName, ...(message.badge !== undefined ? { badge: String(message.badge) } : {}) },
     };
   }
-  return { token, notification: { title: message.botName, body: "New message" }, data: idsOf(message), android: { priority: "high", notification: { channel_id: "messages" } } };
+  return { token, notification: { title: message.botName, body: "New message" }, data: idsOf(message), android: { priority: "high", notification: { channel_id: "messages", tag: message.threadId } } };
 }
 
 const REPLY_KINDS = new Set(["done", "mention", "brief", "wait", "delegation-settled"]);

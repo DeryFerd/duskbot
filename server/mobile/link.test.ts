@@ -432,6 +432,46 @@ describe("mobile link", () => {
       expect(sent.map((one) => one.message.id)).toEqual(["n3"]);
     });
 
+    it("clears a conversation read anywhere on each Android phone that was shown it, even with its app closed", async () => {
+      vi.useFakeTimers();
+      const mobile = link({ unreadCount: () => 1, push: { configured: ["fcm"], send: async (target, message) => { sent.push({ target, message }); return "sent"; } } });
+      const android = async (attempt: string, token: string) => {
+        const answer = (await call(mobile, owner, "POST", "/api/mobile/pairing")).body as MobilePairingResponse;
+        const phone = (await redeem(mobile, { secret: answer.payload.grant.secret, attemptId: attempt, device: { name: "p", platform: "android" } })).body as MobileRedeemResponse;
+        const auth: RequestAuth = { kind: "session", session: sessions.authenticate(phone.token)!, via: "bearer", scopes: phone.scopes };
+        await call(mobile, auth, "PUT", "/api/mobile/push", { service: "fcm", token, draws: true });
+      };
+      await android("attempt-0111", "fcm-token-phone-a");
+      await android("attempt-0112", "fcm-token-phone-b");
+      await mobile.notify(note("n1"));
+      await vi.advanceTimersByTimeAsync(PUSH_GRACE_MS);
+      await mobile.notify(note("n2"));
+      await mobile.notify(note("n3", "t2"));
+      await vi.advanceTimersByTimeAsync(PUSH_GRACE_MS);
+      sent.length = 0;
+      // part of a conversation read: its notification still has news
+      mobile.read(["n1"]);
+      expect(sent).toHaveLength(0);
+      mobile.read(["n2"]);
+      expect(sent.map((one) => [one.target.token, one.message.kind, one.message.threadId, one.message.id])).toEqual([
+        ["fcm-token-phone-a", "read", "t1", "n2"], ["fcm-token-phone-b", "read", "t1", "n2"],
+      ]);
+      expect(sent[0].target.draws).toBe(true);
+      expect(sent[0].message).toMatchObject({ botName: "Nova", badge: 1 });
+      mobile.read(["n1", "n2"]);
+      expect(sent).toHaveLength(2);
+    });
+
+    it("never sends a read to a phone whose app does not draw its own notifications", async () => {
+      vi.useFakeTimers();
+      const mobile = link();
+      await pushPhone(mobile, "attempt-0113");
+      await mobile.notify(note("n1"));
+      await vi.advanceTimersByTimeAsync(PUSH_GRACE_MS);
+      mobile.read(["n1"]);
+      expect(sent.map((one) => one.message.kind)).toEqual(["mention"]);
+    });
+
     it("sends one push per conversation, the newest, when several land within the grace", async () => {
       vi.useFakeTimers();
       const mobile = link();

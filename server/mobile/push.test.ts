@@ -4,7 +4,7 @@ import { connect, createServer, type ClientHttp2Session, type Http2Server, type 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { createPushSender, pushRelayBase, RELAY_RECHECK_MS, RELAY_TIMEOUT_MS, SERVICE_TIMEOUT_MS, type PushMessage } from "./push.ts";
+import { createPushSender, pushRelayBase, READ_KIND, RELAY_RECHECK_MS, RELAY_TIMEOUT_MS, SERVICE_TIMEOUT_MS, type PushMessage } from "./push.ts";
 
 const ec = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
 const rsa = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -299,7 +299,7 @@ describe("FCM push", () => {
     expect(body.includes("body text")).toBe(false);
     expect(JSON.parse(body)).toEqual({ message: {
       token: target.token, notification: { title: "Maus", body: "New message" }, data,
-      android: { priority: "high", notification: { channel_id: "messages" } },
+      android: { priority: "high", notification: { channel_id: "messages", tag: data.threadId } },
     } });
     expect(Object.values(JSON.parse(body).message.data).every((value) => typeof value === "string")).toBe(true);
   });
@@ -314,6 +314,14 @@ describe("FCM push", () => {
     });
     expect(sent.notification).toBeUndefined();
     expect(JSON.stringify(sent).includes("body text")).toBe(false);
+  });
+
+  it("sends a conversation's read to an app that draws its own notifications at normal priority, as it shows nothing", async () => {
+    const push = createPushSender(fcmEnv, { fetch, now: () => clock, log: () => {} });
+    expect(await push.send({ ...target, draws: true }, { ...message, kind: READ_KIND })).toBe("sent");
+    const sent = JSON.parse(String(requests.at(-1)!.init.body)).message;
+    expect(sent.android).toEqual({ priority: "normal", ttl: "2419200s" });
+    expect(sent.data).toMatchObject({ dusk: "1", kind: "read", threadId: data.threadId });
   });
 
   it("refreshes five minutes before expiry", async () => {

@@ -121,6 +121,9 @@ export function apnsAlertBody(message: PushMessage): object {
   };
 }
 
+/** A data-only push to an Android app that draws its own notifications: this conversation was read, up to `id`. */
+export const READ_KIND = "read";
+
 /** The FCM message. An app that draws its own gets data only, which Android hands it even while it is closed; an older
  * app gets the system-drawn notification. */
 export function fcmMessage(target: PushTarget, message: PushMessage): object {
@@ -129,12 +132,13 @@ export function fcmMessage(target: PushTarget, message: PushMessage): object {
     return {
       token: target.token,
       data: { dusk: "1", ...messageData(message), botName: message.botName, ...(badge !== undefined ? { badge: String(badge) } : {}) },
-      android: { priority: "high", ttl: "2419200s" },
+      // FCM deprioritizes an app whose high priority messages show nothing, and a read only takes a notification away
+      android: { priority: message.kind === READ_KIND ? "normal" : "high", ttl: "2419200s" },
     };
   }
   return {
     token: target.token, notification: { title: message.botName, body: "New message" }, data: messageData(message),
-    android: { priority: "high", notification: { channel_id: "messages" } },
+    android: { priority: "high", notification: { channel_id: "messages", tag: message.threadId } },
   };
 }
 
