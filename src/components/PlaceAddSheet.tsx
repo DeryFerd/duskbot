@@ -1,15 +1,15 @@
 // The add-a-place sheet's frame and its choice cards (the sheet itself is PlaceSetup.tsx).
 import { useEffect, useRef, type ReactNode } from "react";
-import { X } from "../icons";
+import { Icon } from "./Icon";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { Tag } from "./cloud-buy/parts";
+import "../styles/settings.css";
 
 /** `art`: the icon is a drawn mark of its own, shown as it is rather than on a tinted tile. */
 export function Choice({ icon, title, sub, onClick, kind, tag, art = false }: { icon: ReactNode; title: string; sub: string; onClick: () => void; kind: string; tag?: string; art?: boolean }) {
   return <button type="button" data-place-add-choice={kind} onClick={onClick}
-    className={cn("flex min-w-0 flex-1 flex-col items-start gap-2 rounded-2xl border bg-ink/[0.035] p-5 text-start transition-colors hover:bg-ink/[0.06] motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
-      "border-transparent")}>
+    className={cn("flex min-w-0 flex-1 flex-col items-start gap-2 rounded-[14px] bg-ink/[0.035] p-5 text-start transition-colors hover:bg-ink/[0.06] motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus")}>
     <span className="flex w-full items-center justify-between gap-2">
       <span aria-hidden="true" className={cn("grid place-items-center", art ? "size-11" : "size-9", !art && "rounded-[10px] bg-accent/12 text-accent-text")}>{icon}</span>
       {tag && <Tag data-place-add-tag="">{tag}</Tag>}
@@ -43,10 +43,11 @@ export function RailSheet({ wide = false, above = false, focusKey, onClose, chil
     if (sheet.current?.contains(document.activeElement) && document.activeElement !== sheet.current) return;
     (sheet.current?.querySelector<HTMLElement>("[data-autofocus]") ?? sheet.current?.querySelector<HTMLElement>("#cloud-add-title"))?.focus();
   }, [focusKey]);
-  return <div className={cn("ui-dialog-scrim fixed inset-0 flex items-center justify-center p-4 sm:p-6", above ? "z-[61]" : "z-[60]")} onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+  return <div className="settings-scrim" style={{ zIndex: above ? 61 : 60 }} onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+    <div aria-hidden="true" className="settings-backdrop pointer-events-none" />
     <div ref={sheet} role="dialog" aria-modal="true" aria-labelledby="cloud-add-title" data-place-add-sheet tabIndex={-1}
-      className={cn("relative max-h-full w-full overflow-y-auto overscroll-contain rounded-[14px] border border-transparent bg-menu outline-none", wide ? "max-w-[900px]" : "max-w-[560px]")}>
-      <button type="button" onClick={onClose} aria-label={t("cloudAdd.close")} className="ui-icon-button absolute end-3.5 top-3.5 z-10"><X size={18} /></button>
+      className="settings-dialog" style={{ width: `min(${wide ? 900 : 560}px, 100vw - 32px)`, overflowY: "auto", overscrollBehavior: "contain" }}>
+      <button type="button" onClick={onClose} aria-label={t("cloudAdd.close")} className="settings-close"><Icon name="close" size={14} /></button>
       {children}
     </div>
   </div>;
