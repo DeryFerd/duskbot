@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { accountProfile, cancelSurvey, retentionStep, CHECKOUT_SOURCES, checkoutDestination, cloudMenuSublabel, createCloudAccountClient, createCloudAccountStore, cloudOrigin, cloudPlanSnapshot, CLOUD_ORIGIN } from "./cloud-account.mjs";
+import { accountProfile, accountRecapAnswer, cancelSurvey, retentionStep, CHECKOUT_SOURCES, checkoutDestination, cloudMenuSublabel, createCloudAccountClient, createCloudAccountStore, cloudOrigin, cloudPlanSnapshot, CLOUD_ORIGIN } from "./cloud-account.mjs";
 
 const accessToken = `omc_${"T".repeat(43)}`;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -17,7 +17,7 @@ async function fixture(t, options = {}) {
     offer: undefined, checkout: { status: 404, body: "<!doctype html>not here" }, interest: { status: 200, body: { ok: true } },
     upgradePreview: { status: 404, body: { error: "not_found" } }, upgrade: { status: 404, body: { error: "not_found" } }, teams: undefined, teamPairing: { status: 404, body: { error: "not_found" } }, moved: { status: 404, body: { error: "not_found" } }, moveStatus: { status: 404, body: { error: "not_found" } },
     // An Admin before the app's Cancel and Keep: neither route, and the session's `clouds` absent.
-    clouds: undefined, feedback: { status: 404, body: { error: "Not found." } }, renewal: () => ({ status: 404, body: { error: "Not found." } }),
+    clouds: undefined, feedback: { status: 404, body: { error: "Not found." } }, recap: { status: 404, body: { code: "not_found" } }, renewal: () => ({ status: 404, body: { error: "Not found." } }),
     // how far this computer's clock runs ahead of the Admin's
     macAhead: 0 };
   const serverTime = () => f.now - f.macAhead;
@@ -44,6 +44,7 @@ async function fixture(t, options = {}) {
     if (req.url === "/api/cloud/desktop/services/x-index" && req.headers.authorization === `Bearer ${accessToken}`) return send(f.xIndex.status, f.xIndex.body);
     if (req.url === "/api/cloud/desktop/moved" && req.method === "POST" && req.headers.authorization === `Bearer ${accessToken}`) return send(f.moved.status, f.moved.body);
     if (req.url === "/api/cloud/desktop/move-status" && req.method === "POST" && req.headers.authorization === `Bearer ${accessToken}`) return send(f.moveStatus.status, f.moveStatus.body);
+    if (req.url === "/v1/account/recap" && req.method === "GET" && req.headers.authorization === `Bearer ${accessToken}`) return send(f.recap.status, f.recap.body);
     if (req.url === "/api/cloud/desktop/feedback" && req.method === "POST" && req.headers.authorization === `Bearer ${accessToken}`) return send(f.feedback.status, f.feedback.body);
     const renewal = /^\/api\/cloud\/desktop\/clouds\/([^/]+)\/(cancel|keep)$/.exec(req.url);
     if (renewal && req.method === "POST" && req.headers.authorization === `Bearer ${accessToken}`) { const answer = f.renewal(renewal[2], renewal[1]); return send(answer.status, answer.body); }
@@ -1096,6 +1097,33 @@ test("a cancel sheet step as main sends it: a known reason, step and outcome, an
   for (const wrong of [null, "price", [], {}, { reason: "nope", step: "reason", outcome: "shown" }, { reason: "price", step: "pause", outcome: "shown" },
     { reason: "price", step: "help", outcome: "paused" }, { reason: "price", step: "help", outcome: "shown", offer: "pause" },
     { reason: "price", step: "help", outcome: "shown", note: "n".repeat(2_001) }]) assert.equal(retentionStep(wrong), null, JSON.stringify(wrong)?.slice(0, 80));
+});
+
+const RECAP = { v: 1, since: 1_780_000_000_000, bots: 2, crew: [{ id: "nova", name: "Nova", color: "blue", body: "blob", replies: 40 }, { id: "quill", name: "Quill", color: "purple", body: null, replies: 0 }],
+  topBot: { id: "nova", name: "Nova", color: "blue", body: "blob", replies: 40 }, replies: 40, activeDays: 9, longestStreak: 4, routines: 3, apps: 2, computers: 1 };
+test("the Admin's recap keeps only its own checked fields, and anything malformed is no recap", () => {
+  assert.deepEqual(accountRecapAnswer({ ...RECAP, routineNames: ["Call the bank"], crew: RECAP.crew.map(bot => ({ ...bot, lastMessage: "hi" })) }), RECAP);
+  assert.deepEqual(accountRecapAnswer({ ...RECAP, since: null, topBot: null }), { ...RECAP, since: null, topBot: null });
+  for (const wrong of [null, [], { ...RECAP, v: 2 }, { ...RECAP, replies: -1 }, { ...RECAP, apps: 1.5 }, { ...RECAP, computers: "2" }, { ...RECAP, since: "today" },
+    { ...RECAP, crew: Array(7).fill(RECAP.crew[0]) }, { ...RECAP, crew: [{ ...RECAP.crew[0], color: "<b>" }] }, { ...RECAP, topBot: { name: "Nova" } }, { ...RECAP, crew: undefined }]) {
+    assert.equal(accountRecapAnswer(wrong), null, JSON.stringify(wrong)?.slice(0, 80));
+  }
+});
+
+test("the cancel sheet's recap is GET /v1/account/recap with the sign-in, and null rather than an error when it can't be read", async t => {
+  const f = await fixture(t);
+  const asked = () => f.requests.filter(request => request.route === "/v1/account/recap").map(request => [request.method, request.token === `Bearer ${accessToken}`]);
+  assert.equal(await f.client.recap(), null);
+  assert.deepEqual(asked(), [], "nothing is asked while signed out");
+  await f.connect();
+  assert.equal(await f.client.recap(), null, "an Admin without the route");
+  f.recap = { status: 200, body: { ...RECAP, routineNames: ["Call the bank"] } };
+  assert.deepEqual(await f.client.recap({ accountId: "someone-elses" }), RECAP);
+  f.recap = { status: 200, body: { ...RECAP, crew: "everyone" } };
+  assert.equal(await f.client.recap(), null);
+  f.recap = { status: 500, body: { code: "internal" } };
+  assert.equal(await f.client.recap(), null);
+  assert.deepEqual(asked(), Array(4).fill(["GET", true]));
 });
 
 test("each cancel sheet step goes to /v1/clouds/<the session's own Cloud>/retention, best effort, and never throws", async t => {

@@ -239,7 +239,6 @@ if (!app.isPackaged && process.platform === "darwin") {
   }
 }
 
-
 if (!app.requestSingleInstanceLock()) {
   console.log("[desktop] dusk bot is already running: focusing that window");
   process.exit(0);
@@ -2929,6 +2928,7 @@ ipcMain.handle("cloud-account:openTeam", localWorkspaceOnly("cloud-account:openT
 ipcMain.handle("cloud-account:cancelPlan", localWorkspaceOnly("cloud-account:cancelPlan", (_event, survey) => ensureCloudAccount().cancelPlan(survey)));
 ipcMain.handle("cloud-account:keepPlan", localWorkspaceOnly("cloud-account:keepPlan", () => ensureCloudAccount().keepPlan()));
 ipcMain.handle("cloud-account:retention", localWorkspaceOnly("cloud-account:retention", (_event, step) => ensureCloudAccount().retention(step)));
+ipcMain.handle("cloud-account:recap", localWorkspaceOnly("cloud-account:recap", () => ensureCloudAccount().recap()));
 // this computer's CLI logins kept in a file, for the account's own Cloud being made; keychain logins (Claude Code among them) stay here
 ipcMain.handle("cloud-account:holdSignIns", localWorkspaceOnly("cloud-account:holdSignIns", async () => ensureCloudAccount().holdSignIns(await localAiSignIns())));
 ipcMain.handle("cloud-account:carriedAis", localWorkspaceOnly("cloud-account:carriedAis", async () => {

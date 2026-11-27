@@ -196,6 +196,8 @@ export interface CloudAccountBridge {
   keepPlan?(): Promise<CloudRenewalResult>;
   /** A step of the cancel sheet, for the save rate; best effort, false when it wasn't kept. Absent on an older app. */
   retention?(step: CloudRetentionStep): Promise<boolean>;
+  /** The cancel sheet's recap of the signed-in account (counts and bot looks only); null when it can't be read. Absent on an older app. */
+  recap?(): Promise<import("../shared/account-recap.ts").AccountRecap | null>;
   /** The first run on dusk cloud: this computer's AI sign-ins, held for the account's own Cloud until it runs. */
   holdSignIns?(): Promise<CloudHeldSignIns>;
   /** The first run on dusk cloud: the AIs signed in here (instance ids) whose sign-in goes along to the account's own Cloud. Absent on an older app. */
@@ -293,6 +295,8 @@ export interface CloudPlanBridge {
   keep?(): Promise<CloudRenewalResult>;
   /** A step of the cancel sheet, for the save rate; best effort. Absent on an older app. */
   retention?(step: CloudRetentionStep): Promise<boolean>;
+  /** The cancel sheet's recap of the signed-in account; null when it can't be read, or asked without the person's click on a Cloud's page. Absent on an older app. */
+  recap?(): Promise<import("../shared/account-recap.ts").AccountRecap | null>;
   /** The room card's Not now, and Restart now after its upgrade (only from the person's click). Absent on an older app. */
   roomNotNow?(id: string): Promise<boolean>;
   restartNow?(): Promise<"restarting" | "current" | "failed">;
@@ -314,6 +318,7 @@ export declare function cancelSurvey(input: unknown): { answer: CloudCancelAnswe
 export declare const CLOUD_RETENTION_OFFERS: readonly CloudRetentionOffer[];
 /** A step of the cancel sheet as main sends it, or null when it isn't one. */
 export declare function retentionStep(input: unknown): CloudRetentionStep | null;
+export declare function accountRecapAnswer(input: unknown): import("../shared/account-recap.ts").AccountRecap | null;
 /** Only this Admin's own /handoff (or /dashboard/handoff) page with a one-time `#t=` token; anything else is null. */
 export declare function handoffDestination(value: unknown, origin: string): string | null;
 export type CloudHandoffPage = "plans" | "home" | "workspace" | "cloud" | "billing" | "account" | "usage";
@@ -388,6 +393,8 @@ export interface CloudAccountClient {
   cancelPlan(survey: unknown): Promise<CloudRenewalResult>;
   /** POST /v1/clouds/<the session's own Cloud>/retention with the step, given 8 seconds; never throws. */
   retention(step: unknown): Promise<boolean>;
+  /** GET /v1/account/recap with the sign-in, given 8 seconds; the answer's own fields checked, null otherwise; never throws. */
+  recap(): Promise<import("../shared/account-recap.ts").AccountRecap | null>;
   /** POST /api/cloud/desktop/clouds/<the session's own Cloud>/keep. */
   keepPlan(): Promise<CloudRenewalResult>;
   holdSignIns(items: Array<import("../shared/ai-signins.ts").AiSignIn>): Promise<CloudHeldSignIns>;

@@ -30,3 +30,22 @@ export function retentionStep(input) {
     || (input.offer !== undefined && !CLOUD_RETENTION_OFFERS.includes(input.offer)) || note.length > SURVEY_TEXT_MAX) return null;
   return { reason: input.reason, step: input.step, outcome: input.outcome, ...(input.offer ? { offer: input.offer } : {}), ...(note ? { note } : {}) };
 }
+/** The cancel sheet's recap of the account (shared/account-recap.ts), asked of the Admin with the sign-in. */
+export const ACCOUNT_RECAP_ROUTE = "/v1/account/recap";
+const RECAP_COUNTS = Object.freeze(["bots", "replies", "activeDays", "longestStreak", "routines", "apps", "computers"]);
+const recapCount = value => Number.isSafeInteger(value) && value >= 0;
+const short = (value, max) => typeof value === "string" && value.length <= max;
+function recapBot(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const { id, name, color, body, replies } = input;
+  if (!short(id, 128) || !id || !short(name, 200) || !short(color, 32) || !/^[a-z]+$/.test(color) || !(body === null || short(body, 64)) || !recapCount(replies)) return null;
+  return { id, name, color, body, replies };
+}
+/** The Admin's recap with only its own fields, each checked; null for anything else, so a page never draws a malformed one. */
+export function accountRecapAnswer(input) {
+  if (!input || typeof input !== "object" || input.v !== 1 || !Array.isArray(input.crew) || input.crew.length > 6 || !RECAP_COUNTS.every(key => recapCount(input[key]))) return null;
+  if (!(input.since === null || (Number.isFinite(input.since) && input.since > 0))) return null;
+  const crew = input.crew.map(recapBot), topBot = input.topBot === null ? null : recapBot(input.topBot);
+  if (crew.includes(null) || (input.topBot !== null && !topBot)) return null;
+  return { v: 1, since: input.since, crew, topBot, ...Object.fromEntries(RECAP_COUNTS.map(key => [key, input[key]])) };
+}

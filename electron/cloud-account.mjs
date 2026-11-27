@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { CARRIED_DRIVERS } from "./ai-signins-carry.mjs";
-import { cancelSurvey, retentionStep, SURVEY_WAIT_MS } from "./cloud-cancel.mjs";
+import { ACCOUNT_RECAP_ROUTE, accountRecapAnswer, cancelSurvey, retentionStep, SURVEY_WAIT_MS } from "./cloud-cancel.mjs";
 import { createManagedDesktopStore, retryDelay, unreadableRecord } from "./managed-desktop.mjs";
 import { CLOUD_MACHINE_CONNECTABLE, cloudUnreachableText, parseCloudOffer, parseCloudPurchase, parseCloudSummary, parseCloudTeams, parseCloudRoom, parseCloudTrial, parseCloudUsage, parsePairingGrant, parsePublicOffer, withoutTrial } from "./cloud-home.mjs";
 import { CLOUD_ID, CLOUD_SWATCHES, cleanCloudListName, ORGANIZATION_BLOCKS, otherOwnClouds, ownCloud, parseCloudList, parseCloudPayment, parseCloudRenewal, parseOrganizations, releaseVersion } from "./cloud-list.mjs";
@@ -46,7 +46,7 @@ export const UPGRADE_SOURCES = Object.freeze(["app_usage", "app_settings", "app_
 const UPGRADE_TIERS = Object.freeze(["starter", "personal", "pro", "max"]);
 const UPGRADE_REFUSALS = Object.freeze(["payment_failed", "not_subscribed", "already_on_plan", "plan_change_unavailable", "confirmation_required", "price_changed", "rate_limited"]);
 const CONFIRMATION = /^[A-Za-z0-9_-]{43}$/;
-export { CLOUD_CANCEL_ANSWERS, CLOUD_RETENTION_OFFERS, cancelSurvey, retentionStep } from "./cloud-cancel.mjs";
+export { CLOUD_CANCEL_ANSWERS, CLOUD_RETENTION_OFFERS, accountRecapAnswer, cancelSurvey, retentionStep } from "./cloud-cancel.mjs";
 /** Why the Admin won't open another Cloud's checkout now (POST clouds, 409 `addBlocked`; contract v1). */
 export const ADD_BLOCKS = Object.freeze(["cap", "checkout_open", "rate", "signups_closed"]);
 const ADD_INTERVALS = Object.freeze(["month", "year"]);
@@ -851,6 +851,13 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
       if (!signedIn || !cloudId || !step || state().status !== "connected") return false;
       try { await request("", { path: `/v1/clouds/${encodeURIComponent(cloudId)}/retention`, method: "POST", body: step, token: signedIn.token, timeoutMs: SURVEY_WAIT_MS }); return true; }
       catch { return false; }
+    },
+    /** The cancel sheet's recap of the signed-in account, given SURVEY_WAIT_MS; null when it can't be read, never throws. */
+    async recap() {
+      const signedIn = grant;
+      if (!signedIn || state().status !== "connected") return null;
+      try { const answer = accountRecapAnswer(await request("", { path: ACCOUNT_RECAP_ROUTE, token: signedIn.token, timeoutMs: SURVEY_WAIT_MS })); return grant === signedIn ? answer : null; }
+      catch { return null; }
     },
     /**
      * The first run's AI sign-ins for the account's own Cloud while it is being made: the Admin holds them sealed, for a

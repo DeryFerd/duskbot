@@ -111,8 +111,9 @@ test("Cancel, Keep my plan and each cancel step from Settings carry only the pag
   await f.bridge.cloudAccount.cancelPlan();
   await f.bridge.cloudAccount.keepPlan({ cloudId: "someone-elses" });
   await f.bridge.cloudAccount.retention({ reason: "price", step: "reason", outcome: "shown" }, { cloudId: "someone-elses" });
+  await f.bridge.cloudAccount.recap({ accountId: "someone-elses" });
   assert.deepEqual(f.invoked, [["cloud-account:cancelPlan", { answer: "price", expected: "words" }], ["cloud-account:cancelPlan", null], ["cloud-account:keepPlan"],
-    ["cloud-account:retention", { reason: "price", step: "reason", outcome: "shown" }]]);
+    ["cloud-account:retention", { reason: "price", step: "reason", outcome: "shown" }], ["cloud-account:recap"]]);
   const source = readFileSync(new URL("./main.mjs", import.meta.url), "utf8"), start = source.indexOf("const workspaceOnly ="), end = source.indexOf('ipcMain.handle("organization:settings-opened"', start);
   const handlers = new Map(), calls = [], frame = { url: `${origin}/` }, contents = { mainFrame: frame };
   localOrigin.setLocalOrigin(origin);
@@ -121,16 +122,18 @@ test("Cancel, Keep my plan and each cancel step from Settings carry only the pag
     rendererOrigin: () => origin, environmentsState: { environments: [], activeId: "local" },
     ensureCloudAccount: () => ({ cancelPlan: (...args) => { calls.push(["cancelPlan", ...args]); return { outcome: "cancelled" }; },
       keepPlan: (...args) => { calls.push(["keepPlan", ...args]); return { outcome: "kept" }; },
-      retention: (...args) => { calls.push(["retention", ...args]); return true; } }) });
+      retention: (...args) => { calls.push(["retention", ...args]); return true; },
+      recap: (...args) => { calls.push(["recap", ...args]); return { v: 1 }; } }) });
   vm.runInContext(source.slice(start, end), context);
   const page = { sender: contents, senderFrame: frame };
   await handlers.get("cloud-account:cancelPlan")(page, { answer: "setup" }, "https://evil.example.test");
   await handlers.get("cloud-account:keepPlan")(page, "anything");
   await handlers.get("cloud-account:retention")(page, { reason: "skip", step: "help", outcome: "kept" }, "https://evil.example.test");
-  assert.deepEqual(calls, [["cancelPlan", { answer: "setup" }], ["keepPlan"], ["retention", { reason: "skip", step: "help", outcome: "kept" }]]);
-  for (const channel of ["cloud-account:cancelPlan", "cloud-account:keepPlan", "cloud-account:retention"]) {
+  assert.deepEqual(await handlers.get("cloud-account:recap")(page, { accountId: "someone-elses" }), { v: 1 });
+  assert.deepEqual(calls, [["cancelPlan", { answer: "setup" }], ["keepPlan"], ["retention", { reason: "skip", step: "help", outcome: "kept" }], ["recap"]]);
+  for (const channel of ["cloud-account:cancelPlan", "cloud-account:keepPlan", "cloud-account:retention", "cloud-account:recap"]) {
     for (const sender of [{ sender: contents, senderFrame: { url: `${origin}/subframe` } }, { sender: {}, senderFrame: frame },
       { sender: contents, senderFrame: { url: "https://remote.example.test" } }]) assert.throws(() => handlers.get(channel)(sender, { answer: "price" }), /only available/);
   }
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4);
 });
