@@ -56,6 +56,8 @@ export type RuntimeEvent = RuntimeEventBase &
         delayMs: number;
         /** Why this failure was judged retry-worthy. */
         reason: string;
+        /** Every try this failure gets, the first included; absent means the engines' usual 3. */
+        maxAttempts?: number;
       }
     | {
         type: "turn.completed";

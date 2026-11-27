@@ -9,6 +9,7 @@ import type { SendTurnInput } from "../contracts.ts";
 import { recordEvents } from "../testing/events.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
 import { requestTooLargeMessage } from "../../shared/request-too-large.ts";
+import { retryLine } from "../retry-line.ts";
 import { IMAGE_OMITTED, refusesRequestSize, smallerResend, TOOL_OUTPUT_SHORTENED } from "./chat-size-limit.ts";
 import type { OpenAIChatMessage } from "./openai-chat.ts";
 import { OpenAICompatDriver } from "./openai-compat.ts";
@@ -218,6 +219,8 @@ describe("an OpenAI-compatible provider that refuses large requests", () => {
     // a rate limit is tried over about half a minute, other hiccups twice more
     expect(f.requests).toHaveLength(status === 400 ? 1 : status === 429 ? 4 : 3);
     expect(f.retries()).toHaveLength(status === 400 ? 0 : status === 429 ? 3 : 2);
+    const counts = f.retries().map((event) => /\(attempt (\d+ of \d+)\)/.exec(retryLine(undefined, event))?.[1]);
+    expect(counts).toEqual(status === 400 ? [] : status === 429 ? ["2 of 4", "3 of 4", "4 of 4"] : ["2 of 3", "3 of 3"]);
     expect(new Set(f.requests.map((request) => request.bytes)).size).toBe(1);
     expect(f.errors()).toEqual([message]);
   });

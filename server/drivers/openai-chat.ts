@@ -28,7 +28,7 @@ import { createModelRoutes, ModelRouteRefused, noRouteLeft, readResponsesStream,
 import { appendNative } from "./native.ts"; import { backupNotice, movesToBackup, refusesToolChoice, TurnBackups, type ChatBackup } from "./chat-fallback.ts"; import { modelSwapNotice, namesUnknownModel, unavailableModelMessage } from "./model-intent.ts"; import { fingerprint, MAX_DELIVERED_THREADS, replayDelivered, type DeliveredUserMessage } from "./openai-chat-replay.ts";
 import { classifyError, interruptibleDelay, RETRY_MAX_ATTEMPTS } from "./retry.ts";
 import { carriedSteps, carriedWorkFile, chatLimitFacts, sharedCarriedWork } from "./openai-chat-carry.ts";
-import { CORRECTIVE_ROUND, CORRECTIVE_ROUNDS, announcesAction, ownsFailure, withoutRepeats, claimsUnmadeChange, effectfulCall, leakedReasoning, leakedToolSyntax, LeakHoldback, NUDGE_ANNOUNCED_ACTION, REASONING_AGAIN, NUDGE_CLAIMED_CHANGE, retryDelay, withRetryAfter } from "./openai-chat-habits.ts";
+import { CORRECTIVE_ROUND, CORRECTIVE_ROUNDS, announcesAction, ownsFailure, withoutRepeats, claimsUnmadeChange, effectfulCall, leakedReasoning, leakedToolSyntax, LeakHoldback, NUDGE_ANNOUNCED_ACTION, REASONING_AGAIN, NUDGE_CLAIMED_CHANGE, retryAttempts, retryDelay, withRetryAfter } from "./openai-chat-habits.ts";
 import { plainFailureMessage } from "./engine-errors.ts"; import { toolFailureMessage } from "./tool-failure.ts"; import { chosenEffort, withModelEfforts, type ModelEffort } from "./api-effort.ts";
 import { refusesRequestSize, RequestTooLargeError, sizeChange, smallerResend } from "./chat-size-limit.ts";
 import { requestTooLargeMessage } from "../../shared/request-too-large.ts"; import { thrownCode } from "../../shared/usage-signals.ts"; import { failureCodeOf, inPlainWords, noReplyError, nudgeOnce, unfinishedReply } from "./openai-chat-final.ts";
@@ -703,7 +703,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
               }
               if (delayMs === null) throw serverModels && !carrier ? new ChatProtocolError(unavailableModelMessage(model, serverModels), "model_not_found") : error;
               attempt += 1;
-              emit({ ...base(turn.threadId, turnId), type: "turn.retrying", attempt, delayMs, reason: verdict.reason });
+              emit({ ...base(turn.threadId, turnId), type: "turn.retrying", attempt, delayMs, reason: verdict.reason, maxAttempts: retryAttempts(verdict.reason) });
               await interruptibleDelay(delayMs * (options.retryScale ?? Number(process.env.FAKE_CHAT_RETRY_SCALE ?? "1")), abort.signal).promise;
               abort.signal.throwIfAborted();
             }

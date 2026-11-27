@@ -90,7 +90,7 @@ export function retryDelay(error: unknown, verdict: ErrorClassification, attempt
   // "You exceeded your current quota ... Please retry in 33s")
   const brief = verdict.reason === "quota" && typeof message === "string" && /\bHTTP 429\b/.test(message) && hinted !== undefined && hinted <= MAX_RETRY_WAIT_MS;
   const spaced = SPACED_RETRIES[verdict.reason];
-  if ((!verdict.transient && !brief) || attempt >= (spaced?.length ?? RETRY_MAX_ATTEMPTS - 1)) return null;
+  if ((!verdict.transient && !brief) || attempt >= retryAttempts(verdict.reason) - 1) return null;
   if (hinted !== undefined && hinted > MAX_RETRY_WAIT_MS) return null;
   const backoff = spaced ? jittered(spaced[attempt]!) : computeBackoff(attempt);
   return Math.max(backoff, brief || hinted !== undefined ? Math.max(0, hinted!) : 0);
@@ -102,6 +102,11 @@ const SPACED_RETRIES: Partial<Record<string, readonly number[]>> = {
   rate_limited: [2_000, 8_000, 20_000],
   connection_reset: [1_000, 3_000, 8_000],
 };
+
+/** Every try a failed completion request gets for this reason, the first included. */
+export function retryAttempts(reason: string): number {
+  return (SPACED_RETRIES[reason]?.length ?? RETRY_MAX_ATTEMPTS - 1) + 1;
+}
 
 const jittered = (ms: number) => Math.round(ms * (0.85 + Math.random() * 0.3));
 
