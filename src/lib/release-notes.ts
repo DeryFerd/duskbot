@@ -89,24 +89,69 @@ export function resetLaunchesForTests() { launches.clear(); }
  * the changelog has none */
 export function notesForUpdate(releases: readonly Release[], areas: readonly ReleaseArea[], from: string | null, to: string): Release[] {
   const between = releasesBetween(releasesFor(releases, areas), from, to);
-  return from ? between : between.filter((release) => release.version === to);
+  return dedupeNotes(from ? between : between.filter((release) => release.version === to));
+}
+
+/** the same line written in two releases shows once, under the newest (releases come newest first) */
+function dedupeNotes(releases: readonly Release[]): Release[] {
+  const seen = new Set<string>();
+  return releases
+    .map((release) => ({ ...release, items: release.items.filter((item) => {
+      const key = item.text.trim().toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }) }))
+    .filter((release) => release.items.length > 0);
+}
+
+/** What's new opens on the release whose last number is a multiple of this (0.2.35, 0.2.40), or on the first update past one */
+export const WHATS_NEW_EVERY = 5;
+
+/** whether going from `from` to `to` reaches a version that is a multiple of WHATS_NEW_EVERY (a new minor starts at .0, one) */
+export function crossesMilestone(from: string, to: string): boolean {
+  const [fromMajor, fromMinor, fromPatch] = from.split(".").map(Number) as [number, number, number];
+  const [toMajor, toMinor, toPatch] = to.split(".").map(Number) as [number, number, number];
+  if (compareRelease(to, from) <= 0) return false;
+  if (fromMajor !== toMajor || fromMinor !== toMinor) return true;
+  return Math.floor(toPatch / WHATS_NEW_EVERY) > Math.floor(fromPatch / WHATS_NEW_EVERY);
 }
 
 export interface PendingUpdate { from: string | null; to: string }
 
 const pendingKey = (surface: string) => `dusk-whats-new:pending:${surface}`;
 const toldKey = (surface: string) => `dusk-whats-new:told:${surface}`;
+const digestKey = (surface: string) => `dusk-whats-new:digest:${surface}`;
 const isVersion = (value: unknown): value is string => typeof value === "string" && /^\d+\.\d+\.\d+$/.test(value);
 
+interface Digest { from: string | null; last: string | null }
+
+function readDigest(store: Storage, surface: string): Digest {
+  try {
+    const raw = JSON.parse(store.getItem(digestKey(surface)) ?? "null") as { from?: unknown; last?: unknown } | null;
+    return { from: isVersion(raw?.from) ? raw.from : null, last: isVersion(raw?.last) ? raw.last : null };
+  } catch {
+    return { from: null, last: null };
+  }
+}
+
 /**
- * The update whose notes this surface still owes: the one it was just updated to (`updated`, from the version it ran
- * before), or one an earlier launch could not show. Null on a fresh install and once that version's notes were shown.
+ * The update whose notes this surface still owes. An update to `updated` (from `before`) owes one when it reaches a
+ * multiple of WHATS_NEW_EVERY, as one update from the version this surface ran when it last showed What's new; the others
+ * owe nothing. Null on a fresh install and once the notes were shown or had none.
  */
 export function updateToTell(surface: string, updated: string | null, before: string | null, store: Storage | null = storage()): PendingUpdate | null {
   if (!store) return null;
   try {
     const told = store.getItem(toldKey(surface));
-    if (isVersion(updated) && updated !== told) store.setItem(pendingKey(surface), JSON.stringify({ from: isVersion(before) ? before : null, to: updated }));
+    if (isVersion(updated) && updated !== told) {
+      const digest = readDigest(store, surface);
+      if (digest.last !== updated) {
+        const next: Digest = { from: digest.from ?? (isVersion(before) ? before : null), last: updated };
+        store.setItem(digestKey(surface), JSON.stringify(next));
+        if (isVersion(before) && crossesMilestone(before, updated)) store.setItem(pendingKey(surface), JSON.stringify({ from: next.from, to: updated }));
+      }
+    }
     const pending = JSON.parse(store.getItem(pendingKey(surface)) ?? "null") as { from?: unknown; to?: unknown } | null;
     if (!pending || !isVersion(pending.to) || pending.to === told) return null;
     return { from: isVersion(pending.from) ? pending.from : null, to: pending.to };
@@ -115,11 +160,12 @@ export function updateToTell(surface: string, updated: string | null, before: st
   }
 }
 
-/** that update's notes were shown (or it has none to show): it is not asked again */
+/** that update's notes were shown (or it has none to show): it is not asked again, and the next one's notes start after it */
 export function updateTold(surface: string, version: string, store: Storage | null = storage()): void {
   try {
     store?.setItem(toldKey(surface), version);
     store?.removeItem(pendingKey(surface));
+    store?.setItem(digestKey(surface), JSON.stringify({ from: null, last: version }));
   } catch { /* asks again next launch */ }
 }
 
