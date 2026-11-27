@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { accountProfile, accountRecapAnswer, cancelSurvey, retentionStep, CHECKOUT_SOURCES, checkoutDestination, cloudMenuSublabel, createCloudAccountClient, createCloudAccountStore, cloudOrigin, cloudPlanSnapshot, CLOUD_ORIGIN } from "./cloud-account.mjs";
+import { accountProfile, CHECKOUT_SOURCES, checkoutDestination, cloudMenuSublabel, createCloudAccountClient, createCloudAccountStore, cloudOrigin, cloudPlanSnapshot, CLOUD_ORIGIN } from "./cloud-account.mjs";
 
 const accessToken = `omc_${"T".repeat(43)}`;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -16,8 +16,8 @@ async function fixture(t, options = {}) {
     disk: { status: 404, body: "<!doctype html>not here" }, x: { status: 404, body: { error: "unsupported" } }, pages: { status: 404, body: { error: "unsupported" } }, xIndex: { status: 404, body: { error: "not_found" } }, sessionPage: null, sessionError: null, tokenPage: null, publicConfig: { status: 404, body: { error: "not_found" } },
     offer: undefined, checkout: { status: 404, body: "<!doctype html>not here" }, interest: { status: 200, body: { ok: true } },
     upgradePreview: { status: 404, body: { error: "not_found" } }, upgrade: { status: 404, body: { error: "not_found" } }, teams: undefined, teamPairing: { status: 404, body: { error: "not_found" } }, moved: { status: 404, body: { error: "not_found" } }, moveStatus: { status: 404, body: { error: "not_found" } },
-    // An Admin before the app's Cancel and Keep: neither route, and the session's `clouds` absent.
-    clouds: undefined, feedback: { status: 404, body: { error: "Not found." } }, recap: { status: 404, body: { code: "not_found" } }, renewal: () => ({ status: 404, body: { error: "Not found." } }),
+    // the session's `clouds` absent, as an older Admin sends it
+    clouds: undefined,
     // how far this computer's clock runs ahead of the Admin's
     macAhead: 0 };
   const serverTime = () => f.now - f.macAhead;
@@ -44,10 +44,6 @@ async function fixture(t, options = {}) {
     if (req.url === "/api/cloud/desktop/services/x-index" && req.headers.authorization === `Bearer ${accessToken}`) return send(f.xIndex.status, f.xIndex.body);
     if (req.url === "/api/cloud/desktop/moved" && req.method === "POST" && req.headers.authorization === `Bearer ${accessToken}`) return send(f.moved.status, f.moved.body);
     if (req.url === "/api/cloud/desktop/move-status" && req.method === "POST" && req.headers.authorization === `Bearer ${accessToken}`) return send(f.moveStatus.status, f.moveStatus.body);
-    if (req.url === "/v1/account/recap" && req.method === "GET" && req.headers.authorization === `Bearer ${accessToken}`) return send(f.recap.status, f.recap.body);
-    if (req.url === "/api/cloud/desktop/feedback" && req.method === "POST" && req.headers.authorization === `Bearer ${accessToken}`) return send(f.feedback.status, f.feedback.body);
-    const renewal = /^\/api\/cloud\/desktop\/clouds\/([^/]+)\/(cancel|keep)$/.exec(req.url);
-    if (renewal && req.method === "POST" && req.headers.authorization === `Bearer ${accessToken}`) { const answer = f.renewal(renewal[2], renewal[1]); return send(answer.status, answer.body); }
     for (const [route, answer] of [["/api/cloud/desktop/checkout", f.checkout], ["/api/cloud/desktop/interest", f.interest],
       ["/api/cloud/desktop/upgrade/preview", f.upgradePreview], ["/api/cloud/desktop/upgrade", f.upgrade]]) {
       if (req.url !== route || req.method !== "POST" || req.headers.authorization !== `Bearer ${accessToken}`) continue;
@@ -989,17 +985,6 @@ function renewingClouds(f, renewal = { trial: true, endsAt: null, keptDays: 3 })
   return [{ id: TEAM_CLOUD, name: "Acme", role: "member", teamId: "team-acme", primary: false, renewsAt: null, cancelAtPeriodEnd: false },
     { id: MY_CLOUD, name: "My Cloud", role: "owner", teamId: null, primary: true, renewsAt: renewal.endsAt === null ? f.now + 5 * DAY : null, cancelAtPeriodEnd: renewal.endsAt !== null, renewal }];
 }
-/** An Admin with the app's Cancel and Keep: each turns the Cloud's renewal off or on, and the next session says so. */
-function renewalAdmin(f) {
-  f.feedback = { status: 201, body: { cloudContractVersion: 1, id: "answer-1" } };
-  f.renewal = (action, cloudId) => {
-    if (cloudId !== MY_CLOUD) return { status: 404, body: { error: "not_found", errorDescription: "There is no such Cloud on your account." } };
-    f.clouds = renewingClouds(f, { trial: true, endsAt: action === "cancel" ? f.now + 5 * DAY : null, keptDays: 3 });
-    return { status: 200, body: { cloudContractVersion: 1, cloud: f.clouds[1] } };
-  };
-}
-const posts = f => f.requests.filter(request => request.method === "POST" && /\/(?:feedback|cancel|keep)$/.test(request.route))
-  .map(request => [request.route.replace("/api/cloud/desktop/", ""), JSON.parse(request.body || "null"), request.token === `Bearer ${accessToken}`]);
 
 test("the plan's renewal comes from the session's own primary Cloud, for display only; the Cloud's id stays in main", async t => {
   const f = await fixture(t);
@@ -1009,137 +994,12 @@ test("the plan's renewal comes from the session's own primary Cloud, for display
   assert.deepEqual(f.client.state().renewal, { trial: true, cancelled: false, renewsAt: f.now + 5 * DAY, endsAt: null, keptDays: 3 });
   assert.equal(JSON.stringify(f.client.state()).includes(MY_CLOUD), false);
   assert.deepEqual(cloudPlanSnapshot(f.client.state()).renewal, f.client.state().renewal);
-  // Someone in a team Cloud they don't pay for, and an Admin that doesn't say: no renewal, so nothing to cancel.
+  // Someone in a team Cloud they don't pay for, and an Admin that doesn't say: no renewal.
   f.clouds = [renewingClouds(f)[0], { ...renewingClouds(f)[1], primary: false }];
   await f.client.refresh();
   assert.equal(f.client.state().renewal, undefined);
   f.clouds = undefined;
   await f.client.refresh();
   assert.equal(f.client.state().renewal, undefined);
-  assert.deepEqual(await f.client.cancelPlan({ answer: "price" }), { outcome: "failed", state: f.client.state() });
-  assert.deepEqual(posts(f), [], "nothing is asked without a Cloud the session names");
 });
 
-test("Cancel plan sends the survey first, then the session's own Cloud's cancel; the survey never blocks it, and Keep turns renewal back on", async t => {
-  const f = await fixture(t);
-  f.entitlement = { plan: "pro", tier: "pro", status: "active", expiresAt: f.now + 30 * DAY, version: 2 };
-  f.clouds = renewingClouds(f);
-  renewalAdmin(f);
-  await f.connect();
-  // The page names no Cloud: a cloudId it sends is never used, and each box is trimmed.
-  const cancelled = await f.client.cancelPlan({ answer: "price", expected: "  To sort my inbox.  ", improve: "", cloudId: TEAM_CLOUD });
-  assert.deepEqual(posts(f), [["feedback", { cloudId: MY_CLOUD, answer: "price", expected: "To sort my inbox." }, true], [`clouds/${MY_CLOUD}/cancel`, {}, true]]);
-  assert.equal(cancelled.outcome, "cancelled");
-  assert.deepEqual(cancelled.renewal, { trial: true, cancelled: true, renewsAt: null, endsAt: f.now + 5 * DAY, keptDays: 3 });
-  assert.equal(cancelled.surveyed, true);
-  assert.deepEqual(f.client.state().renewal, cancelled.renewal, "the session is read again");
-  // Keep my plan: the same Cloud, nothing else sent.
-  f.requests.length = 0;
-  const kept = await f.client.keepPlan();
-  assert.equal(kept.outcome, "kept");
-  assert.deepEqual(posts(f), [[`clouds/${MY_CLOUD}/keep`, {}, true]]);
-  assert.equal(f.client.state().renewal.cancelled, false);
-  // Nothing said: only the cancel. Words without a reason: kept as "other". A refused or failed survey: the cancel goes ahead.
-  for (const [survey, sent] of [[null, null], [{}, null], [{ answer: "keep" }, null], ["price", null], [{ improve: "Tell me sooner." }, { answer: "other", improve: "Tell me sooner." }]]) {
-    f.requests.length = 0;
-    assert.equal((await f.client.cancelPlan(survey)).outcome, "cancelled");
-    assert.deepEqual(posts(f), [...sent ? [["feedback", { cloudId: MY_CLOUD, ...sent }, true]] : [], [`clouds/${MY_CLOUD}/cancel`, {}, true]]);
-    await f.client.keepPlan();
-  }
-  for (const refusal of [{ status: 429, body: { error: "rate_limited", interval: 600 } }, { status: 500, body: { error: "unexpected" } }]) {
-    f.feedback = refusal; f.requests.length = 0;
-    const result = await f.client.cancelPlan({ answer: "setup" });
-    assert.deepEqual([result.outcome, result.surveyed], ["cancelled", false]);
-    assert.deepEqual(posts(f).map(([route]) => route), ["feedback", `clouds/${MY_CLOUD}/cancel`]);
-    await f.client.keepPlan();
-  }
-});
-
-test("an Admin without the app's Cancel and Keep opens the Cloud page's billing; a refusal changes nothing and reads the session again", async t => {
-  const f = await fixture(t);
-  f.entitlement = { plan: "pro", tier: "pro", status: "active", expiresAt: f.now + 30 * DAY, version: 2 };
-  f.clouds = renewingClouds(f);
-  await f.connect();
-  f.browsers.length = 0;
-  for (const status of [404, 405, 501]) {
-    f.renewal = () => ({ status, body: { error: status === 404 ? "Not found." : "unsupported" } });
-    assert.deepEqual(await f.client.cancelPlan({ answer: "later" }), { outcome: "browser" });
-    assert.deepEqual(await f.client.keepPlan(), { outcome: "browser" });
-  }
-  assert.deepEqual(f.browsers, Array(6).fill(`${f.origin}/billing`));
-  // The route is there, but refuses: the Cloud isn't this account's (anymore), or there's no plan to change, or Dodo can't be reached.
-  for (const [status, error] of [[404, "not_found"], [403, "forbidden"], [409, "not_renewable"], [502, "provider_error"], [429, "rate_limited"]]) {
-    f.renewal = () => ({ status, body: { error, errorDescription: "Refused." } });
-    const reads = f.requests.filter(request => request.route === "/api/cloud/desktop/session").length;
-    const result = await f.client.cancelPlan(null);
-    assert.equal(result.outcome, "failed", `${status} ${error}`);
-    assert.equal(f.requests.filter(request => request.route === "/api/cloud/desktop/session").length, reads + ([404, 409].includes(status) ? 1 : 0));
-  }
-  assert.equal(f.browsers.length, 6, "only an Admin without the routes opens the browser");
-});
-
-test("the cancel survey as main sends it: one of the reasons, words trimmed and at most 2,000 characters each, never anything else", () => {
-  assert.deepEqual(cancelSurvey({ answer: "broken", expected: " a ", improve: " b " }), { answer: "broken", expected: "a", improve: "b" });
-  assert.deepEqual(cancelSurvey({ answer: null, expected: "only words" }), { answer: "other", expected: "only words" });
-  assert.deepEqual(cancelSurvey({ answer: "later", expected: 7, improve: ["no"] }), { answer: "later" });
-  for (const nothing of [null, undefined, "price", ["price"], {}, { answer: null, expected: "   " }, { answer: "keep" }, { answer: "price", expected: "x".repeat(2_001) },
-    { answer: "price", improve: "y".repeat(2_001) }]) assert.equal(cancelSurvey(nothing), null, JSON.stringify(nothing)?.slice(0, 60));
-  assert.equal(cancelSurvey({ answer: "price", expected: "z".repeat(2_000) }).expected.length, 2_000);
-  // the six reasons the sheet asks now, and the one offer it showed for it
-  for (const answer of ["price", "unused", "feature", "switching", "broken", "skip"]) assert.deepEqual(cancelSurvey({ answer }), { answer });
-  assert.deepEqual(cancelSurvey({ answer: "price", offer: "downgrade", improve: " too much " }), { answer: "price", improve: "too much", offer: "downgrade" });
-  assert.deepEqual(cancelSurvey({ answer: "skip", offer: "pause" }), { answer: "skip" }, "an offer the Admin doesn't know is left out");
-});
-
-test("a cancel sheet step as main sends it: a known reason, step and outcome, an offer and a note only when they are real", () => {
-  assert.deepEqual(retentionStep({ reason: "price", step: "reason", outcome: "shown", note: "  pricey  " }), { reason: "price", step: "reason", outcome: "shown", note: "pricey" });
-  assert.deepEqual(retentionStep({ reason: "skip", step: "help", outcome: "kept", offer: "losses", note: "   ", cloudId: TEAM_CLOUD }), { reason: "skip", step: "help", outcome: "kept", offer: "losses" });
-  for (const wrong of [null, "price", [], {}, { reason: "nope", step: "reason", outcome: "shown" }, { reason: "price", step: "pause", outcome: "shown" },
-    { reason: "price", step: "help", outcome: "paused" }, { reason: "price", step: "help", outcome: "shown", offer: "pause" },
-    { reason: "price", step: "help", outcome: "shown", note: "n".repeat(2_001) }]) assert.equal(retentionStep(wrong), null, JSON.stringify(wrong)?.slice(0, 80));
-});
-
-const RECAP = { v: 1, since: 1_780_000_000_000, bots: 2, crew: [{ id: "nova", name: "Nova", color: "blue", body: "blob", replies: 40 }, { id: "quill", name: "Quill", color: "purple", body: null, replies: 0 }],
-  topBot: { id: "nova", name: "Nova", color: "blue", body: "blob", replies: 40 }, replies: 40, activeDays: 9, longestStreak: 4, routines: 3, apps: 2, computers: 1 };
-test("the Admin's recap keeps only its own checked fields, and anything malformed is no recap", () => {
-  assert.deepEqual(accountRecapAnswer({ ...RECAP, routineNames: ["Call the bank"], crew: RECAP.crew.map(bot => ({ ...bot, lastMessage: "hi" })) }), RECAP);
-  assert.deepEqual(accountRecapAnswer({ ...RECAP, since: null, topBot: null }), { ...RECAP, since: null, topBot: null });
-  for (const wrong of [null, [], { ...RECAP, v: 2 }, { ...RECAP, replies: -1 }, { ...RECAP, apps: 1.5 }, { ...RECAP, computers: "2" }, { ...RECAP, since: "today" },
-    { ...RECAP, crew: Array(7).fill(RECAP.crew[0]) }, { ...RECAP, crew: [{ ...RECAP.crew[0], color: "<b>" }] }, { ...RECAP, topBot: { name: "Nova" } }, { ...RECAP, crew: undefined }]) {
-    assert.equal(accountRecapAnswer(wrong), null, JSON.stringify(wrong)?.slice(0, 80));
-  }
-});
-
-test("the cancel sheet's recap is GET /v1/account/recap with the sign-in, and null rather than an error when it can't be read", async t => {
-  const f = await fixture(t);
-  const asked = () => f.requests.filter(request => request.route === "/v1/account/recap").map(request => [request.method, request.token === `Bearer ${accessToken}`]);
-  assert.equal(await f.client.recap(), null);
-  assert.deepEqual(asked(), [], "nothing is asked while signed out");
-  await f.connect();
-  assert.equal(await f.client.recap(), null, "an Admin without the route");
-  f.recap = { status: 200, body: { ...RECAP, routineNames: ["Call the bank"] } };
-  assert.deepEqual(await f.client.recap({ accountId: "someone-elses" }), RECAP);
-  f.recap = { status: 200, body: { ...RECAP, crew: "everyone" } };
-  assert.equal(await f.client.recap(), null);
-  f.recap = { status: 500, body: { code: "internal" } };
-  assert.equal(await f.client.recap(), null);
-  assert.deepEqual(asked(), Array(4).fill(["GET", true]));
-});
-
-test("each cancel sheet step goes to /v1/clouds/<the session's own Cloud>/retention, best effort, and never throws", async t => {
-  const f = await fixture(t);
-  f.entitlement = { plan: "pro", tier: "pro", status: "active", expiresAt: f.now + 30 * DAY, version: 2 };
-  f.clouds = renewingClouds(f);
-  renewalAdmin(f);
-  await f.connect();
-  const sent = () => f.requests.filter(request => request.route.endsWith("/retention")).map(request => [request.route, request.method, JSON.parse(request.body), request.token === `Bearer ${accessToken}`]);
-  // the fixture has no such route: the Admin's 404 is a false, never an error in the sheet's way
-  assert.equal(await f.client.retention({ reason: "price", step: "help", outcome: "shown", offer: "downgrade", note: " pricey ", cloudId: TEAM_CLOUD }), false);
-  assert.deepEqual(sent(), [[`/v1/clouds/${MY_CLOUD}/retention`, "POST", { reason: "price", step: "help", outcome: "shown", offer: "downgrade", note: "pricey" }, true]]);
-  assert.equal(await f.client.retention({ reason: "price", step: "pause", outcome: "shown" }), false);
-  assert.equal(sent().length, 1, "a step that isn't one is never sent");
-  f.clouds = undefined;
-  await f.client.refresh();
-  assert.equal(await f.client.retention({ reason: "price", step: "reason", outcome: "shown" }), false);
-  assert.equal(sent().length, 1, "nothing is sent without a Cloud the session names");
-});

@@ -335,8 +335,8 @@ describe("the free trial's notice, here and on My Cloud", () => {
     snapshot = { ...snapshot, notice: undefined };
     expect(await settle()).toContain("Your free trial ends on");
     expect(bridges.plan.noticeSeen).toHaveBeenCalledOnce();
-    press("OK"); await flush();
-    expect(bridges.plan.manage).not.toHaveBeenCalled();
+    press("Manage subscription"); await flush();
+    expect(bridges.plan.manage).toHaveBeenCalledOnce();
     expect(render()).toBe("");
     expect(await launch()).not.toContain("your free trial");
   });

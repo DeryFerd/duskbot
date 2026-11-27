@@ -50,11 +50,6 @@ export function installCloudPlanIpc({ ipcMain, pageSender, account, client, noti
   };
   ipcMain.handle("cloud-plan:upgrade-preview", (event, plan, source) => pageSender("cloud-plan:upgrade-preview", () => client().upgradePreview(...upgradeArgs(plan, source)))(event));
   ipcMain.handle("cloud-plan:upgrade", (event, plan, source) => pageSender("cloud-plan:upgrade", () => client().upgrade(...upgradeArgs(plan, source)))(event));
-  // Cancel trial / Cancel plan and Keep my plan: the page's survey is checked in main, and the Cloud is the session's own.
-  ipcMain.handle("cloud-plan:cancel", (event, survey) => pageSender("cloud-plan:cancel", () => client().cancelPlan(survey))(event));
-  ipcMain.handle("cloud-plan:keep", pageSender("cloud-plan:keep", () => client().keepPlan()));
-  ipcMain.handle("cloud-plan:retention", (event, step) => pageSender("cloud-plan:retention", () => client().retention(step))(event));
-  ipcMain.handle("cloud-plan:recap", pageSender("cloud-plan:recap", () => client().recap()));
   // The room card (the session's `room`): Not now, and Restart now after its upgrade; both for the session's own Cloud.
   ipcMain.handle("cloud-plan:room-not-now", (event, id) => pageSender("cloud-plan:room-not-now", () => client().roomNotNow(typeof id === "string" ? id.slice(0, 64) : ""))(event));
   ipcMain.handle("cloud-plan:restart-now", pageSender("cloud-plan:restart-now", () => client().restartNow()));

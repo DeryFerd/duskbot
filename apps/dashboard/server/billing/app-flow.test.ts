@@ -107,7 +107,7 @@ it("rejects expired app sessions on every Admin billing route", async () => {
   }
 });
 
-it("runs the real desktop client through checkout, setup, pairing, upgrade, another Cloud and Cancel/Keep", async () => {
+it("runs the real desktop client through checkout, setup, pairing, upgrade, another Cloud and an older app's Cancel/Keep", async () => {
   const f = await fixture(); await f.client.start(); await f.signIn();
   expect(f.client.state()).toMatchObject({ status: "connected", entitlement: { plan: "free", status: "inactive" }, offer: { plans: [{ tier: "starter" }, { tier: "pro" }, { tier: "team" }] } });
   const publicConfig = await f.request("/api/public/config");
@@ -167,10 +167,12 @@ it("runs the real desktop client through checkout, setup, pairing, upgrade, anot
   fields = await f.session();
   // an unpaid checkout lists nothing: the cloud only shows once paid
   expect(parseCloudList(fields.clouds)).toHaveLength(1); expect(otherOwnClouds(parseCloudList(fields.clouds))).toEqual([]);
-  const cancelled = await f.client.cancelPlan({ answer: "price", improve: "cheaper" });
-  expect(cancelled).toMatchObject({ outcome: "cancelled", renewal: { cancelled: true, trial: false, keptDays: 30 }, surveyed: true });
+  // the app sends people to the account website to cancel; an older app's Cancel plan and Keep my plan still work here
+  expect(await f.request("feedback", { cloudId: checkout.cloudId, answer: "price", improve: "cheaper" })).toMatchObject({ status: 200 });
+  const cancelled = await f.request(`clouds/${checkout.cloudId}/cancel`, {});
+  expect(cancelled.status).toBe(200); expect(parseCloudRenewal([cancelled.data.cloud])).toMatchObject({ cancelled: true, trial: false, keptDays: 30 });
   expect(f.snapshot().feedback[0]).toMatchObject({ cloudId: checkout.cloudId, answer: "price", improve: "cheaper" });
-  expect(await f.client.keepPlan()).toMatchObject({ outcome: "kept" });
+  expect((await f.request(`clouds/${checkout.cloudId}/keep`, {})).status).toBe(200);
   expect(f.snapshot().subscriptions[0].cancelAtPeriodEnd).toBe(false);
   const subjects = f.mailer.outbox.filter(mail => mail.to === "owner@example.test" && !/code/.test(mail.subject)).map(mail => mail.subject);
   expect(subjects.slice(0, 3)).toEqual(["welcome to dusk bot", expect.stringMatching(/^receipt for \$\d+\.\d\d: /), "your dusk cloud is ready"]);

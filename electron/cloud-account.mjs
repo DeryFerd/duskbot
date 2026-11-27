@@ -1,6 +1,5 @@
 import { randomBytes } from "node:crypto";
 import { CARRIED_DRIVERS } from "./ai-signins-carry.mjs";
-import { ACCOUNT_RECAP_ROUTE, accountRecapAnswer, cancelSurvey, retentionStep, SURVEY_WAIT_MS } from "./cloud-cancel.mjs";
 import { createManagedDesktopStore, retryDelay, unreadableRecord } from "./managed-desktop.mjs";
 import { CLOUD_MACHINE_CONNECTABLE, cloudUnreachableText, parseCloudOffer, parseCloudPurchase, parseCloudSummary, parseCloudTeams, parseCloudRoom, parseCloudTrial, parseCloudUsage, parsePairingGrant, parsePublicOffer, withoutTrial } from "./cloud-home.mjs";
 import { CLOUD_ID, CLOUD_SWATCHES, cleanCloudListName, ORGANIZATION_BLOCKS, otherOwnClouds, ownCloud, parseCloudList, parseCloudPayment, parseCloudRenewal, parseOrganizations, releaseVersion } from "./cloud-list.mjs";
@@ -46,7 +45,6 @@ export const UPGRADE_SOURCES = Object.freeze(["app_usage", "app_settings", "app_
 const UPGRADE_TIERS = Object.freeze(["starter", "personal", "pro", "max"]);
 const UPGRADE_REFUSALS = Object.freeze(["payment_failed", "not_subscribed", "already_on_plan", "plan_change_unavailable", "confirmation_required", "price_changed", "rate_limited"]);
 const CONFIRMATION = /^[A-Za-z0-9_-]{43}$/;
-export { CLOUD_CANCEL_ANSWERS, CLOUD_RETENTION_OFFERS, accountRecapAnswer, cancelSurvey, retentionStep } from "./cloud-cancel.mjs";
 /** Why the Admin won't open another Cloud's checkout now (POST clouds, 409 `addBlocked`; contract v1). */
 export const ADD_BLOCKS = Object.freeze(["cap", "checkout_open", "rate", "signups_closed"]);
 const ADD_INTERVALS = Object.freeze(["month", "year"]);
@@ -175,8 +173,6 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
   let plan = null, savedHint = null;
   /** The signed-in account's name and photo, from its last sign-in or session read (accountProfile). */
   let profile = null;
-  /** The plan's own Cloud that Cancel and Keep act on, as the last verified session names it. */
-  let renewalCloud = null;
   let offerCache = null, offerPending = null, waking = false;
   /** The checkout this app opened, its address kept here for Reopen and Copy link: never published, never asked for again. */
   let opened = null;
@@ -295,18 +291,6 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
     }
     return { outcome: "failed" };
   }
-  /**
-   * An Admin without the app's Cancel and Keep (its own 404, 405 or 501) opens the Cloud page's billing instead. Its `not_found`
-   * is the Cloud, not the route: the session is read again.
-   */
-  async function renewalFailure(error, signedIn) {
-    if (signInEnded(error)) return { outcome: "failed", state: await refresh().catch(() => state()) };
-    if (grant === signedIn && !error?.opaque && [404, 405, 501].includes(error?.status) && error.code !== "not_found") {
-      await openBrowser(`${origin}/billing`);
-      return { outcome: "browser" };
-    }
-    return { outcome: "failed", state: [404, 409].includes(error?.status) ? await refresh().catch(() => state()) : state() };
-  }
   async function revoke(previous) {
     try { await request("session", { method: "DELETE", body: {}, token: previous.token, signal: AbortSignal.timeout(20_000) }); }
     catch (error) { if (![401, 403].includes(error?.status) || error.opaque) throw error; }
@@ -323,7 +307,7 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
   function forget({ quiet = false } = {}) {
     if (clearing) return clearing;
     const previous = grant ?? issued ?? cleanup, stamp = reset();
-    grant = null; issued = null; cleanup = previous; cleanupNeeded = true; plan = null; savedHint = null; opened = null; adding = null; setupSince = null; renewalCloud = null;
+    grant = null; issued = null; cleanup = previous; cleanupNeeded = true; plan = null; savedHint = null; opened = null; adding = null; setupSince = null;
     if (!quiet) publish({ status: "signed-out" });
     const operation = (async () => {
       const [persisted, revoked] = await Promise.allSettled([Promise.resolve().then(() => store.write(null)), previous ? revoke(previous) : Promise.resolve()]);
@@ -372,7 +356,6 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
         if (!current(stamp) || grant !== previous) return state();
       }
       plan = hint ? { accountId: grant.account.id, ...hint } : null;
-      renewalCloud = renewingCloud;
       failures = 0;
       // A checkout the Admin still holds open, with none kept here (this app restarted mid-checkout): watched as this
       // app's own from first sight, so payment, setup and "ready" are followed as closely as before the restart.
@@ -821,45 +804,6 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
       return { outcome: result.status, tier: TIER.test(result.tier ?? "") ? result.tier : plan };
     },
     /**
-     * Cancel trial / Cancel plan: the survey first when the person said anything (given SURVEY_WAIT_MS, and let go when it
-     * fails or is refused), then renewal off for the plan's own Cloud, named by the verified session, never by a page.
-     * `cancelled`: when it ends, from the Admin's answer (`renewal`), and whether the survey was kept; `browser`: this Admin
-     * can't cancel from the app yet, so its Cloud page's billing opened instead; `failed`: nothing changed.
-     */
-    async cancelPlan(input) {
-      const signedIn = grant, cloudId = renewalCloud;
-      if (!signedIn || !cloudId || state().status !== "connected") return { outcome: "failed", state: state() };
-      const survey = cancelSurvey(input);
-      let surveyed = false;
-      if (survey) {
-        try { await request("feedback", { method: "POST", body: { cloudId, ...survey }, token: signedIn.token, timeoutMs: SURVEY_WAIT_MS }); surveyed = true; }
-        catch {}
-      }
-      if (grant !== signedIn) return { outcome: "failed", state: state() };
-      let result;
-      try { result = await request(`clouds/${cloudId}/cancel`, { method: "POST", body: {}, token: signedIn.token, timeoutMs: 60_000 }); }
-      catch (error) { return renewalFailure(error, signedIn); }
-      const { cloudId: answered, ...renewal } = result?.cloudContractVersion === 1 ? parseCloudRenewal([result.cloud]) ?? {} : {};
-      return { outcome: "cancelled", renewal: answered === cloudId ? renewal : null, surveyed, state: await refresh().catch(() => state()) };
-    },
-    /**
-     * One step of the cancel sheet for the save rate, for the plan's own Cloud as `cancelPlan` names it: best effort (given
-     * SURVEY_WAIT_MS), never in the sheet's way. True when the Admin kept it.
-     */
-    async retention(input) {
-      const signedIn = grant, cloudId = renewalCloud, step = retentionStep(input);
-      if (!signedIn || !cloudId || !step || state().status !== "connected") return false;
-      try { await request("", { path: `/v1/clouds/${encodeURIComponent(cloudId)}/retention`, method: "POST", body: step, token: signedIn.token, timeoutMs: SURVEY_WAIT_MS }); return true; }
-      catch { return false; }
-    },
-    /** The cancel sheet's recap of the signed-in account, given SURVEY_WAIT_MS; null when it can't be read, never throws. */
-    async recap() {
-      const signedIn = grant;
-      if (!signedIn || state().status !== "connected") return null;
-      try { const answer = accountRecapAnswer(await request("", { path: ACCOUNT_RECAP_ROUTE, token: signedIn.token, timeoutMs: SURVEY_WAIT_MS })); return grant === signedIn ? answer : null; }
-      catch { return null; }
-    },
-    /**
      * The first run's AI sign-ins for the account's own Cloud while it is being made: the Admin holds them sealed, for a
      * day at most, and hands them to that Cloud once it runs. The Cloud is the session's own, never one a page names;
      * `items` never reach a log here.
@@ -873,14 +817,6 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
       try { await request(`clouds/${encodeURIComponent(cloud.id)}/ai-signins`, { method: "POST", body: { items: movable }, token: signedIn.token, timeoutMs: 30_000 }); }
       catch { return { outcome: "failed" }; }
       return { outcome: "held" };
-    },
-    /** Keep my plan: renewal back on for the same Cloud, as `cancelPlan` names it. */
-    async keepPlan() {
-      const signedIn = grant, cloudId = renewalCloud;
-      if (!signedIn || !cloudId || state().status !== "connected") return { outcome: "failed", state: state() };
-      try { await request(`clouds/${cloudId}/keep`, { method: "POST", body: {}, token: signedIn.token, timeoutMs: 60_000 }); }
-      catch (error) { return renewalFailure(error, signedIn); }
-      return { outcome: "kept", state: await refresh().catch(() => state()) };
     },
     async offer() {
       const current = state();
@@ -1256,7 +1192,7 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
     reload() {
       quiet = false;
       reset();
-      grant = null; issued = null; cleanup = null; cleanupNeeded = false; plan = null; savedHint = null; opened = null; adding = null; setupSince = null; renewalCloud = null; offerCache = null; waking = false;
+      grant = null; issued = null; cleanup = null; cleanupNeeded = false; plan = null; savedHint = null; opened = null; adding = null; setupSince = null; offerCache = null; waking = false;
       confirmations.clear();
       value = { status: "signed-out", message: "restoring" };
       return start();

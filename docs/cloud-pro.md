@@ -1279,41 +1279,16 @@ notice queue (below), on this computer's page and on My Cloud's own page.
 
 #### Cancel trial / Cancel plan
 
-Customers couldn't find how to cancel: the plan card only said **Manage in
-your browser**. Now, while the session's `renewal` says this account pays for a
-plan that runs, the plan card in Settings (Usage & billing → Plan in Simple
-mode, dusk cloud in Advanced) and on the Cloud's own page in home mode
-(`CloudPlanOnCloud`) shows **Cancel trial** during a free trial and **Cancel
-plan** otherwise (`src/components/CloudCancelPlan.tsx`). Someone in a team's
-Cloud never sees it: the Admin sends no `renewal` for a Cloud they don't pay
-for.
+The app has no cancel of its own. Its plan card in Settings (Usage & billing →
+dusk cloud) and on the Cloud's own page in home mode (`CloudPlanOnCloud`)
+keeps **Manage cloud subscription** / **Manage in your browser**, which opens
+the account website; cancelling, resuming and the cancel flow live there
+(`apps/dashboard/src/pages/cancel-flow.tsx`). The session's `renewal` is shown
+read only.
 
-Its sheet asks "Before you go: what's the main reason?" with one-tap chips
-(Missing a feature, Too expensive, Hard to set up, Didn't work as I expected,
-Not using it right now, Something else; tap again to let one go), two optional
-boxes ("What did you expect dusk bot to do?", "What could we have done
-better?"), and **Keep my
-plan** and **Cancel my trial** / **Cancel my plan**. Cancelling never needs an
-answer. The page sends only the survey's words: `cloudAccount.cancelPlan` on
-this computer's page, `cloudPlan.cancel` on the Cloud's page (only from the
-person's click there). Main checks them (`cancelSurvey`: one of the reasons,
-words without one kept as `other`, each box at most 2,000 characters), sends
-`POST /api/cloud/desktop/feedback` first when anything was said, given 8 s and
-let go when it fails or is refused, then `POST
-/api/cloud/desktop/clouds/<id>/cancel` for the Cloud the verified session
-names, never one a page names. After: "Cancelled. Your trial ends on {date},
-and nothing is charged." (a paid plan: "Your plan ends on {date}. You won't be
-charged again."), "The Cloud stops then. Its files are kept {N} days, then
-deleted." (a Team Cloud: it stops for everyone in the team), and "Changed your
-mind? **Keep my plan**" (`keepPlan` / `cloudPlan.keep`, `…/keep`). A plan
-already cancelled shows when it ends and **Keep my plan** in place of Cancel,
-and the trial's own button then reads as the plain manage button.
-
-An Admin from before these routes sends no `renewal`, so the card stays as it
-was (**Manage in your browser**). If the routes are missing anyway (its own
-404, 405 or 501, never its `not_found` for the Cloud), main opens the Cloud
-page's billing (`/cloud/personal/billing`) in the browser and the sheet says
-so. Deploy the Admin before the app release that uses it.
+The Admin still answers `POST /api/cloud/desktop/feedback` and `POST
+/api/cloud/desktop/clouds/<id>/cancel` / `…/keep` for app builds up to 0.2.32,
+which had a Cancel plan sheet; keep those routes until those builds are gone.
 
 #### One card at a time: the notice queue
 

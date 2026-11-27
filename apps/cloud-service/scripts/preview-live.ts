@@ -228,9 +228,9 @@ try {
   });
 
   // 4. cancel, then delete the account (destroying the cloud now), and the provider is left with nothing
-  await step("cancel: the app cancels the plan, it runs to the period's end", async () => {
-    const r = await client.cancelPlan({ answer: "other", improve: "live test" }) as { outcome: string };
-    if (r.outcome !== "cancelled") throw new Error(`cancel ${JSON.stringify(r).slice(0, 160)}`);
+  await step("cancel: the account website cancels the plan, it runs to the period's end", async () => {
+    const { subscriptions } = await web("GET", "/v1/billing/overview") as { subscriptions: Array<{ id: string }> };
+    await web("POST", `/v1/billing/subscriptions/${subscriptions[0]!.id}/cancel`, { survey: { answer: "other", improve: "live test" } });
     const overview = await web("GET", "/v1/billing/overview");
     if (!JSON.stringify(overview).includes("\"cancelAtPeriodEnd\":true")) throw new Error("not marked to cancel");
     await page.goto(`${origin}/app/billing`); await sleep(2000); await shot("06-cancelled");
