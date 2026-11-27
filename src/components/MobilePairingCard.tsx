@@ -55,8 +55,6 @@ export interface PhoneParts {
 type Flow = "loading" | "home" | "platform" | "link";
 export type PhoneKind = "ios" | "android";
 
-/** the Android app is out as a signed APK on dusk.bot (not Google Play): its card is pickable */
-export const ANDROID_APP_OUT = true;
 
 /** a live code is swapped for a new one this long before it ends, so the screen never shows a dead code */
 export const RENEW_BEFORE_MS = 60_000;
@@ -395,7 +393,6 @@ export function MobilePairingCard({ remote, cloudHome = false, email, direct, ch
   }
 
   function pick(next: PhoneKind) {
-    if (next === "android" && !ANDROID_APP_OUT) return;
     haptic("pick");
     setKind(next);
     // signed out, the phone's card opens the app's own sign-in and goes on to its link page once that is done
@@ -519,16 +516,13 @@ export function MobilePairingCard({ remote, cloudHome = false, email, direct, ch
 
   const phoneCard = (option: PhoneKind) => {
     const apple = option === "ios";
-    const off = !apple && !ANDROID_APP_OUT;
     return (
-      <button type="button" data-phone-platform={option} aria-disabled={off || undefined} onClick={() => pick(option)}
-        className={cn(off ? "cursor-default rounded-2xl bg-ink/[0.025] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" : TILE,
-          "flex min-h-[176px] min-w-0 flex-col items-start justify-between gap-6 p-5 text-start")}>
+      <button type="button" data-phone-platform={option} onClick={() => pick(option)}
+        className={cn(TILE, "flex min-h-[176px] min-w-0 flex-col items-start justify-between gap-6 p-5 text-start")}>
         <span className="flex w-full items-start justify-between gap-2">
-          <span className={cn("flex size-14 items-center justify-center", off && "opacity-50 grayscale")}><StoreMark name={apple ? "apple" : "android"} scale={2} /></span>
-          {off && <span className={pill}>{t("settings.phone.androidTag")}</span>}
+          <span className="flex size-14 items-center justify-center"><StoreMark name={apple ? "apple" : "android"} scale={2} /></span>
         </span>
-        <span className={cn("flex flex-col gap-0.5", off && "opacity-60")}>
+        <span className="flex flex-col gap-0.5">
           <span className="text-[16px] font-medium leading-6 text-ink">{t(apple ? "settings.phone.iphone" : "settings.phone.android")}</span>
           <span className="text-[13px] leading-[18px] text-ink-secondary">{t(apple ? "settings.phone.iphoneSub" : "settings.phone.androidSub")}</span>
         </span>

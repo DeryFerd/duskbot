@@ -88,4 +88,11 @@ describe("mobile workspace pairing", () => {
     expect(source).toContain('data-phone-app-store="" href={storeUrl("ios")}');
     expect(words["mobile.desktop.storesSoon"]).toBe("Google Play soon");
   });
+
+  it("never says the Android app is coming: its APK is on dusk.bot/download", () => {
+    const words = en as Record<string, string>;
+    const said = Object.entries(words).filter(([, text]) => /android/i.test(text) && /soon|coming/i.test(text));
+    expect(said).toEqual([]);
+    expect(words["mobile.desktop.noStoreApp"]).toContain("On Android, download it from dusk.bot");
+  });
 });
