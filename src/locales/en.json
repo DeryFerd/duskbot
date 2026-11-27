@@ -8263,6 +8263,7 @@
   "failedReply.noReply": "{engine} didn't reply. Try again.",
   "failedReply.busy": "{engine} is busy right now. Try again in a moment.",
   "failedReply.keyRejected": "{engine} turned down its API key. Update the key to keep going.",
+  "failedReply.keyRejectedOwn": "{engine} turned down its API key. It keeps its own keys, so change it by running {command} in a terminal.",
   "failedReply.plan": "Your plan has reached its limit for this. See your plan to keep going.",
   "failedReply.folder": "This bot's folder was moved or deleted. Pick a folder to keep going.",
   "failedReply.updateKey": "Update key",

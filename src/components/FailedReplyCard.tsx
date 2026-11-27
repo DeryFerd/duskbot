@@ -2,7 +2,7 @@ import { createContext, useMemo, useState } from "react";
 import { t } from "@/lib/i18n";
 import { botEngine, claudeUpdateTarget, signedInChatGpt } from "@/lib/failed-turn";
 import { modelSelectionForPick } from "@/lib/model-choices";
-import { blockerDetail, canOfferSignIn, currentFailureWords, failedReplyDetail, failedReplyKind, failedReplyTitle, mostActionable, restartAlreadyDid, trailingRows } from "@/lib/failed-reply";
+import { blockerDetail, canOfferSignIn, currentFailureWords, failedReplyDetail, failedReplyKind, failedReplyTitle, mostActionable, ownKeyCommand, restartAlreadyDid, trailingRows } from "@/lib/failed-reply";
 import { statusActivity } from "@/lib/activity-runs";
 import { lowerFirst } from "@/lib/lower-first";
 import { resetTime } from "@/lib/limit-resets";
@@ -166,7 +166,8 @@ export function FailedReplyCard({ rows, group = false, botId: ownBotId, threadId
   const onServer = aiRunsOnServer(state.config, capabilities);
   const engineName = lead.engine?.displayName ?? t("failedReply.yourAi");
   const cause = failedTurnCause(tool.name) ?? "";
-  let detail: string | null = failedReplyDetail(lead.kind, engineName, onServer);
+  const ownKeys = ownKeyCommand(lead.engine);
+  let detail: string | null = failedReplyDetail(lead.kind, engineName, onServer, ownKeys);
   let did: string | null = null;
   const actions: CardAction[] = [];
   const retry = onRetry;
@@ -217,7 +218,9 @@ export function FailedReplyCard({ rows, group = false, botId: ownBotId, threadId
         const tile = (canOfferSignIn(lead.kind, lead.engine) || signInNotice) && lead.engine && aiTileOf(lead.engine);
         return { label: t("chat.notice.signIn"), onClick: switchChatGpt ?? (() => tile ? setConnecting(tile) : dispatch(openEngines)) };
       }
-      if (action === "update_key") return { label: t("failedReply.updateKey"), onClick: () => dispatch(openKeys) };
+      // a key saved in Settings never reaches an AI that keeps its own: its setup shows the command that changes it
+      if (action === "update_key") return ownKeys ? { label: t("failedReply.setUp", { engine: engineName }), onClick: () => dispatch(openEngines) }
+        : { label: t("failedReply.updateKey"), onClick: () => dispatch(openKeys) };
       if (action === "open_plan") return { label: t("failedReply.seePlan"), onClick: () => dispatch(openPlan) };
       if (action === "open_folder") return leadBotId ? { label: t("botPanel.page.folder"), onClick: () => openBotSettings(dispatch, "access", { botId: leadBotId, page: "folder" }) } : null;
       if (action === "set_up_engine") return { label: t("failedReply.setUp", { engine: engineName }), onClick: () => dispatch(openEngines) };

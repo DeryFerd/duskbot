@@ -39,7 +39,7 @@ import { ScreenAccessNotice } from "./ScreenAccessNotice";
 import { ComposerNoticeSlot } from "./ComposerNoticeSlot";
 import { macCuaPermissionMessage, missingMacCuaPermissions } from "@/lib/mac-cua-permissions";
 import { claudeUpdateTarget, failedTurnCause, signedOutEngine } from "@/lib/failed-turn";
-import { blockerDetail, failedReplyDetail, failedReplyKind } from "@/lib/failed-reply";
+import { blockerDetail, failedReplyDetail, failedReplyKind, ownKeyCommand } from "@/lib/failed-reply";
 import { resetTime } from "@/lib/limit-resets";
 import { openBotSettings } from "./bot-panel/panel-link";
 import { providerName } from "@/lib/simple-model-menu";
@@ -313,7 +313,7 @@ export function FailedTurnRow({ tool, engine, onRetry, botId, threadId }: {
   const headline = signedOut ? t("chat.error.signedOut", { name: signedOut.displayName })
     : limited ? (tool.limitResetsAt ? t("failedReply.limitHit", { ai, time: resetTime(tool.limitResetsAt) }) : t("failedReply.limitHitUnknown", { ai }))
     : tool.blocker ? blockerDetail(tool.blocker)
-    : failedReplyDetail(kind, engine?.displayName ?? t("failedReply.yourAi"), false);
+    : failedReplyDetail(kind, engine?.displayName ?? t("failedReply.yourAi"), false, ownKeyCommand(engine));
   return (
     <ErrorRow
       message={cause}

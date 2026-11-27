@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { failedReplyDetail, failedReplyKind } from "./failed-reply";
+import { failedReplyDetail, failedReplyKind, failurePreviewLine } from "./failed-reply";
 import type { InstanceInfo } from "@/state/store";
 import { failedTurnTool } from "../../shared/failed-turn";
 import { ERROR_KIND_OF, errorKind, type FailureKind } from "../../shared/failure-plan";
@@ -33,6 +33,19 @@ describe("a failed reply's line", () => {
     expect(kind("You've hit your usage limit")).toBe("usage_limit");
     expect(kind("Interrupted by another dusk bot restart after resuming once; not resumed again.")).toBe("interrupted");
     expect(kind("The model refused this request.")).toBe("other");
+  });
+
+  it("sends a key an AI that keeps its own keys turned down to its own command, never to Settings", () => {
+    const hermes = { instanceId: "hermes", driverKind: "hermesAgent", displayName: "Hermes", access: "custom", install: { signInCommand: "hermes setup" },
+      snapshot: { state: "available", authenticated: true } } as InstanceInfo;
+    const tool = failedTurnTool("Anthropic HTTP 401: invalid x-api-key", { reason: "key_rejected" });
+    expect(errorKind(failedReplyKind(tool, hermes, true))).toBe("key_rejected");
+    const line = failurePreviewLine(tool, hermes);
+    expect(line).toContain("hermes setup");
+    expect(line).not.toMatch(/Update the key/u);
+    // an AI on a key saved in dusk bot keeps the Settings line
+    const keyed = { ...claude, access: "api" } as InstanceInfo;
+    expect(failurePreviewLine(tool, keyed)).toMatch(/Update the key/u);
   });
 
   it("reads a refused sign-in on an AI that runs on a pasted key as a key to update", () => {
