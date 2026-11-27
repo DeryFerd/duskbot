@@ -421,9 +421,11 @@ describe("longCommandsPrompt", () => {
   it("names Bash's limit everywhere and vm_exec's own limit only with a Local VM", () => {
     for (const kind of [null, "local", "vps"] as const) {
       const text = longCommandsPrompt(kind);
-      expect(text).toContain("`timeout` in milliseconds, up to 600000");
-      expect(text).toContain("Never wait inside a command for CI, a deploy or another job: check once");
-      expect(text).toContain("check once, then set wait_until to check back and end your turn. When the person writes while you work, answer them first.");
+      expect(text).toContain("`timeout` in ms, up to 600000");
+      expect(text).toContain("Never wait inside a command for CI or a deploy: check once");
+      expect(text).toContain("check once, set wait_until and end your turn. When the person writes while you work, answer them first.");
+      expect(text).toContain("`find ~ -maxdepth 8 -iname`");
+      expect(text).toContain("`gh auth status`");
       expect(text).not.toContain("vm_exec");
     }
     for (const kind of ["vm-private", "vm-shared"] as const) {
