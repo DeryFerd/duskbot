@@ -118,6 +118,15 @@ const pressedButtonOf = (buttons: number): PreviewStreamMouseButton =>
   buttons & 1 ? "left" : buttons & 2 ? "right" : buttons & 4 ? "middle" : "none";
 
 /** A viewer that may act, unless another viewer holds the browser; its first press takes it. */
+const PLAIN_KEY = /^(?:Key([A-Z])|Digit([0-9]))$/;
+/** A key pressed with AltGr, which Chrome on Windows reports as Ctrl+Alt: it makes a character of the layout's (a Ctrl+Alt
+ * shortcut on a letter or digit still reads as that letter or digit). */
+export function isAltGraph(event: Pick<KeyboardEvent, "key" | "code" | "ctrlKey" | "altKey" | "metaKey">): boolean {
+  if (!event.ctrlKey || !event.altKey || event.metaKey || [...event.key].length !== 1) return false;
+  const plain = PLAIN_KEY.exec(event.code);
+  return !plain || (plain[1] ?? plain[2])!.toLowerCase() !== event.key.toLowerCase();
+}
+
 export const operable = (control: PreviewStreamControl | null): boolean =>
   control !== null && control.canOperate && control.controller !== "another-viewer";
 
@@ -603,14 +612,18 @@ export function StreamSurface(props: {
       }
       return;
     }
-    const shortcut = event.ctrlKey || event.metaKey;
+    // Windows reports AltGr as Ctrl+Alt: with it the key is the character it makes (@, €, { on most non-US layouts),
+    // not a Ctrl+Alt shortcut for the page
+    const altGraph = isAltGraph(event);
+    const shortcut = (event.ctrlKey || event.metaKey) && !altGraph;
     // Paste arrives as a paste event carrying this device's clipboard. Copy and cut run in the page, which sends the
     // copied text back. Shift+Insert is the same paste.
     if (shortcut && event.key.toLowerCase() === "v") return;
     if (event.shiftKey && event.key === "Insert") return;
     // Enter carries "\r" like Puppeteer's key table, so forms submit and textareas break lines.
     const text = shortcut ? undefined : [...event.key].length === 1 ? event.key : event.key === "Enter" ? "\r" : undefined;
-    send({ type: "key", action, key: event.key, code: event.code, keyCode: event.keyCode, ...(action === "down" && text !== undefined ? { text } : {}), modifiers: previewStreamModifiers(event) });
+    const modifiers = altGraph ? previewStreamModifiers({ altKey: false, ctrlKey: false, metaKey: false, shiftKey: event.shiftKey }) : previewStreamModifiers(event);
+    send({ type: "key", action, key: event.key, code: event.code, keyCode: event.keyCode, ...(action === "down" && text !== undefined ? { text } : {}), modifiers });
     // Some Android keyboards edit the textarea even when keydown is prevented.
     keySentRef.current = action === "down" && !shortcut && (text !== undefined || event.key === "Backspace" || event.key === "Delete");
     // Shortcuts stay with the app (copy, paste, keybindings); other keys belong to the page.
