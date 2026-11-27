@@ -392,8 +392,8 @@ export const Composer = memo(function Composer({
   const inlineCommand = useMemo(() => {
     const found = inlineSlashCommand(text, builtInCommands.flatMap((command) => command.kind === "command" ? [command.id] : []));
     if (!found) return undefined;
-    const hintKey = found.id === "goal" && group ? "composer.commandHint.goalRoom" : `composer.commandHint.${found.id}` as const;
-    return { end: found.end, color: group ? "var(--color-accent)" : botCommandText(bot?.color ?? "green"), hint: found.hint ? t(hintKey) : null };
+    const hintKey = found.id === "new" ? null : found.id === "goal" && group ? "composer.commandHint.goalRoom" : `composer.commandHint.${found.id}` as const;
+    return { end: found.end, color: group ? "var(--color-accent)" : botCommandText(bot?.color ?? "green"), hint: found.hint && hintKey ? t(hintKey) : null };
   }, [text, builtInCommands, group, bot?.color, locale]);
 
   const mention = mentionQueryAt(text, caret); const teammates = useTeammates(); const viewer = useViewerEmail();
