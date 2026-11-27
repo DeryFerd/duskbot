@@ -21,7 +21,7 @@ const EVERYDAY_PREFIXES: Record<string, readonly string[]> = {
     "computer.screen.", "vm.cloud.", "browser.",
   ],
   "dusk cloud: buying it, setting it up, moving to it and sharing with it": [
-    "cloudBuy.", "cloudIntro.", "cloudTrial.", "cloudCancel.", "cloudSetup.", "cloudIntent.", "cloudNotice.", "cloudHowTo.",
+    "cloudBuy.", "cloudIntro.", "cloudTrial.", "cloudSetup.", "cloudIntent.", "cloudNotice.", "cloudHowTo.",
     "cloudPower.", "cloudSignIn.", "cloudAdd.", "cloudHome.", "cloudPhone.", "cloudAccount.", "pro.",
     "files.", "usageMeter.", "roomCard.", "botLimit.",
   ],
