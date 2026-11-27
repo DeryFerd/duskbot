@@ -6,14 +6,12 @@ import { t, tFromServer } from "@/lib/i18n";
 import { describePart, describeSkip, preparePictures, saveShareFile, type ShareSkip } from "@/lib/team-share";
 import { api } from "@/state/store";
 import { cn } from "@/lib/cn";
-import { dialogPrimaryCls, fieldLabelCls, footnoteCls, formBodyCls, formCloseCls, formFooterCls, formHeaderCls, formSheetCls, formTitleCls, mdPrimaryCls, mdSecondaryCls, rowHintCls, textAreaCls, textFieldCls } from "./ui/GrokDialog";
+import { SettingRow, SettingsGroup, SettingsRows, SIMPLE_BUTTONS, SIMPLE_CARD, Switch } from "./SettingsPrimitives";
+import { compactBackdropStyle, compactSheetStyle } from "./compact-settings-sheet";
+import "../styles/settings.css";
 import type { NewBotDefaults } from "../../shared/new-bot-defaults";
 import type { PackageDocument, PackageSummary } from "../../shared/package-format";
 import { friendlyError } from "@/lib/plain-error";
-
-const shareLabelCls = "pl-3.5 text-[12px] leading-4 tracking-[0.01em] text-ink/68";
-const shareCardCls = "rounded-[14px] bg-menu px-3.5 py-2.5 text-[13px] leading-[18px] outline-1 -outline-offset-1 outline-transparent [outline-style:solid]";
-const shareCheckCls = "flex cursor-pointer items-center gap-2 text-[13px] leading-[18px] text-ink";
 
 export interface PresetShareResponse {
   document: PackageDocument;
@@ -60,34 +58,35 @@ export function SharePresetContents({ preview, localSkips }: { preview: PresetSh
   ];
   const skipped = [...localSkips, ...preview.skipped.map((skip) => describeSkip(skip, preview.document))];
   return (
-    <div className="flex flex-col gap-2">
-      <div className={shareLabelCls}>{t("teamShare.included")}</div>
-      <dl className={cn(shareCardCls, "m-0 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5")}>
-        {rows.map(([label, value]) => (
-          <div key={label} className="contents">
-            <dt className="text-ink/68">{label}</dt>
-            <dd className="max-w-[300px] truncate text-right text-ink" title={value}>{value}</dd>
-          </div>
-        ))}
-      </dl>
-      <p className={footnoteCls}>{t("presetShare.never")}</p>
+    <>
+      <SettingsGroup label={t("teamShare.included")} footnote={t("presetShare.never")}>
+        <SettingsRows>
+          {rows.map(([label, value]) => (
+            <SettingRow key={label} title={label}>
+              <span className="max-w-[300px] truncate text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary" title={value}>{value}</span>
+            </SettingRow>
+          ))}
+        </SettingsRows>
+      </SettingsGroup>
       {preview.redacted.length > 0 && (
-        <div className={cn(shareCardCls, "text-ink/68")}>
-          <div className="text-ink">{t("teamShare.redacted")}</div>
-          <ul className="m-0 mt-1 list-disc pl-5">
-            {preview.redacted.map((part) => <li key={part}>{describePart(part, preview.document)}</li>)}
-          </ul>
-        </div>
+        <SettingsGroup label={t("teamShare.redacted")}>
+          <div className={cn(SIMPLE_CARD, "px-3 py-2.5 text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary")}>
+            <ul className="m-0 list-disc pl-5">
+              {preview.redacted.map((part) => <li key={part}>{describePart(part, preview.document)}</li>)}
+            </ul>
+          </div>
+        </SettingsGroup>
       )}
       {skipped.length > 0 && (
-        <div className={cn(shareCardCls, "text-ink/68")}>
-          <div className="text-ink">{t("teamShare.skipped")}</div>
-          <ul className="m-0 mt-1 list-disc pl-5">
-            {skipped.map((line, index) => <li key={`${line}-${index}`}>{line}</li>)}
-          </ul>
-        </div>
+        <SettingsGroup label={t("teamShare.skipped")}>
+          <div className={cn(SIMPLE_CARD, "px-3 py-2.5 text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary")}>
+            <ul className="m-0 list-disc pl-5">
+              {skipped.map((line, index) => <li key={`${line}-${index}`}>{line}</li>)}
+            </ul>
+          </div>
+        </SettingsGroup>
       )}
-    </div>
+    </>
   );
 }
 
@@ -170,12 +169,14 @@ export function SharePresetDialog({ onClose }: { onClose: () => void }) {
   }, []);
 
   const localSkips = includePicture ? picture?.skipped ?? [] : [];
+  const field = "h-[30px] w-[220px] max-w-full rounded-lg border border-transparent bg-transparent px-2 text-[13px] leading-[18px] tracking-[0.015em] text-ink outline-none placeholder:text-ink-secondary";
   return createPortal(
-    <div className="ui-dialog-scrim fixed inset-0 z-[80] flex items-center justify-center p-4" onMouseDown={(event) => {
+    <div data-settings-sheet data-settings-look="simple" className="settings-scrim z-[80]" onMouseDown={(event) => {
       if (event.target === event.currentTarget && !saving) onClose();
     }}>
+      <div aria-hidden="true" className="settings-backdrop" style={compactBackdropStyle} />
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="share-preset-title" tabIndex={-1}
-        className={cn(formSheetCls, "max-h-[90vh] max-w-[480px]", "focus-visible:outline-none!")}
+        className="settings-dialog" style={compactSheetStyle(520)}
         onKeyDown={(event) => {
           if (event.key === "Escape" && !saving) { event.stopPropagation(); onClose(); }
           if (event.key === "Tab") {
@@ -186,69 +187,72 @@ export function SharePresetDialog({ onClose }: { onClose: () => void }) {
             else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
           }
         }}>
-        <header className={formHeaderCls}>
-          <h2 id="share-preset-title" className={formTitleCls}>{t("presetShare.title")}</h2>
-          <button aria-label={t("presetShare.close")} disabled={saving} onClick={onClose} className={formCloseCls}><X size={16} /></button>
-        </header>
-
-        <div className={cn(formBodyCls, "flex flex-col gap-3")}>
-          {saved ? (
-            <>
-              <div className="flex flex-col gap-0.5">
-                <p className="m-0 flex items-center gap-1.5 text-[13px] leading-[18px] text-ink"><Check size={14} className="shrink-0 text-success" />{t("teamShare.saved", { filename: saved.filename })}</p>
-                <p className={cn(rowHintCls, "m-0")}>{t("presetShare.savedHint")}</p>
-              </div>
-              <SharePresetContents preview={saved} localSkips={localSkips} />
-            </>
-          ) : (
-            <>
-              <p className={cn(rowHintCls, "m-0 text-pretty")}>{t("presetShare.intro")}</p>
-              {preview
-                ? <SharePresetContents preview={preview} localSkips={localSkips} />
-                : !error && <div className={cn(rowHintCls, "flex items-center gap-2 py-3")}><Loader2 size={14} className="animate-spin" />{t("presetShare.preparing")}</div>}
-              <fieldset className="m-0 flex flex-col gap-2 border-0 p-0" disabled={saving}>
-                <label className={shareCheckCls}>
-                  <input type="checkbox" className="size-4 accent-[var(--color-ink)]" checked={includePicture} onChange={(event) => setIncludePicture(event.target.checked)} />
-                  {t("presetShare.includePicture")}
-                </label>
-                <label className={shareCheckCls}>
-                  <input type="checkbox" className="size-4 accent-[var(--color-ink)]" checked={includeNotes} onChange={(event) => setIncludeNotes(event.target.checked)} />
-                  {t("presetShare.includeNotes")}
-                </label>
-              </fieldset>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="flex flex-col gap-1"><span className={fieldLabelCls}>{t("presetShare.name")}</span>
-                  <input value={name} maxLength={100} disabled={saving} onChange={(event) => setName(event.target.value)} className={textFieldCls} />
-                </label>
-                <label className="flex flex-col gap-1"><span className={fieldLabelCls}>{t("teamShare.release")}</span>
-                  <input value={release} maxLength={20} disabled={saving} placeholder="1.0.0" onChange={(event) => setRelease(event.target.value)} className={textFieldCls} />
-                </label>
-              </div>
-              <label className="flex flex-col gap-1"><span className={fieldLabelCls}>{t("presetShare.description")}</span>
-                <input value={description} maxLength={300} disabled={saving} onChange={(event) => setDescription(event.target.value)} className={textFieldCls} />
-              </label>
-              <label className="flex flex-col gap-1"><span className={fieldLabelCls}>{t("teamShare.notes")}</span>
-                <textarea value={notes} maxLength={4000} rows={2} disabled={saving} onChange={(event) => setNotes(event.target.value)} className={textAreaCls} />
-              </label>
-            </>
-          )}
-        </div>
-
-        {error && <p role="alert" className="m-0 px-4 pt-2 text-[12px] leading-4 text-danger">{error}</p>}
-        <footer className={formFooterCls}>
-          {saved ? (
-            <button onClick={onClose} className={dialogPrimaryCls}>{t("teamShare.done")}</button>
-          ) : (
-            <>
-              <button disabled={saving} onClick={onClose} className={mdSecondaryCls}>{t("common.cancel")}</button>
-              <button disabled={saving || !preview} onClick={() => void save()}
-                className={mdPrimaryCls}>
-                {saving && <Loader2 size={14} className="animate-spin" />}
-                {saving ? t("teamShare.saving") : t("teamShare.save")}
-              </button>
-            </>
-          )}
-        </footer>
+        <section className="settings-panel min-h-0">
+          <button type="button" aria-label={t("presetShare.close")} disabled={saving} onClick={onClose} className="settings-close disabled:opacity-50"><X size={14} /></button>
+          <div className="settings-pane-header">
+            <h2 id="share-preset-title" className="settings-pane-title">{t("presetShare.title")}</h2>
+          </div>
+          <div className="settings-scroll">
+            <div className={cn("settings-pane", SIMPLE_BUTTONS)} style={{ gap: 24, paddingBottom: 12 }}>
+              {saved ? (
+                <>
+                  <div className="flex flex-col gap-0.5 px-2.5">
+                    <p className="m-0 flex items-center gap-1.5 text-[13px] leading-[18px] tracking-[0.015em] text-ink"><Check size={14} className="shrink-0 text-success" />{t("teamShare.saved", { filename: saved.filename })}</p>
+                    <p className="m-0 text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary">{t("presetShare.savedHint")}</p>
+                  </div>
+                  <SharePresetContents preview={saved} localSkips={localSkips} />
+                </>
+              ) : (
+                <>
+                  <p className="m-0 px-2.5 text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary text-pretty">{t("presetShare.intro")}</p>
+                  {preview
+                    ? <SharePresetContents preview={preview} localSkips={localSkips} />
+                    : !error && <div className="flex items-center gap-2 px-2.5 py-3 text-[13px] leading-[18px] text-ink-secondary"><Loader2 size={14} className="animate-spin" />{t("presetShare.preparing")}</div>}
+                  <fieldset className="m-0 border-0 p-0" disabled={saving}>
+                    <SettingsRows>
+                      <SettingRow title={t("presetShare.includePicture")}>
+                        <Switch checked={includePicture} aria-label={t("presetShare.includePicture")} onClick={() => setIncludePicture((value) => !value)} />
+                      </SettingRow>
+                      <SettingRow title={t("presetShare.includeNotes")}>
+                        <Switch checked={includeNotes} aria-label={t("presetShare.includeNotes")} onClick={() => setIncludeNotes((value) => !value)} />
+                      </SettingRow>
+                    </SettingsRows>
+                  </fieldset>
+                  <fieldset className="m-0 border-0 p-0" disabled={saving}>
+                    <SettingsRows>
+                      <SettingRow title={t("presetShare.name")}>
+                        <input value={name} maxLength={100} disabled={saving} aria-label={t("presetShare.name")} onChange={(event) => setName(event.target.value)} className={field} />
+                      </SettingRow>
+                      <SettingRow title={t("teamShare.release")}>
+                        <input value={release} maxLength={20} disabled={saving} aria-label={t("teamShare.release")} placeholder="1.0.0" onChange={(event) => setRelease(event.target.value)} className={field} />
+                      </SettingRow>
+                      <SettingRow title={t("presetShare.description")}>
+                        <input value={description} maxLength={300} disabled={saving} aria-label={t("presetShare.description")} onChange={(event) => setDescription(event.target.value)} className={field} />
+                      </SettingRow>
+                      <SettingRow title={t("teamShare.notes")}>
+                        <textarea value={notes} maxLength={4000} rows={2} disabled={saving} aria-label={t("teamShare.notes")} onChange={(event) => setNotes(event.target.value)} className={cn(field, "h-auto resize-none py-1.5")} />
+                      </SettingRow>
+                    </SettingsRows>
+                  </fieldset>
+                </>
+              )}
+            </div>
+          </div>
+          {error && <p role="alert" className="m-0 px-6 pb-2 text-[13px] leading-[18px] text-danger">{error}</p>}
+          <div className={cn("flex shrink-0 items-center justify-end gap-2 px-6 pb-5 pt-1", SIMPLE_BUTTONS)}>
+            {saved ? (
+              <button type="button" onClick={onClose} className="ui-button ui-button-primary">{t("teamShare.done")}</button>
+            ) : (
+              <>
+                <button type="button" disabled={saving} onClick={onClose} className="ui-button">{t("common.cancel")}</button>
+                <button type="button" disabled={saving || !preview} onClick={() => void save()} className="ui-button ui-button-primary">
+                  {saving && <Loader2 size={14} className="animate-spin" />}
+                  {saving ? t("teamShare.saving") : t("teamShare.save")}
+                </button>
+              </>
+            )}
+          </div>
+        </section>
       </div>
     </div>,
     document.body,
