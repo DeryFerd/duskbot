@@ -133,3 +133,9 @@ describe("Cerebras provider", () => {
     }
   });
 });
+it("takes the Cerebras key only over https or loopback", () => {
+  expect(() => CerebrasDriver.decodeConfig({ url: "http://gateway.example.test/v1" })).toThrow("requires HTTPS");
+  expect(CerebrasDriver.decodeConfig({ url: "https://gateway.example.test/v1" }).url).toBe("https://gateway.example.test/v1");
+  expect(CerebrasDriver.decodeConfig({ url: "http://127.0.0.1:11434/v1" }).url).toBe("http://127.0.0.1:11434/v1");
+  expect(CerebrasDriver.decodeConfig({ url: "http://localhost:8080/v1" }).url).toBe("http://localhost:8080/v1");
+});
