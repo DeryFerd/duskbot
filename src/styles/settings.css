@@ -654,7 +654,8 @@
   .settings-nav-item:active { background: color-mix(in srgb, var(--color-ink) 4%, var(--color-menu)); }
   .settings-nav-item > .ui-icon:not(.settings-nav-chevron) { color: color-mix(in srgb, var(--color-ink) 68%, transparent); }
   .settings-nav-chevron { display: block; flex-shrink: 0; margin-inline-start: auto; color: color-mix(in srgb, var(--color-ink) 40%, transparent); }
-  .settings-close { display: none; }
+  .settings-dialog[data-phone-view] .settings-close { display: none; }
+  .settings-dialog:not([data-phone-view]) .settings-pane-header { padding-inline-end: 44px; }
   .settings-panel { height: 100%; }
   .settings-wipe { background-color: var(--settings-phone-page); }
   .settings-pane-header {
