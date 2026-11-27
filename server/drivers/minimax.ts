@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import type { ModelCatalog, ProviderDriver } from "../contracts.ts";
 import { createOpenAIChatRuntime } from "./openai-chat.ts";
+import { requireHttpsOrThisNetwork } from "./openai-compat.ts";
 
 const DRIVER_KIND = "minimax";
 const API_KEY_ENV = "MINIMAX_API_KEY";
@@ -42,7 +43,9 @@ const driverConfigSchema = z.object({ url: z.string().optional() });
 
 function normalizedApiUrl(value: string): string {
   const root = value.trim().replace(/\/+$/, "");
-  return root.endsWith("/v1") ? root : `${root}/v1`;
+  const url = root.endsWith("/v1") ? root : `${root}/v1`;
+  requireHttpsOrThisNetwork(url, "MiniMax");
+  return url;
 }
 
 export function loadLocalMiniMaxConfig(home = homedir()): LocalMiniMaxConfig {
