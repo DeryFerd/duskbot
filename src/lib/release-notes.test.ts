@@ -45,3 +45,37 @@ describe("once a launch", () => {
     expect(store.get("dusk-whats-new:twice")).toBe("1.2.12");
   });
 });
+
+describe("New, Better and Fixed", () => {
+  it("keeps a change's kind and icon when they are known ones, and drops odd ones", () => {
+    const [release] = parseChangelog({ releases: [{ version: "0.2.32", items: [
+      { text: "a", area: "all", kind: "new", icon: "cloud" },
+      { text: "b", area: "all", kind: "shiny", icon: "rocket" },
+    ] }] });
+    expect(release!.items).toEqual([{ text: "a", area: "all", kind: "new", icon: "cloud" }, { text: "b", area: "all" }]);
+  });
+
+  it("groups in that order, unkinded changes as Better, and a release with no kinds as one list", async () => {
+    const { groupChanges } = await import("./release-notes");
+    const items = parseChangelog({ releases: [{ version: "0.2.32", items: [
+      { text: "fix", area: "all", kind: "fixed" }, { text: "plain", area: "all" }, { text: "added", area: "all", kind: "new" },
+    ] }] })[0]!.items;
+    expect(groupChanges(items).map((group) => [group.kind, group.items.map((change) => change.text)])).toEqual([["new", ["added"]], ["better", ["plain"]], ["fixed", ["fix"]]]);
+    expect(groupChanges(items.map(({ kind: _kind, ...rest }) => rest)).map((group) => group.kind)).toEqual([null]);
+    expect(groupChanges([])).toEqual([]);
+  });
+});
+
+describe("the update a surface still owes its notes for", () => {
+  it("is remembered until told, never on a fresh install, and not again once told", async () => {
+    const { updateToTell, updateTold } = await import("./release-notes");
+    const store = memory();
+    expect(updateToTell("desktop", null, null, store)).toBeNull();
+    expect(updateToTell("desktop", "0.2.32", "0.2.31", store)).toEqual({ from: "0.2.31", to: "0.2.32" });
+    expect(updateToTell("desktop", null, null, store)).toEqual({ from: "0.2.31", to: "0.2.32" });
+    updateTold("desktop", "0.2.32", store);
+    expect(updateToTell("desktop", null, null, store)).toBeNull();
+    expect(updateToTell("desktop", "0.2.32", "0.2.31", store)).toBeNull();
+    expect(updateToTell("desktop", "0.2.33", "dev", store)).toEqual({ from: null, to: "0.2.33" });
+  });
+});

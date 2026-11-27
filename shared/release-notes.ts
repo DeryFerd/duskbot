@@ -7,10 +7,16 @@ export const LATEST_URL = "https://dusk.bot/releases/latest.json";
 export const LATEST_APK_URL = "https://github.com/DuskBotAI/duskbot-releases/releases/latest/download/DuskBot.apk";
 
 export type ReleaseArea = "desktop" | "phone" | "server" | "cli" | "all";
-export interface ReleaseItem { text: string; area: ReleaseArea; issue?: number; pr?: number }
+/** which heading a change sits under in the apps' What's new; a release with none set is one plain list */
+export type ReleaseKind = "new" | "better" | "fixed";
+/** the small pixel picture beside a change; unset, its kind's */
+export type ReleaseIcon = "spark" | "bolt" | "check" | "cloud" | "chat" | "phone" | "file" | "photo" | "key" | "moon" | "eraser" | "bell" | "eye";
+export interface ReleaseItem { text: string; area: ReleaseArea; kind?: ReleaseKind; icon?: ReleaseIcon; issue?: number; pr?: number }
 export interface Release { version: string; date?: string; title?: string; items: ReleaseItem[] }
 
 const AREAS: readonly ReleaseArea[] = ["desktop", "phone", "server", "cli", "all"];
+export const RELEASE_KINDS: readonly ReleaseKind[] = ["new", "better", "fixed"];
+export const RELEASE_ICONS: readonly ReleaseIcon[] = ["spark", "bolt", "check", "cloud", "chat", "phone", "file", "photo", "key", "moon", "eraser", "bell", "eye"];
 const VERSION = /^\d+\.\d+\.\d+$/;
 const MAX_RELEASES = 60;
 const MAX_ITEMS = 40;
@@ -39,8 +45,14 @@ export function parseChangelog(body: unknown): Release[] {
       const text = line((item as { text?: unknown } | null)?.text, 300);
       if (!text) continue;
       const area = (item as { area?: unknown }).area;
+      const kind = (item as { kind?: unknown }).kind, icon = (item as { icon?: unknown }).icon;
       const issue = count((item as { issue?: unknown }).issue), pr = count((item as { pr?: unknown }).pr);
-      items.push({ text, area: AREAS.includes(area as ReleaseArea) ? area as ReleaseArea : "all", ...(issue ? { issue } : {}), ...(pr ? { pr } : {}) });
+      items.push({
+        text, area: AREAS.includes(area as ReleaseArea) ? area as ReleaseArea : "all",
+        ...(RELEASE_KINDS.includes(kind as ReleaseKind) ? { kind: kind as ReleaseKind } : {}),
+        ...(RELEASE_ICONS.includes(icon as ReleaseIcon) ? { icon: icon as ReleaseIcon } : {}),
+        ...(issue ? { issue } : {}), ...(pr ? { pr } : {}),
+      });
     }
     if (!items.length) continue;
     const date = line((entry as { date?: unknown }).date, 10);

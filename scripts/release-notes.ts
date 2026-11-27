@@ -20,7 +20,7 @@ export const CHANGELOG = join(ROOT, "apps", "site", "public", "landing", "releas
 export const UNRELEASED = join(ROOT, "docs", "releases", "unreleased.json");
 
 export type Area = "desktop" | "phone" | "server" | "cli" | "all";
-export interface Item { text: string; area: Area; issue?: number; pr?: number }
+export interface Item { text: string; area: Area; kind?: "new" | "better" | "fixed"; icon?: string; issue?: number; pr?: number }
 export interface Entry { version: string; date: string; title?: string; items: Item[] }
 export interface Changelog { v: 1; releases: Entry[] }
 export interface Commit { sha: string; subject: string; files: string[] }
