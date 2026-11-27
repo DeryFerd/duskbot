@@ -644,6 +644,8 @@ describe("shared files", () => {
     expect(sanitizeSharedFileName("page.html", "text/plain")).toBe("page.html.txt");
     expect(sanitizeSharedFileName("Dockerfile", "text/plain")).toBe("Dockerfile");
     expect(sanitizeSharedFileName("server.log", "text/plain")).toBe("server.log");
+    expect(sanitizeSharedFileName("events.jsonl", "text/plain")).toBe("events.jsonl");
+    expect(sanitizeSharedFileName("map.geojson", "text/plain")).toBe("map.geojson");
     expect(sanitizeSharedFileName("notes.txt", "text/plain")).toBe("notes.txt");
     expect(() => sanitizeSharedFileName("../../secret.txt", "text/plain")).toThrow(/filename, not a path/);
     expect(() => sanitizeSharedFileName("..\\..\\secret.txt", "text/plain")).toThrow(/filename, not a path/);

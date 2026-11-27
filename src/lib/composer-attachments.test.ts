@@ -587,6 +587,16 @@ describe("private document intake", () => {
     expect(tile("setup.exe", "application/x-msdownload")).toBeNull();
   });
 
+  it("uploads JSON-family data and rotated logs as text, whatever type the system gives them", () => {
+    for (const name of ["events.jsonl", "events.ndjson", "settings.jsonc", "config.json5", "map.geojson", "app.log.1", "server.LOG.12", "data.json", "app.log"]) {
+      for (const type of ["", "application/octet-stream"]) {
+        expect(pendingFileAttachment({ name, type, size: 2048 }), `${name} ${type}`).toMatchObject({ kind: "file", name, uploading: true });
+      }
+    }
+    expect(pendingFileAttachment({ name: "a.out", type: "", size: 2048 })).toBeNull();
+    expect(pendingFileAttachment({ name: "catalog.1", type: "", size: 2048 })).toBeNull();
+  });
+
   it("recognises supported documents by declared mime or filename", () => {
     expect(documentMime({ name: "notes.bin", type: "text/markdown; charset=utf-8" })).toBe("text/markdown");
     expect(documentMime({ name: "REPORT.PDF", type: "" })).toBe("application/pdf");
