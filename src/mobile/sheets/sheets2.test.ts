@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AppEntry } from "@/components/connect-apps/catalog";
 import { appIsAdded } from "./ConnectorsSheet";
 import { routineResultsThread } from "./RoutinesSheet";
-import { accountRows, shownComputer } from "./SettingsSheet";
+import { accountRows, planBillingUrl, shownComputer } from "./SettingsSheet";
 import { LEGAL_LINKS, SUPPORT_EMAIL, supportMail } from "../legal";
 import { swipeOffset, swipeRestingPosition } from "./SwipeRow";
 
@@ -62,6 +62,12 @@ describe("settings account rows", () => {
     expect(accountRows({ native: true, identity: session }).dashboard).toBe(false);
     expect(accountRows({ native: true, identity: nothing }).dashboard).toBe(false);
     expect(accountRows({ native: false, identity: nothing }).dashboard).toBe(true);
+  });
+
+  it("Plan & billing opens the account page's plan & billing on the account's own service, only where the dashboard may be linked", () => {
+    expect(planBillingUrl("https://preview.dusk.bot")).toBe("https://preview.dusk.bot/account#billing");
+    expect(planBillingUrl(undefined)).toBe("https://dusk.bot/account#billing");
+    expect(accountRows({ native: true, identity: session }).dashboard, "the store apps never show it").toBe(false);
   });
 
   it("a signed-in phone can sign out and delete the account", () => {

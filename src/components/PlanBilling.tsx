@@ -75,7 +75,7 @@ export function PlanBillingRow() {
   const sub = useSubPage();
   if (!plan) return null;
   const title = t("settings.planBilling.title");
-  return <NavRow data-settings-open={PLAN_BILLING_PAGE} data-panel-page={PLAN_BILLING_PAGE} title={title} value={plan.tier ? cloudPlanLabel(plan.tier) : undefined} onClick={() => sub.open(PLAN_BILLING_PAGE, title)} />;
+  return <NavRow data-settings-open={PLAN_BILLING_PAGE} data-panel-page={PLAN_BILLING_PAGE} pixel="cloud" title={title} value={plan.tier ? cloudPlanLabel(plan.tier) : undefined} onClick={() => sub.open(PLAN_BILLING_PAGE, title)} />;
 }
 
 /** Plan & billing: the plan and when it renews, the account page for the card and invoices, and at the very bottom a quiet

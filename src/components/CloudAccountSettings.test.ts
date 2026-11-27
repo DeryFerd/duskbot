@@ -62,7 +62,7 @@ it("names the verified tier; no tier is today's Pro, and a tier newer than the a
   await ready(free);
   for (const [tier, text] of [[undefined, "Pro active"], ["personal", "Personal active"], ["pro", "Pro active"], ["max", "Max active"], ["team", "Cloud active"], ["constructor", "Cloud active"]] as const) {
     push({ ...free, entitlement: { plan: "pro", ...(tier ? { tier } : {}), status: "active", expiresAt: 1_900_000_000_000, version: 3 } });
-    expect(render().html).toContain(`${text} · verified by dusk cloud`); expect(render().html).toContain("Manage cloud subscription");
+    expect(render().html).toContain(`${text} · verified by dusk cloud`); expect(render().html).not.toContain("Manage cloud subscription");
   }
   push({ ...free, entitlement: { plan: "pro", tier: "max", status: "inactive", expiresAt: null, version: 4 } });
   expect(render().html).toContain("Max · not active right now"); expect(render().html).not.toContain("Max active");
@@ -97,14 +97,14 @@ it("a failed re-check keeps the plan, Cloud and Connect, and only says it is che
   const machine = { status: "ready" as const, origin: "https://home-7f3k2.fly.dev" };
   await ready({ ...free, entitlement: { plan: "pro", tier: "max", status: "active", expiresAt: 1_900_000_000_000, version: 3 }, machine, checking: true });
   const { html } = render();
-  all(html, ["Max active · verified by dusk cloud", "Checking with dusk cloud…", "Open the cloud", "Manage cloud subscription"]);
-  none(html, [...BUY, ...ALARM]);
+  all(html, ["Max active · verified by dusk cloud", "Checking with dusk cloud…", "Open the cloud"]);
+  none(html, [...BUY, ...ALARM, "Manage cloud subscription"]);
 });
 it("dusk cloud out of reach: the plan last verified stays named, calmly, with no offer to buy", async () => {
   await ready({ status: "unavailable", message: "unreachable", account: { id: "fixture", email: "person@example.test" }, lastPlan: { tier: "personal", active: true } });
   let html = render().html;
-  all(html, ["Personal · checking with dusk cloud…", "be reached right now, so this app", "Nothing has changed with your plan", "Manage cloud subscription"]);
-  none(html, [...BUY, ...ALARM]);
+  all(html, ["Personal · checking with dusk cloud…", "be reached right now, so this app", "Nothing has changed with your plan"]);
+  none(html, [...BUY, ...ALARM, "Manage cloud subscription"]);
   push({ status: "unavailable", message: "unreachable", account: { id: "fixture", email: "person@example.test" } });
   html = render().html; expect(html).toContain("Open your plan page"); none(html, [...BUY, ...ALARM]);
 });
@@ -224,7 +224,7 @@ it("setting up shows the Cloud page's steps, a slow setup and a failed setup's n
   push({ ...paid, machine: { status: "failed", retryAt: Date.UTC(2026, 9, 2, 12, 30) } });
   html = render().html; all(html, ["Nothing was lost", "tried again automatically at"]);
 });
-it("on the person's own Cloud, Settings shows the plan read only, with Manage, and Sign in again once this computer's sign-in ended", async () => {
+it("on the person's own Cloud, Settings shows the plan read only, and Sign in again once this computer's sign-in ended", async () => {
   const plan = { state: vi.fn().mockResolvedValue({ status: "paid", tier: "max" }), manage: vi.fn().mockResolvedValue(undefined), signIn: vi.fn().mockResolvedValue(undefined) };
   vi.stubGlobal("window", { duskDesktop: { cloudPlan: plan } });
   const settings = render({ cloudHome: true }).html; expect(settings).not.toContain("local desktop app");
@@ -232,9 +232,8 @@ it("on the person's own Cloud, Settings shows the plan read only, with Manage, a
   const view = () => { f.index = 0; f.effects = []; let tree: ReactNode; function Capture() { tree = CloudPlanOnCloud({ bridge: plan }); return tree; }
     return { html: renderToStaticMarkup(createElement(Capture)), nodes: nodes(tree) }; };
   view(); f.effects[0](); await flush();
-  all(view().html, ["Max active · verified by dusk cloud", "Manage in your browser"]); none(view().html, [...BUY, "switch to this computer", "Sign in again"]);
-  view().nodes.find(node => node.type === "button" && node.props.children === "Manage in your browser")!.props.onClick!();
-  await flush(); expect(plan.manage).toHaveBeenCalledExactlyOnceWith();
+  // a running plan's controls are in Settings > Account > Plan & billing, not on this card
+  all(view().html, ["Max active · verified by dusk cloud"]); none(view().html, [...BUY, "switch to this computer", "Sign in again", "Manage in your browser"]);
   plan.state.mockResolvedValueOnce({ status: "checking", tier: "pro" }); f.values = []; view(); f.effects[0](); await flush();
   expect(view().html).toContain("Pro · checking with dusk cloud…");
   plan.state.mockResolvedValueOnce({ status: "signin", tier: "max" }); f.values = []; view(); f.effects[0](); await flush();
@@ -508,9 +507,9 @@ it("a free trial says what happens and when, in the notice's words, with its nex
   none(html, ["Pro active", "Manage cloud subscription", ...BUY]);
   click("Subscribe to keep it"); await flush(); expect(bridge.openDashboard).toHaveBeenCalledExactlyOnceWith();
   push({ ...pro, entitlement: { plan: "pro", tier: "pro", status: "active", expiresAt: ENDS + 3 * DAY, version: 4 }, machine, trial: onTrial("active", { chargeAt: ENDS }) });
-  expect(render().html).toContain("To cancel, choose Manage subscription before then."); expect(button("Manage subscription")).toBeTruthy();
+  expect(render().html).toContain("To cancel, open Settings › General › Plan &amp; billing before then."); expect(button("Manage subscription")).toBeFalsy();
   push({ ...pro, entitlement: { plan: "pro", tier: "pro", status: "active", expiresAt: ENDS + 3 * DAY, version: 5 }, machine, trial: onTrial("processing") });
-  expect(render().html).toContain("Your first payment is processing"); expect(button("Manage cloud subscription")).toBeTruthy();
+  expect(render().html).toContain("Your first payment is processing"); expect(button("Manage cloud subscription")).toBeFalsy();
 });
 it("an ended trial is one message: what happens to the files, and Subscribe to keep it; the stopped Cloud only says it is stopped", async () => {
   await ready({ ...free, entitlement: { plan: "free", status: "inactive", expiresAt: null, version: 6 }, machine: { status: "stopped", origin },
@@ -539,17 +538,19 @@ it("signed out or with no plan, the Add a Cloud button names the trial only when
   offer.mockClear(); push(pro); render({ onAddCloud }); f.effects.at(-1)!(); await flush();
   expect(offer).not.toHaveBeenCalled(); none(render({ onAddCloud }).html, BUY);
 });
-it("on My Cloud, Settings shows the trial, and its button names the trial's next step", async () => {
+it("on My Cloud, Settings shows the trial; its button names a next step other than cancelling, which is in Plan & billing", async () => {
   const plan = { state: vi.fn().mockResolvedValue({ status: "paid", tier: "pro", trial: onTrial("active", { chargeAt: ENDS }) }),
     manage: vi.fn().mockResolvedValue(undefined) };
   const view = () => { f.index = 0; f.effects = []; let tree: ReactNode; function Capture() { tree = CloudPlanOnCloud({ bridge: plan }); return tree; }
     return { html: renderToStaticMarkup(createElement(Capture)), nodes: nodes(tree) }; };
   view(); f.effects[0](); await flush();
   all(view().html, ["Pro free trial · verified by dusk cloud", "Your free trial ends on Oct 15", "Then Pro is $49/month plus tax, charged on Oct 15."]);
-  view().nodes.find(node => node.type === "button" && node.props.children === "Manage subscription")!.props.onClick!();
+  none(view().html, ["Manage subscription", "Manage in your browser"]);
+  plan.state.mockResolvedValueOnce({ status: "paid", tier: "pro", trial: onTrial("ending", { deleteAt: ENDS + 3 * DAY, keep: "portal" }) }); f.values = []; view(); f.effects[0](); await flush();
+  view().nodes.find(node => node.type === "button" && node.props.children === "Subscribe to keep it")!.props.onClick!();
   await flush(); expect(plan.manage).toHaveBeenCalledExactlyOnceWith();
   plan.state.mockResolvedValueOnce({ status: "paid", tier: "pro" }); f.values = []; view(); f.effects[0](); await flush();
-  all(view().html, ["Pro active · verified by dusk cloud", "Manage in your browser"]); none(view().html, ["free trial", "Claude credit"]);
+  all(view().html, ["Pro active · verified by dusk cloud"]); none(view().html, ["free trial", "Claude credit", "Manage in your browser"]);
 });
 it("Sign in is the sheet's email code when Settings hands it over; the staging Admin is marked plainly", async () => {
   const onSignIn = vi.fn();

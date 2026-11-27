@@ -11,9 +11,9 @@ const MACHINE: Record<string, LocaleKey> = {
   failed: "cloudHome.failed",
 };
 
-/** What the screen's one button does: sign in again, look again, or, for a Cloud that isn't running, buy
+/** What the screen's one button does: sign in again, open the Plan page, look again, or, for a Cloud that isn't running, buy
  * it again, continue its checkout or update the card (each on the Cloud page in the browser, or its checkout reopened). */
-export type HomeAction = "sign-in" | "retry" | "buy" | "continue" | "card" | "upgrade";
+export type HomeAction = "sign-in" | "manage" | "retry" | "buy" | "continue" | "card" | "upgrade";
 
 /** A day as this person reads it: "November 1", with the year once it isn't this one. */
 export function homeDay(at: number, now = Date.now()): string {
@@ -31,7 +31,7 @@ export function homeScreenText(view: HomeView | null, now = Date.now()): { title
   if (view?.screen === "offline") return { title: named("homeScreen.offline", "homeScreen.offlineNamed"), body: t("homeScreen.offlineBack"), reason: view.reason ?? null, action: "retry", busy: false };
   if (view?.screen === "signin") return { title: named("homeScreen.signIn", "homeScreen.signInNamed"), body: t(view.other ? "homeScreen.signInOther" : "homeScreen.signInEnded"), reason: null, action: "sign-in", busy: false };
   if (view?.screen === "plan" && view.member && view.machine !== "failed") return { title: named("homeScreen.plan", "homeScreen.planNamed"), body: t("cloudHome.stoppedMember"), reason: null, action: null, busy: false };
-  if (view?.screen === "plan") return { title: named("homeScreen.plan", "homeScreen.planNamed"), body: t(MACHINE[view.machine] ?? "cloudHome.failed"), reason: null, action: null, busy: false };
+  if (view?.screen === "plan") return { title: named("homeScreen.plan", "homeScreen.planNamed"), body: t(MACHINE[view.machine] ?? "cloudHome.failed"), reason: null, action: view.member ? null : "manage", busy: false };
   // A Cloud the Admin's list says isn't running: what it is in plain words, with its one fitting action.
   if (view?.screen === "ended") return { title: named("cloudHome.ended", "cloudHome.endedNamed"), body: view.deleteAt ? t("cloudHome.endedFiles", { date: homeDay(view.deleteAt, now) }) : null,
     reason: null, action: "buy", busy: false };
@@ -45,7 +45,7 @@ export function homeScreenText(view: HomeView | null, now = Date.now()): { title
   return { title: named("homeScreen.opening", "homeScreen.openingNamed"), body: null, reason: null, action: null, busy: true };
 }
 
-const BUTTON: Record<Exclude<HomeAction, "sign-in">, LocaleKey> = {
+const BUTTON: Record<Exclude<HomeAction, "sign-in" | "manage">, LocaleKey> = {
   retry: "cloudHome.tryAgain", buy: "cloudHome.buyAgain", continue: "cloudHome.continue", card: "cloudAccount.updateCard", upgrade: "cloudHome.upgrade",
 };
 
@@ -99,9 +99,9 @@ export function HomeScreen({ bridge, manage }: { bridge: HomeBridge; manage?: ()
   const reopen = window.duskDesktop?.cloudAdd?.reopen;
   const run: Partial<Record<HomeAction, () => Promise<unknown>>> = {
     retry: () => bridge.retry().then((next) => setView(next)),
-    ...(manage ? { buy: manage, card: manage, upgrade: manage, continue: async () => { if (!(reopen && await reopen().catch(() => false))) await manage(); } } : {}),
+    ...(manage ? { manage, buy: manage, card: manage, upgrade: manage, continue: async () => { if (!(reopen && await reopen().catch(() => false))) await manage(); } } : {}),
   };
-  const button = text.action && text.action !== "sign-in" ? text.action : null;
+  const button = text.action && text.action !== "sign-in" && text.action !== "manage" ? text.action : null;
   const removable = (view?.screen === "ended" || view?.screen === "payment" || view?.screen === "gone") && view.removable === true && typeof bridge.remove === "function";
   if (view?.screen === "asleep") return <CloudAsleepHome bridge={bridge} view={view} />;
   return (
@@ -115,6 +115,7 @@ export function HomeScreen({ bridge, manage }: { bridge: HomeBridge; manage?: ()
         {view?.screen === "setup" && <CloudSetupSteps step={view.step ?? "reserving"} />}
         {text.reason && <p data-home-reason className="text-[13px] leading-relaxed text-ink-secondary">{text.reason}</p>}
         {text.action === "sign-in" && <button type="button" className="ui-button ui-button-primary mt-2" onClick={() => act(() => bridge.signIn())}>{t("homeScreen.signInButton")}</button>}
+        {text.action === "manage" && manage && <button type="button" className="ui-button mt-2" onClick={() => act(manage)}>{t("cloudAccount.manageInBrowser")}</button>}
         {button && run[button] && <button type="button" data-home-action={button} className={button === "retry" ? "ui-button mt-2" : "ui-button ui-button-primary mt-2"}
           onClick={() => act(run[button]!)}>{t(BUTTON[button])}</button>}
         {removable && <RemoveFromList name={view.name ?? t("cloudSetup.myCloud")} remove={() => bridge.remove!()} />}

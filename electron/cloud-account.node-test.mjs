@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { accountProfile, cancelSurvey, CHECKOUT_SOURCES, checkoutDestination, cloudMenuSublabel, createCloudAccountClient, createCloudAccountStore, cloudOrigin, cloudPlanSnapshot, CLOUD_ORIGIN } from "./cloud-account.mjs";
+import { accountProfile, cancelSurvey, retentionStep, CHECKOUT_SOURCES, checkoutDestination, cloudMenuSublabel, createCloudAccountClient, createCloudAccountStore, cloudOrigin, cloudPlanSnapshot, CLOUD_ORIGIN } from "./cloud-account.mjs";
 
 const accessToken = `omc_${"T".repeat(43)}`;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -1084,4 +1084,34 @@ test("the cancel survey as main sends it: one of the reasons, words trimmed and 
   for (const nothing of [null, undefined, "price", ["price"], {}, { answer: null, expected: "   " }, { answer: "keep" }, { answer: "price", expected: "x".repeat(2_001) },
     { answer: "price", improve: "y".repeat(2_001) }]) assert.equal(cancelSurvey(nothing), null, JSON.stringify(nothing)?.slice(0, 60));
   assert.equal(cancelSurvey({ answer: "price", expected: "z".repeat(2_000) }).expected.length, 2_000);
+  // the six reasons the sheet asks now, and the one offer it showed for it
+  for (const answer of ["price", "unused", "feature", "switching", "broken", "skip"]) assert.deepEqual(cancelSurvey({ answer }), { answer });
+  assert.deepEqual(cancelSurvey({ answer: "price", offer: "downgrade", improve: " too much " }), { answer: "price", improve: "too much", offer: "downgrade" });
+  assert.deepEqual(cancelSurvey({ answer: "skip", offer: "pause" }), { answer: "skip" }, "an offer the Admin doesn't know is left out");
+});
+
+test("a cancel sheet step as main sends it: a known reason, step and outcome, an offer and a note only when they are real", () => {
+  assert.deepEqual(retentionStep({ reason: "price", step: "reason", outcome: "shown", note: "  pricey  " }), { reason: "price", step: "reason", outcome: "shown", note: "pricey" });
+  assert.deepEqual(retentionStep({ reason: "skip", step: "help", outcome: "kept", offer: "losses", note: "   ", cloudId: TEAM_CLOUD }), { reason: "skip", step: "help", outcome: "kept", offer: "losses" });
+  for (const wrong of [null, "price", [], {}, { reason: "nope", step: "reason", outcome: "shown" }, { reason: "price", step: "pause", outcome: "shown" },
+    { reason: "price", step: "help", outcome: "paused" }, { reason: "price", step: "help", outcome: "shown", offer: "pause" },
+    { reason: "price", step: "help", outcome: "shown", note: "n".repeat(2_001) }]) assert.equal(retentionStep(wrong), null, JSON.stringify(wrong)?.slice(0, 80));
+});
+
+test("each cancel sheet step goes to /v1/clouds/<the session's own Cloud>/retention, best effort, and never throws", async t => {
+  const f = await fixture(t);
+  f.entitlement = { plan: "pro", tier: "pro", status: "active", expiresAt: f.now + 30 * DAY, version: 2 };
+  f.clouds = renewingClouds(f);
+  renewalAdmin(f);
+  await f.connect();
+  const sent = () => f.requests.filter(request => request.route.endsWith("/retention")).map(request => [request.route, request.method, JSON.parse(request.body), request.token === `Bearer ${accessToken}`]);
+  // the fixture has no such route: the Admin's 404 is a false, never an error in the sheet's way
+  assert.equal(await f.client.retention({ reason: "price", step: "help", outcome: "shown", offer: "downgrade", note: " pricey ", cloudId: TEAM_CLOUD }), false);
+  assert.deepEqual(sent(), [[`/v1/clouds/${MY_CLOUD}/retention`, "POST", { reason: "price", step: "help", outcome: "shown", offer: "downgrade", note: "pricey" }, true]]);
+  assert.equal(await f.client.retention({ reason: "price", step: "pause", outcome: "shown" }), false);
+  assert.equal(sent().length, 1, "a step that isn't one is never sent");
+  f.clouds = undefined;
+  await f.client.refresh();
+  assert.equal(await f.client.retention({ reason: "price", step: "reason", outcome: "shown" }), false);
+  assert.equal(sent().length, 1, "nothing is sent without a Cloud the session names");
 });
