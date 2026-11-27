@@ -76,6 +76,8 @@ export function parseTypedPairing(input: string): MobilePairingPayload | TypedCo
   // the desktop's qr is an https link (a camera opens the app with it); the app's own scanner reads it the same way
   const value = appLinkFromUniversal(input) ?? input.trim();
   if (value.startsWith("duskbot:")) return parseMobilePairingLink(value);
+  const browserQr = serverSignInQr(value);
+  if (browserQr) return browserQr;
   const code = value.replace(/[-\s]/g, "").toUpperCase();
   if (/^[A-Z0-9]{12}$/.test(code)) return { kind: "code", code };
   const match = /^(\S+)\s+([A-Za-z0-9]{12})$/.exec(value);
@@ -85,6 +87,17 @@ export function parseTypedPairing(input: string): MobilePairingPayload | TypedCo
     if (origin.protocol !== "https:" || origin.username || origin.password || origin.pathname !== "/" || origin.search || origin.hash || match[1].includes("\\")) return null;
     return { v: 1, transport: "https", origin: origin.origin, credential: "", code: match[2].toUpperCase() };
   } catch { return null; }
+}
+
+/** a server's own `duskbot serve` / `duskbot pair` QR, `https://host/pair#code=XXXX-XXXX-XXXX`: the same code the phone
+ * redeems with that server's /api/pair as a typed `host CODE` */
+function serverSignInQr(value: string): MobilePairingPayload | null {
+  let url: URL;
+  try { url = new URL(value); } catch { return null; }
+  if (url.protocol !== "https:" || url.username || url.password || url.pathname !== "/pair" || url.search) return null;
+  const code = new URLSearchParams(url.hash.slice(1)).get("code")?.replace(/[-\s]/g, "").toUpperCase() ?? "";
+  if (!/^[A-Z0-9]{12}$/.test(code)) return null;
+  return { v: 1, transport: "https", origin: url.origin, credential: "", code };
 }
 
 const pendingAttempts = new WeakMap<MobilePlatform, Map<string, Promise<string>>>();
