@@ -23,9 +23,9 @@ export class CloudAsleepError extends Error {
 /** My Cloud's answer to a held or new background call while it goes to sleep. */
 export const asleepAnswer = response => response?.status === 503 && readHeader(response.headers, CLOUD_POWER_HEADER) === "asleep";
 
-/** The provider's own page for a machine it paused (InstaBox, seen 2026-11-27): it names the sandbox and the provider's CLI, so it is
+/** The provider's own page for a machine it paused: it names the sandbox and the provider's CLI, so it is
  *  never shown. Its owner's cloud is resumed through the Admin instead (apps/cloud-service/edge/route.js carries the same words). */
-export const PROVIDER_PAUSE_PAGE = /sandbox offline|instabox resume|only a sandbox that paused itself/i;
+export const PROVIDER_PAUSE_PAGE = /sandbox offline|only a sandbox that paused itself/i;
 export const providerPausePage = text => typeof text === "string" && PROVIDER_PAUSE_PAGE.test(text.slice(0, 2000));
 
 /** The edge's answer for a dusk cloud that was deleted (apps/cloud-service/edge/worker.js): it never answers again. */

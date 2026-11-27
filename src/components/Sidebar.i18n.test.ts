@@ -94,7 +94,7 @@ describe("room delete confirmation copy", () => {
     expect(markup).toContain('role="alertdialog"');
     expect(markup).toContain("Delete Launch plan?");
     expect(markup.indexOf(">Cancel</button>")).toBeLessThan(markup.indexOf(">Delete group chat</button>"));
-    expect(markup).toContain("bg-danger");
+    expect(markup).toContain("bg-[#e72e3b]");
   });
 
   it("offers a gentler way beside the destructive one when there is one, after Cancel", () => {

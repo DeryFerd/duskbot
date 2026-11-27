@@ -1,4 +1,4 @@
-// My Cloud whose machine the provider paused (InstaBox, 2026-11-27) while the Admin still reads it as awake: the address answers
+// My Cloud whose machine the provider paused (2026-11-27) while the Admin still reads it as awake: the address answers
 // with the provider's own page. The window never shows it and never says Can't reach while it resumes: it asks the Admin to
 // resume (the wake says the page was met), shows the waking screen, and opens by itself once the home answers.
 import assert from "node:assert/strict";
@@ -8,7 +8,7 @@ import { createCloudPowerGate, providerPausePage } from "./cloud-power.mjs";
 import { createHomeWindow } from "./home-window.mjs";
 import { CLOUD, connected, done, json, LOCAL } from "./fixtures/home-window-world.mjs";
 
-const PAGE = "Sandbox offline: it is paused, and only a sandbox that paused itself for being idle wakes on a visit. Its owner can resume it: instabox resume sbx_1";
+const PAGE = "Sandbox offline: it is paused, and only a sandbox that paused itself for being idle wakes on a visit. Its owner can resume it: the provider CLI resume sbx_1";
 
 /** `resumeMs`: how long the Admin's resume takes; Infinity is a provider that keeps refusing */
 function pausedWorld({ resumeMs = 8_000 } = {}) {

@@ -4,7 +4,7 @@ import { answerOf } from "../state/api";
 
 afterEach(() => { vi.unstubAllGlobals(); resetCloudPowerForTests(); });
 
-const PAGE = "Sandbox offline: it is paused, and only a sandbox that paused itself for being idle wakes on a visit. Its owner can resume it: instabox resume sbx_1";
+const PAGE = "Sandbox offline: it is paused, and only a sandbox that paused itself for being idle wakes on a visit. Its owner can resume it: the provider CLI resume sbx_1";
 
 describe("the provider's own page for a paused machine", () => {
   it("is told from every answer the home itself gives", async () => {
