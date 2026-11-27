@@ -195,7 +195,7 @@ function Saves({ offer, plus, smaller, work, busy, onDiscount, onDowngrade, cata
             <p className="text-14 text-ink">switch to {plus.name}</p>
             <p className="num text-13 text-ink-3">{cartText(priceCart(smaller, catalog), interval)}, a smaller dusk cloud{work ? ", work license included" : ""}</p>
           </div>
-          <Button variant={offer ? "outline" : "primary"} size="sm" onClick={onDowngrade} disabled={busy !== null}>{busy === "downgrade" ? "switching" : `switch to ${plus.name}`}</Button>
+          <Button variant={offer ? "outline" : "primary"} size="sm" onClick={onDowngrade} disabled={busy !== null}>{busy === "downgrade" ? "changing" : "continue to change plan"}</Button>
         </div>
       )}
     </div>
@@ -206,7 +206,7 @@ function Saves({ offer, plus, smaller, work, busy, onDiscount, onDowngrade, cata
 
 /** account, plan & billing, cancel subscription: a look back at what they and their bots did, why, the one offer that fits,
  * what they'd lose, then the cancel at the period's end. consumer rules (California's online cancel, ROSCA, UK, EU) want it
- * online and plain: every screen has "continue to cancel", a reason is asked but "prefer not to say" counts, and there is
+ * online and plain: every screen has a way on toward the cancel, a reason is asked but "prefer not to say" counts, and there is
  * at most one offer */
 export function CancelFlow({ open, onClose, catalog }: { open: boolean; onClose(): void; catalog: PlanCatalog }) {
   const { billing, cancel, keep: renew, changePlan, updateCard, retentionStep, takeDiscount } = useCloud();
@@ -300,11 +300,12 @@ export function CancelFlow({ open, onClose, catalog }: { open: boolean; onClose(
             : keepsLicense ? "your dusk cloud is cancelled" : "your plan is cancelled";
   const saves = <Saves offer={offer} plus={offer ? null : cheaper} smaller={!offer && cheaper ? smaller : null} work={work} busy={busy} onDiscount={() => void discount()} onDowngrade={() => void downgrade()} catalog={catalog} interval={sel.interval} />;
   const keepButton = <Button variant="primary" onClick={keep}>keep my plan</Button>;
+  const onwardLabel = step === "offer" ? "no thanks, continue" : step === "losses" ? "i understand, continue" : keepsLicense ? "continue to cancel dusk cloud" : "continue to cancel";
   const footer = step === "done"
     ? <><Button onClick={() => void restart()} disabled={busy !== null}>{busy === "restart" ? "resuming" : "resume my plan"}</Button><Button variant="primary" onClick={onClose}>done</Button></>
     : step === "confirm"
       ? <><Button onClick={() => void stop()} disabled={busy !== null}>{busy === "cancel" ? "cancelling" : keepsLicense ? "cancel dusk cloud" : "cancel subscription"}</Button>{keepButton}</>
-      : <><Button onClick={next} disabled={busy !== null}>continue to cancel</Button>{keepButton}</>;
+      : <><Button onClick={next} disabled={busy !== null}>{onwardLabel}</Button>{keepButton}</>;
   const dots = step === "done" ? null : <Dots steps={steps} at={step} />;
   const pad = "px-7 max-sm:px-5";
   const top = step === "recap" ? <><CancelScene time="day" bots={crew} state="working" /><div className={cx(pad, "pt-6 max-sm:pt-5")}>{dots}</div></>

@@ -126,7 +126,7 @@ export function offerFor(answer: OfferReason, renewal: CloudRenewal, offers: Clo
   const keep = { label: "cloudCancel.keep", outcome: "kept" } as const;
   switch (answer) {
     case "price": return offers.cheaper && offers.openPlans && !renewal.trial
-      ? { offer: "downgrade", title: "cloudCancel.offer.cheaperTitle", body: t("cloudCancel.offer.cheaper", { plan: offers.cheaper }), action: { label: "cloudCancel.offer.seePlans", outcome: "helped", run: offers.openPlans } }
+      ? { offer: "downgrade", title: "cloudCancel.offer.cheaperTitle", body: t("cloudCancel.offer.cheaper", { plan: offers.cheaper }), action: { label: "cloudCancel.offer.changePlan", outcome: "helped", run: offers.openPlans } }
       : { offer: "help", title: "cloudCancel.offer.freeTitle", body: t("cloudCancel.help.price"), action: keep };
     case "unused": {
       const used = usedLines(offers.usage);
@@ -265,7 +265,8 @@ export function CloudCancelSheet({ renewal, actions, offers = {}, onClose }: { r
   const box = "mt-1.5 w-full rounded-lg border border-transparent bg-inset px-3 py-2 text-[14px] text-ink outline-none focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-60";
   const body = "text-[14px] leading-[1.55] text-ink-secondary";
   const keepButton = <button type="button" data-cloud-cancel-first className="ui-button ui-button-primary" disabled={busy} onClick={stay}>{t("cloudCancel.keep")}</button>;
-  const onward = <button type="button" data-cloud-cancel-next className="ui-button" onClick={next}>{t("cloudCancel.continue")}</button>;
+  const onward = <button type="button" data-cloud-cancel-next className="ui-button" onClick={next}>
+    {t(state.step === "offer" ? "cloudCancel.noThanks" : state.step === "losses" ? "cloudCancel.understood" : "cloudCancel.continue")}</button>;
   const art = state.step === "recap" ? <CancelScene time="day" bots={crew} state="working" />
     : state.step === "losses" ? <CancelScene time="dusk" bots={crew} state="sad" />
       : state.step === "done" ? <CancelScene time="night" bots={top ? [top] : crew.slice(0, 1)} state="happy" /> : null;

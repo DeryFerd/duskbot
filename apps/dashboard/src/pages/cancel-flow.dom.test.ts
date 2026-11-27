@@ -65,9 +65,11 @@ const type = async (value: string) => {
   });
 };
 const dots = () => document.querySelector("[role=dialog] [data-dots]")?.getAttribute("data-dots");
-const onward = () => click("continue to cancel");
-/** the dialog's own buttons, left to right, without close */
-const footer = () => [...document.querySelectorAll("[role=dialog] button")].filter((b) => !b.hasAttribute("data-close")).slice(-2).map((b) => b.textContent);
+/** the dialog's own buttons at its foot, left to right, without close */
+const footButtons = () => [...document.querySelectorAll<HTMLButtonElement>("[role=dialog] button")].filter((b) => !b.hasAttribute("data-close")).slice(-2);
+const footer = () => footButtons().map((b) => b.textContent);
+/** the left button, the way on toward the cancel, whatever the screen calls it */
+const onward = async () => { const [way] = footButtons(); expect(way?.textContent).not.toBe("keep my plan"); await act(async () => way!.click()); };
 /** past the recap to the reason step */
 const toReason = async () => { expect(title()).toBe("look what you and your bots did"); await onward(); expect(title()).toBe("why are you leaving?"); };
 /** the reason step, a reason picked, then on */
@@ -85,6 +87,7 @@ test("the first screen is a look back in the person's own numbers, with the top 
   expect(footer()).toEqual(["continue to cancel", "keep my plan"]);
   await onward();
   expect(title()).toBe("why are you leaving?");
+  expect(footer()).toEqual(["continue to cancel", "keep my plan"]);
   expect(spies.retentionStep).not.toHaveBeenCalled();
 });
 
@@ -129,6 +132,7 @@ test("the reason is required: continue with nothing picked says so and stays; pr
   expect(text()).toContain("your 3 routines only run while your mac is awake");
   expect(text()).toContain("the 5 apps they use only work while your mac is awake");
   expect(text()).toContain("your dusk cloud's files, and what your bots remember there, are kept until 12 Jan 2027, then deleted");
+  expect(footer()).toEqual(["i understand, continue", "keep my plan"]);
   await onward();
   expect(spies.retentionStep).toHaveBeenLastCalledWith({ reason: "skip", step: "help", outcome: "shown", offer: "losses" });
   expect(title()).toBe("cancel your plan?");
@@ -182,9 +186,9 @@ test("too expensive: one offer, the discount, which can be taken", async () => {
   await toOffer("it's too expensive");
   expect(title()).toBe("keep it for less");
   expect(dots()).toBe("3/5");
-  expect(footer()).toEqual(["continue to cancel", "keep my plan"]);
+  expect(footer()).toEqual(["no thanks, continue", "keep my plan"]);
   expect(text()).toContain("30% off your next 3 months");
-  expect(button("switch to plus")).toBeNull();
+  expect(button("continue to change plan")).toBeNull();
   await click("take 30% off");
   expect(spies.takeDiscount).toHaveBeenCalledWith("price");
   expect(spies.cancel).not.toHaveBeenCalled();
@@ -194,7 +198,7 @@ test("too expensive on pro without the discount: plus instead, logged as a downg
   await open(pro, false);
   await toOffer("it's too expensive");
   expect(button("take 30% off")).toBeNull();
-  await click("switch to plus");
+  await click("continue to change plan");
   expect(spies.changePlan).toHaveBeenCalledWith(expect.objectContaining({ desktop: "shared-s", license: "starter" }), 0);
   expect(spies.retentionStep).toHaveBeenLastCalledWith({ reason: "price", step: "help", outcome: "downgrade", offer: "downgrade" });
 });
@@ -256,7 +260,7 @@ test("missing a feature: tell us and we'll reply, the note goes into the mail", 
 test("switching: what you'd lose, confirm and cancel with the survey; done shows the access date over the night scene and resumes", async () => {
   await open(plus);
   await toReason();
-  const lightButton = button("continue to cancel")!.className;
+  const lightButton = footButtons()[0]!.className;
   await type("going elsewhere");
   await pick("i'm switching to something else");
   await onward();
@@ -303,6 +307,7 @@ test("every reason reaches the confirm with continue to cancel alone, through it
 
 test("a plan with a work license ends only the dusk cloud", async () => {
   await open(pro);
+  expect(footer()).toEqual(["continue to cancel dusk cloud", "keep my plan"]);
   await toOffer("prefer not to say");
   expect(text()).toContain("your dusk cloud keeps working until 13 Dec 2026 and your work license stays.");
   await onward();
@@ -325,7 +330,7 @@ test("pro on a free trial cancels the whole plan at the trial's end, never a pla
   roots.push(root);
   await act(async () => root.render(createElement(CancelFlow, { open: true, onClose: () => spies.onClose(), catalog: fixtureCatalog })));
   await toOffer("it's too expensive");
-  expect(button("switch to plus")).toBeNull();
+  expect(button("continue to change plan")).toBeNull();
   await onward();
   expect(text()).not.toContain("work license stays");
   await onward();

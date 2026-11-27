@@ -99,12 +99,13 @@ describe("the cancel sheet", () => {
     expect(actions.retention).toHaveBeenLastCalledWith({ reason: "price", step: "reason", outcome: "shown", note: "Too much for a side project." });
     expect([step(), title(), dots()]).toEqual(["offer", "Try a smaller plan", "3/5"]);
     expect(text()).toContain("Plus costs less and keeps your bots running on dusk cloud.");
-    expect(foot()).toEqual(["Continue to cancel", "See plans"]);
+    expect(foot()).toEqual(["No thanks, continue", "Continue to change plan"]);
     await next();
     expect(actions.retention).toHaveBeenLastCalledWith({ reason: "price", step: "help", outcome: "shown", offer: "downgrade", note: "Too much for a side project." });
     expect([step(), title(), dots()]).toEqual(["losses", "What you'd lose", "4/5"]);
     expect(sheet()!.querySelector("[data-cancel-scene='dusk']")).toBeTruthy();
     expect(text()).toContain(`Everything keeps working until ${day(END)}. After that:`);
+    expect(foot()).toEqual(["I understand, continue", "Keep my plan"]);
     expect([...sheet()!.querySelectorAll("li")].map(item => item.textContent)).toEqual(["Nova, Quill, and Rivet stop working when your Mac sleeps.", "Your 6 routines only run while your Mac is awake.",
       "The app they use only works while your Mac is awake.", `Your dusk cloud files, and what your bots remember there, are kept until ${day(END + 30 * DAY)}, then deleted.`]);
     await next();
@@ -161,7 +162,7 @@ describe("the cancel sheet", () => {
   it("one offer for each reason, only what the app can do; taking it keeps the plan and logs it, and never cancels", async () => {
     const openLink = vi.fn(async (url: string) => void url), openPlans = vi.fn(async () => undefined);
     const cases: Array<{ answer: string; renewal?: CloudRenewal; offers?: CloudCancelOffers; title: string; offer: string; take: string; outcome: string; says?: string; lines?: string[] }> = [
-      { answer: "Too expensive", offers: { cheaper: "Plus", openPlans }, title: "Try a smaller plan", offer: "downgrade", take: "See plans", outcome: "helped" },
+      { answer: "Too expensive", offers: { cheaper: "Plus", openPlans }, title: "Try a smaller plan", offer: "downgrade", take: "Continue to change plan", outcome: "helped" },
       // a trial or no cheaper plan: personal use on the Mac stays free
       { answer: "Too expensive", renewal: trial, offers: { cheaper: "Plus", openPlans }, title: "Your Mac stays free", offer: "help", take: "Keep my plan", outcome: "kept", says: "Personal use on your Mac stays free. Only dusk cloud is paid." },
       { answer: "Not using it enough", offers: { usage }, title: "This month on dusk cloud", offer: "help", take: "Keep my plan", outcome: "kept", lines: ["Cloud desktop hours: 14.5 of 60 hours"] },
@@ -178,7 +179,7 @@ describe("the cancel sheet", () => {
       expect([title(), sheet()!.getAttribute("data-cloud-cancel-offer")], one.title).toEqual([one.title, one.offer]);
       if (one.says) expect(text()).toContain(one.says);
       if (one.lines) expect([...sheet()!.querySelectorAll("li")].map(item => item.textContent)).toEqual(one.lines);
-      expect(button("Continue to cancel")).toBeTruthy();
+      expect(sheet()!.querySelector("[data-cloud-cancel-next]")?.textContent).toBe("No thanks, continue");
       await click(button(one.take, sheet()!));
       expect(sheet(), one.title).toBeNull();
       expect(actions.retention).toHaveBeenLastCalledWith(expect.objectContaining({ step: "help", outcome: one.outcome, offer: one.offer }));
@@ -344,7 +345,7 @@ describe("the plan's place", () => {
     await toWhy();
     await choose("Too expensive");
     expect(title()).toBe("Try a smaller plan");
-    await click(button("See plans", sheet()!));
+    await click(button("Continue to change plan", sheet()!));
     expect(bridge.continueInBrowser).toHaveBeenCalledExactlyOnceWith({ kind: "upgrade" });
     expect(bridge.retention).toHaveBeenLastCalledWith({ reason: "price", step: "help", outcome: "helped", offer: "downgrade" });
     await open();

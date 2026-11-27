@@ -9926,7 +9926,6 @@
       "cloudCancel.note": "ccbf1db451a37eee3d2608eae05dda3b462766d0cc7647baaaf8380cfcec239a",
       "cloudCancel.offer.cheaperTitle": "b08be5ea8754031b0874670b03c2b32a9f1732ed9c0888f9aa8d0c451118e472",
       "cloudCancel.offer.cheaper": "e79ce3ad4f93e3c7e308ee16a85fffedb7e4a3b259bb3aad3121d57104d6372f",
-      "cloudCancel.offer.seePlans": "d989893356eeff0f22804648f79ee465c509800917fe8d64ec31ab5aa6557220",
       "cloudCancel.offer.freeTitle": "17fea458cce9c6fa2d09b4c7a52f5110fc259ccbef810b554bd00b654a867588",
       "cloudCancel.offer.usedTitle": "b4c33b2e022e42a5aeb0b1c50a68786588380db168dce0359759ed95a3d0324e",
       "cloudCancel.offer.used": "a8b310a30d45d77dba78b07bb554f277db1b9086d8c330a6200151ed6098a908",
@@ -9991,7 +9990,10 @@
       "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105",
       "cloudAsleep.wakingUp": "4dda7c0026bdaf5a38e7f0ce1798da32d30f9193797ab704e0cdc0f5cc04f0aa",
       "cloudAsleep.wakingSlow": "4a3ea30a5b8b48ff840b9a3dc815587746bed542226bd8849a9394abb50319ac",
-      "keys.purpose.openaiNoLive": "1de6f8eeb4e3eb7cea5d59e842a1327a736a187213a0f0e31fb6a0f35837fba1"
+      "keys.purpose.openaiNoLive": "1de6f8eeb4e3eb7cea5d59e842a1327a736a187213a0f0e31fb6a0f35837fba1",
+      "cloudCancel.noThanks": "99af23a3fd4be001c239cf44b93f5a7f8b0fea7e42b186510afb2a52c9859e6e",
+      "cloudCancel.understood": "2772f3504e2c1e3efdd21161e3250a5ba2ae82a668b661956e4fc5ffa99b1ed2",
+      "cloudCancel.offer.changePlan": "5bbddfbf820617b5ecd44ae522d2da0343ed31471988f7f871a3817cf58777e0"
     },
     "es": {
       "updates.updated": "da0fcccdc519425a9c333fda0838bbdd50d67fb0266194753bd1044abd0ecbb4",
@@ -19897,7 +19899,6 @@
       "cloudCancel.note": "ccbf1db451a37eee3d2608eae05dda3b462766d0cc7647baaaf8380cfcec239a",
       "cloudCancel.offer.cheaperTitle": "b08be5ea8754031b0874670b03c2b32a9f1732ed9c0888f9aa8d0c451118e472",
       "cloudCancel.offer.cheaper": "e79ce3ad4f93e3c7e308ee16a85fffedb7e4a3b259bb3aad3121d57104d6372f",
-      "cloudCancel.offer.seePlans": "d989893356eeff0f22804648f79ee465c509800917fe8d64ec31ab5aa6557220",
       "cloudCancel.offer.freeTitle": "17fea458cce9c6fa2d09b4c7a52f5110fc259ccbef810b554bd00b654a867588",
       "cloudCancel.offer.usedTitle": "b4c33b2e022e42a5aeb0b1c50a68786588380db168dce0359759ed95a3d0324e",
       "cloudCancel.offer.used": "a8b310a30d45d77dba78b07bb554f277db1b9086d8c330a6200151ed6098a908",
@@ -19954,7 +19955,10 @@
       "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105",
       "cloudAsleep.wakingUp": "4dda7c0026bdaf5a38e7f0ce1798da32d30f9193797ab704e0cdc0f5cc04f0aa",
       "cloudAsleep.wakingSlow": "4a3ea30a5b8b48ff840b9a3dc815587746bed542226bd8849a9394abb50319ac",
-      "keys.purpose.openaiNoLive": "1de6f8eeb4e3eb7cea5d59e842a1327a736a187213a0f0e31fb6a0f35837fba1"
+      "keys.purpose.openaiNoLive": "1de6f8eeb4e3eb7cea5d59e842a1327a736a187213a0f0e31fb6a0f35837fba1",
+      "cloudCancel.noThanks": "99af23a3fd4be001c239cf44b93f5a7f8b0fea7e42b186510afb2a52c9859e6e",
+      "cloudCancel.understood": "2772f3504e2c1e3efdd21161e3250a5ba2ae82a668b661956e4fc5ffa99b1ed2",
+      "cloudCancel.offer.changePlan": "5bbddfbf820617b5ecd44ae522d2da0343ed31471988f7f871a3817cf58777e0"
     },
     "fr": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -23417,7 +23421,6 @@
       "cloudCancel.note": "ccbf1db451a37eee3d2608eae05dda3b462766d0cc7647baaaf8380cfcec239a",
       "cloudCancel.offer.cheaperTitle": "b08be5ea8754031b0874670b03c2b32a9f1732ed9c0888f9aa8d0c451118e472",
       "cloudCancel.offer.cheaper": "e79ce3ad4f93e3c7e308ee16a85fffedb7e4a3b259bb3aad3121d57104d6372f",
-      "cloudCancel.offer.seePlans": "d989893356eeff0f22804648f79ee465c509800917fe8d64ec31ab5aa6557220",
       "cloudCancel.offer.freeTitle": "17fea458cce9c6fa2d09b4c7a52f5110fc259ccbef810b554bd00b654a867588",
       "cloudCancel.offer.usedTitle": "b4c33b2e022e42a5aeb0b1c50a68786588380db168dce0359759ed95a3d0324e",
       "cloudCancel.offer.used": "a8b310a30d45d77dba78b07bb554f277db1b9086d8c330a6200151ed6098a908",
@@ -23471,7 +23474,10 @@
       "cloudCancel.lossApps.one": "763a14cc46b3a75edacd8136e2eb2e6a03b911dd4223a23f78378e53b1bfa221",
       "cloudCancel.lossMemoryUntil": "50cd92d3d6ef64cd5257a6f45945265d53cfe666191b0efdb4eaaa5e00d5d209",
       "cloudCancel.confirmPlanOn": "06cca49a42bfecccb799bbbb8e16ab9a56147fa682b75fc4269589837a9213ca",
-      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105"
+      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105",
+      "cloudCancel.noThanks": "99af23a3fd4be001c239cf44b93f5a7f8b0fea7e42b186510afb2a52c9859e6e",
+      "cloudCancel.understood": "2772f3504e2c1e3efdd21161e3250a5ba2ae82a668b661956e4fc5ffa99b1ed2",
+      "cloudCancel.offer.changePlan": "5bbddfbf820617b5ecd44ae522d2da0343ed31471988f7f871a3817cf58777e0"
     },
     "hi": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -26932,7 +26938,6 @@
       "cloudCancel.note": "ccbf1db451a37eee3d2608eae05dda3b462766d0cc7647baaaf8380cfcec239a",
       "cloudCancel.offer.cheaperTitle": "b08be5ea8754031b0874670b03c2b32a9f1732ed9c0888f9aa8d0c451118e472",
       "cloudCancel.offer.cheaper": "e79ce3ad4f93e3c7e308ee16a85fffedb7e4a3b259bb3aad3121d57104d6372f",
-      "cloudCancel.offer.seePlans": "d989893356eeff0f22804648f79ee465c509800917fe8d64ec31ab5aa6557220",
       "cloudCancel.offer.freeTitle": "17fea458cce9c6fa2d09b4c7a52f5110fc259ccbef810b554bd00b654a867588",
       "cloudCancel.offer.usedTitle": "b4c33b2e022e42a5aeb0b1c50a68786588380db168dce0359759ed95a3d0324e",
       "cloudCancel.offer.used": "a8b310a30d45d77dba78b07bb554f277db1b9086d8c330a6200151ed6098a908",
@@ -26986,7 +26991,10 @@
       "cloudCancel.lossApps.one": "763a14cc46b3a75edacd8136e2eb2e6a03b911dd4223a23f78378e53b1bfa221",
       "cloudCancel.lossMemoryUntil": "50cd92d3d6ef64cd5257a6f45945265d53cfe666191b0efdb4eaaa5e00d5d209",
       "cloudCancel.confirmPlanOn": "06cca49a42bfecccb799bbbb8e16ab9a56147fa682b75fc4269589837a9213ca",
-      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105"
+      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105",
+      "cloudCancel.noThanks": "99af23a3fd4be001c239cf44b93f5a7f8b0fea7e42b186510afb2a52c9859e6e",
+      "cloudCancel.understood": "2772f3504e2c1e3efdd21161e3250a5ba2ae82a668b661956e4fc5ffa99b1ed2",
+      "cloudCancel.offer.changePlan": "5bbddfbf820617b5ecd44ae522d2da0343ed31471988f7f871a3817cf58777e0"
     },
     "it": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -33131,7 +33139,6 @@
       "cloudCancel.note": "ccbf1db451a37eee3d2608eae05dda3b462766d0cc7647baaaf8380cfcec239a",
       "cloudCancel.offer.cheaperTitle": "b08be5ea8754031b0874670b03c2b32a9f1732ed9c0888f9aa8d0c451118e472",
       "cloudCancel.offer.cheaper": "e79ce3ad4f93e3c7e308ee16a85fffedb7e4a3b259bb3aad3121d57104d6372f",
-      "cloudCancel.offer.seePlans": "d989893356eeff0f22804648f79ee465c509800917fe8d64ec31ab5aa6557220",
       "cloudCancel.offer.freeTitle": "17fea458cce9c6fa2d09b4c7a52f5110fc259ccbef810b554bd00b654a867588",
       "cloudCancel.offer.usedTitle": "b4c33b2e022e42a5aeb0b1c50a68786588380db168dce0359759ed95a3d0324e",
       "cloudCancel.offer.used": "a8b310a30d45d77dba78b07bb554f277db1b9086d8c330a6200151ed6098a908",
@@ -33185,7 +33192,10 @@
       "cloudCancel.lossApps.one": "763a14cc46b3a75edacd8136e2eb2e6a03b911dd4223a23f78378e53b1bfa221",
       "cloudCancel.lossMemoryUntil": "50cd92d3d6ef64cd5257a6f45945265d53cfe666191b0efdb4eaaa5e00d5d209",
       "cloudCancel.confirmPlanOn": "06cca49a42bfecccb799bbbb8e16ab9a56147fa682b75fc4269589837a9213ca",
-      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105"
+      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105",
+      "cloudCancel.noThanks": "99af23a3fd4be001c239cf44b93f5a7f8b0fea7e42b186510afb2a52c9859e6e",
+      "cloudCancel.understood": "2772f3504e2c1e3efdd21161e3250a5ba2ae82a668b661956e4fc5ffa99b1ed2",
+      "cloudCancel.offer.changePlan": "5bbddfbf820617b5ecd44ae522d2da0343ed31471988f7f871a3817cf58777e0"
     },
     "ja": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -39516,7 +39526,6 @@
       "cloudCancel.note": "ccbf1db451a37eee3d2608eae05dda3b462766d0cc7647baaaf8380cfcec239a",
       "cloudCancel.offer.cheaperTitle": "b08be5ea8754031b0874670b03c2b32a9f1732ed9c0888f9aa8d0c451118e472",
       "cloudCancel.offer.cheaper": "e79ce3ad4f93e3c7e308ee16a85fffedb7e4a3b259bb3aad3121d57104d6372f",
-      "cloudCancel.offer.seePlans": "d989893356eeff0f22804648f79ee465c509800917fe8d64ec31ab5aa6557220",
       "cloudCancel.offer.freeTitle": "17fea458cce9c6fa2d09b4c7a52f5110fc259ccbef810b554bd00b654a867588",
       "cloudCancel.offer.usedTitle": "b4c33b2e022e42a5aeb0b1c50a68786588380db168dce0359759ed95a3d0324e",
       "cloudCancel.offer.used": "a8b310a30d45d77dba78b07bb554f277db1b9086d8c330a6200151ed6098a908",
@@ -39570,7 +39579,10 @@
       "cloudCancel.lossApps.one": "763a14cc46b3a75edacd8136e2eb2e6a03b911dd4223a23f78378e53b1bfa221",
       "cloudCancel.lossMemoryUntil": "50cd92d3d6ef64cd5257a6f45945265d53cfe666191b0efdb4eaaa5e00d5d209",
       "cloudCancel.confirmPlanOn": "06cca49a42bfecccb799bbbb8e16ab9a56147fa682b75fc4269589837a9213ca",
-      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105"
+      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105",
+      "cloudCancel.noThanks": "99af23a3fd4be001c239cf44b93f5a7f8b0fea7e42b186510afb2a52c9859e6e",
+      "cloudCancel.understood": "2772f3504e2c1e3efdd21161e3250a5ba2ae82a668b661956e4fc5ffa99b1ed2",
+      "cloudCancel.offer.changePlan": "5bbddfbf820617b5ecd44ae522d2da0343ed31471988f7f871a3817cf58777e0"
     },
     "ko": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -46286,7 +46298,6 @@
       "cloudCancel.note": "ccbf1db451a37eee3d2608eae05dda3b462766d0cc7647baaaf8380cfcec239a",
       "cloudCancel.offer.cheaperTitle": "b08be5ea8754031b0874670b03c2b32a9f1732ed9c0888f9aa8d0c451118e472",
       "cloudCancel.offer.cheaper": "e79ce3ad4f93e3c7e308ee16a85fffedb7e4a3b259bb3aad3121d57104d6372f",
-      "cloudCancel.offer.seePlans": "d989893356eeff0f22804648f79ee465c509800917fe8d64ec31ab5aa6557220",
       "cloudCancel.offer.freeTitle": "17fea458cce9c6fa2d09b4c7a52f5110fc259ccbef810b554bd00b654a867588",
       "cloudCancel.offer.usedTitle": "b4c33b2e022e42a5aeb0b1c50a68786588380db168dce0359759ed95a3d0324e",
       "cloudCancel.offer.used": "a8b310a30d45d77dba78b07bb554f277db1b9086d8c330a6200151ed6098a908",
@@ -46341,7 +46352,10 @@
       "cloudCancel.lossMemoryUntil": "50cd92d3d6ef64cd5257a6f45945265d53cfe666191b0efdb4eaaa5e00d5d209",
       "cloudCancel.confirmPlanOn": "06cca49a42bfecccb799bbbb8e16ab9a56147fa682b75fc4269589837a9213ca",
       "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105",
-      "keys.purpose.openaiNoLive": "1de6f8eeb4e3eb7cea5d59e842a1327a736a187213a0f0e31fb6a0f35837fba1"
+      "keys.purpose.openaiNoLive": "1de6f8eeb4e3eb7cea5d59e842a1327a736a187213a0f0e31fb6a0f35837fba1",
+      "cloudCancel.noThanks": "99af23a3fd4be001c239cf44b93f5a7f8b0fea7e42b186510afb2a52c9859e6e",
+      "cloudCancel.understood": "2772f3504e2c1e3efdd21161e3250a5ba2ae82a668b661956e4fc5ffa99b1ed2",
+      "cloudCancel.offer.changePlan": "5bbddfbf820617b5ecd44ae522d2da0343ed31471988f7f871a3817cf58777e0"
     },
     "pl": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -52646,7 +52660,6 @@
       "cloudCancel.note": "ccbf1db451a37eee3d2608eae05dda3b462766d0cc7647baaaf8380cfcec239a",
       "cloudCancel.offer.cheaperTitle": "b08be5ea8754031b0874670b03c2b32a9f1732ed9c0888f9aa8d0c451118e472",
       "cloudCancel.offer.cheaper": "e79ce3ad4f93e3c7e308ee16a85fffedb7e4a3b259bb3aad3121d57104d6372f",
-      "cloudCancel.offer.seePlans": "d989893356eeff0f22804648f79ee465c509800917fe8d64ec31ab5aa6557220",
       "cloudCancel.offer.freeTitle": "17fea458cce9c6fa2d09b4c7a52f5110fc259ccbef810b554bd00b654a867588",
       "cloudCancel.offer.usedTitle": "b4c33b2e022e42a5aeb0b1c50a68786588380db168dce0359759ed95a3d0324e",
       "cloudCancel.offer.used": "a8b310a30d45d77dba78b07bb554f277db1b9086d8c330a6200151ed6098a908",
@@ -52700,7 +52713,10 @@
       "cloudCancel.lossApps.one": "763a14cc46b3a75edacd8136e2eb2e6a03b911dd4223a23f78378e53b1bfa221",
       "cloudCancel.lossMemoryUntil": "50cd92d3d6ef64cd5257a6f45945265d53cfe666191b0efdb4eaaa5e00d5d209",
       "cloudCancel.confirmPlanOn": "06cca49a42bfecccb799bbbb8e16ab9a56147fa682b75fc4269589837a9213ca",
-      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105"
+      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105",
+      "cloudCancel.noThanks": "99af23a3fd4be001c239cf44b93f5a7f8b0fea7e42b186510afb2a52c9859e6e",
+      "cloudCancel.understood": "2772f3504e2c1e3efdd21161e3250a5ba2ae82a668b661956e4fc5ffa99b1ed2",
+      "cloudCancel.offer.changePlan": "5bbddfbf820617b5ecd44ae522d2da0343ed31471988f7f871a3817cf58777e0"
     },
     "pt-br": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -58880,7 +58896,6 @@
       "cloudCancel.note": "ccbf1db451a37eee3d2608eae05dda3b462766d0cc7647baaaf8380cfcec239a",
       "cloudCancel.offer.cheaperTitle": "b08be5ea8754031b0874670b03c2b32a9f1732ed9c0888f9aa8d0c451118e472",
       "cloudCancel.offer.cheaper": "e79ce3ad4f93e3c7e308ee16a85fffedb7e4a3b259bb3aad3121d57104d6372f",
-      "cloudCancel.offer.seePlans": "d989893356eeff0f22804648f79ee465c509800917fe8d64ec31ab5aa6557220",
       "cloudCancel.offer.freeTitle": "17fea458cce9c6fa2d09b4c7a52f5110fc259ccbef810b554bd00b654a867588",
       "cloudCancel.offer.usedTitle": "b4c33b2e022e42a5aeb0b1c50a68786588380db168dce0359759ed95a3d0324e",
       "cloudCancel.offer.used": "a8b310a30d45d77dba78b07bb554f277db1b9086d8c330a6200151ed6098a908",
@@ -58934,7 +58949,10 @@
       "cloudCancel.lossApps.one": "763a14cc46b3a75edacd8136e2eb2e6a03b911dd4223a23f78378e53b1bfa221",
       "cloudCancel.lossMemoryUntil": "50cd92d3d6ef64cd5257a6f45945265d53cfe666191b0efdb4eaaa5e00d5d209",
       "cloudCancel.confirmPlanOn": "06cca49a42bfecccb799bbbb8e16ab9a56147fa682b75fc4269589837a9213ca",
-      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105"
+      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105",
+      "cloudCancel.noThanks": "99af23a3fd4be001c239cf44b93f5a7f8b0fea7e42b186510afb2a52c9859e6e",
+      "cloudCancel.understood": "2772f3504e2c1e3efdd21161e3250a5ba2ae82a668b661956e4fc5ffa99b1ed2",
+      "cloudCancel.offer.changePlan": "5bbddfbf820617b5ecd44ae522d2da0343ed31471988f7f871a3817cf58777e0"
     },
     "ru": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -65246,7 +65264,6 @@
       "cloudCancel.note": "ccbf1db451a37eee3d2608eae05dda3b462766d0cc7647baaaf8380cfcec239a",
       "cloudCancel.offer.cheaperTitle": "b08be5ea8754031b0874670b03c2b32a9f1732ed9c0888f9aa8d0c451118e472",
       "cloudCancel.offer.cheaper": "e79ce3ad4f93e3c7e308ee16a85fffedb7e4a3b259bb3aad3121d57104d6372f",
-      "cloudCancel.offer.seePlans": "d989893356eeff0f22804648f79ee465c509800917fe8d64ec31ab5aa6557220",
       "cloudCancel.offer.freeTitle": "17fea458cce9c6fa2d09b4c7a52f5110fc259ccbef810b554bd00b654a867588",
       "cloudCancel.offer.usedTitle": "b4c33b2e022e42a5aeb0b1c50a68786588380db168dce0359759ed95a3d0324e",
       "cloudCancel.offer.used": "a8b310a30d45d77dba78b07bb554f277db1b9086d8c330a6200151ed6098a908",
@@ -65300,7 +65317,10 @@
       "cloudCancel.lossApps.one": "763a14cc46b3a75edacd8136e2eb2e6a03b911dd4223a23f78378e53b1bfa221",
       "cloudCancel.lossMemoryUntil": "50cd92d3d6ef64cd5257a6f45945265d53cfe666191b0efdb4eaaa5e00d5d209",
       "cloudCancel.confirmPlanOn": "06cca49a42bfecccb799bbbb8e16ab9a56147fa682b75fc4269589837a9213ca",
-      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105"
+      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105",
+      "cloudCancel.noThanks": "99af23a3fd4be001c239cf44b93f5a7f8b0fea7e42b186510afb2a52c9859e6e",
+      "cloudCancel.understood": "2772f3504e2c1e3efdd21161e3250a5ba2ae82a668b661956e4fc5ffa99b1ed2",
+      "cloudCancel.offer.changePlan": "5bbddfbf820617b5ecd44ae522d2da0343ed31471988f7f871a3817cf58777e0"
     },
     "tr": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -70590,7 +70610,6 @@
       "cloudCancel.note": "ccbf1db451a37eee3d2608eae05dda3b462766d0cc7647baaaf8380cfcec239a",
       "cloudCancel.offer.cheaperTitle": "b08be5ea8754031b0874670b03c2b32a9f1732ed9c0888f9aa8d0c451118e472",
       "cloudCancel.offer.cheaper": "e79ce3ad4f93e3c7e308ee16a85fffedb7e4a3b259bb3aad3121d57104d6372f",
-      "cloudCancel.offer.seePlans": "d989893356eeff0f22804648f79ee465c509800917fe8d64ec31ab5aa6557220",
       "cloudCancel.offer.freeTitle": "17fea458cce9c6fa2d09b4c7a52f5110fc259ccbef810b554bd00b654a867588",
       "cloudCancel.offer.usedTitle": "b4c33b2e022e42a5aeb0b1c50a68786588380db168dce0359759ed95a3d0324e",
       "cloudCancel.offer.used": "a8b310a30d45d77dba78b07bb554f277db1b9086d8c330a6200151ed6098a908",
@@ -70644,7 +70663,10 @@
       "cloudCancel.lossApps.one": "763a14cc46b3a75edacd8136e2eb2e6a03b911dd4223a23f78378e53b1bfa221",
       "cloudCancel.lossMemoryUntil": "50cd92d3d6ef64cd5257a6f45945265d53cfe666191b0efdb4eaaa5e00d5d209",
       "cloudCancel.confirmPlanOn": "06cca49a42bfecccb799bbbb8e16ab9a56147fa682b75fc4269589837a9213ca",
-      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105"
+      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105",
+      "cloudCancel.noThanks": "99af23a3fd4be001c239cf44b93f5a7f8b0fea7e42b186510afb2a52c9859e6e",
+      "cloudCancel.understood": "2772f3504e2c1e3efdd21161e3250a5ba2ae82a668b661956e4fc5ffa99b1ed2",
+      "cloudCancel.offer.changePlan": "5bbddfbf820617b5ecd44ae522d2da0343ed31471988f7f871a3817cf58777e0"
     },
     "uk": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -74409,7 +74431,6 @@
       "cloudCancel.note": "ccbf1db451a37eee3d2608eae05dda3b462766d0cc7647baaaf8380cfcec239a",
       "cloudCancel.offer.cheaperTitle": "b08be5ea8754031b0874670b03c2b32a9f1732ed9c0888f9aa8d0c451118e472",
       "cloudCancel.offer.cheaper": "e79ce3ad4f93e3c7e308ee16a85fffedb7e4a3b259bb3aad3121d57104d6372f",
-      "cloudCancel.offer.seePlans": "d989893356eeff0f22804648f79ee465c509800917fe8d64ec31ab5aa6557220",
       "cloudCancel.offer.freeTitle": "17fea458cce9c6fa2d09b4c7a52f5110fc259ccbef810b554bd00b654a867588",
       "cloudCancel.offer.usedTitle": "b4c33b2e022e42a5aeb0b1c50a68786588380db168dce0359759ed95a3d0324e",
       "cloudCancel.offer.used": "a8b310a30d45d77dba78b07bb554f277db1b9086d8c330a6200151ed6098a908",
@@ -74463,7 +74484,10 @@
       "cloudCancel.lossApps.one": "763a14cc46b3a75edacd8136e2eb2e6a03b911dd4223a23f78378e53b1bfa221",
       "cloudCancel.lossMemoryUntil": "50cd92d3d6ef64cd5257a6f45945265d53cfe666191b0efdb4eaaa5e00d5d209",
       "cloudCancel.confirmPlanOn": "06cca49a42bfecccb799bbbb8e16ab9a56147fa682b75fc4269589837a9213ca",
-      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105"
+      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105",
+      "cloudCancel.noThanks": "99af23a3fd4be001c239cf44b93f5a7f8b0fea7e42b186510afb2a52c9859e6e",
+      "cloudCancel.understood": "2772f3504e2c1e3efdd21161e3250a5ba2ae82a668b661956e4fc5ffa99b1ed2",
+      "cloudCancel.offer.changePlan": "5bbddfbf820617b5ecd44ae522d2da0343ed31471988f7f871a3817cf58777e0"
     },
     "vi": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -79753,7 +79777,6 @@
       "cloudCancel.note": "ccbf1db451a37eee3d2608eae05dda3b462766d0cc7647baaaf8380cfcec239a",
       "cloudCancel.offer.cheaperTitle": "b08be5ea8754031b0874670b03c2b32a9f1732ed9c0888f9aa8d0c451118e472",
       "cloudCancel.offer.cheaper": "e79ce3ad4f93e3c7e308ee16a85fffedb7e4a3b259bb3aad3121d57104d6372f",
-      "cloudCancel.offer.seePlans": "d989893356eeff0f22804648f79ee465c509800917fe8d64ec31ab5aa6557220",
       "cloudCancel.offer.freeTitle": "17fea458cce9c6fa2d09b4c7a52f5110fc259ccbef810b554bd00b654a867588",
       "cloudCancel.offer.usedTitle": "b4c33b2e022e42a5aeb0b1c50a68786588380db168dce0359759ed95a3d0324e",
       "cloudCancel.offer.used": "a8b310a30d45d77dba78b07bb554f277db1b9086d8c330a6200151ed6098a908",
@@ -79807,7 +79830,10 @@
       "cloudCancel.lossApps.one": "763a14cc46b3a75edacd8136e2eb2e6a03b911dd4223a23f78378e53b1bfa221",
       "cloudCancel.lossMemoryUntil": "50cd92d3d6ef64cd5257a6f45945265d53cfe666191b0efdb4eaaa5e00d5d209",
       "cloudCancel.confirmPlanOn": "06cca49a42bfecccb799bbbb8e16ab9a56147fa682b75fc4269589837a9213ca",
-      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105"
+      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105",
+      "cloudCancel.noThanks": "99af23a3fd4be001c239cf44b93f5a7f8b0fea7e42b186510afb2a52c9859e6e",
+      "cloudCancel.understood": "2772f3504e2c1e3efdd21161e3250a5ba2ae82a668b661956e4fc5ffa99b1ed2",
+      "cloudCancel.offer.changePlan": "5bbddfbf820617b5ecd44ae522d2da0343ed31471988f7f871a3817cf58777e0"
     },
     "zh": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -86681,7 +86707,6 @@
       "cloudCancel.note": "ccbf1db451a37eee3d2608eae05dda3b462766d0cc7647baaaf8380cfcec239a",
       "cloudCancel.offer.cheaperTitle": "b08be5ea8754031b0874670b03c2b32a9f1732ed9c0888f9aa8d0c451118e472",
       "cloudCancel.offer.cheaper": "e79ce3ad4f93e3c7e308ee16a85fffedb7e4a3b259bb3aad3121d57104d6372f",
-      "cloudCancel.offer.seePlans": "d989893356eeff0f22804648f79ee465c509800917fe8d64ec31ab5aa6557220",
       "cloudCancel.offer.freeTitle": "17fea458cce9c6fa2d09b4c7a52f5110fc259ccbef810b554bd00b654a867588",
       "cloudCancel.offer.usedTitle": "b4c33b2e022e42a5aeb0b1c50a68786588380db168dce0359759ed95a3d0324e",
       "cloudCancel.offer.used": "a8b310a30d45d77dba78b07bb554f277db1b9086d8c330a6200151ed6098a908",
@@ -86736,7 +86761,10 @@
       "cloudCancel.lossMemoryUntil": "50cd92d3d6ef64cd5257a6f45945265d53cfe666191b0efdb4eaaa5e00d5d209",
       "cloudCancel.confirmPlanOn": "06cca49a42bfecccb799bbbb8e16ab9a56147fa682b75fc4269589837a9213ca",
       "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105",
-      "keys.purpose.openaiNoLive": "1de6f8eeb4e3eb7cea5d59e842a1327a736a187213a0f0e31fb6a0f35837fba1"
+      "keys.purpose.openaiNoLive": "1de6f8eeb4e3eb7cea5d59e842a1327a736a187213a0f0e31fb6a0f35837fba1",
+      "cloudCancel.noThanks": "99af23a3fd4be001c239cf44b93f5a7f8b0fea7e42b186510afb2a52c9859e6e",
+      "cloudCancel.understood": "2772f3504e2c1e3efdd21161e3250a5ba2ae82a668b661956e4fc5ffa99b1ed2",
+      "cloudCancel.offer.changePlan": "5bbddfbf820617b5ecd44ae522d2da0343ed31471988f7f871a3817cf58777e0"
     },
     "zh-tw": {
       "settings.talkingStyle.title": "b1f52e3d447b7f2c73e754991ee9eeb710a8a24af163d861ebdf33e22b87fe50",
@@ -91604,7 +91632,6 @@
       "cloudCancel.note": "ccbf1db451a37eee3d2608eae05dda3b462766d0cc7647baaaf8380cfcec239a",
       "cloudCancel.offer.cheaperTitle": "b08be5ea8754031b0874670b03c2b32a9f1732ed9c0888f9aa8d0c451118e472",
       "cloudCancel.offer.cheaper": "e79ce3ad4f93e3c7e308ee16a85fffedb7e4a3b259bb3aad3121d57104d6372f",
-      "cloudCancel.offer.seePlans": "d989893356eeff0f22804648f79ee465c509800917fe8d64ec31ab5aa6557220",
       "cloudCancel.offer.freeTitle": "17fea458cce9c6fa2d09b4c7a52f5110fc259ccbef810b554bd00b654a867588",
       "cloudCancel.offer.usedTitle": "b4c33b2e022e42a5aeb0b1c50a68786588380db168dce0359759ed95a3d0324e",
       "cloudCancel.offer.used": "a8b310a30d45d77dba78b07bb554f277db1b9086d8c330a6200151ed6098a908",
@@ -91658,7 +91685,10 @@
       "cloudCancel.lossApps.one": "763a14cc46b3a75edacd8136e2eb2e6a03b911dd4223a23f78378e53b1bfa221",
       "cloudCancel.lossMemoryUntil": "50cd92d3d6ef64cd5257a6f45945265d53cfe666191b0efdb4eaaa5e00d5d209",
       "cloudCancel.confirmPlanOn": "06cca49a42bfecccb799bbbb8e16ab9a56147fa682b75fc4269589837a9213ca",
-      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105"
+      "cloudCancel.confirmTrialOn": "a11c21d0f3e107f77a472c3bc77e0bb13914f7ec7004465c103bb43a13376105",
+      "cloudCancel.noThanks": "99af23a3fd4be001c239cf44b93f5a7f8b0fea7e42b186510afb2a52c9859e6e",
+      "cloudCancel.understood": "2772f3504e2c1e3efdd21161e3250a5ba2ae82a668b661956e4fc5ffa99b1ed2",
+      "cloudCancel.offer.changePlan": "5bbddfbf820617b5ecd44ae522d2da0343ed31471988f7f871a3817cf58777e0"
     }
   }
 }
