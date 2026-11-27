@@ -745,9 +745,25 @@ export function noteBrowserEngineUnavailable(status: Extract<BrowserEngineStatus
   console.warn(`${describeBrowserEngine(status)}; bots get no browser tools until it is installed`);
 }
 
-/** A turn whose bot works in the built-in browser while that browser is still being fetched or set up on this computer. */
+/** Why a turn that wanted the built-in browser has none: its install is under way, or none is coming (a sealed or
+ * throwaway workspace, auto-install turned off, a failed install waiting out its retry, a broken bundle). */
+export type BrowserMissing = "setting-up" | "unavailable";
+
 export const BROWSER_SETTING_UP_PROMPT =
   " Your built-in browser is still being set up on this computer, so its tools are missing this turn. Read pages with web search and page fetching meanwhile. For a step that needs clicking, typing or signing in on a site, say in one plain line that the browser is still setting up, do everything else, and never say you have no browser.";
+
+const BROWSER_UNAVAILABLE_PROMPT =
+  " Your built-in browser is not available here this turn: read pages with web search and page fetching, and for a step that needs a site itself, say so in one plain line and do the rest.";
+
+/** Null when the engine is there and only the profile's browser could not be offered. */
+export function browserMissingWhy(status: { kind: string }, install: { pending: boolean; installing: boolean }): BrowserMissing | null {
+  if (status.kind !== "unavailable") return null;
+  return install.pending || install.installing ? "setting-up" : "unavailable";
+}
+
+export function browserMissingPrompt(why: BrowserMissing): string {
+  return why === "setting-up" ? BROWSER_SETTING_UP_PROMPT : BROWSER_UNAVAILABLE_PROMPT;
+}
 
 /** What the bot says when the person asks which browser it uses: never a guess, and never "I don't have one". */
 export function whichBrowserLine(described: string, myChrome: boolean): string {

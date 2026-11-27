@@ -22,9 +22,12 @@ describe("mountsHostShell", () => {
       expect(mountsHostShell({ ...desktopTurn, ...change })).toBe(false);
     }
   });
-  it("lends it on a server the person runs with duskbot serve, as on the desktop app", () => {
-    const own = { ...desktopTurn, desktopApp: false, selfHosted: true };
+  it("lends it on a server others sign in to only for its owner's and admins' own lines", () => {
+    const own = { ...desktopTurn, desktopApp: false, selfHosted: true, shared: true, ownerOrAdminRequest: true };
     expect(mountsHostShell(own)).toBe(true);
+    expect(mountsHostShell({ ...own, ownerOrAdminRequest: false })).toBe(false);
+    expect(mountsHostShell({ ...own, ownerOrAdminRequest: undefined })).toBe(false);
+    expect(mountsHostShell({ ...own, watched: false })).toBe(false);
     for (const change of [{ engineHasShell: true }, { worksOn: "off" }, { remoteComputer: true }, { guest: true }, { testRun: true }]) {
       expect(mountsHostShell({ ...own, ...change })).toBe(false);
     }
@@ -147,6 +150,9 @@ describe("find_files", () => {
     expect(byContent).toEqual({ text: join(home, "Library/Mobile Documents/com~apple~CloudDocs/Trips/oct-weekend.md") });
     const linux = await findFiles({ query: "paddle" }, { platform: "linux", home, env: process.env, run: async (file, args, options) => (file === "locate" ? { code: 0, stdout: "", stderr: "", timedOut: false } : runProcess(file, args, options)) });
     expect(linux.text).toContain("IMG_4471 halyard paddle club card.txt");
+    const outside = await findFiles({ query: "quillmoor cabin", in_content: true }, { platform: "darwin", home, env: process.env,
+      run: async (file, args, options) => (file === "mdfind" ? { code: 0, stdout: "/Applications/Notes Helper.app/quillmoor.txt\n", stderr: "", timedOut: false } : runProcess(file, args, options)) });
+    expect(outside).toEqual({ text: [join(home, "Library/Mobile Documents/com~apple~CloudDocs/Trips/oct-weekend.md"), "/Applications/Notes Helper.app/quillmoor.txt"].join("\n") });
     rmSync(home, { recursive: true, force: true });
   });
   it("asks Windows Search with the query in the environment, then where.exe", () => {

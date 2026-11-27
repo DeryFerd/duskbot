@@ -269,8 +269,19 @@ export const JUST_DO_IT_PROMPT =
 export const EXECUTION_PROMPT =
   " Prices, rates, hours, scores and anything else current come from a search or a page read this turn, never from what you remember; a sum over more than a few numbers goes through a data query when you have one. \"Is it running?\" or \"did it work?\" means look with your tools, not ask them where.";
 
-export const CREDENTIAL_PROMPT =
-  " Secrets: when a key, token or password is needed, call request_credential (one the person pasted in this chat goes in with pasted_as, no card); never copy a value into a tool call, command or reply, or ask for one in chat. For computer access use select_computer (their own VPS needs no provider key); mcp_server adds an MCP server when a task needs a service you can't reach yet, once the person asks or agrees.";
+const credentialPrompt = (ownFiles: boolean) =>
+  ` Secrets: when a key, token or password is needed, call request_credential (one the person pasted in this chat goes in with pasted_as, no card); never copy a value into a tool call, command or reply, or ask for one in chat${ownFiles ? OWN_FILES_EXCEPTION : ""}. For computer access use select_computer (their own VPS needs no provider key); mcp_server adds an MCP server when a task needs a service you can't reach yet, once the person asks or agrees.`;
+/** Their own note is theirs to read back: refusing it protects nobody. Anything from a page, a message or another person
+ * could be planted there to be read out, and a room or chat app has other readers. */
+const OWN_FILES_EXCEPTION =
+  ", except a detail they ask for here from their own files (a Wi-Fi password in their note), never one from a page, a message or someone else";
+export const CREDENTIAL_PROMPT = credentialPrompt(false);
+/** A one-to-one turn's secrets rule: the person may have back what they keep in their own files only in their own
+ * chat, never on a team, in a chat app (Telegram, Discord), for a guest, a member of a shared server or an automation. */
+export function oneToOneCredentialPrompt(turn: { team: boolean; guest: boolean; chatApp: boolean; member: boolean; personAsked: boolean }): string {
+  const own = !turn.team && !turn.guest && !turn.chatApp && !turn.member && turn.personAsked;
+  return own ? credentialPrompt(true) : CREDENTIAL_PROMPT;
+}
 /** Ten minutes stays inside the 20-minute turn stall watchdog, which sees nothing while a command runs. */
 export const BASH_MAX_TIMEOUT_MS = 600_000;
 /** A tool the person already set up on their computer does the job surely and quietly; a website for it is a detour. */
@@ -289,7 +300,7 @@ export const hostShellPrompt = (cloudHome: boolean): string => cloudHome
   ? " Your shell on your cloud computer: shell_run_command runs a command there, starting in your working folder (files you make there can be attached to the chat). Use it for every file and command-line task: listing, reading, moving or converting files, running scripts with python3 or node, git, curl. Never say you cannot run commands. A command is stopped after 60 seconds unless you pass a longer timeout_seconds (at most 300); start anything longer in the background with its output in a file and read that file later." + CLI_FIRST
   : HOST_SHELL_PROMPT;
 export const HOST_SHELL_PROMPT =
-  " Your shell on this computer: shell_run_command runs a command on the person's own computer, starting in your working folder (files you make there can be attached to the chat), and shell_find_files finds their files anywhere in their home folder (the system's search index first, then a walk of the folder, iCloud Drive included). Your working folder is not their home folder: their files are under ~ (Desktop, Documents, Downloads, iCloud Drive). Use these for every file and command-line task on this computer: finding, listing, reading, moving or converting files, running scripts, installing or removing an app. Never say you cannot search their files or run commands, and never open a terminal on their screen to type a command these can run. To find a file, call shell_find_files with one or two distinctive words of its name, or with in_content for words inside it, before any other way; never scan the whole disk with a command. A command is stopped after 60 seconds unless you pass a longer timeout_seconds (at most 300); start anything longer in the background with its output in a file and read that file later." + CLI_FIRST;
+  " Your shell on this computer: shell_run_command runs a command on the person's own computer, starting in your working folder (files you make there can be attached to the chat), and shell_find_files finds their files anywhere in their home folder (the system's search index first, then a walk of the folder, iCloud Drive included). Your working folder is not their home folder: their files are under ~ (Desktop, Documents, Downloads, iCloud Drive). Use these for every file and command-line task on this computer: finding, listing, reading, moving or converting files, running scripts, installing or removing an app (removing one takes its support files in ~/Library too, to the Trash). Never say you cannot search their files or run commands, and never open a terminal on their screen to type a command these can run. To find a file, call shell_find_files with one or two distinctive words of its name, or with in_content for words inside it, before any other way; never scan the whole disk with a command. A command is stopped after 60 seconds unless you pass a longer timeout_seconds (at most 300); start anything longer in the background with its output in a file and read that file later." + CLI_FIRST;
 export function longCommandsPrompt(computer: ComputerPromptKind | null): string {
   return LONG_COMMANDS_TEXT + (computer === "vm-private" || computer === "vm-shared" ? VM_LONG_COMMANDS_TEXT : "");
 }

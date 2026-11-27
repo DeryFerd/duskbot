@@ -16,7 +16,7 @@ export type HarnessMcpKind = "browser" | "computer" | "data" | "email" | "device
 const NAMES: Record<HarnessMcpKind, string> = { browser: "Browser", computer: "Cloud computer", data: "Data", email: "Email", device: "Phone" };
 const INSTRUCTIONS: Partial<Record<HarnessMcpKind, string>> = { data: DATA_INSTRUCTIONS, email: EMAIL_INSTRUCTIONS, device: PHONE_INSTRUCTIONS };
 const RECOVERY: Record<HarnessMcpKind, string> = {
-  browser: " This failure does not establish that all browsers are unavailable. Inspect available connections with select_computer if that tool is present. Keep the requested computer and account; do not bypass a permission refusal or human takeover, and do not repeat an uncertain action without checking its result.",
+  browser: " Your built-in browser is still yours: when this says it is getting ready or could not start, make the same call again in a moment, and read pages with web search meanwhile; never tell the person you have no browser. Keep the requested computer and account; do not bypass a permission refusal or human takeover, and do not repeat an uncertain action without checking its result.",
   computer: " Keep working on the assigned cloud computer only; do not bypass a person's control of it, and take a fresh screenshot before repeating an action whose result is uncertain.",
   data: " The tables already loaded are unchanged; check with data_describe or SHOW TABLES before repeating a load, and do not repeat a statement whose result is uncertain.",
   email: " A send may or may not have gone; look in the Sent folder (EMAIL_SEARCH_MESSAGES) before repeating one.",

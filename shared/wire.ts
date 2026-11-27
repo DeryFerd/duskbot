@@ -436,6 +436,9 @@ export type BotVisibility = "everyone" | "admins" | { people: string[] };
 export interface ResolvedSender {
   name: string;
   id?: string;
+  /** Typed in a session without admin rights (a member of a shared server, a device paired for chat only) or relayed
+   * for someone by another app: not the server's owner or an admin. */
+  member?: true;
 }
 
 /** Who answered a card: a signed-in person (named as their messages are), the owner on this machine, a session-less

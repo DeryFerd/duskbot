@@ -4,6 +4,7 @@ import { availableTools } from "./drivers/agents-catalog.ts";
 import { soulSystemPrompt } from "./bot-folder.ts";
 import { BUILT_IN_BROWSER_SYSTEM_PROMPT } from "./browser-engine.ts";
 import {
+  oneToOneCredentialPrompt,
   SANDBOX_ESCALATION_PROMPT,
   longCommandsPrompt,
   buildSystemPrompt,
@@ -577,4 +578,19 @@ it("a sandboxed engine asks to run a blocked step outside its sandbox instead of
 it("pauses only an automation whose steps need an app not connected yet, and keeps one another app calls by link on", () => {
   expect(TRIGGER_PROMPT).toContain("an automation whose steps need it is made paused until it is");
   expect(TRIGGER_PROMPT).toContain("one another app calls by link stays on");
+});
+
+describe("the secrets rule in a one-to-one chat", () => {
+  const own = { team: false, guest: false, chatApp: false, member: false, personAsked: true };
+  it("lets the owner have back a detail from their own files when they ask for it", () => {
+    expect(oneToOneCredentialPrompt(own)).toContain("except a detail they ask for here from their own files");
+    expect(oneToOneCredentialPrompt(own)).toContain("never one from a page, a message or someone else");
+  });
+  it("keeps the refusal on a team, in a chat app, for a guest, a member or an automation, and in rooms", () => {
+    for (const change of [{ team: true }, { chatApp: true }, { guest: true }, { member: true }, { personAsked: false }]) {
+      expect(oneToOneCredentialPrompt({ ...own, ...change })).toBe(CREDENTIAL_PROMPT);
+    }
+    expect(CREDENTIAL_PROMPT).toContain("never copy a value into a tool call, command or reply, or ask for one in chat.");
+    expect(CREDENTIAL_PROMPT).not.toContain("own files");
+  });
 });

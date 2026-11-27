@@ -34,6 +34,7 @@ import {
   prepareBrowserSessionState,
   resolveAgentBrowserBinary,
   setBrowserViewport,
+  browserMissingPrompt, browserMissingWhy,
 } from "./browser-engine.ts";
 import { AGENT_BROWSER_VERSION, agentBrowserReleaseUrl, agentBrowserReleaseVersion, resolveAgentBrowserReleaseAsset } from "./browser-engine-release.ts";
 import { browserBundlePaths, browserBundleSpec, SUPPORTED_BROWSER_TARGETS } from "./browser-bundle-release.ts";
@@ -1098,5 +1099,17 @@ describe("the bots' browser on Linux ARM64, where `agent-browser install` always
     await expect(ensureChrome(engine, { ...arm, host, dataDir, env: { HOME: join(dataDir, "home"), PATH: "" }, download: download as never, missing: async () => [] }))
       .rejects.toThrow("unzip is not installed on this computer");
     expect(download).not.toHaveBeenCalled();
+  });
+});
+
+describe("a turn with no built-in browser", () => {
+  it("says the browser is setting up only while an install is under way", () => {
+    const missing = { kind: "unavailable" };
+    expect(browserMissingWhy(missing, { pending: false, installing: true })).toBe("setting-up");
+    expect(browserMissingWhy(missing, { pending: true, installing: false })).toBe("setting-up");
+    expect(browserMissingWhy(missing, { pending: false, installing: false })).toBe("unavailable");
+    expect(browserMissingWhy({ kind: "ready" }, { pending: false, installing: false })).toBeNull();
+    expect(browserMissingPrompt("setting-up")).toContain("still being set up");
+    expect(browserMissingPrompt("unavailable")).not.toContain("set up");
   });
 });

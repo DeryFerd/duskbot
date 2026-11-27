@@ -210,6 +210,8 @@ export async function findFiles(
   const style = platform === "win32" ? win32 : posix;
   let failure = "";
   let empty = false;
+  let elsewhere: string[] = [];
+  const inHome = (path: string) => path === home || path.startsWith(home.endsWith(style.sep) ? home : home + style.sep);
   for (const step of findInvocations(query, { content: args.in_content === true, folder, limit, platform, home })) {
     const result = await run(step.file, step.args, { cwd: home, env: { ...env, ...step.env }, timeoutMs: FIND_SECONDS * 1000 });
     const paths = result.stdout.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && style.isAbsolute(line) && !hiddenBy(options.hidden ?? [], line, style.sep));
@@ -217,22 +219,29 @@ export async function findFiles(
     // failures; a walk stopped at its time limit still answers with what it found by then
     const answered = result.code === 0 || (!step.index && result.code === 1 && !result.timedOut) || paths.length > 0;
     if (!answered) { failure = (result.stderr || (result.timedOut ? "the search ran past its time limit" : "the search could not run")).trim(); continue; }
-    if (!paths.length) { empty = true; if (step.index) continue; break; }
-    const shown = paths.slice(0, limit);
-    return { text: `${shown.join("\n")}${paths.length > shown.length ? `\n…(${paths.length - shown.length} more; narrow the query or pass a folder)` : ""}` };
+    // an index that only knows files outside the person's own folders (apps, other volumes) has not looked in theirs
+    if (step.index && !folder && paths.length && !paths.some(inHome)) { elsewhere = paths; continue; }
+    if (!paths.length) { empty = true; if (step.index) continue; if (!elsewhere.length) break; }
+    const found = [...paths, ...elsewhere.filter((path) => !paths.includes(path))];
+    const shown = found.slice(0, limit);
+    return { text: `${shown.join("\n")}${found.length > shown.length ? `\n…(${found.length - shown.length} more; narrow the query or pass a folder)` : ""}` };
   }
+  if (elsewhere.length) return { text: elsewhere.slice(0, limit).join("\n") };
   if (empty) return { text: `No files matched "${query}"${folder ? ` in ${folder}` : ""}. Try one distinctive word of the name, or in_content for a word inside the file.` };
   return { text: `The file search could not run on this computer (${clip(failure, 300)}). Use run_command to look in a likely folder instead, with a depth limit.`, isError: true };
 }
 
 /** The desktop app's own server lends its computer's shell, a dusk cloud home its own and a server the person runs on a
- * computer of theirs with `duskbot serve` its own (where Claude Code and Codex run their shell too), only to an engine
+ * computer of theirs with `duskbot serve` its own to its owner and admins (where Claude Code and Codex run their shell
+ * too), only to an engine
  * that has none, in a turn that works on this computer: never Off, a VPS or team computer, a policy that bars this
  * computer, a guest's or a confined turn, or an automation's test run. */
 export function mountsHostShell(input: {
   engineHasShell: boolean; desktopApp: boolean; cloudHome: boolean; worksOn: "off" | string | undefined;
   /** Started by `duskbot serve` on the person's own server: not the desktop app, a cloud home or a copy run from source. */
   selfHosted?: boolean;
+  /** The line was not typed by a member, a chat-only device or another app relaying for someone. */
+  ownerOrAdminRequest?: boolean;
   remoteComputer: boolean; thisComputerRefused: boolean; guest: boolean; testRun: boolean;
   /** Where the model runs (agents-bridge-switch modelPlace). */
   model: "hosted" | "loopback" | "network";
@@ -242,8 +251,8 @@ export function mountsHostShell(input: {
   /** The server lets people other than its owner in (a sign-in allow list or a team). */
   shared?: boolean;
 }): boolean {
-  // security: a self-hosted server's shell is unsandboxed and runs as the server's user, so only its owner's own turns get it
-  const selfHosted = input.selfHosted === true && input.watched && input.shared !== true;
+  // security: a self-hosted server's shell is unsandboxed and runs as the server's user, so only its owner's and admins' own turns get it
+  const selfHosted = input.selfHosted === true && input.watched && (input.shared !== true || input.ownerOrAdminRequest === true);
   const lent = !input.engineHasShell && (input.desktopApp || input.cloudHome || selfHosted) && input.worksOn !== "off"
     && !input.remoteComputer && !input.thisComputerRefused && !input.guest && !input.testRun;
   if (input.model === "hosted") return lent;

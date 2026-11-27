@@ -417,7 +417,7 @@ import {
   cloudHomePrompt, syncedFolders,
   computerPrompt,
   composioSystemPrompt, composioConnectSystemPrompt,
-  CREDENTIAL_PROMPT,
+  CREDENTIAL_PROMPT, oneToOneCredentialPrompt,
   longCommandsPrompt, hostShellPrompt, SANDBOX_ESCALATION_PROMPT,
   THREADS_PROMPT, WIDGET_PROMPT, JUST_DO_IT_PROMPT, EXECUTION_PROMPT,
   LEARN_PROMPT,
@@ -475,7 +475,7 @@ import { recentTabs } from "./browser-recent-tabs.ts";
 import { browserEvidence, stepContext } from "./browser-steps.ts"; import { WakeGate } from "./wake-gate.ts"; import { startRunHealth } from "./run-health.ts"; import { codexAutoUpdateEnabled, codexUpkeepFor, startCodexUpkeep } from "./codex-upkeep.ts";
 import { parseLoginFields, parseTotpField, createLoginRoutes } from "./routes/logins.ts";
 import { loginSite } from "../shared/logins.ts";
-import { BROWSER_SETTING_UP_PROMPT, browserEngineStatus, whichBrowserLine } from "./browser-engine.ts";
+import { browserEngineStatus, browserMissingPrompt, browserMissingWhy, type BrowserMissing, whichBrowserLine } from "./browser-engine.ts";
 import { chromeLauncher } from "./browser/chrome/launcher.ts";
 import { botThreadLimitText, botThreadsHost, maxConcurrentBotThreads, maxConcurrentChildThreads } from "./bot-thread-limits.ts"; import { createBrowserSeats } from "./host/browser-seats.ts"; import { createBrowserHost } from "./host/browser.ts"; import { createCloudPlanTier } from "./host/cloud-plan-tier.ts";
 import { createScreenFrameSource, rememberTurnFrame, type ScreenCapture } from "./screen-frame-source.ts";
@@ -832,7 +832,7 @@ function sessionPersonName(session: SessionRecord): string {
 function messageSender(auth: RequestAuth): ResolvedSender | undefined {
   if (auth.kind !== "session") return undefined;
   const name = sessionPersonName(auth.session);
-  return name ? { name, id: actorKey(auth) } : undefined;
+  return name ? { name, id: actorKey(auth), ...(auth.scopes.includes("admin") ? {} : { member: true as const }) } : undefined;
 }
 
 /** On a Team Cloud, whose conversation this is: the member's own, or the routine run's writer. */
@@ -8968,7 +8968,7 @@ async function beginTurn(
       if (dispatchContext.handoff) handoffs.begin(threadId, dispatchClaimId, dispatchContext.handoff);
 
       const integrations: NonNullable<Parameters<typeof instance.adapter.sendTurn>[0]["integrations"]> = {};
-      let browser: Awaited<ReturnType<typeof browserIntegration>> = null; let browserSettingUp = false;
+      let browser: Awaited<ReturnType<typeof browserIntegration>> = null; let browserMissing: BrowserMissing | null = null;
       const skills = availableSkills(), phoneOffered = usbPhoneOffered(instance, skills) && !proactive.fence.confines(threadId) && !botApiThread(threadId);
       const selectedSkills = selectBundledSkills(
         providerText,
@@ -9355,7 +9355,8 @@ async function beginTurn(
         : integrations.agents && sectionPeers.length > 0
           ? peerRosterSystemPrompt(sectionPeers, bot)
           : "";
-      const credentialPrompt = integrations.agents ? CREDENTIAL_PROMPT + THREADS_PROMPT + WIDGET_PROMPT : "";
+      const credentialPrompt = integrations.agents ? oneToOneCredentialPrompt({ team: Boolean(CLOUD_TEAM), guest: guestConfined, chatApp: Boolean(messengerHost.platformOf(threadId)),
+        member: Boolean(userMessage.sender?.member), personAsked: requestOrigin.kind === "user" }) + THREADS_PROMPT + WIDGET_PROMPT : "";
       const routinePrompt = integrations.agents ? TRIGGER_PROMPT : "";
       const profilePrompt = integrations.agents ? PROFILE_PROMPT + workspacePrompt(chiefLevel(bot)) : "";
       const recallPrompt = integrations.agents && bot.memoryEnabled !== false ? SESSION_SEARCH_SYSTEM_PROMPT : "";
@@ -9387,7 +9388,7 @@ async function beginTurn(
       if (liveBot && instance.adapter.capabilities.emailMcp === true) { const mail = emailIntegration(liveBot, { threadId, generation: dispatchClaimId }); if (mail) integrations.email = mail; }
       const phone = liveBot && instance.adapter.capabilities.deviceMcp === true ? phones.integration(liveBot, { threadId, generation: dispatchClaimId }) : null;
       if (phone) integrations.device = phone;
-      if (mountsHostShell({ engineHasShell: worksInWorkspace, desktopApp: DESKTOP_MANAGED && desktopComputer.granted(), cloudHome: Boolean(CLOUD_HOME), selfHosted: !DESKTOP_MANAGED && process.env[SELF_HOSTED_ENV] === "1", shared: sharedMembership(), worksOn: plan.computer, remoteComputer: Boolean(teamComputer) || Boolean(vpsSshAliasForBot(cfg, bot)), thisComputerRefused: Boolean(computerPlaceRefusal("thisComputer")), guest: guestConfined || cloudGuestOpened(threadId), testRun: routineGuard.dryRun(routines?.runForThread(threadId) ?? null), model: modelPlace(bot, turnEngine(instance, instanceConfigs(cfg), registry.lastSnapshot(instance.instanceId), cwd)), platform: process.platform, watched: (requestKind === "person" || requestKind === "continuation") && requestOrigin.kind === "user" })) { const shell = hostShellLaunch(messageFileRootsForThread(bot.id, threadId).find((root) => root !== ATTACHMENTS_DIR), [DATA_DIR, join(homedir(), ".ssh")], bot.id); if (shell) integrations.shell = shell; }
+      if (mountsHostShell({ engineHasShell: worksInWorkspace, desktopApp: DESKTOP_MANAGED && desktopComputer.granted(), cloudHome: Boolean(CLOUD_HOME), selfHosted: !DESKTOP_MANAGED && process.env[SELF_HOSTED_ENV] === "1", shared: sharedMembership(), ownerOrAdminRequest: !userMessage.sender?.member, worksOn: plan.computer, remoteComputer: Boolean(teamComputer) || Boolean(vpsSshAliasForBot(cfg, bot)), thisComputerRefused: Boolean(computerPlaceRefusal("thisComputer")), guest: guestConfined || cloudGuestOpened(threadId), testRun: routineGuard.dryRun(routines?.runForThread(threadId) ?? null), model: modelPlace(bot, turnEngine(instance, instanceConfigs(cfg), registry.lastSnapshot(instance.instanceId), cwd)), platform: process.platform, watched: (requestKind === "person" || requestKind === "continuation") && requestOrigin.kind === "user" })) { const shell = hostShellLaunch(messageFileRootsForThread(bot.id, threadId).find((root) => root !== ATTACHMENTS_DIR), [DATA_DIR, join(homedir(), ".ssh")], bot.id); if (shell) integrations.shell = shell; }
       const mountedComputer = surfaceOfComputerKind(computerKind);
       if (
         liveBot &&
@@ -9401,7 +9402,7 @@ async function beginTurn(
         const selectedProfile = liveBot.browserProfile;
         await browserEngineInstalled(bot.id);
         browser = await browserIntegration(bot.id, selectedProfile, { threadId, generation: dispatchClaimId });
-        if (browser) integrations.browser = browser.integration; else browserSettingUp = browserEngineStatus().kind === "unavailable";
+        if (browser) integrations.browser = browser.integration; else browserMissing = browserMissingWhy(browserEngineStatus(), { pending: browserPart.pending(), installing: Boolean(browserEngineInstall) });
         if (browser) {
           // The preview shares the profile with tool calls: claim the same browser:<session> resource, and skip the frame while another thread holds it.
           browserCapture = browserPreviewCapture(threadId, browser);
@@ -9456,7 +9457,7 @@ async function beginTurn(
         { id: "cloud-home", label: "My Cloud", text: CLOUD_HOME ? cloudHomePrompt(syncedFolders(DATA_DIR)) : "" },
         { id: "composio", label: "Connected apps", text: integrations.composio ? composioSystemPrompt(liveBot?.connectorTools ?? bot.connectorTools, Boolean(integrations.browser)) + describeConnectorScopes((liveBot ?? bot).connectorScopes) : hasComposioConnectMounted(integrations.custom, cfg.mcpServers) ? composioConnectSystemPrompt(Boolean(integrations.browser)) : "" },
         { id: "mcp", label: "MCP servers", text: mcpPrompt(bot, integrations.custom ?? {}) }, { id: "to-connect", label: "Connections to make", text: cloudConnections.prompt(liveBot ?? bot) + teamConnections.prompt(threadId, dispatchClaimId, integrations) },
-        { id: "browser", label: "Browser", text: integrations.browser ? browserPromptFor(bot, Boolean(integrations.agents)) : browserSettingUp ? BROWSER_SETTING_UP_PROMPT : "" },
+        { id: "browser", label: "Browser", text: integrations.browser ? browserPromptFor(bot, Boolean(integrations.agents)) : browserMissing ? browserMissingPrompt(browserMissing) : "" },
         { id: "data", label: "Data", text: integrations.data ? BUILT_IN_DATA_SYSTEM_PROMPT : "" },
         { id: "email", label: "Email", text: instance.adapter.capabilities.emailMcp === true ? emailHost.prompt(liveBot ?? bot) : "" },
         ...phones.promptParts(liveBot ?? bot, {
