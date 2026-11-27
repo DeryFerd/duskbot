@@ -41,16 +41,20 @@ export function useBottomFollowResize(
   followingRef: RefObject<boolean>,
   observeKey: string | null,
   onHold?: () => void,
+  onUnfollowedResize?: () => void,
 ): void {
   const hold = useRef(onHold);
   hold.current = onHold;
+  const unfollowed = useRef(onUnfollowedResize);
+  unfollowed.current = onUnfollowedResize;
   useLayoutEffect(() => {
     const scroller = scrollRef.current;
     const transcript = transcriptRef.current;
     if (!scroller || !transcript || observeKey === null) return;
 
     const observer = new ResizeObserver(() => {
-      const top = followingRef.current ? growthHold(scroller, transcript) : null;
+      if (!followingRef.current) { unfollowed.current?.(); return; }
+      const top = growthHold(scroller, transcript);
       if (top === null) { followBottomGrowth(scroller, followingRef.current); return; }
       scroller.scrollTop = top;
       hold.current?.();

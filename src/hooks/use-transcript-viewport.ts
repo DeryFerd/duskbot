@@ -41,39 +41,54 @@ function rowBox(row: Element): DOMRect | null {
   return null;
 }
 
-type ScrollAnchor = { key: string; height: number; id?: string; top?: number; edge: "top" | "bottom" };
+/** `at` is the row's top in the scroller's content, so neither scrolling nor the column drawn `lift` px above its place
+ * moves it: only rows above it mounting, going or changing height do. */
+type ScrollAnchor = { key: string; height: number; scroll: number; id?: string; at?: number; edge: "top" | "bottom" };
+
+const contentOrigin = (el: HTMLElement, lift: number) => el.getBoundingClientRect().top - el.scrollTop - lift;
 
 /** The first (or last, when paging forward) row on screen and where it sits, so a page of rows mounted or let go above
  * or below keeps it in place. */
-function scrollAnchor(el: HTMLElement, key: string, edge: "top" | "bottom" = "top"): ScrollAnchor {
-  const anchor: ScrollAnchor = { key, height: el.scrollHeight, edge };
+function scrollAnchor(el: HTMLElement, key: string, edge: "top" | "bottom" = "top", lift = 0): ScrollAnchor {
+  const anchor: ScrollAnchor = { key, height: el.scrollHeight, scroll: el.scrollTop, edge };
   if (typeof el.querySelectorAll !== "function") return anchor;
   const rect = el.getBoundingClientRect();
+  const origin = contentOrigin(el, lift);
   const rows = el.querySelectorAll<HTMLElement>("[data-mid]");
   if (edge === "bottom") {
     for (let i = rows.length - 1; i >= 0; i--) {
       const row = rows[i]!;
       const box = rowBox(row);
       if (!box || box.top >= rect.bottom) continue;
-      return { ...anchor, id: row.dataset.mid, top: box.top };
+      return { ...anchor, id: row.dataset.mid, at: box.top - origin };
     }
     return anchor;
   }
   for (const row of rows) {
     const box = rowBox(row);
     if (!box || box.bottom <= rect.top) continue;
-    return { ...anchor, id: row.dataset.mid, top: box.top };
+    return { ...anchor, id: row.dataset.mid, at: box.top - origin };
   }
   return anchor;
 }
 
-function anchorShift(el: HTMLElement, anchor: ScrollAnchor): number {
-  const row = anchor.id && anchor.top !== undefined ? el.querySelector(`[data-mid=${JSON.stringify(anchor.id)}]`) : null;
+/** How far the anchor's row moved down the content, or null once it is no longer mounted. */
+function rowShift(el: HTMLElement, anchor: ScrollAnchor, lift: number): number | null {
+  const row = anchor.id && anchor.at !== undefined ? el.querySelector(`[data-mid=${JSON.stringify(anchor.id)}]`) : null;
   const box = row && rowBox(row);
-  if (box) return box.top - anchor.top!;
-  // If a forward page dropped the only visible anchor row, stay put rather than slamming scrollTop to 0.
-  return anchor.edge === "bottom" ? 0 : el.scrollHeight - anchor.height;
+  return box ? box.top - contentOrigin(el, lift) - anchor.at! : null;
 }
+
+function anchorShift(el: HTMLElement, anchor: ScrollAnchor, lift: number): number {
+  // If a forward page dropped the only visible anchor row, stay put rather than slamming scrollTop to 0.
+  return rowShift(el, anchor, lift) ?? (anchor.edge === "bottom" ? 0 : el.scrollHeight - anchor.height);
+}
+
+/** WebKit on iOS drops a scrollTop written while a finger or a fling is moving the list (the fling carries on from where
+ * it was), so there the content is drawn shifted until the list comes to rest. */
+const scrollWritesLostMidFling = () =>
+  globalThis.document?.documentElement?.dataset?.mobileApp === "ios" || /iP(hone|ad|od)/.test(globalThis.navigator?.userAgent ?? "");
+const FLING_REST_MS = 120;
 
 const WIDGETS_WITH_OWN_ARROW_KEYS = '[role="menu"], [role="menubar"], [role="listbox"], [role="tree"], [role="grid"], [role="tablist"], [role="radiogroup"], [role="slider"], select, [contenteditable="true"]';
 
@@ -176,12 +191,78 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
   const shownWindow = useRef({ start: startIndex, end: endIndex, total: viewportMessages.length });
   shownWindow.current = { start: startIndex, end: endIndex, total: viewportMessages.length };
 
+  // held from a page step until the reader is back at the latest, so rows above it that settle late (a picture, a
+  // diagram, maths) never move it either
+  const anchorRef = useRef<ScrollAnchor | null>(null);
+  const stepPending = useRef(false);
+  const lift = useRef(0);
+  const fling = useRef<{ touching: boolean; timer: ReturnType<typeof setTimeout> | null }>({ touching: false, timer: null });
+
+  const settleLift = () => {
+    const el = scrollRef.current;
+    if (fling.current.timer) clearTimeout(fling.current.timer);
+    fling.current.timer = null;
+    if (!lift.current) return;
+    if (clipRef.current) clipRef.current.style.transform = "";
+    if (el) {
+      el.scrollTop += lift.current;
+      previousScrollTop.current = el.scrollTop;
+    }
+    lift.current = 0;
+  };
+  const restLater = () => {
+    if (!scrollWritesLostMidFling()) return;
+    if (fling.current.timer) clearTimeout(fling.current.timer);
+    fling.current.timer = setTimeout(() => {
+      fling.current.timer = null;
+      if (!fling.current.touching) settleLift();
+    }, FLING_REST_MS);
+  };
+  const scrollBy = (el: HTMLElement, shift: number, from: ScrollAnchor) => {
+    // rows let go above the reader can leave the list shorter than where it was scrolled, and the browser pulls the
+    // scroll back to the new end before this runs
+    const clamped = el.scrollTop < from.scroll && el.scrollTop >= el.scrollHeight - el.clientHeight - 1;
+    if (clamped) {
+      el.scrollTop = from.scroll + shift;
+      previousScrollTop.current = el.scrollTop;
+      return;
+    }
+    if (Math.abs(shift) < 0.5) return;
+    const clip = clipRef.current;
+    if (clip && scrollWritesLostMidFling() && (fling.current.touching || fling.current.timer)) {
+      lift.current += shift;
+      clip.style.transform = `translateY(${-lift.current}px)`;
+      previousScrollTop.current += shift;
+      return;
+    }
+    el.scrollTop += shift;
+    previousScrollTop.current = el.scrollTop + lift.current;
+  };
+  const releaseAnchor = () => {
+    anchorRef.current = null;
+    stepPending.current = false;
+    settleLift();
+  };
+  const releaseRef = useRef(releaseAnchor);
+  releaseRef.current = releaseAnchor;
+  useEffect(() => () => releaseRef.current(), []);
+
   const setBottomFollow = useCallback((next: boolean) => {
     followRef.current = next;
     setFollow(next);
+    if (next) releaseRef.current();
   }, []);
   const holdAtReply = useCallback(() => setBottomFollow(false), [setBottomFollow]);
-  useBottomFollowResize(scrollRef, transcriptRef, followRef, transcriptShown ? transcriptKey : null, holdAtReply);
+  const holdAnchorRow = () => {
+    const el = scrollRef.current;
+    const held = anchorRef.current;
+    if (!el || !held || held.key !== transcriptKey) return;
+    const shift = rowShift(el, held, lift.current);
+    if (shift === null) return;
+    scrollBy(el, shift, held);
+    anchorRef.current = scrollAnchor(el, transcriptKey, held.edge, lift.current);
+  };
+  useBottomFollowResize(scrollRef, transcriptRef, followRef, transcriptShown ? transcriptKey : null, holdAtReply, holdAnchorRow);
 
   useEffect(() => setBottomFollow(true), [transcriptKey, setBottomFollow]);
 
@@ -206,32 +287,34 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
   useFocusMessage(threadId, messages.length > 0);
 
   // Shift scrollTop by the growth after commit (scroll anchoring is off here); a switch drops the capture.
-  const preExpandHeight = useRef<ScrollAnchor | null>(null);
   const expandingRef = useRef(false);
   // After paging forward, hold off automatic earlier-paging until the reader actually scrolls up again.
   const suppressEarlierRef = useRef(false);
   const settleSeqRef = useRef(0);
 
   const holdRowForPrepend = (edge: "top" | "bottom" = "top") => {
-    preExpandHeight.current = scrollRef.current ? scrollAnchor(scrollRef.current, transcriptKey, edge) : null;
+    anchorRef.current = scrollRef.current ? scrollAnchor(scrollRef.current, transcriptKey, edge, lift.current) : null;
+    stepPending.current = true;
     setBottomFollow(false);
   };
   const oldestId = viewportMessages[0]?.id;
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    const captured = preExpandHeight.current;
+    const captured = stepPending.current ? anchorRef.current : null;
     if (!captured || !el) {
       expandingRef.current = false;
       return;
     }
-    preExpandHeight.current = null;
+    stepPending.current = false;
     if (captured.key !== transcriptKey) {
+      anchorRef.current = null;
       expandingRef.current = false;
       suppressEarlierRef.current = false;
       return;
     }
-    el.scrollTop += anchorShift(el, captured);
-    previousScrollTop.current = el.scrollTop;
+    scrollBy(el, anchorShift(el, captured, lift.current), captured);
+    previousScrollTop.current = el.scrollTop + lift.current;
+    anchorRef.current = scrollAnchor(el, transcriptKey, "top", lift.current);
     expandingRef.current = false;
     if (captured.edge === "bottom") {
       suppressEarlierRef.current = true;
@@ -247,6 +330,7 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
   useLayoutEffect(() => {
     // the newest row seen is recorded after paint, so here it still names the thread that was open before
     if (seenNewest.current.key !== transcriptKey) {
+      releaseAnchor();
       setBottomFollow(true);
       suppressEarlierRef.current = false;
     }
@@ -397,7 +481,7 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
         suppressEarlierRef.current = false;
         setBottomFollow(false);
         const el = scrollRef.current;
-        if (el && el.scrollTop <= AUTO_EXPAND_TOP_THRESHOLD) {
+        if (el && el.scrollTop + lift.current <= AUTO_EXPAND_TOP_THRESHOLD) {
           triggerAutoEarlier();
         }
       } else if (laterCount > 0) {
@@ -409,6 +493,15 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
     },
     onTouchStart: (e: TouchEvent<HTMLDivElement>) => {
       touchY.current = e.touches[0]?.clientY ?? 0;
+      fling.current.touching = true;
+    },
+    onTouchEnd: () => {
+      fling.current.touching = false;
+      restLater();
+    },
+    onTouchCancel: () => {
+      fling.current.touching = false;
+      restLater();
     },
     onTouchMove: (e: TouchEvent<HTMLDivElement>) => {
       const y = e.touches[0]?.clientY ?? 0;
@@ -416,7 +509,7 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
         suppressEarlierRef.current = false;
         setBottomFollow(false);
         const el = scrollRef.current;
-        if (el && el.scrollTop <= AUTO_EXPAND_TOP_THRESHOLD) {
+        if (el && el.scrollTop + lift.current <= AUTO_EXPAND_TOP_THRESHOLD) {
           triggerAutoEarlier();
         }
       } else if (laterCount > 0 && y < touchY.current - 4) {
@@ -429,8 +522,12 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
     onScroll: () => {
       const el = scrollRef.current;
       if (!el) return;
-      const scrollTop = el.scrollTop;
+      // where the reader is: the content is drawn `lift` px further on than the scroll says
+      const scrollTop = el.scrollTop + lift.current;
       const previousTop = previousScrollTop.current;
+      restLater();
+      const held = anchorRef.current;
+      if (held && !followRef.current) anchorRef.current = scrollAnchor(el, transcriptKey, stepPending.current ? held.edge : "top", lift.current);
       const resume = laterCount === 0 && shouldResumeBottomFollow({
         following: followRef.current,
         previousScrollTop: previousScrollTop.current,
