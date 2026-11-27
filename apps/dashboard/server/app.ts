@@ -8,6 +8,7 @@ import { APP_COMMAND_ONLINE_MS, CLAIM_TTL_MS, COMMAND_KINDS, PHONE_PAIR_COMMAND_
 import type { CommandKind, CommandResult, CommandView, ConnectorsAnswer, MachineSample, ReportAnswer, WorkspaceDetail, WorkspaceReport, WorkspaceSummary } from "../../../shared/dashboard-protocol.ts";
 import { PULSE_INTERVAL_MS, PULSE_WINDOW_MS, PulseRing, type PulseAnswer } from "../../../shared/machine-pulse.ts";
 import type { NotificationPrefs } from "../../../shared/account-api.ts";
+import { accountRecap, ACCOUNT_RECAP_PATH, type AccountRecap } from "../../../shared/account-recap.ts";
 import { MCP_CLIENT_METADATA, MCP_CLIENT_METADATA_PATH } from "../../../shared/mcp-client-metadata.ts";
 import { AuthError, createAuth, isAppCorsRoute, reviewAccountFromEnv, type ReviewAccount } from "./auth/index.ts";
 import type { ProviderConfigs } from "./auth/providers.ts";
@@ -1052,6 +1053,13 @@ export function createDashboardApp(options: DashboardAppOptions) {
         "content-disposition": `attachment; filename="dusk-bot-account-${new Date(now()).toISOString().slice(0, 10)}.json"` });
       res.end(JSON.stringify(data, null, 2));
       return;
+    }
+    // the cancel flow's recap: counts from the caller's own workspaces only, for the web session or the signed-in app
+    if (method === "GET" && path === ACCOUNT_RECAP_PATH) {
+      rate(req, "account-recap", 600);
+      const owner = auth.appSession(req)?.account ?? auth.requireWeb(req, { mutation: false });
+      const answer: AccountRecap = accountRecap({ createdAt: owner.createdAt, workspaces: state.workspaces.filter(ws => ws.ownerAccountId === owner.id) });
+      return json(res, 200, answer);
     }
     if (method === "GET" && path === "/v1/workspaces") {
       const owner = account(req);
