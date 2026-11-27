@@ -9,7 +9,7 @@ import { phoneApp } from "@/lib/store-app";
 import { flushSystemControls, wakeSystemControls } from "@/lib/system-control";
 import { plainDialogText, systemDialogs } from "@/lib/system-dialog";
 import { closesOnBack } from "@/mobile/Sheet";
-import { confirmCancelCls, mdDangerCls, mdPrimaryCls } from "./ui/GrokDialog";
+import { rowButtonCls, rowDangerCls, rowHintCls, rowPrimaryCls } from "./ui/GrokDialog";
 import { ScrimMotion, SheetMotion, useMotionReduced } from "./ui/SheetMotion";
 
 export type ConfirmTone = "danger" | "neutral";
@@ -227,26 +227,27 @@ export function ConfirmDialogCard({
       aria-labelledby="confirm-dialog-title"
       aria-describedby={body ? "confirm-dialog-body" : undefined}
       data-tone={tone}
-      className="ui-dialog relative flex w-full max-w-[320px] flex-col outline-none"
+      data-settings-look="simple"
+      className="relative flex w-full max-w-[360px] flex-col rounded-[14px] bg-app text-ink outline-none"
     >
-      <div className="flex flex-col gap-1 px-4 py-3">
+      <div className="flex flex-col gap-1 px-6 pb-1 pt-5">
         {art && <div aria-hidden="true" data-confirm-art="" className="mb-2 flex pt-1">{art}</div>}
-        <h2 id="confirm-dialog-title" className="m-0 min-w-0 text-[14px] font-semibold leading-[22px] tracking-[-0.15px] text-ink">
+        <h2 id="confirm-dialog-title" className="m-0 min-w-0 pl-2.5 text-[15px] font-medium leading-[22px] tracking-[-0.006em] text-ink">
           {title}
         </h2>
         {body && (
-          <div id="confirm-dialog-body" className="text-[14px] leading-[22px] tracking-[-0.15px] text-ink/56 text-pretty">
+          <div id="confirm-dialog-body" className={`${rowHintCls} pl-2.5 text-pretty`}>
             {body}
           </div>
         )}
       </div>
-      <div className="flex flex-wrap gap-2 py-3 pl-4 pr-3">
-        <button ref={cancelRef} type="button" onClick={onCancel} disabled={pending} className={`${confirmCancelCls} flex-1`}>
+      <div className="flex flex-wrap justify-end gap-2 px-6 pb-5 pt-3">
+        <button ref={cancelRef} type="button" onClick={onCancel} disabled={pending} className={`${rowButtonCls} flex-1`}>
           {cancelLabel}
         </button>
         {alternative && <button type="button" data-confirm-alternative onClick={alternative.onClick} disabled={pending}
-          className={`${confirmCancelCls} flex-1`}>{alternative.label}</button>}
-        <button ref={confirmRef} type="button" onClick={onConfirm} disabled={pending} className={`${danger ? mdDangerCls : mdPrimaryCls} flex-1`}>
+          className={`${rowButtonCls} flex-1`}>{alternative.label}</button>}
+        <button ref={confirmRef} type="button" onClick={onConfirm} disabled={pending} className={`${danger ? rowDangerCls : rowPrimaryCls} flex-1`}>
           {confirmLabel}
         </button>
       </div>
