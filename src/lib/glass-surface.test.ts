@@ -81,9 +81,10 @@ describe("glass surface", () => {
     expect(glassPopupTopInset("mac-inset")).toBe(56);
     expect(glassPopupTopInset("win-caption")).toBe(56);
     expect(glassPopupTopInset("native")).toBe(24);
+    // the voice dialog is now the Settings sheet, centred by Settings' own scrim
     const voice = readFileSync(join(src, "components", "VoiceSetupDialog.tsx"), "utf8");
-    expect(voice).toContain('className="glass-popup-frame"');
-    expect(voice).toContain("style={glassPopupFrameStyle()}");
+    expect(voice).toContain('className="settings-scrim"');
+    expect(voice).not.toContain("glass-popup-frame");
     expect(voice).not.toMatch(/100dvh/);
   });
 
