@@ -43,3 +43,45 @@ export function staleRef(name: string, args: Args | undefined, result: unknown):
 export const staleRefText = (ref: string, fresh: boolean): string =>
   `${ref} is not on the page now: the page changed since the snapshot that ref came from, so this call did nothing. ` +
   (fresh ? "The page now, with fresh refs (earlier refs no longer apply):" : "Use a ref from the page's latest snapshot.");
+
+type Rpc = (name: string, args: Args, timeoutMs: number) => Promise<unknown>;
+const failed = (result: unknown) => !result || (result as { isError?: unknown }).isError === true;
+
+/**
+ * An element call's answer once a missing element was waited for (and the call run again when it showed), and a stale
+ * ref answered with the page's fresh snapshot, which `saw` records as the refs the conversation now holds. A batch step
+ * gets no snapshot: the batch's failure answer carries one.
+ */
+export async function answerMisses(result: unknown, call: {
+  name: string; args: Args | undefined; rpc: Rpc; again: (timeoutMs: number) => Promise<unknown>;
+  remainingMs: () => number; checkpoint: () => void; batched: boolean; saw: (snapshot: unknown) => void;
+}): Promise<unknown> {
+  const missing = missingElement(call.name, call.args, result);
+  const lateMs = Math.min(LATE_ELEMENT_MS, call.remainingMs() - 1_000);
+  if (missing && lateMs >= 500) {
+    const shown = await call.rpc("agent_browser_wait_for_selector", { selector: missing, waitTimeoutMs: lateMs }, lateMs + 2_000);
+    call.checkpoint();
+    return !failed(shown) ? call.again(Math.max(1, call.remainingMs()))
+      : { isError: true, content: [{ type: "text", text: lateElementMissing(missing, lateMs) }] };
+  }
+  const stale = staleRef(call.name, call.args, result);
+  if (!stale) return result;
+  const page = !call.batched && call.remainingMs() > 1_000 ? await call.rpc("agent_browser_snapshot", { compact: true }, Math.min(call.remainingMs(), 10_000)) : null;
+  call.checkpoint();
+  const fresh = !failed(page) && Array.isArray((page as { content?: unknown }).content) ? (page as { content: unknown[] }).content : null;
+  if (fresh) call.saw(page);
+  return { isError: true, content: [{ type: "text", text: staleRefText(stale, Boolean(fresh)) }, ...(fresh ?? [])] };
+}
+
+/** A plain wait needs no page, so it is waited out by dusk bot: it answers while the browser starts, is busy with another
+ * call or did not answer one, which agent-browser would have refused (a model told "try again in a moment" waits). */
+export async function plainWait(ms: unknown, limitMs: number, checkpoint: () => void): Promise<unknown> {
+  if (typeof ms !== "number") return { isError: true, content: [{ type: "text", text: 'agent_browser_wait_ms needs ms, how long to wait in milliseconds, such as {"ms": 2000}.' }] };
+  const waited = Math.min(ms, limitMs);
+  checkpoint();
+  for (const until = Date.now() + waited; Date.now() < until;) {
+    await new Promise((resolve) => setTimeout(resolve, Math.min(250, until - Date.now())));
+    checkpoint();
+  }
+  return { content: [{ type: "text", text: JSON.stringify({ data: { ms: waited, waited: "timeout" }, error: null, success: true }) }] };
+}

@@ -135,3 +135,76 @@ export function withoutDialogWarning(result: unknown): unknown {
     } catch { return part; }
   }) };
 }
+
+/** The DevTools address of a session's running browser, or null when it has none to watch. */
+export type DevToolsOf = () => Promise<string | null>;
+type Watched = { watch: DialogWatch; call: (DialogAnswer & { asked: PageDialog[] }) | null };
+const RETRY_MS = 15_000;
+
+/**
+ * agent-browser 0.37.0 answers a page's alert itself, but a confirm or prompt stays open in its headless Chrome and
+ * holds the call that opened it, and every call after it, until the browser restarts. A bot call's own dialog is
+ * answered over a second DevTools client, which must be watching before the dialog opens; a person's never is.
+ */
+export class BotDialogs {
+  readonly #watched = new Map<string, Watched>();
+  readonly #tried = new Map<string, number>();
+  readonly #personHolds: (session: string) => boolean;
+
+  constructor(personHolds: (session: string) => boolean) {
+    this.#personHolds = personHolds;
+  }
+
+  async #watch(session: string, devTools: DevToolsOf): Promise<Watched | null> {
+    const kept = this.#watched.get(session);
+    if (kept && !kept.watch.closed) return kept;
+    if ((this.#tried.get(session) ?? 0) > Date.now() - RETRY_MS) return null;
+    this.#tried.set(session, Date.now());
+    const url = localDevToolsUrl(await devTools().catch(() => null));
+    if (!url) return null;
+    this.#tried.delete(session);
+    const entry: Watched = { watch: new DialogWatch((dialog) => {
+      const call = entry.call;
+      if (!dialog || !call || this.#personHolds(session)) return;
+      call.asked.push(dialog);
+      void entry.watch.answer(call.accept, call.promptText);
+    }), call: null };
+    kept?.watch.close();
+    this.#watched.set(session, entry);
+    await entry.watch.start(url).catch(() => entry.watch.close());
+    return entry.watch.closed ? null : entry;
+  }
+
+  /** Runs one bot call with its page questions answered as `params` asks, and says in its answer what was asked. */
+  async during(session: string, params: unknown, devTools: DevToolsOf | null, run: () => Promise<unknown>): Promise<unknown> {
+    const watched = devTools ? await this.#watch(session, devTools) : null;
+    if (!watched) {
+      const result = await run();
+      // the first open is what starts the browser, so there was no DevTools address to watch before it
+      const name = (params as { name?: unknown } | null)?.name;
+      if (name === "agent_browser_open" || name === "agent_browser_tab_new") this.#tried.delete(session);
+      return result;
+    }
+    const call = { ...dialogAnswerOf(params), asked: [] as PageDialog[] };
+    watched.call = call;
+    const open = watched.watch.dialog;
+    if (open && !this.#personHolds(session)) { call.asked.push(open); void watched.watch.answer(call.accept, call.promptText); }
+    try {
+      const result = await run();
+      return call.asked.length ? withNote(withoutDialogWarning(result), dialogNote(call.asked[0]!, call)) : result;
+    } finally {
+      if (watched.call === call) watched.call = null;
+    }
+  }
+
+  forget(session: string): void {
+    this.#watched.get(session)?.watch.close();
+    this.#watched.delete(session);
+    this.#tried.delete(session);
+  }
+}
+
+function withNote(result: unknown, note: string): unknown {
+  const content = (result as { content?: unknown } | null)?.content;
+  return Array.isArray(content) ? { ...result as object, content: [...content, { type: "text", text: note }] } : result;
+}

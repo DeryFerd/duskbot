@@ -41,3 +41,41 @@ export function asToolResult(result: unknown): ToolResult {
   });
   return { content, ...(record?.isError === true ? { isError: true } : {}) };
 }
+
+/** One timed browser action (ms), logged with DUSK_BROWSER_TIMING=1; `inFlight` is this session's work already running. */
+export interface BrowserTiming {
+  session: string;
+  tool: string;
+  outcome: "ok" | "error";
+  totalMs: number;
+  launchMs?: number;
+  engineMs?: number;
+  observeMs?: number;
+  stepsMs?: number;
+  chars?: number;
+  inFlight: number;
+}
+
+export function formatBrowserTiming(timing: BrowserTiming): string {
+  const parts = [`browser timing: ${timing.tool} ${timing.outcome}`];
+  const phases: Array<[string, number | undefined]> = [
+    ["total", timing.totalMs], ["launch", timing.launchMs], ["engine", timing.engineMs], ["observe", timing.observeMs], ["steps", timing.stepsMs],
+  ];
+  for (const [label, value] of phases) {
+    if (value !== undefined) parts.push(`${label}=${Math.round(value)}ms`);
+  }
+  if (timing.chars !== undefined) parts.push(`chars=${timing.chars}`);
+  parts.push(`inflight=${timing.inFlight}`, `session=${timing.session}`);
+  return parts.join(" ");
+}
+
+export function resultChars(result: unknown): number {
+  const content = (result as { content?: unknown } | null)?.content;
+  if (!Array.isArray(content)) return 0;
+  let chars = 0;
+  for (const item of content) {
+    const text = (item as { text?: unknown } | null)?.text;
+    if (typeof text === "string") chars += text.length;
+  }
+  return chars;
+}
