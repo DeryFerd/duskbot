@@ -103,7 +103,8 @@ async function processEnvironment(pid: number): Promise<Map<string, string> | nu
 }
 
 async function imageOf(pid: number): Promise<string | null> {
-  const row = await execText("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"]);
+  // a busy PC can take seconds to answer, and an image not read in time costs a full process listing instead
+  const row = await execText("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], {}, 15_000);
   return row === null ? null : /^"([^"]*)"/.exec(row.trim())?.[1]?.toLowerCase() ?? "";
 }
 
