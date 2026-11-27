@@ -74,6 +74,16 @@ describe("forget, across the person's bots", () => {
     expect(result).toEqual({ ok: true, forgotten: ["Meera's birthday is March 14"], aboutMe: [], logLines: 1, ownMemory: true, otherBots: ["Pepper"] });
   });
 
+  it("takes a forgotten fact out of the chat name another bot's kept note quotes, even cut short, and keeps the note", () => {
+    const [scout, pepper] = ["fg-scout-q", "fg-pepper-q"];
+    writeMemoryFile(scout, "- 2026-11-26 · Meera's birthday is March 14\n");
+    writeMemoryFile(pepper, "- 2026-11-26 · from chat \"so when is Meera's birth…\" · The person lives in Pune\n- 2026-11-26 · from chat \"plan the week\" · Atlas deploys on Fridays\n");
+    const result = botMemoryUpdate(scout, { action: "forget", oldText: "Meera's birthday" },
+      { source: "chat", aboutMe: null, elsewhere: [{ layer: pepper, name: "Pepper" }] });
+    expect(readFileSync(join(workspaceDir(pepper), "MEMORY.md"), "utf8")).toBe("- 2026-11-26 · from chat · The person lives in Pune\n- 2026-11-26 · from chat \"plan the week\" · Atlas deploys on Fridays\n");
+    expect(result).toMatchObject({ ok: true, otherBots: ["Pepper"] });
+  });
+
   it("without other bots named (a room, the team's memory) stays in the asking bot's memory", () => {
     writeMemoryFile("fg-solo", "- 2026-11-26 · Meera's birthday is March 14\n");
     writeMemoryLog("fg-elsewhere", "2026-11-26.md", "# 2026-11-26\n- 18:24 · Meera's birthday: March 14\n");
