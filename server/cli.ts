@@ -21,8 +21,7 @@ import { defaultSetupIo, SetupCancelled, type SetupIo } from "./cli-prompts.ts";
 import { commandHelp, HEADLESS_VERB_NAMES, USAGE } from "./cli-usage.ts";
 import { normalizePhoneOrigin, runPhoneSetup } from "./cli-phone-setup.ts";
 import { browserSignInLines, pairingBlock, phonePairing, pushReadiness } from "./cli-pairing.ts";
-import type { AppConfig } from "./config.ts";
-import { SELF_HOSTED_ENV } from "./host-shell-mcp.ts";
+import type { AppConfig } from "./config.ts"; import { SELF_HOSTED_ENV } from "./host-shell-mcp.ts";
 import {
   cleanupTunnelOrigin,
   createTunnelAccount,
@@ -693,8 +692,7 @@ export async function runServe(options: CliOptions, log: (line: string) => void 
     ...process.env,
     DUSK_DATA_DIR: options.dataDir,
     DUSK_PORT: String(options.port),
-    DUSK_WEBHOOK_PORT: process.env.DUSK_WEBHOOK_PORT || String(options.port + 1),
-    [SELF_HOSTED_ENV]: "1",
+    DUSK_WEBHOOK_PORT: process.env.DUSK_WEBHOOK_PORT || String(options.port + 1), [SELF_HOSTED_ENV]: "1",
   };
   if (options.local) delete env.DUSK_PUBLIC_URL;
   // The per-launch secret goes over stdin, not the environment that every engine the server starts inherits.
