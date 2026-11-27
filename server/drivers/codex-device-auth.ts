@@ -8,6 +8,21 @@ export function codexDevicePrompt(output: string): { authorizationUrl: string; u
   return deviceSignInPrompt("codex", stripVTControlCharacters(output));
 }
 
+/** codex-cli 0.170: "device auth failed with status <N>" when OpenAI answers a token poll with anything but success,
+ * 403 or 404 (still waiting), "device code exchange failed: …" after approval, "failed to request device code: …" before
+ * a code, and "device code request failed with status <N>". */
+export function codexLoginFailureKind(output: string): { kind: string; status?: number } {
+  const status = Number(/\bstatus (\d{3})\b/i.exec(output)?.[1]) || undefined;
+  const kind = /unexpected argument|unrecognized (argument|option)|unknown option/i.test(output) ? "cli_outdated"
+    : /device.{0,40}(disabled|not enabled|not allowed)|enable.{0,40}device/i.test(output) ? "device_code_disabled"
+      : /device auth failed with status/i.test(output) ? "device_auth_refused"
+        : /device code exchange failed/i.test(output) ? "token_exchange_failed"
+          : /device code request failed|failed to request device code/i.test(output) ? "code_request_failed"
+            : /expired|expiration|timed out/i.test(output) ? "expired"
+              : "other";
+  return status ? { kind, status } : { kind };
+}
+
 function loginFailure(output: string): string {
   if (/(unexpected argument|unrecognized (argument|option)|unknown option).*device-auth/i.test(output)) {
     return "This server's Codex CLI needs updating for browser sign-in. Run npm install -g @openai/codex@latest on the server, then try again.";
@@ -18,6 +33,9 @@ function loginFailure(output: string): string {
   if (/expired|expiration|timed out/i.test(output)) {
     return "The ChatGPT sign-in code expired. Start sign-in again for a new code.";
   }
+  const { status } = codexLoginFailureKind(output);
+  if (status === 429) return "OpenAI got too many requests for this sign-in. Wait a minute, then try again.";
+  if (status && status >= 500) return "OpenAI's sign-in is temporarily unavailable. Try again in a minute.";
   return "ChatGPT sign-in did not finish. Check the server's connection and that device-code login is enabled in ChatGPT, then try again.";
 }
 
@@ -30,6 +48,7 @@ export const CODEX_DEVICE_SIGN_IN: DeviceSignIn = {
   loginArgs: ["login", "--device-auth"],
   install: "Run npm install -g @openai/codex@latest on the server, then try again.",
   failure: loginFailure,
+  failureKind: codexLoginFailureKind,
   status: {
     args: ["login", "status"],
     read: (code, output) =>

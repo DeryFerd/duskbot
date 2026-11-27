@@ -38,6 +38,8 @@ export interface DeviceSignIn {
   install: string;
   /** One safe sentence for a failed login command; never the CLI's own words, which may carry tokens. */
   failure(output: string): string;
+  /** What a failed login command said, as a fixed kind and an HTTP status, for the server log; never its words. */
+  failureKind?(output: string): { kind: string; status?: number };
   /** Checked before a sign-in, so a working one is never replaced, and after it to confirm. */
   status?: { args: readonly string[]; read(code: number | null, output: string): DeviceSignInState };
   /** Without a status command: whether the sign-in a turn uses is now there. */
@@ -61,7 +63,7 @@ type Flow = {
   startupTimer: NodeJS.Timeout;
   expiryTimer: NodeJS.Timeout;
   browser: boolean;
-  recorder: ReturnType<typeof browserRecorder>;
+  recorder: ReturnType<typeof browserRecorder> | null;
   loopback: Loopback | null;
   relayed?: boolean;
   homeKey: string;
@@ -135,6 +137,8 @@ export class DeviceAuthController {
       this.flow = flow;
       const login = () => this.run(flow, [...(flow.browser ? this.spec.browserLogin!.args : this.spec.loginArgs)], env, home, (loginCode, loginOutput) => {
         if (loginCode !== 0 || !flow.ready) {
+          const said = this.spec.failureKind?.(loginOutput);
+          if (said) console.warn(`${this.spec.product} sign-in: the login command ended (exit ${loginCode ?? "signal"}, ${said.kind}${said.status ? `, status ${said.status}` : ""})`);
           this.finish(flow, "failed", this.spec.failure(loginOutput));
           return;
         }

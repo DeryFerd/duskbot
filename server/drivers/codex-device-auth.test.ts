@@ -2,7 +2,8 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { failureReason } from "../../shared/usage-signals.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
 import { CodexDeviceAuthController, codexDevicePrompt } from "./codex-device-auth.ts";
 
@@ -45,6 +46,7 @@ if (args.join(' ') === 'login status') {
       console.error('Successfully logged in'); process.exit(0);
     }, 80);
     else if (mode === 'crash') setTimeout(() => { console.error('access_token=secret-token'); process.exit(1); }, 50);
+    else if (mode.startsWith('refused-')) setTimeout(() => { console.error('Error logging in with device code: device auth failed with status ' + mode.slice(8) + ' secret-token ada@example.test'); process.exit(1); }, 50);
     else { if (mode === 'ignore-term') process.on('SIGTERM', () => {}); setInterval(() => {}, 1000); }
   }
 } else if (args.join(' ') === 'logout') {
@@ -294,6 +296,25 @@ describe("Codex server-owned device authentication", () => {
     await expect(controller.start()).rejects.toThrow(message);
     await controller.cancel();
     expect(alive(Number(readFileSync(join(home, "pid"), "utf8")))).toBe(false);
+  });
+
+  it.each([
+    ["429", "too many requests", "rate_limit"],
+    ["503", "temporarily unavailable", "provider_down"],
+    ["401", "ChatGPT sign-in did not finish", "auth"],
+  ])("a code OpenAI refuses with %s after it was shown reads as its cause, and only the status and kind reach the log", async (status, message, reason) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const controller = create(`refused-${status}`);
+      const start = await controller.start();
+      await expect.poll(async () => (await controller.get(start.flowId!)).phase, { timeout: 5_000 }).toBe("failed");
+      const said = (await controller.get(start.flowId!)).message ?? "";
+      expect(said).toContain(message);
+      expect(failureReason(said)).toBe(reason);
+      const logged = warn.mock.calls.map((call) => call.join(" ")).join("\n");
+      expect(logged).toContain(`Codex sign-in: the login command ended (exit 1, device_auth_refused, status ${status})`);
+      expect(logged).not.toMatch(/secret-token|ada@example/);
+    } finally { warn.mockRestore(); }
   });
 
   it("fails safely when the configured executable is missing", async () => {
