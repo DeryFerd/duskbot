@@ -352,7 +352,7 @@ describe("OpenAICompatDriver", () => {
       instanceId: "test-managed",
       displayName: "Managed",
       enabled: true,
-      config: { url: "https://example.test/v1", key: "secret", managedModels: ["a", "b"] },
+      config: OpenAICompatDriver.decodeConfig({ url: "https://example.test/v1", key: "secret", managedModels: ["a", "b"] }),
       environment: {},
     });
     expect(inst.models).toEqual({
