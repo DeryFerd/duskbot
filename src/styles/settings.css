@@ -556,6 +556,9 @@
     border-radius: 14px;
     background-color: color-mix(in srgb, var(--color-ink) 2.75%, transparent);
   }
+  :root [data-settings-sheet] .settings-dialog .settings-pane [class*="bg-composer"][class*="rounded-[12px]"]:not([data-settings-rows]) {
+    background-color: color-mix(in srgb, var(--color-ink) 2.75%, transparent);
+  }
   :root [data-settings-sheet] .settings-dialog .settings-pane [data-settings-rows] > :is(button, a, div, label):not(.contents, [hidden], [data-settings-rows]) { border-radius: 10px; }
   :root [data-settings-sheet] .settings-dialog .settings-pane [data-settings-group-head] { margin-bottom: 8px; }
   :root [data-settings-sheet] .settings-dialog .settings-pane [data-settings-rows] :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], .bg-transparent), textarea:not(.bg-transparent), :is(div, label):has(> input.bg-transparent):is(.border)) {
