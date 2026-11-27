@@ -12,7 +12,7 @@
     "ai move notion page to database"
   ],
   "answer": "**put the finished brief where your team will look for it.** a bot moves an existing notion page under another page or into a database, keeping its contents intact. give it the source link and destination link. you get the original page in its new home, without a second copy to keep in sync.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -43,7 +43,7 @@
     "toolkit": "notion",
     "slug": "NOTION_MOVE_PAGE"
   },
-  "what": "**two pages called archive are a good reason to paste the link.** links settle which page moves and where it belongs. the bot can search notion by name to find candidates.\n\na database destination works differently from a parent page. say which you mean. the move changes the page’s home and leaves the writing alone.",
+  "what": "**two pages called archive are a good reason to paste the link.** links settle which page moves and where it belongs. the bot can search notion by name to find candidates.\n\na database destination works differently from a parent page. say which you mean. the move changes the page’s home and leaves the writing alone.\n\nfind both pages with [search](/integrations/notion/search-notion-pages-and-databases) first. after the move, [update its status](/integrations/notion/update-page) if your tracker records it.",
   "uses": [
     "**file a finished event brief.** move it under the right annual archive.",
     "**bring a stray note home.** place it in the agreed project database.",

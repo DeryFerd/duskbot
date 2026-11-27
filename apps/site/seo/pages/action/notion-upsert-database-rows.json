@@ -23,7 +23,7 @@
     "/integrations/notion/update-page"
   ],
   "og_line": "match the reference before writing the record.",
-  "what": "**one list can contain old records and new ones.** each incoming item carries its matching rule, creation values and update values. a missing match creates a row; a match updates one. the action returns a result for each item.\n\npaste the database link and let the bot inspect its columns first. creation and update values can differ. tell it which fields to leave alone rather than hoping a broad import will guess.",
+  "what": "**one list can contain old records and new ones.** each incoming item carries its matching rule, creation values and update values. a missing match creates a row; a match updates one. the action returns a result for each item.\n\npaste the database link and let the bot inspect its columns first. creation and update values can differ. tell it which fields to leave alone rather than hoping a broad import will guess.\n\nto see what already matches, [query the database](/integrations/notion/query-database-with-filter) first. a single new record suits [insert a row](/integrations/notion/insert-row-database).",
   "uses": [
     "**keep registrations together.** match each workshop booking by its reference.",
     "**refresh the equipment list.** update known asset numbers and add new ones.",
@@ -61,7 +61,7 @@
       "a": "**yes, each item gets a result.** ask for failures separately, then retry only items whose changes did not succeed."
     }
   ],
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -126,5 +126,9 @@
   "tip": {
     "text": "a batch is done when you can account for every item, including the ones that failed."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "xavi sends 9 equipment records keyed by asset number.\n6 asset numbers exist in the table.",
+    "after": "updated: 6 rows\ncreated: 3 rows\nper-item results returned.\nonly the first page of each match query was read."
+  }
 }

@@ -12,7 +12,7 @@
     "ai notion page markdown retrieval"
   ],
   "answer": "**turn a long notion page into the few lines you need before the meeting.** paste its link or ask the bot to find the title. it reads the page as markdown and makes a summary, comparison or checklist. the source stays untouched. have it name shortened text and unreadable blocks so you know which parts still need opening.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,7 +45,7 @@
     "toolkit": "notion",
     "slug": "NOTION_GET_PAGE_MARKDOWN"
   },
-  "what": "**get the page text in one read, then ask your question.** the bot doesn't need to open every nested block separately. paste the link or let it search the title.\n\nmeeting transcripts stay out by default; ask for them when needed. the result names shortened text and blocks it couldn't turn into markdown. the summary should carry those gaps with it.",
+  "what": "**get the page text in one read, then ask your question.** the bot doesn't need to open every nested block separately. paste the link or let it search the title.\n\nmeeting transcripts stay out by default; ask for them when needed. the result names shortened text and blocks it couldn't turn into markdown. the summary should carry those gaps with it.\n\nwant to rewrite what it read? hand the approved text to [replace page content](/integrations/notion/replace-page-content). to discuss it instead, [leave a comment](/integrations/notion/create-comment).",
   "uses": [
     "**carry a procedure as a checklist.** leave the original alone.",
     "**spot changes in a brief.** compare it with earlier instructions you provide as a file.",
@@ -127,5 +127,9 @@
       "transcripts appear only when requested"
     ]
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "zara pastes the link to the warehouse safety procedure.\nthe page holds a long table and an embedded form.",
+    "after": "procedure as markdown: 31 steps.\nnote: one embedded form could not be shown.\nnote: text cut short near the end.\nnothing changed in notion."
+  }
 }

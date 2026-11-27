@@ -22,7 +22,7 @@
     "/integrations/notion/upsert-database-rows"
   ],
   "og_line": "the matching rows, with their criteria clear.",
-  "what": "**get next week's confirmed bookings in one dated list.** paste the database's own link, or ask the bot to find it. a page containing a tracker is a different thing.\n\nthe bot reads the field names and types, applies your conditions and sorts by session date. for a large list, tell it to keep going until notion has no more matches.",
+  "what": "**get next week's confirmed bookings in one dated list.** paste the database's own link, or ask the bot to find it. a page containing a tracker is a different thing.\n\nthe bot reads the field names and types, applies your conditions and sorts by session date. for a large list, tell it to keep going until notion has no more matches.\n\na match that needs a change goes to [update page](/integrations/notion/update-page). a missing record goes to [insert a row](/integrations/notion/insert-row-database).",
   "uses": [
     "list confirmed studio bookings in the next fortnight",
     "find equipment loans still out after their due date",
@@ -61,7 +61,7 @@
       "a": "**no.** sorting controls the returned list. it does not rearrange the database itself."
     }
   ],
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -117,5 +117,9 @@
   "tip": {
     "text": "an empty list is lovely until you discover it filtered the wrong date column."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "tariq asks for studio bookings next fortnight with status confirmed.\nthe table holds 230 rows.",
+    "after": "filter: status is confirmed, session date in range\nsort: session date, oldest first\nmatches: 18, one batch of up to 100\nno rows changed."
+  }
 }

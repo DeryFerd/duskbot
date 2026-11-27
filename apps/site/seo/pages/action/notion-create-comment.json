@@ -12,7 +12,7 @@
     "ai post notion review comment"
   ],
   "answer": "**put the review question where the document owner will actually see it.** the bot can leave a notion page comment or reply in an existing discussion. it cannot start a new inline thread on a block. draft the wording in dusk chat, choose the page or thread, and keep sending on **Ask every time** so posting waits for you.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -43,11 +43,12 @@
     "toolkit": "notion",
     "slug": "NOTION_CREATE_COMMENT"
   },
-  "what": "**choose the destination before polishing the words.** a page comment suits feedback about the whole document. for a reply, point the bot at the existing discussion. it finds the right thread.\n\n“comment on this sentence” needs a clearer destination. this action cannot start a new inline discussion on that sentence.\n\nask to see the page or thread alongside the proposed text. a good comment in the wrong place still wastes someone’s time.",
+  "what": "**choose the destination before polishing the words.** a page comment suits feedback about the whole document. for a reply, point the bot at the existing discussion. it finds the right thread.\n\n“comment on this sentence” needs a clearer destination. this action cannot start a new inline discussion on that sentence.\n\nask to see the page or thread alongside the proposed text. a good comment in the wrong place still wastes someone’s time.\n\nwant to see the thread first? [fetch the open comments](/integrations/notion/fetch-comments) and pick the discussion to answer.",
   "uses": [
     "**settle a disputed date.** ask the document owner which delivery date is current.",
     "**keep the decision together.** reply in the existing design-review discussion.",
-    "**question a forecast.** leave a page comment asking for the missing source."
+    "**question a forecast.** leave a page comment asking for the missing source.",
+    "**answer the reviewer after a fix.** once you [update the page](/integrations/notion/update-page), reply in the thread that raised it."
   ],
   "routine": {
     "message": "every other tuesday at 16:20, read new proposal pages in the silvermere instruments proposals database in notion. compare delivery dates with the matching project briefs in notion. for each clear conflict, prepare one page-level comment asking which date is current. read existing comments first and skip questions already raised. show each page, the two dates and the proposed wording here. post only the comments i allow. report where each comment appears. never invent a deadline or start a new inline thread.",
@@ -111,5 +112,9 @@
   "tip": {
     "text": "a useful review comment names the uncertainty and asks one answerable question."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "tomas asks in chat: \"leave a note on line four of the pricing table.\"\nthe page has no discussion on that line yet.",
+    "after": "inline thread not possible here.\npage comment proposed instead:\n\"tomas: line four of the pricing table still shows the old rate.\"\nposted after your yes."
+  }
 }

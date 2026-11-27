@@ -12,7 +12,7 @@
     "ai turn notes into notion rows"
   ],
   "answer": "**get the approved purchase out of your notes and into the tracker.** a bot adds a notion database row with table properties and a short page body. missing fields can stay empty. share the database with the connection first, and use a database with one data source. put any approval step in the request.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -43,12 +43,13 @@
     "toolkit": "notion",
     "slug": "NOTION_INSERT_ROW_DATABASE"
   },
-  "what": "**put the headline in the table and the detail inside the row.** properties fill the columns; content blocks hold the longer note. paste the database link and have the bot read its columns first.\n\nkeep entries short. long text can lose its ending, and extra blocks arrive after the page exists. open the body to see the whole note. this inserts a new row rather than updating an old one.",
+  "what": "**put the headline in the table and the detail inside the row.** properties fill the columns; content blocks hold the longer note. paste the database link and have the bot read its columns first.\n\nkeep entries short. long text can lose its ending, and extra blocks arrive after the page exists. open the body to see the whole note. this inserts a new row rather than updating an old one.\n\nbefore adding, [query the database](/integrations/notion/query-database-with-filter) for a match. if rows may already exist, [upsert them](/integrations/notion/upsert-database-rows) instead.",
   "uses": [
     "record a confirmed equipment purchase in your purchasing database",
     "add an accepted research proposal with its short brief inside",
     "log a workshop booking after the date and organiser agree",
-    "save an idea with its source and leave undecided fields empty"
+    "save an idea with its source and leave undecided fields empty",
+    "**log a returned loan with the database id you pasted.** the row needs that id; a page link around the table will not do."
   ],
   "routine": {
     "message": "every thursday at 12:35, read new approval files added this week to the 'approved purchases' google drive folder for thistledown theatre. look for existing entries in the linked notion purchasing database. show proposed rows here with the source file and matching columns. ask me before you change anything. create only the rows i confirm, with short source notes. never guess costs or update old rows. if an insert result is uncertain, look for the row before trying again.",
@@ -107,10 +108,18 @@
     {
       "mistake": "feeding the routine approvals buried in chat",
       "fix": "point it at new approval files in a connected folder."
+    },
+    {
+      "mistake": "pointing it at a database with more than one data source",
+      "fix": "this action needs a single-source database. use a different table or a different action."
     }
   ],
   "tip": {
     "text": "an empty cost is more useful than a confident guess."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "ursula approves a new projector purchase.\npurchasing database columns: item, cost, owner, status.",
+    "after": "new row: projector, 640, ursula, ordered.\nbody: the supplier quote summary.\nlast part of the body arrives a moment later."
+  }
 }

@@ -12,7 +12,7 @@
     "claude create notion page from notes"
   ],
   "answer": "**get the field notes out of chat and into the project.** a bot can create a notion page with a title and markdown, or start a blank page for later. give it an existing parent page or database.\n\nthat's where the new note will live; this action can't make a top-level workspace page.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,11 +45,12 @@
     "toolkit": "notion",
     "slug": "NOTION_CREATE_NOTION_PAGE"
   },
-  "what": "**a new page needs a home, not just a title.** give the bot the parent page or database and your note. it can start with markdown content or an empty page for later.\n\npaste the parent's link when names repeat. otherwise the bot searches by name, and a familiar title can lead to the wrong project. this creates a fresh page rather than extending an existing one.",
+  "what": "**a new page needs a home, not just a title.** give the bot the parent page or database and your note. it can start with markdown content or an empty page for later.\n\npaste the parent's link when names repeat. otherwise the bot searches by name, and a familiar title can lead to the wrong project. this creates a fresh page rather than extending an existing one.\n\nnot sure of the parent? [search pages and databases](/integrations/notion/search-notion-pages-and-databases) first, then create under the match. adding more later? use [add content blocks](/integrations/notion/add-multiple-content-blocks) on the new page.",
   "uses": [
     "**file the site visit under its building.** turn the note into a separate child page.",
     "**prepare for each interview.** create a clearly titled blank page before the research session.",
-    "**save the agreed workshop outline.** give it a page without rewriting the project home."
+    "**save the agreed workshop outline.** give it a page without rewriting the project home.",
+    "**start a supplier file under its account page.** give it a title now and fill it after the call."
   ],
   "routine": {
     "message": "each monday at 16:25, read field visit notes added today to the alderfinch restoration project folder. group notes from the same visit. look under the notion field visits parent for existing pages first.\n\nshow the title, parent and markdown for each new visit here. ask before creating its page, then return the page reference. never invent observations or repeat a visit already saved. if no new notes exist, create nothing.",
@@ -108,10 +109,18 @@
     {
       "mistake": "retrying before checking notion",
       "fix": "look for the first page. a lost reply does not mean creation failed."
+    },
+    {
+      "mistake": "asking for a page at the very top of the workspace",
+      "fix": "every new page needs a parent. pick an existing page or database to hold it."
     }
   ],
   "tip": {
     "text": "give the note a parent before giving it a clever title."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "yusuf: \"new page for the zeno lighting visit notes.\"\ntwo pages called site visits exist.",
+    "after": "parent: site visits (link you pasted)\ntitle: zeno lighting visit\nbody: your four notes as markdown\nno other page touched."
+  }
 }
