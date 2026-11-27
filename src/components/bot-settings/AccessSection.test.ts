@@ -284,7 +284,7 @@ describe("a VPS bot's own server", () => {
     const vpsBot = makeBot({ computer: "cloud", cloudBackend: "vps", vpsAlias: "alpha-vps" });
     const saved = render(vpsBot);
     expect(saved).toContain("Server (SSH alias)");
-    expect(saved).toContain("Leave empty to use production-vps from settings → API keys.");
+    expect(saved).toContain("Leave empty to use production-vps, the default server.");
     expect(saved).toContain('value="alpha-vps"');
     expect(render(makeBot({ computer: "cloud", cloudBackend: "box" }))).toContain("Server (SSH alias)");
     const { BotEditorContext } = await import("./BotEditorContext");

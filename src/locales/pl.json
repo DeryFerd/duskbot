@@ -4827,8 +4827,6 @@
   "botAccess.scopes.readWrite": "Odczyt i zapis",
   "botAccess.scopes.readWriteHint": "Uprawnienia narzędzi i limity wysyłania nadal obowiązują.",
   "botAccess.cloud.server": "Serwer (alias SSH)",
-  "botAccess.cloud.serverDefault": "Pozostaw puste, aby użyć {alias} z Ustawień → Klucze API.",
-  "botAccess.cloud.serverNoDefault": "Nie ustawiono domyślnego serwera. Wpisz alias SSH z konfiguracji SSH lub ustaw go w Ustawieniach → Klucze API.",
   "botAccess.cloud.serverPlaceholder": "My-vps",
   "botAccess.cloud.serverSave": "Zapisz",
   "screenLoad.failed": "Nie udało się wczytać tego ekranu. Przeładuj okno, aby go otworzyć.",

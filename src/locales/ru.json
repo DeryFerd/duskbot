@@ -4854,8 +4854,6 @@
   "botAccess.scopes.readWrite": "Чтение и запись",
   "botAccess.scopes.readWriteHint": "Разрешения инструментов и лимиты отправки по-прежнему действуют.",
   "botAccess.cloud.server": "Сервер (SSH-псевдоним)",
-  "botAccess.cloud.serverDefault": "Оставьте пустым, чтобы использовать {alias} из раздела «Настройки → Ключи API».",
-  "botAccess.cloud.serverNoDefault": "Сервер по умолчанию не задан. Введите SSH-псевдоним из вашего SSH config или задайте его в разделе «Настройки → Ключи API».",
   "botAccess.cloud.serverPlaceholder": "My-vps",
   "botAccess.cloud.serverSave": "Сохранить",
   "screenLoad.failed": "Не удалось загрузить этот экран. Перезагрузите окно, чтобы открыть его.",

@@ -4884,8 +4884,6 @@
   "botAccess.scopes.readWrite": "読み取りと書き込み",
   "botAccess.scopes.readWriteHint": "ツールの許可設定と送信の上限は、引き続き適用されます。",
   "botAccess.cloud.server": "サーバー (SSH エイリアス)",
-  "botAccess.cloud.serverDefault": "空欄の場合は、「設定 → API キー」の {alias} を使用します。",
-  "botAccess.cloud.serverNoDefault": "既定のサーバーが設定されていません。SSH 設定にある SSH エイリアスを入力するか、「設定 → API キー」で設定してください。",
   "botAccess.cloud.serverPlaceholder": "my-vps",
   "botAccess.cloud.serverSave": "保存",
   "screenLoad.failed": "この画面を読み込めませんでした。ウィンドウを再読み込みして開いてください。",

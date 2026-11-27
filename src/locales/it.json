@@ -4673,8 +4673,6 @@
   "botAccess.scopes.readWrite": "Lettura e scrittura",
   "botAccess.scopes.readWriteHint": "Restano valide le concessioni degli strumenti e i limiti di invio.",
   "botAccess.cloud.server": "Server (alias SSH)",
-  "botAccess.cloud.serverDefault": "Lascia vuoto per usare {alias} da Impostazioni → Chiavi API.",
-  "botAccess.cloud.serverNoDefault": "Nessun server predefinito impostato. Digita un alias SSH dalla tua configurazione SSH, oppure impostane uno in Impostazioni → Chiavi API.",
   "botAccess.cloud.serverSave": "Salva",
   "screenLoad.failed": "Questa schermata non si è caricata. Ricarica la finestra per aprirla.",
   "screenLoad.reload": "Ricarica",
