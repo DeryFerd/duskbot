@@ -363,9 +363,10 @@ for (const page of pages) {
   }
   const at = page.name === 'home' ? '/' : page.name === '404' ? '/404.html' : `/${page.name}`;
   const jsonld = page.name === 'home' ? [appLd, orgLd, ...faqLd(macros(body))] : page.name === 'about' ? [orgLd, ...faqLd(macros(body))] : faqLd(macros(body));
+  // once downloads are open the waitlist is gone and its address goes to /download
+  if (release.released && page.name === 'waitlist') { fs.rmSync(path.join(site, 'waitlist'), { recursive: true, force: true }); continue; }
   // the waitlist never carries the site's bar or footer, wherever it is served
-  // the phone app's link pages (/m/...) are for one person's phone, never for search, and since launch the waitlist is a
-  // bare form nothing links to, which search engines file as a soft 404
+  // the phone app's link pages (/m/...) are for one person's phone, never for search
   const noindex = page.noindex === true || page.name === '404';
   const html = layout({ ...page, page: page.name, at, kind: page.kind || `p-${page.name.replace(/\//g, '-')}`, body, jsonld, noindex });
   write(at, page.name === 'waitlist' ? soloWaitlist(html) : html, { index: !noindex });
@@ -469,6 +470,7 @@ fs.writeFileSync(path.join(site, 'site.webmanifest'), JSON.stringify({
 // server.js reads this: short and old addresses, each sent on to the page that answers it
 const redirects = { ...JSON.parse(fs.readFileSync(path.join(here, 'redirects.json'), 'utf8')), ...seo.redirects };
 // with the waitlist at home, its own address and everything that pointed at it go home
+if (release.released && !WAITLIST_HOME) redirects['/waitlist'] = '/download';
 if (WAITLIST_HOME) { fs.rmSync(path.join(site, 'waitlist'), { recursive: true, force: true }); for (const [k, v] of Object.entries(redirects)) if (v.split('#')[0] === '/waitlist') redirects[k] = '/'; redirects['/waitlist'] = '/'; }
 for (const [from, to] of Object.entries(redirects)) {
   const target = to.split('#')[0];
