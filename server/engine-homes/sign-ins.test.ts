@@ -90,4 +90,44 @@ describe("the team's sign-in in an audience's home", () => {
     expect(syncSignIn(files().bob)).toBe("copied");
     expect(readFileSync(bob, "utf8")).toBe(credentials("tok-3"));
   });
+
+  describe("a copy that went bad is never taken back", () => {
+    const claude = (access: string, refresh: string, expiresAt: number) => JSON.stringify({ claudeAiOauth: { accessToken: access, refreshToken: refresh, expiresAt } });
+    const codex = (refresh: string, last: string) => JSON.stringify({ auth_mode: "chatgpt", tokens: { access_token: "a", refresh_token: refresh }, last_refresh: last });
+
+    it("a Claude file its CLI blanked after a refused renewal does not blank the team's login or the other audiences'", () => {
+      write(team, claude("a1", "r1", Date.now() + 8 * 3_600_000));
+      syncSignIn(files().bob);
+      syncSignIn(files().owner);
+      write(bob, claude("", "", 0), SETTLED_MS + 500);
+      expect(syncSignIn(files().owner, [bob])).toBe("same");
+      expect(readFileSync(team, "utf8")).toContain('"r1"');
+      expect(syncSignIn(files().bob, [owner])).toBe("copied");
+      expect(readFileSync(bob, "utf8")).toContain('"r1"');
+    });
+
+    it("a Claude copy renewed earlier than the team's is a stale one, however fresh its file", () => {
+      write(team, claude("a2", "r2", Date.now() + 8 * 3_600_000), 5_000);
+      write(bob, claude("a1", "r1", Date.now() + 1 * 3_600_000), SETTLED_MS + 500);
+      syncSignIn(files().owner);
+      expect(syncSignIn(files().owner, [bob])).toBe("same");
+      expect(readFileSync(team, "utf8")).toContain('"r2"');
+    });
+
+    it("a Codex copy that lost its tokens, or holds an older renewal, never replaces the team's", () => {
+      const teamAuth = join(root, "server", ".codex", "auth.json"), bobAuth = join(root, "bob", ".codex", "auth.json");
+      const pair = { source: teamAuth, target: bobAuth };
+      write(teamAuth, codex("r2", "2026-11-27T10:00:00Z"), 10_000);
+      syncSignIn(pair);
+      write(bobAuth, JSON.stringify({ auth_mode: "chatgpt", tokens: null }), SETTLED_MS + 500);
+      expect(syncSignIn(pair)).toBe("copied");
+      expect(readFileSync(teamAuth, "utf8")).toContain('"r2"');
+      write(bobAuth, codex("r1", "2026-11-20T10:00:00Z"), SETTLED_MS + 500);
+      expect(syncSignIn(pair)).toBe("copied");
+      expect(readFileSync(teamAuth, "utf8")).toContain('"r2"');
+      write(bobAuth, codex("r3", "2026-11-27T12:00:00Z"), SETTLED_MS + 500);
+      expect(syncSignIn(pair)).toBe("taken back");
+      expect(readFileSync(teamAuth, "utf8")).toContain('"r3"');
+    });
+  });
 });

@@ -699,9 +699,7 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
         let server: NonNullable<typeof reused>;
         try {
           server = reused ?? appServers.adopt(spawnKey, spawnHoldingSlot(releaseSlot, () => spawnCli(...codexLaunch(config.cli, appServerArgs), {
-            cwd: turn.cwd ?? homedir(),
-            env,
-            stdio: ["pipe", "pipe", "pipe"],
+            cwd: turn.cwd ?? homedir(), env, stdio: ["pipe", "pipe", "pipe"],
           }, "bot")));
         } catch (error) { renewal?.release(); throw error; }
         renewal?.track(server.child);
