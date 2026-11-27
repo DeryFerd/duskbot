@@ -633,8 +633,10 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
           mountSelected("computer", "computer", turn.integrations.localComputer); if (selectedMcp.has("computer")) appServerArgs.push("-c", `mcp_servers.computer.tool_timeout_sec=${COMPUTER_TOOL_TIMEOUT_SECONDS}`);
         }
         if (turn.integrations?.browser) {
-          // OpenAI's Responses API refuses a tool namespace named "browser" (400 "reserved namespace 'browser'", 2026-11)
-          mountSelected("browser", "duskbot_browser", turn.integrations.browser);
+          // OpenAI's Responses API refuses a tool namespace named "browser" (400 "reserved namespace 'browser'", 2026-11).
+          // codex ends an mcp call after 60 s by default, while dusk bot may take up to its 120 s budget to answer one; a
+          // call codex gave up on still holds the browser, so every next call waited behind it and was refused as busy
+          mountSelected("browser", "duskbot_browser", turn.integrations.browser); if (selectedMcp.has("duskbot_browser")) appServerArgs.push("-c", `mcp_servers.duskbot_browser.tool_timeout_sec=${COMPUTER_TOOL_TIMEOUT_SECONDS}`);
         }
         for (const name of ["data", "email", "device"] as const) if (turn.integrations?.[name]) mountSelected(name, name, turn.integrations[name]);
         // A `-c` override merges with a same-named server in config.toml, and stdio over url is

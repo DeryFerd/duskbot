@@ -1918,6 +1918,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(seen.argv.some((arg: string) => arg.startsWith("web_search="))).toBe(false);
     expect(seen.argv).toContain('plugins={ "browser@openai-bundled" = { enabled = false }, "computer-use@openai-bundled" = { enabled = false }, "unified-computer-use@openai-bundled" = { enabled = false } }');
     expect(seen.argv).toContain('mcp_servers.duskbot_browser.default_tools_approval_mode="auto"');
+    expect(seen.argv, "dusk bot answers a browser call within 130 s").toContain("mcp_servers.duskbot_browser.tool_timeout_sec=140");
     expect(seen.argv).not.toContain('mcp_servers.duskbot_browser.default_tools_approval_mode="approve"');
     expect(seen.argv.join(" "), "OpenAI reserves the browser namespace").not.toContain("mcp_servers.browser.");
     expect(seen.argv.join(" ")).toContain("/tmp/harness-mcp-proxy.js");
