@@ -1063,14 +1063,15 @@ describe("routine comms e2e on the job runtime (fake ACP fleet)", () => {
           const current = await bot(asker.id);
           failed = current.messages.find((m: any) => m.kind === "activity" && m.tool?.ok === false && m.from?.botId === helper.id);
           return Boolean(failed) && lastText(current.messages)?.text === WOKE_WITH_FAILURE && !current.busy;
-        }, 30_000, "the asker never heard back");
+          // a per-minute limit naming no wait is tried four times over about half a minute (2 s, 8 s, 20 s, with jitter)
+        }, 75_000, "the asker never heard back");
         expect(failed.tool.name).toContain("Rate limit reached for fake-model: 30 requests per minute");
         expect(assignments(helper.id, asker.id)[0].result).toContain("Rate limit reached for fake-model: 30 requests per minute");
       } finally {
         compatAnswer = "hang";
       }
     },
-    45_000,
+    120_000,
   );
 
   it(

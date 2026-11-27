@@ -53,7 +53,7 @@ async function fixtureSession(test: (f: any) => Promise<void>, fakeEnv: NodeJS.P
     const evidence = () => existsSync(`${planPath}.evidence.jsonl`) ? readFileSync(`${planPath}.evidence.jsonl`, "utf8").trim().split("\n").filter(Boolean).map(line => JSON.parse(line)) : [];
     const messages = async (threadId: string) => (await api(`/api/threads/${threadId}/messages`)).messages;
     const start = async () => { save(); return cli("send", "--bot", chief.id, "--task", chief.activeTaskId, "--text", "Please have Engineering build and independently verify a CSV export. Own the result."); };
-    const wait = () => cli("wait", "--bot", chief.id, "--task", chief.activeTaskId, "--timeout", "30");
+    const wait = (seconds = 30) => cli("wait", "--bot", chief.id, "--task", chief.activeTaskId, "--timeout", String(seconds));
     await test({ session, cli, api, chief, lead, specialist, plan, save, start, wait, nodes, eventsOf, evidence, messages });
   } finally { await session.close(); }
 }
@@ -963,7 +963,8 @@ it("tells the Chief a teammate's provider refused the turn, in the provider's wo
   });
   try {
     await f.start();
-    expect((await f.wait()).status).toBe("settled");
+    // a per-minute limit naming no wait is tried four times over about half a minute (2 s, 8 s, 20 s, with jitter)
+    expect((await f.wait(75)).status).toBe("settled");
     const child = f.nodes().find((node: any) => node.botId === f.lead.id);
     expect(child.status).toBe("failed");
     expect(child.result).toContain("429");
@@ -971,7 +972,7 @@ it("tells the Chief a teammate's provider refused the turn, in the provider's wo
     const resumed = f.evidence().find((turn: any) => turn.botId === f.chief.id && turn.resumed);
     expect(resumed.prompt.message.content).toContain("Rate limit reached for loop-model");
   } finally { await close(); }
-}), 45_000);
+}), 120_000);
 
 it("keeps a teammate working through a provider settings save that does not touch its engine", () => fixture(async f => {
   const gate = join(f.session.info.dataDir, "lead-ready");
