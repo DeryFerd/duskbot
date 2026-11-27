@@ -59,7 +59,6 @@ function parse(raw) {
     ...(isLanguage(record.language) ? { language: record.language } : {}),
     ...(typeof record.talkShortcut === "boolean" ? { talkShortcut: record.talkShortcut } : {}),
     ...(isTalkKey(record.talkKey) ? { talkKey: record.talkKey } : {}),
-    ...(typeof record.railHidden === "boolean" ? { railHidden: record.railHidden } : {}),
     ...(typeof record.windowFrame === "boolean" ? { windowFrame: record.windowFrame } : {}),
     ...(Object.keys(quickAsks).length ? { quickAsks } : {}) };
 }
@@ -112,12 +111,6 @@ export function createDesktopPrefs({ read, write, frameByDefault = true }) {
     setQuickAsksChat(server, chat) {
       const parsed = typeof server === "string" ? parseChat(chat) : null;
       if (parsed) save({ ...current(), quickAsks: { ...current().quickAsks, [server]: parsed } });
-    },
-    /** The window's rail of places is shown until the person hides it. */
-    railHidden: () => current().railHidden === true,
-    setRailHidden(hidden) {
-      const railHidden = hidden === true;
-      if ((current().railHidden === true) !== railHidden) save({ ...current(), railHidden });
     },
     /** Whether the window draws its own frame: `frameByDefault` until the person turns it on or off. */
     windowFrame: () => (typeof current().windowFrame === "boolean" ? current().windowFrame : frameByDefault),

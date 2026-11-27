@@ -108,13 +108,13 @@ test("a server of the person's own that signed in with their account: one saved 
 
 function rail(over = {}) {
   const handlers = new Map(), opened = [], ran = [], sent = [];
-  const w = { trusted: true, lists: true, beside: true, state: session(), offer: { recommended: "pro", plans: [{ tier: "pro", amount: 4900 }] }, added: [], organized: [],
+  const w = { trusted: true, lists: true, state: session(), offer: { recommended: "pro", plans: [{ tier: "pro", amount: 4900 }] }, added: [], organized: [],
     organization: { outcome: "added", cloudId: "c-new" } };
   const account = { state: () => w.state, offer: async () => w.offer, addCloud: async (input) => { w.added.push(input); return { outcome: "opened", state: w.state }; },
     addOrganization: async (input) => { w.organized.push(input); return w.organization; },
     reopenAdd: async () => true, addLink: () => "https://test.checkout.dodopayments.com/x", addDone: () => { w.done = true; }, interest: async () => {} };
   const installed = installCloudRail({ ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) }, guard: handler => handler, trusted: () => w.trusted,
-    lists: () => w.lists, beside: () => w.beside,
+    lists: () => w.lists,
     places: () => railPlaces({ saved: saved(), home: HOME, mine: HOME, state: w.state }), open: id => opened.push(id), account: () => account,
     add: { choices: () => ({ cloud: true, link: true, address: false }), run: (...args) => ran.push(args) }, clipboard: { writeText: text => sent.push(text) },
     openCloud: async id => opened.push(`cloud:${id}`), targets: () => [{ isDestroyed: () => false, send: (channel) => sent.push(`page:${channel}`) }, null,
@@ -126,10 +126,8 @@ test("the rail's channels: the list only for the rail's own page, a circle only 
   const r = rail();
   assert.deepEqual((await r.call("workspaces:places")).places.map(place => place.id), ["home", "a", "acme", "vps"]);
   r.w.lists = false;
-  assert.deepEqual(await r.call("workspaces:places"), { places: [], add: { cloud: false, link: false, address: false, organization: false }, beside: true },
-    "a place's page, this computer's and a Cloud's included, learns only that the rail stands beside it");
-  r.w.beside = false;
-  assert.deepEqual(await r.call("workspaces:places"), { places: [], add: { cloud: false, link: false, address: false, organization: false } });
+  assert.deepEqual(await r.call("workspaces:places"), { places: [], add: { cloud: false, link: false, address: false, organization: false } },
+    "a place's page, this computer's and a Cloud's included, learns nothing, not even of a rail");
   assert.throws(() => r.call("workspaces:open", "a"), /only available/);
   r.call("workspaces:add", "link", "https://own.example.test/#code=abc");
   assert.deepEqual(r.ran.splice(0), [["link", "https://own.example.test/#code=abc"]], "this computer's own add-a-server sheet adds through main's Connect dialog");
@@ -151,9 +149,6 @@ test("the rail's channels: the list only for the rail's own page, a circle only 
     "a pasted link reaches main's own Connect dialog trimmed and bounded; anything but text is the clipboard's");
   r.installed.changed(); r.installed.changed();
   assert.deepEqual(r.sent, ["page:workspaces:changed", "rail:workspaces:changed"], "a signal only, to the page and the rail, and once per change");
-  r.w.beside = true;
-  r.installed.changed();
-  assert.deepEqual(r.sent.slice(2), ["page:workspaces:changed", "rail:workspaces:changed"], "the rail came beside the page (or went): the page reads it again");
 });
 
 test("buying another Cloud from a page: the plan must be on sale, the name is checked, and the page gets only what the sheet says", async () => {
@@ -388,10 +383,7 @@ test("Remove from list on a server saved by hand: main forgets it here, by its o
   assert.deepEqual(await rail().call("workspaces:remove", "vps"), { outcome: "unsupported" }, "a main without forget says so");
 });
 
-test("a place with inbox lines waiting says so on its circle, this computer's too; the Admin's payment problem still does", () => {
-  const places = railPlaces({ saved: saved("home"), mine: HOME, state: session(), waiting: id => id === "a" || id === "local" });
-  assert.equal(places.find(place => place.id === "a").attention, true);
-  assert.equal(places.find(place => place.id === "local").attention, true);
-  assert.equal(places.find(place => place.id === "vps").attention, undefined);
-  assert.equal(railPlaces({ saved: saved("home"), mine: HOME, state: session() }).find(place => place.id === "a").attention, undefined, "with nothing to say, nothing fires");
+test("a place's circle fires only for the Admin's payment problem: no inbox counts are read for it", () => {
+  const places = railPlaces({ saved: saved("home"), mine: HOME, state: session(), waiting: () => true });
+  assert.deepEqual(places.filter(place => place.attention).map(place => place.id), []);
 });

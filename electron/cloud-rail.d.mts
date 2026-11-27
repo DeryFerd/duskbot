@@ -53,8 +53,7 @@ export interface RailPlace {
  * a new organization on the Team plan this account pays for (absent from an older app's main). */
 /** `account`: Add another account (the rail's own page runs that sign-in). */
 export interface RailAddChoices { cloud: boolean; link: boolean; address: boolean; organization?: boolean; account?: boolean }
-/** `beside`: a place's page, which never reads the list, learns that the window's rail stands beside it. */
-export interface RailState { places: RailPlace[]; add: RailAddChoices; beside?: true }
+export interface RailState { places: RailPlace[]; add: RailAddChoices }
 /** Buying another Cloud as a page sees it: what the sheet says, never the account, an address or the checkout page. */
 export type AddCloudView =
   | { signedIn: false }
@@ -80,5 +79,5 @@ export type AddCloudView =
   };
 export declare const RAIL_MIN_PLACES: number;
 /** main's own circles: each as the page sees it, plus the Cloud main acts on for it (never sent to a page). */
-export declare function railPlaces(input: { saved: { environments: any[]; activeId: string }; home?: string | null; mine?: string | null; state?: unknown; offers?: (entry: any) => boolean; waiting?: (id: string) => boolean }): Array<RailPlace & { cloudId?: string }>;
+export declare function railPlaces(input: { saved: { environments: any[]; activeId: string }; home?: string | null; mine?: string | null; state?: unknown; offers?: (entry: any) => boolean }): Array<RailPlace & { cloudId?: string }>;
 export declare function addCloudView(state: unknown, offer: import("./cloud-home.mjs").CloudOffer | null): AddCloudView;

@@ -13,8 +13,8 @@ import "./styles.css";
 watchFocusNav();
 watchStaleChunks();
 
-// The window's own rail of places (electron/chrome-rail.mjs): see-through but for the rail and its open sheets. Only
-// the desktop's preload gives this app's page a rail; anywhere else this address is the app.
+// The accounts sheet's page over the window (electron/chrome-rail.mjs): see-through but for the sheet. Only the
+// desktop's preload gives this app's page this bridge; anywhere else this address is the app.
 if (window.duskDesktop?.rail?.expand) {
   applySkinChoice(readSkinChoice());
   applyFont(readFont());

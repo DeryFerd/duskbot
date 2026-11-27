@@ -124,7 +124,7 @@ import { createHomeWindow, HOME_SCREEN_PATH, installHomeWindowIpc, WELCOMED_ROUT
 import { localPageStep, settledActive } from "./workspace-choice.mjs"; import { createWorkspaceReconnect, installWorkspaceReconnectIpc, proxyAnswersForDownServer, RECONNECT_PATH } from "./workspace-reconnect.mjs";
 import { createTeamProfileSeeds } from "./team-profile-seed.mjs";
 import { createWorkspaceSwitch, installWorkspaceSwitchIpc } from "./workspace-switch.mjs";
-import { createHomePlaces } from "./home-places.mjs"; import { createDesktopRing, installAccounts } from "./accounts-main.mjs"; import { createAddedCloudNotice, installCloudRail, railPlaces } from "./cloud-rail.mjs"; import { createPlaceInboxWatch } from "./place-inbox-watch.mjs"; import { homeLook, otherOwnClouds, withoutOldCloudHome } from "./cloud-list.mjs"; import { installPlaceLook } from "./place-look.mjs"; import { CHROME_RAIL_PATH, createChromeRail } from "./chrome-rail.mjs";
+import { createHomePlaces } from "./home-places.mjs"; import { createDesktopRing, installAccounts } from "./accounts-main.mjs"; import { createAddedCloudNotice, installCloudRail, railPlaces } from "./cloud-rail.mjs";  import { homeLook, otherOwnClouds, withoutOldCloudHome } from "./cloud-list.mjs"; import { installPlaceLook } from "./place-look.mjs"; import { CHROME_RAIL_PATH, createChromeRail } from "./chrome-rail.mjs";
 import { createWindowStateFile } from "./window-state-file.mjs";
 import { bundleSource, createLocalUi, devSource, originOf, servedOrigins } from "./local-ui.mjs";
 import { accountSetupStore, localAccountSetupStore, remoteAccountSetupStore } from "./account-setup-store.mjs"; import { CLOUD_HOME_ID, installBotsElsewhere, placesChosenStore, placesElsewhere, readBotCounts } from "./bots-elsewhere.mjs";
@@ -3091,14 +3091,13 @@ function showHome(options) {
   return options?.place ? workspaceSwitch.around(shown) : shown();
 }
 const openOwnCloud = id => showHome({ place: { cloud: id, name: environmentsState.environments.find(entry => entry.cloud?.id === id)?.name } });
-const placeInbox = createPlaceInboxWatch({ places: () => [{ id: LOCAL_ID, local: true }, ...cloudGone.keep(environmentsState.environments.filter(entry => entry.kind !== "local" && entry.origin))], activeId: () => environmentsState.activeId, local: localServerRequest, cloudFetch: cloudFetch, asleep: origin => homeWindow.asleepAt(origin), shown: () => !desktopRemoteAccess && serverReady && Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()), changed: () => railChanged() });
 /** A server of the person's own this app linked, which can move to dusk cloud from here now. */
 const serverCanMove = id => Boolean(!desktopRemoteAccess && vpsCloudMove && !vpsCloudMove.away() && vpsLink.servers().some(server => server.id === id));
-const railList = () => { ownHome?.refresh(); return railPlaces({ saved: environmentsState, waiting: placeInbox.waiting, home: homeWindow.cloudOrigin() ?? ownHome?.origin() ?? null, mine: myCloud(), state: desktopRemoteAccess ? null : cloudAccount?.state(), offers: entry => !desktopRemoteAccess && ownHome?.offers(entry) === true, cloudMoves: entry => serverCanMove(entry.id), accounts: accountRing.waiting() }); };
-// The rail as the window's own chrome (chrome-rail.mjs): this app's page beside every place's page, the one that lists.
-const chromeRail = createChromeRail({ createView: options => new WebContentsView(options), preload: path.join(__dirname, "preload.cjs"), log: slog, prefs: () => desktopPrefs, changed: () => rail.changed(),
+const railList = () => { ownHome?.refresh(); return railPlaces({ saved: environmentsState, home: homeWindow.cloudOrigin() ?? ownHome?.origin() ?? null, mine: myCloud(), state: desktopRemoteAccess ? null : cloudAccount?.state(), offers: entry => !desktopRemoteAccess && ownHome?.offers(entry) === true, cloudMoves: entry => serverCanMove(entry.id), accounts: accountRing.waiting() }); };
+// The accounts sheet's page over the window, and the frame's traffic lights (chrome-rail.mjs).
+const chromeRail = createChromeRail({ createView: options => new WebContentsView(options), preload: path.join(__dirname, "preload.cjs"), log: slog, prefs: () => desktopPrefs,
   args: () => [...desktopCompanionRendererArguments(rendererOrigin(), desktopRemoteAccess), "--dusk-current-local-origin=1", ...(accountApp() ? ["--dusk-company-desktop=1"] : []), ...(accountApp() || accountGateNeeded() ? ["--dusk-account-gate=1"] : []), `--dusk-app-version=${app.getVersion()}`],
-  url: () => `${rendererOrigin()}${CHROME_RAIL_PATH}`, wanted: () => false });
+  url: () => `${rendererOrigin()}${CHROME_RAIL_PATH}` });
 chromeRail.install(ipcMain);
 function railChanged() { chromeRail.refresh(); rail.changed(); void localUi?.refresh(); }
 const accountPages = [() => (mainWindow && !mainWindow.isDestroyed() && senderIsLocal({ sender: mainWindow.webContents }) ? mainWindow.webContents : null), () => ({ send: channel => chromeRail.send(channel) })];
@@ -3137,7 +3136,7 @@ ipcMain.handle("start-fresh:retry", startFreshPage("start-fresh:retry", () => st
 ipcMain.handle("start-fresh:finish", startFreshPage("start-fresh:finish", () => startFresh.finish()));
 const rail = installCloudRail({ ipcMain, clipboard, openCloud: openOwnCloud, switchAccount: id => accountRing().switchTo(id), account: () => (accountApp() ? cloudAccount : null),
   guard: handler => (event, ...args) => (chromeRail.owns(event) ? handler(event, ...args) : workspaceOnly(handler)(event, ...args)),
-  lists: event => chromeRail.owns(event), trusted: event => chromeRail.owns(event) || senderIsLocal(event), beside: () => chromeRail.shown(),
+  lists: event => chromeRail.owns(event), trusted: event => chromeRail.owns(event) || senderIsLocal(event),
   targets: () => [mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null, { send: channel => chromeRail.send(channel), isDestroyed: () => false }],
   places: railList, open: id => (id === LOCAL_ID && (homeWindow.cloudOrigin() ?? ownHome?.origin()) ? openThisComputer() : workspaceMenuAction(() => switchEnvironment(id))), makeHome: id => ownHome.start(id), cloudMove: id => askServerCloudMove(id), forget: id => forgetEnvironment(id, false, true),
   add: { choices: () => ({ cloud: cloudOffersAllowed(), link: !desktopRemoteAccess, address: !desktopRemoteAccess && !homeWindow.cloudOrigin(), account: !desktopRemoteAccess && Boolean(accounts.view().active) }),
