@@ -86,7 +86,7 @@ export function stepOf(event: StoredEvent): Step | null {
     case "download_click": return step(event, "goal", "account", "download_click", { path: page, detail: str(p.platform) });
     case "signup": return step(event, "signup", "server", "signed up", { detail: str(p.method) });
     case "sign_in": return step(event, "signin", "server", p.kind === "web" || !p.kind ? "signed in" : `signed in on the ${p.kind} app`, { detail: OS_OF[String(p.platform)] ?? null });
-    case "onboarding_step": return step(event, "onboarding", "account", `onboarding: ${words(p.step) ?? "step"}`, { ...msOf(p.ms), ...(p.from === "app" ? { detail: "from the app" } : {}) });
+    case "onboarding_step": return step(event, "onboarding", "account", `onboarding: ${words(p.step) ?? "step"}`, { ...msOf(p.ms), ...(p.skipped === true ? { detail: "skipped, name came from sign-in" } : p.from === "app" ? { detail: "from the app" } : {}) });
     case "app_return": return step(event, "onboarding", "account", "sent back to the app", { detail: p.link === "cloud" ? "cloud sheet" : null });
     case "onboarding_done": return step(event, "onboarding", "account", "finished onboarding", msOf(p.ms));
     case "plan_chosen": return step(event, "plan", "account", `picked ${words(p.plan) ?? "a plan"}`, { detail: p.period === "year" ? "yearly" : p.period === "month" ? "monthly" : null });

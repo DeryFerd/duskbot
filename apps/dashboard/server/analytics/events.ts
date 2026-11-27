@@ -62,7 +62,7 @@ export const EVENTS = {
   /** an account page view's end: its visible time; sent on the next route or when the page goes away */
   page_leave: { source: "page", props: { path: route, ms: count } },
   /** ms is the time spent on the step before this one */
-  onboarding_step: { source: "page", props: { step: oneOf("name", "plan", "app"), ms: count, from: oneOf("app") }, active: true },
+  onboarding_step: { source: "page", props: { step: oneOf("name", "plan", "app"), ms: count, from: oneOf("app"), skipped: flag }, active: true },
   /** onboarding's last step sent someone who signed up from the desktop app back to it: the cloud sheet or the app as it was */
   app_return: { source: "page", props: { link: oneOf("open", "cloud"), how: oneOf("auto", "button") }, active: true },
   /** ms is the time spent on the last step */
