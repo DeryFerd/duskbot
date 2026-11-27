@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 
-import { nextShortcutBot, shortcutBots, shownBotIds } from "./sidebar-shortcut-order";
+import { nextShortcutBot, shortcutBots, shortcutTargets, shownBotIds, shownRowIds } from "./sidebar-shortcut-order";
 
 const bot = (id: string) => ({ id });
 
@@ -71,5 +71,24 @@ describe("nextShortcutBot", () => {
 
   it("opens nothing without bots", () => {
     expect(nextShortcutBot([], "a", 1)).toBeUndefined();
+  });
+});
+
+describe("shortcutTargets", () => {
+  it("numbers bots and group chats together in the order the sidebar shows them, nine at most", () => {
+    const root = sidebar(`
+      <div data-sidebar-bot-row="a"></div><div data-sidebar-bot-row="b"></div>
+      <div data-sidebar-section-id="builtin:groups"><div data-sidebar-group-row="room"></div></div>
+      <div data-sidebar-bot-row="c"></div>
+    `);
+    expect(shownRowIds(root)).toEqual(["a", "b", "room", "c"]);
+    const targets = shortcutTargets([bot("a"), bot("b"), bot("c")], [bot("room")], shownRowIds(root));
+    expect(targets.map((target) => target.kind === "bot" ? `bot:${target.bot.id}` : `group:${target.group.id}`)).toEqual(["bot:a", "bot:b", "group:room", "bot:c"]);
+    const many = Array.from({ length: 12 }, (_, index) => bot(`b${index}`));
+    expect(shortcutTargets(many, [], many.map((each) => each.id))).toHaveLength(9);
+  });
+
+  it("with no sidebar on screen, takes the bots first and the group chats after them", () => {
+    expect(shortcutTargets([bot("a")], [bot("room")], []).map((target) => target.kind)).toEqual(["bot", "group"]);
   });
 });
