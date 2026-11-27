@@ -123,7 +123,8 @@ describe("a failed Antigravity sign-in", () => {
     }
   }, 30_000);
 
-  it("skips a CLI on PATH whose version could not be read once it turns `acp --login` away, so Try again installs the official runtime", async () => {
+  // Windows finds only agy.exe and antigravity.exe on PATH and runs an .exe as itself, so a node script cannot stand in
+  it.skipIf(process.platform === "win32")("skips a CLI on PATH whose version could not be read once it turns `acp --login` away, so Try again installs the official runtime", async () => {
     if (!resolveAntigravityReleaseAsset()) return;
     const bin = folder();
     const data = folder();
