@@ -1820,7 +1820,6 @@
   "composer.placeholder.attaching": "Anexando arquivos…",
   "composer.placeholder.listening": "Ouvindo…",
   "composer.placeholder.goal": "Descreva o que {name} deve concluir junto",
-  "composer.placeholder.goalSolo": "Descreva o que {name} deve concluir",
   "composer.placeholder.group": "Mensagem para {name} — {hint}",
   "composer.placeholder.bot": "Mensagem para {name}",
   "composer.hint.mentions": "@ para chamar um bot",

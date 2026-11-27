@@ -1891,7 +1891,6 @@
   "composer.placeholder.attaching": "Прикрепление файлов…",
   "composer.placeholder.listening": "Слушаю…",
   "composer.placeholder.goal": "Опишите, что {name} должен выполнить вместе",
-  "composer.placeholder.goalSolo": "Опишите, что {name} должен завершить",
   "composer.placeholder.group": "Сообщение {name} — {hint}",
   "composer.placeholder.bot": "Сообщение {name}",
   "composer.hint.mentions": "@ чтобы подключить бота",

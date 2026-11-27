@@ -1857,7 +1857,6 @@
   "composer.placeholder.attaching": "Załączanie plików…",
   "composer.placeholder.listening": "Słuchanie…",
   "composer.placeholder.goal": "Opisz, co {name} ma zakończyć razem z zespołem",
-  "composer.placeholder.goalSolo": "Opisz, co {name} ma zakończyć",
   "composer.placeholder.group": "Wiadomość do bota {name} — {hint}",
   "composer.placeholder.bot": "Wiadomość do bota {name}",
   "composer.hint.mentions": "@, aby dodać bota",

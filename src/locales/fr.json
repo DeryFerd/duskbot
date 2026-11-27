@@ -861,7 +861,6 @@
   "composer.placeholder.attaching": "Ajout des fichiers…",
   "composer.placeholder.listening": "À l'écoute…",
   "composer.placeholder.goal": "Décrivez ce que {name} doit terminer ensemble",
-  "composer.placeholder.goalSolo": "Décrivez ce que {name} doit terminer",
   "composer.placeholder.group": "Message à {name} — {hint}",
   "composer.placeholder.bot": "Message à {name}",
   "composer.hint.mentions": "@ pour faire venir un bot",

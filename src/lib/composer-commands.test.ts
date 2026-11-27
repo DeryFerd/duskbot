@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   composerSlashTrigger,
   goalTextFromComposer,
+  inlineSlashCommand,
   replaceComposerSlashTrigger,
   skillSlashCommands,
   slashCommandMatches,
@@ -129,5 +130,25 @@ describe("composer slash commands", () => {
     const skills = skillSlashCommands([{ name: "notes", description: "Compiles notes." }, { name: "compose", description: "Writes." }]);
     const more = () => ({ label: "More", description: "Other tools" });
     expect(slashMenuRows(commands, skills, "comp", false, more).map((row) => row.label)).toEqual(["/compact", "/compose", "/goal", "/notes"]);
+  });
+});
+
+describe("inlineSlashCommand", () => {
+  const all: ComposerSlashCommandId[] = ["goal", "learn", "setup", "new", "compact"];
+  it("names a command at the start of the field once it is complete, and whether its argument is empty", () => {
+    expect(inlineSlashCommand("/goal", all)).toEqual({ id: "goal", end: 5, hint: true, spaced: false });
+    expect(inlineSlashCommand("/compact ", all)).toEqual({ id: "compact", end: 8, hint: true, spaced: true });
+    expect(inlineSlashCommand("/compact keep the pricing", all)).toEqual({ id: "compact", end: 8, hint: false, spaced: true });
+    expect(inlineSlashCommand("/GOAL x", all)?.id).toBe("goal");
+  });
+  it("is not a command while partial, longer, inside a sentence, or not offered", () => {
+    expect(inlineSlashCommand("/goa", all)).toBeNull();
+    expect(inlineSlashCommand("/goalie", all)).toBeNull();
+    expect(inlineSlashCommand("see /goal", all)).toBeNull();
+    expect(inlineSlashCommand("/compact", ["goal"])).toBeNull();
+  });
+  it("leaves /new with words after it as ordinary text", () => {
+    expect(inlineSlashCommand("/new", all)?.id).toBe("new");
+    expect(inlineSlashCommand("/new ideas", all)).toBeNull();
   });
 });

@@ -1907,7 +1907,6 @@
   "composer.placeholder.attaching": "ファイルを添付中…",
   "composer.placeholder.listening": "聞き取り中…",
   "composer.placeholder.goal": "{name} が一緒に仕上げる内容を書いてください",
-  "composer.placeholder.goalSolo": "{name} が仕上げる内容を書いてください",
   "composer.placeholder.group": "{name} へのメッセージ — {hint}",
   "composer.placeholder.bot": "{name} へのメッセージ",
   "composer.hint.mentions": "@ でボットを呼びます",

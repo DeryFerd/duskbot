@@ -2009,7 +2009,6 @@
   "composer.placeholder.attaching": "파일 첨부 중…",
   "composer.placeholder.listening": "듣는 중…",
   "composer.placeholder.goal": "{name}이(가) 함께 끝낼 일을 설명하세요",
-  "composer.placeholder.goalSolo": "{name}이(가) 끝낼 일을 설명하세요",
   "composer.placeholder.group": "{name}에게 메시지 — {hint}",
   "composer.placeholder.bot": "{name}에게 메시지",
   "composer.hint.mentions": "@로 봇 부르기",

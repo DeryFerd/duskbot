@@ -861,7 +861,6 @@
   "composer.placeholder.attaching": "फ़ाइलें संलग्न हो रही हैं…",
   "composer.placeholder.listening": "सुन रहे हैं…",
   "composer.placeholder.goal": "बताइए कि {name} को साथ मिलकर क्या पूरा करना है",
-  "composer.placeholder.goalSolo": "बताइए कि {name} को क्या पूरा करना है",
   "composer.placeholder.group": "{name} को संदेश — {hint}",
   "composer.placeholder.bot": "{name} को संदेश",
   "composer.hint.mentions": "किसी बॉट को बुलाने के लिए @",

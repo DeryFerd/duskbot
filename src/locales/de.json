@@ -2703,7 +2703,6 @@
   "composer.dropToAttach": "Zum Anhängen ablegen",
   "composer.placeholder.listening": "Höre zu…",
   "composer.placeholder.goal": "Beschreib, was {name} gemeinsam fertigstellen soll",
-  "composer.placeholder.goalSolo": "Beschreib, was {name} fertigstellen soll",
   "composer.placeholder.group": "Nachricht an {name} — {hint}",
   "composer.placeholder.bot": "Nachricht an {name}",
   "composer.placeholder.question": "Antwort eingeben oder über etwas anderes sprechen",

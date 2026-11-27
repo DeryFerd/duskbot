@@ -2679,7 +2679,6 @@
   "composer.dropToAttach": "Suelta para adjuntar",
   "composer.placeholder.listening": "Escuchando…",
   "composer.placeholder.goal": "Describe qué debe completar {name} en equipo",
-  "composer.placeholder.goalSolo": "Describe qué debe completar {name}",
   "composer.placeholder.group": "Mensaje para {name}: {hint}",
   "composer.placeholder.bot": "Mensaje para {name}",
   "composer.placeholder.question": "Escribe tu respuesta o habla de otra cosa",

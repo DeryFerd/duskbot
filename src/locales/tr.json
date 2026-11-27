@@ -1537,7 +1537,6 @@
   "composer.placeholder.attaching": "Dosyalar ekleniyor…",
   "composer.placeholder.listening": "Dinleniyor…",
   "composer.placeholder.goal": "{name} botunun birlikte neyi tamamlaması gerektiğini açıklayın",
-  "composer.placeholder.goalSolo": "{name} botunun neyi tamamlaması gerektiğini açıklayın",
   "composer.placeholder.group": "{name} grubuna mesaj gönder — {hint}",
   "composer.placeholder.bot": "{name} adlı bota mesaj gönder",
   "composer.hint.mentions": "Bir botu dahil etmek için @",

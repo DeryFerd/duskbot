@@ -995,7 +995,6 @@
   "composer.placeholder.attaching": "Прикріплюємо файли…",
   "composer.placeholder.listening": "Слухаю…",
   "composer.placeholder.goal": "Опишіть, що {name} має завершити разом",
-  "composer.placeholder.goalSolo": "Опишіть, що {name} має завершити",
   "composer.placeholder.group": "Повідомлення для {name} — {hint}",
   "composer.placeholder.bot": "Повідомлення для {name}",
   "composer.hint.mentions": "@ щоб запросити бота",

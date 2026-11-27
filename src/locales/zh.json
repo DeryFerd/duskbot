@@ -2081,7 +2081,6 @@
   "composer.placeholder.attaching": "正在附加文件…",
   "composer.placeholder.listening": "正在聆听…",
   "composer.placeholder.goal": "描述 {name} 要一起完成什么",
-  "composer.placeholder.goalSolo": "描述 {name} 要完成什么",
   "composer.placeholder.group": "给 {name} 发消息——{hint}",
   "composer.placeholder.bot": "给 {name} 发消息",
   "composer.hint.mentions": "用 @ 叫机器人加入",

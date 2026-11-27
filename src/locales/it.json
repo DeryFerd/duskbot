@@ -1816,7 +1816,6 @@
   "composer.placeholder.attaching": "Allegati in corso…",
   "composer.placeholder.listening": "In ascolto…",
   "composer.placeholder.goal": "Descrivi cosa {name} deve finire insieme",
-  "composer.placeholder.goalSolo": "Descrivi cosa {name} deve finire",
   "composer.placeholder.group": "Messaggio a {name} — {hint}",
   "composer.placeholder.bot": "Messaggio a {name}",
   "composer.hint.mentions": "@ per far entrare un bot",
