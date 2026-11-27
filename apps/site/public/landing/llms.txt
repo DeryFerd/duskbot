@@ -17,7 +17,7 @@
 - [pricing / dusk bot](https://dusk.bot/pricing): Keep your bots working with your laptop off on dusk cloud, from $20 a month. The app is free for personal use, with every feature.
 - [privacy policy / dusk bot](https://dusk.bot/privacy): What dusk bot collects in the app, the phone app, the account service, dusk cloud and this site, why, and how to get it deleted.
 - [refund and cancellation policy / dusk bot](https://dusk.bot/refunds): How cancelling a dusk bot plan works, when you can get a refund, and how to ask for one.
-- [security / dusk bot](https://dusk.bot/security): How to report a security problem in dusk bot, what is in scope, and what to expect from us.
+- [report a security vulnerability in dusk bot / security policy](https://dusk.bot/security): Found a security issue in dusk bot? Email security@dusk.bot. What is in scope, what to include, when we reply (3 business days) and whether there is a bug bounty.
 - [subprocessors / dusk bot](https://dusk.bot/subprocessors): The outside services that process data for dusk bot, what each one does, and where.
 - [terms of service / dusk bot](https://dusk.bot/terms): The terms for using dusk bot: the app, accounts, paid plans, dusk cloud desktops, and what each side promises.
 
@@ -47,4 +47,5 @@
 - [Guides to AI bots that work for you / dusk bot](https://dusk.bot/guides): Plain-words guides to AI agents and bots: keeping them running with your laptop shut, scheduled AI tasks, group chats, safety and what it all costs.
 - [Connect AI bots to the apps you use / dusk bot](https://dusk.bot/integrations): What your bots can do in Gmail, Google Calendar, Slack, Notion, GitHub and more: the real actions, what it asks first, and routines to copy.
 - [Routines to copy: scheduled AI tasks that run for you / dusk bot](https://dusk.bot/routines): Copy-ready routines for AI bots: the message to send, when it runs, what it needs and what it hands back. Paste one into a chat and it is set up.
+- [Free tools for planning AI bots / dusk bot](https://dusk.bot/tools): Small free calculators and helpers for planning AI bots: what keeping one running costs, and more. They run in your browser.
 - [What people hand to AI bots, by task and by role / dusk bot](https://dusk.bot/use-cases): Real jobs for AI bots, by task and by role: inbox triage, morning briefings, research, invoices, and routine packs for founders and small teams.
