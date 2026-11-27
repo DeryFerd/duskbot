@@ -7,7 +7,7 @@ import { launchVerificationServer, runControlDusk } from "../scripts/control-dus
 import { removeTempDir } from "./testing/cleanup.ts";
 import { openSse } from "./testing/sse.ts";
 
-const ACK = "On it, checking this week's Delhi to Goa fares.";
+const ACK = "On it";
 
 it("acks real work once its first tool runs, labels the status line from the call, and tells the engine next turn", async () => {
   const scratch = mkdtempSync(join(tmpdir(), "dusk-turn-beats-"));
