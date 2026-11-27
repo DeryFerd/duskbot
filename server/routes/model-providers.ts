@@ -13,7 +13,7 @@ import type { InstanceConfigMap } from "../contracts.ts";
 import type { ModelCatalogStore } from "../model-catalog/catalog.ts";
 import { catalogStats } from "../model-catalog/trim.ts";
 import {
-  CatalogIndex, addressProblem, buildConnection, catalogGroups, listProviderModels, moreProviders, probeLocalProviders, resolveProvider,
+  CatalogIndex, addressProblem, buildConnection, catalogGroups, listProviderModels, localBaseUrl, moreProviders, probeLocalProviders, resolveProvider,
 } from "../model-providers.ts";
 import { keyResult } from "../key-check.ts";
 import { unsealFields } from "../sealed-fields.ts";
@@ -188,6 +188,9 @@ export function createModelProviderRoutes(deps: ModelProviderRouteDeps): RouteHa
       if (!body) return;
       const def = resolveProvider(body.provider, deps.catalog.get());
       if (!def) return json(res, 404, { error: "Unknown provider." });
+      // a local server that answers only on ::1 is saved at that address
+      const here = def.local && !body.fields?.baseUrl?.trim() ? await localBaseUrl(def, deps.place, deps.fetch) : null;
+      if (here && here !== def.baseUrl) body.fields = { ...body.fields, baseUrl: here };
       const built = buildConnection(def, body, deps.place);
       if ("error" in built) return json(res, 400, { error: built.error });
       const checked = await checkBeforeSave(def, body);
