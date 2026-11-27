@@ -67,6 +67,7 @@ describe("failed tool name", () => {
     ["Bash", "terminal"],
     ["GMAIL_SEND_EMAIL", "app"],
     ["mcp__browser__Go To https://x.example/jane", "browser.other"],
+    ["browser_agent_browser_click", "browser.click"],
   ])("%s -> %s", (name, label) => expect(failedToolName(name)).toBe(label));
 });
 

@@ -112,7 +112,7 @@ const FAILED_TOOL = /^(?:browser|computer)\.[a-z][a-z0-9_]{0,31}$/;
 export function failedToolName(name: string): string {
   const surface = toolSurfaceKind(name);
   if (!surface) return toolSignals([name]).tools[0] ?? "other";
-  const bare = name.toLowerCase().replace(TOOL_NAMESPACE, "").replace(surface === "browser" ? /^(?:agent_browser_|browser_)/ : /^computer_/, "");
+  const bare = name.toLowerCase().replace(TOOL_NAMESPACE, "").replace(surface === "browser" ? /^(?:browser_(?=agent_browser_|browser_))?(?:agent_browser_|browser_)/ : /^computer_/, "");
   return `${surface}.${TOOL_ACTION.test(bare) ? bare : "other"}`;
 }
 
