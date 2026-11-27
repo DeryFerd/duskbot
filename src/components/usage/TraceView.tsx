@@ -7,6 +7,7 @@ import { fetchTrace } from "@/lib/usage-trace";
 import type { TraceDetail } from "../../../shared/usage-trace";
 import { TraceWaterfall } from "./TraceWaterfall";
 import { friendlyError } from "@/lib/plain-error";
+import { formCloseCls } from "../ui/GrokDialog";
 
 /** Refetches at most this often while the run is live; the now-line ticks in between. */
 const LIVE_REFRESH_MS = 1_000;
@@ -86,7 +87,7 @@ export function TraceDialog({ id, at, onClose }: { id: string; at?: number; onCl
   }, []);
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/55 p-3 sm:p-8"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-3 sm:p-8"
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
       <div role="dialog" aria-modal="true" aria-label={t("trace.title")} className="w-full max-w-[1100px] shadow-2xl">
@@ -96,7 +97,7 @@ export function TraceDialog({ id, at, onClose }: { id: string; at?: number; onCl
             type="button"
             onClick={onClose}
             aria-label={t("trace.close")}
-            className="-mr-1.5 flex size-8 shrink-0 items-center justify-center rounded-lg text-ink-secondary hover:bg-raised hover:text-ink"
+            className={formCloseCls}
           >
             <X size={16} />
           </button>
