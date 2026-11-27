@@ -27,7 +27,9 @@ export interface MoreAnswer {
   bots: { perPerson: number | null; engines: Count[]; topBotShare: number | null; memory: Count[]; roles: Count[] };
   apps: { connects: RateRow[]; actions: Count[] };
   routines: { every: RateRow[]; runP50: number | null; survival: { eligible: number; survived: number; share: number | null } };
-  money: { planViews: number; checkouts: { started: number; paid: number; abandoned: number; rate: number | null }; cancelReasons: Count[]; upgrades: number; downgrades: number };
+  money: { planViews: number; checkouts: { started: number; paid: number; abandoned: number; rate: number | null }; cancelReasons: Count[];
+    /** cancel flows that ended in the window, kept or cancelled; absent from an older server */
+    saves?: { saved: number; cancelled: number; rate: number | null }; upgrades: number; downgrades: number };
   discovery: Array<{ feature: string; people: number; share: number | null; medianDays: number | null }>;
   setups: Record<"version" | "os" | "arch" | "locale" | "screen" | "theme" | "skin" | "notifications", Count[]>;
 }
@@ -46,7 +48,9 @@ const HANDOFF_STEP: Record<string, string> = { shown: "saw the account step", me
   signed_in: "app signed in by itself", app_place: "app: picked where bots live", app_done: "app: finished its first run", name: "named themselves", plan: "saw the plans",
   checkout: "opened checkout", all_set: "reached all set", sent_back: "sent back to the app", back: "back in the app" };
 const STEP: Record<string, string> = { name: "named themselves", plan: "picked a plan", app: "got the app", done: "finished setup" };
-const CANCEL: Record<string, string> = { feature: "missing a feature", price: "too expensive", setup: "hard to set up", broken: "something broke", later: "not now", other: "other" };
+const CANCEL: Record<string, string> = { price: "too expensive", unused: "not using it enough", feature: "missing a feature", switching: "switching to something else", broken: "technical problems",
+  skip: "prefer not to say", setup: "hard to set up", later: "not now", other: "other" };
+const saveRate = (saves: MoreAnswer["money"]["saves"]) => saves && saves.saved + saves.cancelled > 0 ? `save rate ${percent(saves.rate)} (${n(saves.saved)} of ${n(saves.saved + saves.cancelled)} kept their plan). ` : "";
 const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 const days = (value: number | null) => value === null ? "-" : value < 1 ? "same day" : `${Math.round(value)} day${Math.round(value) === 1 ? "" : "s"}`;
 
@@ -103,7 +107,7 @@ export function MoreCards({ more, open }: { more: MoreAnswer; open(detail: MoreD
           <Line label="looked at plans" value={n(money.planViews)} onClick={() => open("money")} />
           <Line label="started a checkout" value={n(money.checkouts.started)} onClick={() => open("money")} />
           <Line label="paid" value={n(money.checkouts.paid)} note={percent(money.checkouts.rate)} bar={money.checkouts.rate} onClick={() => open("money")} />
-          <p className="mt-2 px-1 text-12 text-ink-3">{money.cancelReasons.length ? `why people cancel: ${money.cancelReasons.slice(0, 3).map((row) => `${CANCEL[row.key] ?? words(row.key)} ${n(row.count)}`).join(", ")}. ` : "no cancellations in this window. "}{n(money.upgrades)} upgrades, {n(money.downgrades)} downgrades.</p>
+          <p className="mt-2 px-1 text-12 text-ink-3">{money.cancelReasons.length ? `why people cancel: ${money.cancelReasons.slice(0, 3).map((row) => `${CANCEL[row.key] ?? words(row.key)} ${n(row.count)}`).join(", ")}. ` : "no cancellations in this window. "}{saveRate(money.saves)}{n(money.upgrades)} upgrades, {n(money.downgrades)} downgrades.</p>
         </Card>
         <Card title="day to day" icon={<Clock {...I} />} onOpen={() => open("daily")}>
           <Line label="sessions a day" value={more.engagement.sessionsPerPersonDay === null ? "-" : String(Math.round(more.engagement.sessionsPerPersonDay * 10) / 10)} onClick={() => open("daily")} />
@@ -200,7 +204,7 @@ export function MoreTable({ detail, more }: { detail: MoreDetail; more: MoreAnsw
   );
   if (detail === "money") return (
     <div className="flex flex-col gap-4">
-      <p className="text-13 text-ink-3">{n(more.money.planViews)} plan page views, {n(more.money.checkouts.started)} checkouts started, {n(more.money.checkouts.paid)} paid, {n(more.money.checkouts.abandoned)} left unpaid; {n(more.money.upgrades)} upgrades and {n(more.money.downgrades)} downgrades.</p>
+      <p className="text-13 text-ink-3">{n(more.money.planViews)} plan page views, {n(more.money.checkouts.started)} checkouts started, {n(more.money.checkouts.paid)} paid, {n(more.money.checkouts.abandoned)} left unpaid; {n(more.money.upgrades)} upgrades and {n(more.money.downgrades)} downgrades. {saveRate(more.money.saves)}</p>
       <CountTable title="why people cancel" rows={more.money.cancelReasons} label={(key) => CANCEL[key] ?? words(key)} />
     </div>
   );

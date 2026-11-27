@@ -5,7 +5,8 @@ import type { StoredEvent } from "./sink.ts";
 import type { FocusItem } from "./usage-summary.ts";
 import { ACCOUNT_SIGN_IN_STEPS } from "../../../../shared/product-signals.ts";
 import { EXPECTED_TOOL_ERRORS, type UsageToolError } from "../../../../shared/usage-signals.ts";
-import { cancelledFeedback, type RetentionOutcome } from "../../../../shared/billing-api.ts";
+import { cancelledFeedback, type RetentionOutcome, type RetentionStep } from "../../../../shared/billing-api.ts";
+import { cancelSaves, type CancelSaves } from "./cancel-flow.ts";
 
 const DAY = 86_400_000;
 export interface Count { key: string; count: number }
@@ -20,7 +21,7 @@ export interface MoreAnswer {
   bots: { perPerson: number | null; engines: Count[]; topBotShare: number | null; memory: Count[]; roles: Count[] };
   apps: { connects: RateRow[]; actions: Count[] };
   routines: { every: RateRow[]; runP50: number | null; survival: { eligible: number; survived: number; share: number | null } };
-  money: { planViews: number; checkouts: { started: number; paid: number; abandoned: number; rate: number | null }; cancelReasons: Count[]; upgrades: number; downgrades: number };
+  money: { planViews: number; checkouts: { started: number; paid: number; abandoned: number; rate: number | null }; cancelReasons: Count[]; saves: CancelSaves; upgrades: number; downgrades: number };
   discovery: Array<{ feature: string; people: number; share: number | null; medianDays: number | null }>;
   setups: Record<"version" | "os" | "arch" | "locale" | "screen" | "theme" | "skin" | "notifications", Count[]>;
 }
@@ -35,7 +36,7 @@ export interface HandoffStep { step: string; side: "app" | "web"; from: string |
 export interface MoreInput {
   days: string[]; daily: Map<string, Record<string, number>>; people: PersonDay[]; snapshots: SnapshotRow[]; routines: RoutineSpan[]; events: StoredEvent[];
   billing: { checkouts: Array<{ accountId: string; status: string; createdAt: number }>; subscriptions: Array<{ accountId: string; totalCents: number; createdAt: number; status: string }>;
-    feedback: Array<{ answer: string; at: number; outcome?: RetentionOutcome }> };
+    feedback: Array<{ answer: string; at: number; outcome?: RetentionOutcome }>; retention?: ReadonlyArray<{ subscriptionId: string; step: RetentionStep; outcome: RetentionOutcome; at: number }> };
   accounts: ReadonlyArray<{ id: string; createdAt: number }>; from: number; to: number; now: number;
   /** cloud wake times as the slack edge measures them, per desktop kind */
   wake?: { count: number; p50Ms: number | null; p90Ms: number | null };
@@ -157,7 +158,8 @@ export function moreOf(input: MoreInput): MoreAnswer {
     routines: { every: keys("every:").map(key => { const n = total(`every:${key}`), bad = total(`every_fail:${key}`); return { key, total: n, good: n - bad, bad, rate: rate(n - bad, n) }; }).sort((a, b) => b.total - a.total),
       runP50: bucketQuantile(buckets("run_ms:"), 0.5), survival: { eligible: eligible.length, survived: survived.length, share: rate(survived.length, eligible.length) } },
     money: { planViews, checkouts: { started: checkouts.length, paid, abandoned, rate: rate(paid, checkouts.length) },
-      cancelReasons: counts(input.billing.feedback.filter(entry => entry.at >= input.from && entry.at < input.to && cancelledFeedback(entry)).map(entry => entry.answer)), upgrades, downgrades },
+      cancelReasons: counts(input.billing.feedback.filter(entry => entry.at >= input.from && entry.at < input.to && cancelledFeedback(entry)).map(entry => entry.answer)),
+      saves: cancelSaves(input.billing.retention ?? [], input.from, input.to), upgrades, downgrades },
     discovery,
     setups: { version: counts(opens.map(event => String(event.props.appVersion ?? "")).filter(Boolean)).slice(0, 8), os: setupsOf("os"), arch: setupsOf("arch"), locale: setupsOf("locale"), screen: setupsOf("screen"),
       theme: setupsOf("theme"), skin: setupsOf("skin"), notifications: setupsOf("notifications") },

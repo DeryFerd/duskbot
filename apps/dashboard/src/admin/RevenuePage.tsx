@@ -344,8 +344,8 @@ function Checkout({ checkout }: { checkout: SubscriptionReport["checkout"] }) {
   );
 }
 
-const REASONS: Record<string, string> = { price: "too expensive", unused: "not using it", broken: "something broke", feature: "missing a feature", switching: "switching to something else",
-  setup: "too hard to set up", later: "coming back later", other: "something else" };
+const REASONS: Record<string, string> = { price: "too expensive", unused: "not using it enough", broken: "technical problems", feature: "missing a feature", switching: "switching to something else",
+  skip: "prefer not to say", setup: "too hard to set up", later: "coming back later", other: "something else" };
 
 /** who is leaving or might, and who was kept: the cancel flow, failed cards that came back, and the people worth a look */
 function Saves({ report }: { report: SubscriptionReport }) {

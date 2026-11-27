@@ -321,7 +321,7 @@ export function createAdmin(options: AdminOptions) {
       .map(record => ({ id: record.id, name: "engine_sign_in", at: record.at, accountId: record.accountId, props: (record.data as { props: StoredEvent["props"] }).props }));
     const billingState = v.store();
     const more = moreOf({ days, daily: new Map(daily.map(row => [row.day, row.c])), people, snapshots, routines: spans, events: [...events, ...signIns],
-      billing: { checkouts: billingState.checkouts, subscriptions: billingState.subscriptions, feedback: billingState.feedback ?? [] },
+      billing: { checkouts: billingState.checkouts, subscriptions: billingState.subscriptions, feedback: billingState.feedback ?? [], retention: billingState.retention ?? [] },
       accounts: v.directory().accounts, from: start, to: end, now: now(), wake: wakeOf() });
     const focus = [...answer.focus, ...moreFocus(more)].sort((a, b) => b.weight - a.weight).slice(0, 5);
     return { ...answer, focus, more, partialBefore: partialOf(events) };
