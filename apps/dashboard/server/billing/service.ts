@@ -325,7 +325,13 @@ export function createBillingService(options: BillingServiceOptions) {
     if (!account) return config.trial.days;
     const email = emailOf(account.email);
     const owners = new Set([account.id, ...state.customers.filter(entry => entry.email === email).map(entry => entry.accountId)]);
-    return state.subscriptions.some(sub => owners.has(sub.accountId)) ? null : config.trial.days;
+    return state.subscriptions.some(sub => owners.has(sub.accountId) && usedPlan(sub)) ? null : config.trial.days;
+  }
+  /** a subscription that ran: live now, or ever had a period, a trial or a payment. one whose checkout's card check or
+   *  first payment failed ended before any of that and spent nothing */
+  function usedPlan(sub: StoredSubscription) {
+    return sub.status !== "ended" || sub.currentPeriodStart !== null || sub.trialEndsAt !== undefined
+      || state.invoices.some(row => row.checkoutId === sub.checkoutId && row.status !== "failed" && row.amountCents > 0);
   }
   function cap(accountId: string) { if (clouds.list(accountId, true).filter(cloud => cloud.status !== "destroyed").length >= config.maxCloudsPerAccount) fail(409, "cap"); }
   /** a live subscription this cart would duplicate: the same plan, or a second work license */

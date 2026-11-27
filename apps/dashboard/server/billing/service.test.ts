@@ -841,6 +841,26 @@ describe("free trial", () => {
     const other = { id: "other", email: "OWNER@example.com" };
     expect(service.trialDays(other)).toBeNull();
   });
+  it("a first checkout whose card check failed never started the trial: the next checkout still starts free", async () => {
+    const first = await service.checkout(owner, { kind: "cart", cart: desktopOnly() });
+    const checkout = store.state.checkouts.find(row => row.id === first.checkoutId)!, input = provider.sessions.get(checkout.providerSessionId!)!;
+    expect(input.trialDays).toBe(3);
+    const data = { subscription_id: "dsub_mandate", customer: { customer_id: "cus_mandate" }, metadata: { checkoutId: checkout.id, accountId: owner.id },
+      product_id: input.cart[0].productId, addons: [], next_billing_date: new Date(time + 3 * day).toISOString(), cancel_at_next_billing_date: false, status: "failed" };
+    deliver([signed("payment.failed", { payment_id: "pay_mandate", subscription_id: "dsub_mandate", customer: { customer_id: "cus_mandate" }, metadata: data.metadata, total_amount: 0, currency: "USD", error_code: "INSUFFICIENT_FUNDS" }, "mandate_pay"),
+      signed("subscription.failed", data, "mandate_sub")]);
+    expect(store.state.subscriptions[0]).toMatchObject({ status: "ended", currentPeriodStart: null }); expect(store.state.subscriptions[0].trialEndsAt).toBeUndefined();
+    expect(service.catalog(owner).trialDays).toBe(3);
+    const retry = await service.checkout(owner, { kind: "cart", cart: desktopOnly() });
+    const again = store.state.checkouts.find(row => row.id === retry.checkoutId)!;
+    expect(again.trialDays).toBe(3); expect(provider.sessions.get(again.providerSessionId!)?.trialDays).toBe(3);
+  });
+  it("a trial that ran and ended unpaid is still the account's one trial", async () => {
+    const { sub } = await buy(desktopOnly());
+    time += 3 * day; deliver(provider.fail(sub.providerSubscriptionId!));
+    store.state.subscriptions[0].status = "ended";
+    expect(service.catalog(owner).trialDays).toBeUndefined(); expect(service.trialDays(owner)).toBeNull();
+  });
   it("keeps a trialing subscription active through the never-paid rules and their heal on restart", async () => {
     const { sub } = await buy(desktopOnly());
     service.close(); service = createBillingService({ store, provider, clouds, config, publicUrl: "https://dashboard.test", now: () => time });
