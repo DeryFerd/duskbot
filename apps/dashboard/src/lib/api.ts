@@ -1,5 +1,6 @@
 import type { DeletionBlocker, DeleteAccountOptions } from "../../../../shared/billing-api";
 import type { WebsiteHome } from "../../../../shared/account-api";
+import { ACCOUNT_RECAP_PATH, type AccountRecap } from "../../../../shared/account-recap";
 import type { CommandKind, CommandView, ConnectFinishAnswer as FinishAnswer, ConnectorsAnswer, WorkspaceDetail, WorkspaceSummary } from "../../../../shared/dashboard-protocol";
 import type { PulseAnswer } from "../../../../shared/machine-pulse";
 import type { AccountDevice, AccountProfile, AuthProviders, BillingOverview, ChangeOffer, CheckoutAnswer, CheckoutRequest, CloudDesktop, DesktopId, EmailCodeStart, Identity, IdentityProvider, MachineSpec, NotificationPrefs, PlanCatalog, Selection, SlackWake } from "../data/contracts";
@@ -239,6 +240,8 @@ export const api = {
   cancel: (survey: CancelSurvey | null) => send(FIXTURE ? "/v1/billing/cancel" : `${subscriptionPath()}/cancel`, "POST", survey ? { survey } : {}),
   /** a plan set to end renews again */
   keep: () => send(FIXTURE ? "/v1/billing/keep" : `${subscriptionPath()}/keep`, "POST", {}),
+  /** what the account and its bots did, for the cancel flow: counts and bot looks only */
+  recap: (signal?: AbortSignal) => call<AccountRecap>(ACCOUNT_RECAP_PATH, { signal }),
   clouds: async (): Promise<{ clouds: CloudDesktop[] }> => {
     if (FIXTURE) return call("/v1/clouds");
     const answer = await call<{ clouds: CloudDesktopView[] }>("/v1/clouds");

@@ -1,3 +1,4 @@
+import type { AccountRecap } from "../../../../shared/account-recap";
 import type { ActivityReport, BotReport, WorkspaceDetail, WorkspaceKind, WorkspaceSummary } from "../../../../shared/dashboard-protocol";
 import type { AccountData, Scenario } from "../lib/api";
 import { dayKey } from "../lib/format";
@@ -148,4 +149,11 @@ export function fixtureAppsInApp(): Record<string, string[]> {
 /** apps whose sign-in was started and not finished */
 export function fixturePendingApps(): Record<string, string[]> {
   return { [fixtureWorkspaceIds.mac]: ["linear"], [fixtureWorkspaceIds.vps]: ["linear"], [fixtureWorkspaceIds.cloud]: ["linear", "figma"] };
+}
+
+/** the cancel flow's recap for a long-time user: four of the fixture bots, their replies adding up to the total */
+export function fixtureRecap(now = Date.now()): AccountRecap {
+  const crew = [["nova", "Nova", "blue", "blob", 1046], ["quill", "Quill", "purple", "clover", 702], ["rivet", "Rivet", "orange", "hex", 431], ["tally", "Tally", "green", "star", 233]] as const;
+  const bots = crew.map(([id, name, color, body, replies]) => ({ id, name, color, body, replies }));
+  return { v: 1, since: now - 240 * DAY, bots: bots.length, crew: bots, topBot: bots[0]!, replies: 2412, activeDays: 140, longestStreak: 23, routines: 6, apps: 5, computers: 2 };
 }

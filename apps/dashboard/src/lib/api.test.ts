@@ -122,3 +122,16 @@ test("a body read cut off by an abort rejects as an abort, not as an empty answe
   const { api } = await import("./api");
   await expect(api.workspaces(ctl.signal)).rejects.toMatchObject({ name: "AbortError" });
 });
+
+test("the cancel flow's recap is a plain GET with the session, and the fixture's numbers add up for its bots", async () => {
+  const fetch = vi.fn(async (_path: string, _init?: RequestInit) => Response.json({ v: 1 }));
+  vi.stubGlobal("fetch", fetch);
+  const { api } = await import("./api");
+  await api.recap();
+  expect(fetch.mock.calls[0]).toEqual(["/v1/account/recap", expect.objectContaining({ method: "GET", credentials: "same-origin" })]);
+  const { fixtureRecap } = await import("../data/fixtures");
+  const recap = fixtureRecap(1_800_000_000_000);
+  expect(recap).toMatchObject({ bots: 4, replies: 2412, activeDays: 140, longestStreak: 23, routines: 6, apps: 5, computers: 2 });
+  expect(recap.crew.reduce((sum, bot) => sum + bot.replies, 0)).toBe(recap.replies);
+  expect(recap.topBot).toEqual(recap.crew[0]);
+});
