@@ -12,6 +12,7 @@ import { LEGAL_LINKS } from "../legal";
 import { PRIMARY, QUIET } from "../onboarding/parts";
 import { usePlatform } from "../platform";
 import { Sheet } from "../Sheet";
+import { SettingsSection } from "../sheets/SettingsRow";
 import { aiProviders, consentCovers, consentKey, createConsentStore, type AiConsent } from "./ai-consent";
 
 type ConsentContext = { consent: AiConsent | null; covered: boolean; asking: boolean; open(): void };
@@ -95,19 +96,21 @@ function ConsentBody({ providers, covered, onAllow, onDecline, onDone }: { provi
     t("mobile.consent.relay"),
   ];
   return (
-    <div className="px-5 pb-4" data-ai-consent>
-      {!shortNativeScreen && <PixelArt name="key" size={52} className={cn("mb-3", !nativeSheet && "[@media(max-height:700px)]:hidden")} />}
-      <p className="text-[16px] leading-6 text-ink">{t("mobile.consent.lead")}</p>
-      <ul className="mt-3 flex flex-col gap-2.5">
+    <div className="pb-4" data-ai-consent>
+      {!shortNativeScreen && <PixelArt name="key" size={52} className={cn("mx-5 mb-4", !nativeSheet && "[@media(max-height:700px)]:hidden")} />}
+      <SettingsSection
+        card
+        title={t("mobile.consent.lead")}
+        hint={<>
+          {t(covered ? "mobile.consent.onNote" : "mobile.consent.note")}{" "}
+          <button type="button" className="underline underline-offset-2" onClick={() => void platform.openExternal(LEGAL_LINKS.privacy)}>{t("mobile.settings.privacy")}</button>
+        </>}
+      >
         {items.map((item) => (
-          <li key={item} className="flex gap-2.5 text-[15px] leading-[1.45] text-ink-secondary"><span aria-hidden className="mt-[9px] size-1.5 shrink-0 rounded-full bg-ink/40" />{item}</li>
+          <div key={item} data-settings-row="" className="flex min-h-[52px] items-center px-4 py-3 text-[15px] leading-[21px] text-ink">{item}</div>
         ))}
-      </ul>
-      <p className="mt-4 text-[14px] leading-5 text-ink-secondary">
-        {t(covered ? "mobile.consent.onNote" : "mobile.consent.note")}{" "}
-        <button type="button" className="underline underline-offset-2" onClick={() => void platform.openExternal(LEGAL_LINKS.privacy)}>{t("mobile.settings.privacy")}</button>
-      </p>
-      <div className="mt-6 flex flex-col gap-1">
+      </SettingsSection>
+      <div className="mt-6 flex flex-col gap-1 px-4">
         {covered ? <>
           <button type="button" className={PRIMARY} onClick={onDone}>{t("mobile.consent.done")}</button>
           <button type="button" className={cn(QUIET, "text-danger")} onClick={onDecline}>{t("mobile.consent.turnOff")}</button>
