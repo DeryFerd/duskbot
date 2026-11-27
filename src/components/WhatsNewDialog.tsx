@@ -9,7 +9,9 @@ import { t } from "@/lib/i18n";
 import { NOTES_SHOWN_FIRST, changesIn, groupChanges, type Release, type ReleaseKind } from "@/lib/release-notes";
 import { MausAvatar } from "./Avatar";
 import { ChangeIcon } from "./ui/ChangeIcon";
-import { formSheetCls, mdPrimaryCls, mdSecondaryCls, useDialogKeys } from "./ui/GrokDialog";
+import { useDialogKeys } from "./ui/GrokDialog";
+import { SIMPLE_BUTTONS } from "./SettingsPrimitives";
+import "../styles/settings.css";
 import { X } from "../icons";
 import { ScrimMotion, SheetMotion, useDialogMotion } from "./ui/SheetMotion";
 
@@ -45,11 +47,11 @@ export function UpdateNotes({ releases, label, heading, phone = false }: { relea
   const text = phone ? "text-[15px] leading-[21px]" : "text-[14px] leading-[20px]";
   return (
     <div data-whats-new-notes="">
-      <p className={cn("m-0 font-medium text-ink/56", phone ? "text-[13px] leading-[18px]" : "text-[13px] leading-[18px]")}>{label}</p>
-      {heading && <h2 id="whats-new-title" className="m-0 mt-0.5 text-[20px] font-semibold leading-[26px] tracking-[-0.01em] text-ink">{heading}</h2>}
+      <p className="m-0 text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary">{label}</p>
+      {heading && <h2 id="whats-new-title" className={cn("m-0 mt-0.5 font-medium text-ink", phone ? "text-[20px] leading-[26px] tracking-[-0.01em]" : "text-[17px] leading-6 tracking-[-0.006em]")}>{heading}</h2>}
       {groups.map((group) => (
         <section key={group.kind ?? "all"} data-change-kind={group.kind ?? "all"} className="mt-4">
-          {group.kind && <h3 className={cn("m-0 mb-1 font-medium text-ink/56", phone ? "text-[13px] leading-[18px]" : "text-[12px] leading-4")}>{t(KIND_LABEL[group.kind])}</h3>}
+          {group.kind && <h3 className={cn("m-0 mb-1 font-normal tracking-[0.015em] text-ink-secondary", phone ? "text-[13px] leading-[18px]" : "text-[13px] leading-[18px]")}>{t(KIND_LABEL[group.kind])}</h3>}
           <ul className="m-0 flex list-none flex-col p-0">
             {group.items.map((item, index) => (
               <li key={`${group.kind}-${index}`} className={cn("flex items-start gap-2.5 py-[5px] text-pretty text-ink", text)}>
@@ -81,24 +83,24 @@ function WhatsNewSheet({ releases, version, updated, onClose }: { releases: read
   const close = useDialogKeys(sheet, onClose);
   const played = useDialogMotion();
   return createPortal(
-    <div {...played.layer} className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <ScrimMotion {...played.scrim} aria-hidden="true" className="ui-dialog-scrim absolute inset-0" onMouseDown={() => close.current()} />
+    <div {...played.layer} data-settings-sheet data-settings-look="simple" className="settings-scrim">
+      <ScrimMotion {...played.scrim} aria-hidden="true" className="settings-backdrop" onMouseDown={() => close.current()} />
       <SheetMotion {...played.sheet} ref={sheet} role="dialog" aria-modal="true" aria-labelledby="whats-new-title" tabIndex={-1} data-whats-new=""
         data-whats-new-updated={updated ? "" : undefined}
-        className={cn(formSheetCls, "max-h-[min(640px,calc(100dvh-48px))] max-w-[460px] rounded-[16px] shadow-2xl")}>
+        className="settings-dialog" style={{ width: "min(460px, 100vw - 32px)", maxHeight: "min(640px, 100dvh - 48px)" }}>
         <UpdateArt updated={updated}>
           <button type="button" aria-label={t("common.close")} onClick={() => close.current()}
             className="absolute right-2.5 top-2.5 flex size-7 cursor-pointer items-center justify-center rounded-full border-0 bg-[#fdfdfd]/82 text-[#1c1c1c] transition-colors duration-[120ms] ease-[ease] hover:bg-[#fdfdfd] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus">
             <X size={13} aria-hidden="true" />
           </button>
         </UpdateArt>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pb-2 pt-4 [scrollbar-width:thin]">
+        <div className="settings-scroll px-6 pb-2 pt-4">
           <UpdateNotes releases={releases} label={updated ? t("updates.updated", { version }) : t("whatsNew.version", { version })}
             heading={updated ? t("whatsNew.heading") : t("whatsNew.title")} />
         </div>
-        <div className="flex shrink-0 items-center justify-between gap-2 px-6 pb-5 pt-3">
-          <button type="button" onClick={() => void openExternalLink(RELEASES_URL)} className={mdSecondaryCls}>{t("whatsNew.allReleases")}</button>
-          <button type="button" data-autofocus data-whats-new-done="" onClick={() => close.current()} className={mdPrimaryCls}>{t("whatsNew.gotIt")}</button>
+        <div className={cn("flex shrink-0 items-center justify-between gap-2 px-6 pb-5 pt-3", SIMPLE_BUTTONS)}>
+          <button type="button" onClick={() => void openExternalLink(RELEASES_URL)} className="ui-button">{t("whatsNew.allReleases")}</button>
+          <button type="button" data-autofocus data-whats-new-done="" onClick={() => close.current()} className="ui-button ui-button-primary">{t("whatsNew.gotIt")}</button>
         </div>
       </SheetMotion>
     </div>,
