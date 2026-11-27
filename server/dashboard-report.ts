@@ -236,7 +236,7 @@ function activity(rows: UsageRow[], prices: PriceList | null, from: string, to: 
   type Count = { turns: number; tokens: number; costUsd: number | null; input: number; output: number; cacheRead: number; cacheWrite: number };
   const empty = (): Count => ({ turns: 0, tokens: 0, costUsd: null, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
   const count = (value: number | undefined) => typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
-  const days = new Map<string, Count>(), byBot = new Map<string, Count & { botId: string; botName: string }>();
+  const days = new Map<string, Count>(), byBot = new Map<string, Count & { botId: string; botName: string; model: string | null }>();
   const byModel = new Map<string, Count & { model: string }>(), totals = empty();
   const add = (into: Count, row: UsageRow) => {
     into.turns++;
@@ -254,7 +254,8 @@ function activity(rows: UsageRow[], prices: PriceList | null, from: string, to: 
   for (const row of rows) {
     const day = dateKey(new Date(row.at));
     if (!days.has(day)) days.set(day, empty());
-    if (!byBot.has(row.botId)) byBot.set(row.botId, { ...empty(), botId: row.botId, botName: row.botName || row.botId });
+    if (!byBot.has(row.botId)) byBot.set(row.botId, { ...empty(), botId: row.botId, botName: row.botName || row.botId, model: row.model });
+    else if (byBot.get(row.botId)!.model !== row.model) byBot.get(row.botId)!.model = null;
     if (!byModel.has(row.model)) byModel.set(row.model, { ...empty(), model: row.model });
     for (const count of [days.get(day)!, byBot.get(row.botId)!, byModel.get(row.model)!, totals]) add(count, row);
   }

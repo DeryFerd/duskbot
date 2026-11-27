@@ -311,6 +311,17 @@ describe("memory_update", () => {
     expect(profile.aboutMe).not.toContain("German");
   });
 
+  it("says which bots' memory a forget reached and how many daily log lines went, never claiming more", async () => {
+    const answering = (body: Record<string, unknown>): ToolCallContext["client"] => ({
+      api: async () => ({}), apiResponse: async () => ({ ok: true, status: 200, body: { ok: true, ...body } }) });
+    const ask = (body: Record<string, unknown>) => callTool("memory_update", { action: "forget", old_text: "Meera's birthday" }, context({ client: answering(body) }));
+    expect((await ask({ forgotten: ["Meera's birthday is March 14"], aboutMe: [], logLines: 3, ownMemory: true, otherBots: ["Pepper", "Atlas"] })).text)
+      .toBe('Forgotten from your memory, Pepper\'s memory and Atlas\'s memory, 3 daily log lines included: "Meera\'s birthday is March 14". Their chats still show what was said in them; don\'t bring it back from there. Confirm to the person in one plain line what you forgot.');
+    expect((await ask({ forgotten: [], aboutMe: [], logLines: 1, ownMemory: false, otherBots: ["Pepper"] })).text)
+      .toBe('Forgotten from Pepper\'s memory: 1 daily log line that named "Meera\'s birthday". Their chats still show what was said in them; don\'t bring it back from there. Confirm to the person in one plain line what you forgot.');
+    expect((await ask({ forgotten: [], aboutMe: [], logLines: 0, ownMemory: false, otherBots: [] })).text).toMatch(/^Nothing saved mentions "Meera's birthday"/);
+  });
+
   it("forgets a fact everywhere it was kept, says so without naming a file, and keeps it from being learned again", async () => {
     const bot = "bot-memory-forget";
     const ctx = context({ botId: bot, client: harness(bot) });
@@ -321,7 +332,7 @@ describe("memory_update", () => {
 
     const forgot = await callTool("memory_update", { action: "forget", old_text: "short answers" }, ctx);
     expect(forgot.isError).toBeFalsy();
-    expect(forgot.text).toBe('Forgotten everywhere it was saved, About me included, which all their bots read: "The person prefers short answers", "The person wants short answers at work". Confirm to the person in one plain line what you forgot.');
+    expect(forgot.text).toBe('Forgotten from your memory and About me (which all their bots read): "The person prefers short answers", "The person wants short answers at work". Their chats still show what was said in them; don\'t bring it back from there. Confirm to the person in one plain line what you forgot.');
     expect(forgot.text).not.toMatch(/MEMORY\.md|memory\/|\.md\b/);
     expect(readMemoryFile(bot).text).not.toContain("short answers");
     expect(readMemoryFile(bot).text).toContain("The person is in India (IST)");

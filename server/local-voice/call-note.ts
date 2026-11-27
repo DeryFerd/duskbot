@@ -1,7 +1,7 @@
 /** Put before a line someone said on a voice call: the bot's reply is read aloud by the built-in voice. */
 export const VOICE_CALL_NOTE = [
   "[Voice call: the person said this out loud and your reply will be spoken back to them by a voice.",
-  "Answer the way you would on a phone call: short, natural spoken sentences, usually one to three.",
+  "Answer the way you would on a phone call: short, natural spoken sentences, usually one to three, in the language they spoke.",
   "No markdown, lists, tables, links, code, file paths or emoji. Say numbers, times and names the way you would say them.",
   "If something needs real work, say in a few words what you are doing, do it, then give the short spoken answer.]",
   "",

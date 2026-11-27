@@ -38,7 +38,9 @@ it("applies requested Full Access workflows through MCP without duplicate approv
   const run = async (bot: any, threadId: string, text: string, steps: any[], options: { pending?: boolean; resumeReply?: string; guarded?: "ask" | "full" } = {}) => {
     const before = providerTurns().length;
     const reply = `Fixture result ${before}: ${text}`;
-    (plans[bot.id] ??= { turns: [] }).turns.push({ steps, reply });
+    // streamTools: the engine stream shows the calls, as a real Claude turn's does, so the host's claim check sees the
+    // work behind a reply like "Set up my monthly reporting..." instead of starting a carry-on turn on this thread
+    (plans[bot.id] ??= { turns: [] }).turns.push({ steps, reply, streamTools: true });
     if (options.resumeReply) plans[bot.id].turns.push({ reply: options.resumeReply });
     writeFileSync(planPath, JSON.stringify(plans));
     const guardedInput = options.guarded ? { threadId, text, sendId: randomUUID(), expectedApprovalMode: options.guarded,
@@ -182,6 +184,9 @@ it("applies requested Full Access workflows through MCP without duplicate approv
 
     const dump = JSON.parse(readFileSync(fixture.fixtureDumpPath, "utf8"));
     const lateToken = dump.mcpConfig.mcpServers.agents.env.DUSK_COMMS_TOKEN;
+    // the bearer is stable per thread, so it is only stale while no turn of that thread runs
+    expect(dump.mcpConfig.mcpServers.agents.env.DUSK_THREAD_ID).toBe(chief.activeTaskId);
+    expect((await bots()).find(bot => bot.id === chief.id)?.busy).toBe(false);
     await api("POST", "/api/internal/team-setup-requests", { plan: { reason: "Late fixture token", operations: [specialist("Must not exist", "Operations")] } }, 401, lateToken);
 
     await run(chief, chief.activeTaskId, "Update the named monthly skill, pause the report, update Mira, then delete Mira as requested.", [

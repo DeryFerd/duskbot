@@ -228,9 +228,9 @@ describe("the compact browser in the Computer tab", () => {
     await render();
     await message({ type: "tabs", tabs: TABS });
     await click("[data-local-browser-action=close]");
-    expect(q("[role=alertdialog]")!.textContent).toBe("Close the browser? Nova’s tabs are saved.CancelClose");
+    expect(q("[data-local-browser-confirm]")!.textContent).toBe("Close the browser? Nova’s tabs are saved.CancelClose");
     await click("[data-local-browser-action=close-cancel]");
-    expect(q("[role=alertdialog]")).toBeNull();
+    expect(q("[data-local-browser-confirm]")).toBeNull();
     expect(f.closes).toEqual([]);
 
     await click("[data-local-browser-action=close]");

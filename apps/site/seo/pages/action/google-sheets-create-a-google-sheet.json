@@ -22,7 +22,7 @@
     "/integrations/google-sheets/copy-sheet-to-another-spreadsheet"
   ],
   "og_line": "a named spreadsheet with its location checked.",
-  "what": "**start a fresh file when the old one carries too much history.** this action creates a spreadsheet, not a new tab. a title is optional, but leaving it out gives you a default name.\n\nfolder names must match exactly. several matches return choices; no match returns an error. a folder link removes the naming guess. if filing fails after creation, recover the existing file before trying again.",
+  "what": "**start a fresh file when the old one carries too much history.** this action creates a spreadsheet, not a new tab. a title is optional, but leaving it out gives you a default name.\n\nfolder names must match exactly. several matches return choices; no match returns an error. a folder link removes the naming guess. if filing fails after creation, recover the existing file before trying again.\n\nadd headers with [update spreadsheet values](/integrations/google-sheets/update-spreadsheet-values), then grow it row by row with [append values](/integrations/google-sheets/append-values-to-spreadsheet).",
   "uses": [
     "**separate a grant period.** give the new ledger its own name and location.",
     "**start workshop feedback cleanly.** create a blank file in the confirmed workshop folder.",
@@ -61,7 +61,7 @@
       "a": "**find the spreadsheet first.** creation may have succeeded. repeating the whole job can leave an unwanted duplicate."
     }
   ],
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -115,6 +115,10 @@
       "fix": "creation gives you a blank file. request headers and values as a separate step."
     }
   ],
+  "worked": {
+    "before": "\"make a feedback sheet for the ridley workshop in the workshops folder\"\ntwo folders share that name.",
+    "after": "no file created yet\nthe bot shows both folders and asks which one\nafter your pick: a blank file, ridley workshop feedback"
+  },
   "tip": {
     "text": "ask for two outcomes: file creation and folder placement. one success message can hide half a job."
   },

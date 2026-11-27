@@ -72,3 +72,17 @@ describe("a thread saved on a routine as the oldest one", () => {
     expect(wasOldestThread([latest, later], "deleted")).toBe(false);
   });
 });
+
+describe("a bot's main thread beside the jobs it opened (#336)", () => {
+  const job = { threadId: "job", createdAt: 5, openedBy: { botId: "b", name: "Starter", at: 5 } };
+  it("stays the person's own chat after they write in a job the bot opened", () => {
+    expect(mainThread([{ ...first, askedAt: 10 }, { ...job, askedAt: 20 }], "job")).toBe("first");
+  });
+  it("is not a job just because it is selected", () => {
+    expect(mainThread([first, job], "job")).toBe("first");
+  });
+  it("is a job only when the person chose it, or when no chat of their own is open", () => {
+    expect(mainThread([{ ...first, askedAt: 10 }, { ...job, askedAt: 20 }], "job", "job")).toBe("job");
+    expect(mainThread([{ ...first, archivedAt: 3 }, { ...job, askedAt: 20 }], "job")).toBe("job");
+  });
+});

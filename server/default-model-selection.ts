@@ -112,7 +112,7 @@ export function selectDefaultModelSelection(
 
 /** An AI that is "ready" only because a key and an address are saved (an API key, an OpenAI-compatible server) has shown
  * nothing until it answers: an address this machine can't reach reads exactly as ready as one it can. */
-const keyOnly = (instance: SelectableInstance) => instance.access === "api" || instance.access === "custom";
+export const keyOnly = (instance: SelectableInstance) => instance.access === "api" || instance.access === "custom";
 
 /** A ready AI the person connected, never OpenCode's free backup: one whose test message missed never counts, and one
  * only a saved key makes ready counts once its test message answered. */

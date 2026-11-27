@@ -224,7 +224,7 @@ export function AccountStep({ account, known, onDone, onSkip }: {
       {skip && (
         <button type="button" data-funnel-account-skip="" onClick={skip}
           className={cn("fixed top-0 z-20 flex h-14 items-center px-2 text-[13px] text-ink-tertiary/60 transition-colors hover:text-ink-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus motion-reduce:transition-none", winCaption ? "end-[148px]" : "end-4")}>
-          {t("funnel.account.skip")}
+          {t("funnel.account.without")}
         </button>
       )}
       <StepFrame art={<StepArt art="key" />} title={t("funnel.account.title")} sub={t(sent ? "funnel.account.codeSub" : phoneAppEnabled() ? "funnel.account.sub" : "funnel.account.subNoPhone", { email: sent?.email ?? "" })}

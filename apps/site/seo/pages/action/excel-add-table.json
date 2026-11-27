@@ -12,7 +12,7 @@
     "ai create table in excel worksheet"
   ],
   "answer": "**turn the pasted cells into a proper excel table without typing them again.** a bot wraps the existing range in a table. give it the workbook, sheet and cells, then say whether the first row holds column names. you get the same data in a table, with the report title and footnotes left outside.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -42,7 +42,7 @@
     "toolkit": "excel",
     "slug": "EXCEL_ADD_TABLE"
   },
-  "what": "**the table should start at your column names and end at your last record.** the bot finds the workbook in onedrive and reads the cells first. it creates a table over existing data; it adds no new rows.\n\nname the sheet and range, such as `a1:d4` on intake. say whether that first row contains headers. that keeps a real record from becoming a heading.",
+  "what": "**the table should start at your column names and end at your last record.** the bot finds the workbook in onedrive with [search drive files](/integrations/excel/search-drive-files) and reads the cells first. it creates a table over existing data; it adds no new rows.\n\nname the sheet and range, such as `a1:d4` on intake. say whether that first row contains headers. that keeps a real record from becoming a heading.",
   "uses": [
     "**tidy a visitor log.** turn its entries and column names into a table.",
     "**prepare pasted orders.** turn the existing cells into a table before sharing the workbook.",

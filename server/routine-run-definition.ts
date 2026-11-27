@@ -24,10 +24,10 @@ export function resolveRoutineResultsThread(
   resolve: RoutineManagerOptions["resolveResultsThread"],
   allocations: ResultsThreadAllocation[],
   now: number,
-  sourceThreadId = routine.sourceThreadId,
 ): string | undefined {
   if (routine.target !== "bot" || !resolve) return routine.resultsThreadId;
-  const destination = resolve({ ...routine, sourceThreadId }, false);
+  // the chat a routine was made in, never the one a Run now came from: a run's destination is saved as the routine's
+  const destination = resolve(routine, false);
   const own = destination?.main ? undefined : destination?.threadId;
   if (own !== routine.resultsThreadId) {
     if (own) allocations.push({ botId: routine.botId, threadId: own });

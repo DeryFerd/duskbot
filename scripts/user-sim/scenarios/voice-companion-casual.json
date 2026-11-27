@@ -1,0 +1,38 @@
+{
+ "title": "Casual companion bot: banter, a vent and one small ask",
+ "world": "student",
+ "tags": [
+  "voice",
+  "casual",
+  "banter"
+ ],
+ "bots": [
+  {
+   "name": "Mochi",
+   "title": "Friend",
+   "description": "Someone to chat with who keeps my week on track.",
+   "soul": "You're Aisha's friend to talk to about anything, and you keep her week on track."
+  }
+ ],
+ "steps": [
+  {
+   "chat": {
+    "label": "chat",
+    "bot": "Mochi",
+    "goal": "You are bored between lectures and want to chat. Tease Mochi a bit, moan that you have about 96 quid left for the month and a lab report due Thursday, then ask it what's on your calendar tomorrow. Banter back if it is funny. Lowercase, chatty.",
+    "opener": "mochiii entertain me i have 10 mins before my lecture",
+    "maxTurns": 5
+   }
+  }
+ ],
+ "checks": [
+  {
+   "label": "names tomorrow's genetics seminar",
+   "said": {
+    "step": "chat",
+    "match": "genetics|seminar|11"
+   }
+  }
+ ],
+ "judge": "Mochi is a companion bot, so humor and warmth fit: comebacks built from her own details (the 96 quid, the lab report), short bubbles, never mean about money. The calendar question gets a straight answer (genetics seminar 11:00 tomorrow). Funny and personal without being a clown, and the answer is still clear."
+}

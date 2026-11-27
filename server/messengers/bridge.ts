@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { MESSENGER_LABELS, type MessengerPlatform } from "../../shared/messengers.ts";
 import { isErrorDump } from "../../shared/failed-turn.ts";
+import { parseChatCommand } from "../../shared/chat-commands.ts";
 import { liveCardKind } from "../../shared/live-approval.ts";
 import { requestNeedsInput } from "../guarded-requests.ts";
 import type { Message } from "../store.ts";
@@ -56,6 +57,10 @@ export interface MessengerBridgeDeps {
   bot(botId: string): { id: string; name: string } | null;
   createThread(botId: string, title: string): string | null;
   threadExists(botId: string, threadId: string): boolean;
+  /** `/compact [focus]`: summarizes the conversation now; "busy" while a reply is under way. */
+  compact?(botId: string, threadId: string, focus: string): Promise<"started" | "busy" | "failed">;
+  /** `/new` left this conversation: what it taught is captured now, and it stays saved and searchable. */
+  leftConversation?(botId: string, threadId: string): void;
   /** Resolves once the message is accepted (started, steered or queued). `outside`: anyone but the owner in a direct
    * chat, so the turn runs as outside work. */
   send(input: { botId: string; threadId: string; text: string; sendId: string; person: MessengerPerson; outside: boolean; platform: MessengerPlatform }): Promise<void>;
@@ -389,9 +394,24 @@ export function createMessengerBridge(deps: MessengerBridgeDeps) {
     }
 
     const command = /^\/(\w+)(?:@\w+)?\s*$/.exec(text)?.[1]?.toLowerCase();
-    if (command === "new" || command === "reset") {
+    const chatCommand = message.files.length ? null : parseChatCommand(text);
+    if (chatCommand?.kind === "new") {
+      const old = deps.state.conversation(key);
       deps.state.dropConversation(key);
-      await say(platform, botId, chatId, "Started a new conversation.");
+      if (old && deps.threadExists(botId, old.threadId)) deps.leftConversation?.(botId, old.threadId);
+      await say(platform, botId, chatId, "Started a new conversation. Memory carries over, and I can still look up our earlier chats.");
+      return;
+    }
+    if (chatCommand?.kind === "compact") {
+      const mapping = deps.state.conversation(key);
+      if (!mapping || !deps.threadExists(botId, mapping.threadId) || !deps.compact) {
+        await say(platform, botId, chatId, "There's nothing to compact yet.");
+        return;
+      }
+      const outcome = await deps.compact(botId, mapping.threadId, chatCommand.focus).catch(() => "failed" as const);
+      await say(platform, botId, chatId, outcome === "started"
+        ? "Compacting this conversation: older messages get summarized, and nothing is deleted."
+        : outcome === "busy" ? "I'm in the middle of a reply. Send /compact again once it's done." : "I couldn't compact this conversation. Check dusk bot for details.");
       return;
     }
     if ((command === "listen" || command === "unlisten") && message.chatKind === "group") {
@@ -404,7 +424,7 @@ export function createMessengerBridge(deps: MessengerBridgeDeps) {
     }
     if (THANKS.test(text) && !message.files.length && await thanked(message, key)) return;
     if (command === "start" && !message.files.length) {
-      await say(platform, botId, chatId, `Hi, this is ${botName}. Message me here any time. Send /new to start a fresh conversation.`);
+      await say(platform, botId, chatId, `Hi, this is ${botName}. Message me here any time. Send /new to start a fresh conversation, or /compact to summarize a long one.`);
       return;
     }
 

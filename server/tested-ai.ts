@@ -17,7 +17,7 @@ import { dirname } from "node:path";
 import { aiSignInKey, rankAis, type AiTestState } from "../shared/ai-ranking.ts";
 import { writeFileAtomic } from "./atomic.ts";
 import type { ModelSelection, ProviderSnapshot } from "./contracts.ts";
-import { readyToRun, signedOut, type DefaultSelectionContext, type SelectableInstance } from "./default-model-selection.ts";
+import { keyOnly, readyToRun, signedOut, type DefaultSelectionContext, type SelectableInstance } from "./default-model-selection.ts";
 import { checkEngine, type CheckableEngine, type EngineCheck } from "./engine-check.ts";
 import type { Store } from "./store.ts";
 
@@ -237,11 +237,13 @@ export function createTestedAi(deps: TestedAiDeps) {
   };
 
   /** The person's own AIs, in the default's order, one at a time; an organization's models are its own
-   * to look after. One miss waits for its retry; two hand over to the next AI. */
+   * to look after. One miss waits for its retry; two hand over to the next AI. Beside a saved default only an AI that
+   * a saved key alone makes ready is tested: until it answers, nothing on the free backup gives way to it. */
   const sweep = () => {
-    if (!background || fixed()) return;
+    if (!background) return;
+    const keysOnly = fixed();
     const own = lastInstances.filter((instance) => readyToRun(instance, deps.context) && hasModel(instance)
-      && deps.context.company?.(instance.instanceId) !== true);
+      && deps.context.company?.(instance.instanceId) !== true && (!keysOnly || keyOnly(instance)));
     for (const instance of rankAis(own)) {
       if (running.has(instance.instanceId)) return;
       const result = resultOf(instance);

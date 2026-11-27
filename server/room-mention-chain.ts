@@ -40,10 +40,17 @@ export class MentionChain {
   private cues = new Map<string, MentionCue>();
   /** botId -> the bots waiting on its reply, with the hop they asked from. */
   private waiting = new Map<string, Map<string, number>>();
-  /** Bots whose reply for this message has landed. */
-  private finished = new Set<string>();
+  /** Bots whose reply for this message has landed, with their names. */
+  private finished = new Map<string, string>();
   /** A waiting bot still answering when the teammate it asked replied: it speaks again once its own reply lands. */
   private answered = new Map<string, { by: { id: string; name: string }; hop: number }>();
+  /** botId -> the bots whose replies had landed when its turn began, so were in what it read. */
+  private seen = new Map<string, Set<string>>();
+
+  /** `botId`'s turn for this message is starting. */
+  begin(botId: string): void {
+    this.seen.set(botId, new Set(this.finished.keys()));
+  }
 
   /** The cue for `botId`'s next turn, taken once. */
   takeCue(botId: string): MentionCue | undefined {
@@ -72,6 +79,11 @@ export class MentionChain {
       this.waiting.set(id, waiters);
       return null;
     }
+    // a teammate whose reply landed while the speaker was already answering: the speaker never read it, so it speaks once more
+    if (asks && !speakerClosing && this.finished.has(id) && this.seen.get(speaker.id)?.has(id) === false && !this.closed.has(speaker.id)) {
+      this.answered.set(speaker.id, { by: { id, name: this.finished.get(id)! }, hop });
+      return null;
+    }
     if (speakerClosing || heard.has(id) || hop >= MENTION_DEPTH) return null;
     const askers = this.askedBy.get(id) ?? new Set<string>();
     askers.add(speaker.id);
@@ -81,7 +93,7 @@ export class MentionChain {
 
   /** `bot`'s reply for this message has landed: the bots that asked it while it was still answering speak again, once. */
   wake(bot: { id: string; name: string }): NextSpeaker[] {
-    this.finished.add(bot.id);
+    this.finished.set(bot.id, bot.name);
     const woken: NextSpeaker[] = [];
     // its own reply landed after the teammate it waited on had already answered
     const own = this.answered.get(bot.id);

@@ -90,6 +90,11 @@ createInterface({ input: process.stdin }).on("line", async (line) => {
       reply(request.id, { isError: true, content: [{ type: "text", text: "Synthetic tool failed before writing." }] });
       return;
     }
+    if (name === "exited" || name === "missing") {
+      const text = name === "exited" ? "exit code 1\\n(no output)" : "exit code 127\\n--- stderr ---\\nsh: rg: command not found";
+      reply(request.id, { isError: true, content: [{ type: "text", text }] });
+      return;
+    }
     if (name === "broken") {
       process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: request.id, error: { code: -32000, message: "fixture transport refusal" } }) + "\\n");
       return;
@@ -243,7 +248,7 @@ describe("falling back mid-turn to the bot's backup AI", () => {
     const limited = await fixture((_body, response) => refuse(response, 429, "Rate limit exceeded"));
     await limited.start({ approvalMode: "full", chatBackups: () => [backup.backup] });
     expect(await limited.completed()).toMatchObject({ ok: true });
-    expect(limited.requests).toHaveLength(3);
+    expect(limited.requests).toHaveLength(4);
     expect(backup.seen).toHaveLength(1);
     const alone = await fixture((_body, response) => refuse(response, 429, "Rate limit exceeded"));
     await alone.start({ approvalMode: "full" });
@@ -435,6 +440,22 @@ describe("bounded action announcement recovery", () => {
     // This fixture is on this machine, so the model is sent back twice to fix the call before the turn ends on it.
     expect(f.requests).toHaveLength(4);
     expect(f.effects()).toEqual([]);
+  });
+
+  it("ends ok after a command that ran and exited non-zero, and still fails on one that could not run", async () => {
+    const run = async (tool: string) => {
+      process.env.FIXTURE_EXTRA_TOOLS = "exited,missing";
+      try {
+        const f = await fixture((_body, response, round) => round === 1
+          ? sse(response, [chunk({ tool_calls: [toolCall(tool)] }, "tool_calls")])
+          : answer(response, "Here is the summary."));
+        await f.start({ approvalMode: "full" });
+        return await f.completed();
+      } finally { delete process.env.FIXTURE_EXTRA_TOOLS; }
+    };
+    // grep with no match, a test run being checked: the model read the exit code and answered
+    expect(await run("audit_exited")).toMatchObject({ ok: true });
+    expect(await run("audit_missing")).toMatchObject({ ok: false, stopReason: "tool_error" });
   });
 
   it("ends ok on a final reply that says which step failed, partly done on one that does not, and no other stop", async () => {
@@ -658,7 +679,7 @@ describe("optional built-in question compatibility", () => {
     [422, { error: { code: "unsupported_parameter", param: "tools", message: "Unsupported request parameter." } }],
     [400, { error: "tools are not supported by this model" }],
     [400, { error: { message: "Unrecognized parameter: 'tools'" } }],
-  ])("retries a plain turn once without optional questions after explicit HTTP %s rejection", async (status, error) => {
+  ])("retries a plain turn without optional questions after explicit HTTP %s rejection, and sends that model none again", async (status, error) => {
     const f = await fixture((_body, response, round) => {
       if (round === 1) {
         response.writeHead(status as number, { "content-type": "application/json" });
@@ -675,14 +696,13 @@ describe("optional built-in question compatibility", () => {
     f.recorder.events.length = 0;
     await f.start({ integrations: undefined });
     expect(await f.completed()).toMatchObject({ ok: true });
-    expect(f.requests[2].tools?.map(tool => tool.function.name)).toEqual(["ask_user"]);
+    expect(f.requests).toHaveLength(3);
+    expect(f.requests[2]).not.toHaveProperty("tools");
   });
 
   it.each([
     [401, unsupported], [403, unsupported], [429, unsupported], [500, unsupported],
     [400, { error: { message: "Invalid API key; tools are not supported." } }],
-    [400, { error: { message: "Invalid schema for tools[0].function.parameters." } }],
-    [400, { error: { message: "Unsupported parameter: tools[0].function.parameters." } }],
     [400, { error: { code: "unsupported_parameter", param: "temperature", message: "Unsupported parameter: temperature" } }],
     [400, { error: { message: "Invalid request body." } }],
     [404, { error: { message: "Unknown model." } }],
@@ -694,11 +714,24 @@ describe("optional built-in question compatibility", () => {
     });
     await f.start({ integrations: undefined });
     expect(await f.completed()).toMatchObject({ ok: false });
-    expect(f.requests).toHaveLength(status === 429 || status === 500 ? 3 : 1);
+    expect(f.requests).toHaveLength(status === 429 ? 4 : status === 500 ? 3 : 1);
     for (const request of f.requests) expect(request.tools?.map(tool => tool.function.name)).toEqual(["ask_user"]);
   });
 
-  it("retries a network failure the same way and never strips tools mounted by the person", async () => {
+  it.each([
+    "Invalid schema for tools[0].function.parameters.",
+    "Unsupported parameter: tools[0].function.parameters.",
+  ])("resends a tool schema refusal (%s) in the strict dialect, then without the tool it names, then fails plainly", async (message) => {
+    const f = await fixture((_body, response) => {
+      response.writeHead(400, { "content-type": "application/json" });
+      response.end(JSON.stringify({ error: { message } }));
+    });
+    await f.start({ integrations: undefined });
+    expect(await f.completed()).toMatchObject({ ok: false });
+    expect(f.requests.map((request) => request.tools?.map(tool => tool.function.name) ?? [])).toEqual([["ask_user"], ["ask_user"], []]);
+  });
+
+  it("retries a network failure without touching the tools, and answers without tools a model that takes none", async () => {
     for (const network of [false, true]) {
       const f = await fixture((_body, response) => {
         if (network) return response.destroy(new Error("tools are not supported"));
@@ -707,8 +740,11 @@ describe("optional built-in question compatibility", () => {
       });
       await f.start(network ? { integrations: undefined } : {});
       expect(await f.completed()).toMatchObject({ ok: false });
-      expect(f.requests).toHaveLength(network ? 3 : 1);
-      if (!network) expect(f.requests[0].tools?.some(tool => tool.function.name === "audit_write")).toBe(true);
+      expect(f.requests).toHaveLength(network ? 4 : 2);
+      if (!network) {
+        expect(f.requests[0].tools?.some(tool => tool.function.name === "audit_write")).toBe(true);
+        expect(f.requests[1]).not.toHaveProperty("tools");
+      }
       expect(f.effects()).toEqual([]);
     }
   });
@@ -1015,13 +1051,15 @@ describe.each<Provider>(["openai-compat", "grok", "minimax"])("%s structured too
     expect(await f.instance.adapter.respondToRequest(f.threadId, opened.requestId!, { behavior: "answer", message: "late" })).toBe("unavailable");
   }, 20_000);
 
-  it("denies a malformed ask_user call with teaching text instead of opening a card", async () => {
+  it("answers a malformed ask_user call with teaching text instead of opening a card, as a failed call and not a denial", async () => {
     const f = await fixture((_body, response, round) => {
       if (round === 1) sse(response, [chunk({ content: null, tool_calls: [toolCall("ask_user", '{"questions":[]}', "call_ask")] }, "tool_calls")]);
       else answer(response, "The question was not asked.");
     }, provider);
     await f.start();
-    expect(await f.completed()).toMatchObject({ ok: false, denials: ["ask_user"] });
+    const completed = await f.completed();
+    expect(completed).toMatchObject({ ok: true });
+    expect((completed as any).denials).toBeUndefined();
     expect(f.recorder.events.some((event) => event.type === "request.opened")).toBe(false);
     expect(JSON.parse(String(f.requests[1].messages.at(-1)?.content))).toMatchObject({
       ok: false,

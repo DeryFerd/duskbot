@@ -12,8 +12,13 @@ import { createIslandWindow } from "./island-window.mjs";
 
 export { isAmbientWindow } from "./ambient-window.mjs";
 
-/** How often the pointer's display is checked while the surfaces follow it across two displays or more. */
+/** With two displays or more, how often main checks the surfaces are still on the display they belong on: the pointer's
+ * one in "active", and in every mode the place macOS left them after a display came, went or became the main one. */
 export const FOLLOW_MS = 1000;
+/** After a display comes, goes or changes, macOS can still be moving windows: the surfaces are placed again then. */
+export const DISPLAY_SETTLE_MS = 750;
+/** Corrections in a row before main stops putting a surface back that the system keeps moving, until displays change. */
+const MAX_CORRECTIONS = 5;
 const PAGE = "/ambient.html";
 
 /**
@@ -27,6 +32,7 @@ const PAGE = "/ambient.html";
 export function installAmbient({ ipcMain, BrowserWindow, page, origin, file, openChat, reveal, activity = null, platform = process.platform, log = () => {}, readPage = null, trace: given = undefined }) {
   let throttled = null;
   let prefs = null, snapshot = null, from = null, screen = null, started = false, follow = null, displayId = null, dockCount = -1, stillness = null;
+  let target = null, corrections = 0, settleTimer = null;
   const saved = () => (prefs ??= (() => { try { return parsePrefs(file.read(), platform); } catch { return parsePrefs(null, platform); } })());
   const save = next => { prefs = next; try { file.write(next); } catch (error) { log(`ambient prefs not saved: ${error?.message ?? error}`); } };
   const address = surface => { const base = origin(); return base ? `${base}${PAGE}?surface=${surface}` : null; };
@@ -71,7 +77,7 @@ export function installAmbient({ ipcMain, BrowserWindow, page, origin, file, ope
       return;
     }
     if (channel === "ambient:order" && surface === "dock") {
-      save(applyPrefsChange(saved(), { order: payload }));
+      save(applyPrefsChange(saved(), { order: payload }, platform));
       relayout("dock order");
     }
   };
@@ -111,12 +117,13 @@ export function installAmbient({ ipcMain, BrowserWindow, page, origin, file, ope
   const hasBots = () => Boolean(snapshot?.bots.length) && snapshot?.away !== true;
   function relayout(reason = "") {
     const on = saved();
-    const target = started && origin() && hasBots() ? display() : null;
-    note("relayout", `${reason} bots=${snapshot?.bots.length ?? "none"} island=${Boolean(on.island && target)} dock=${Boolean(on.dock && target)}`);
+    target = started && origin() && hasBots() ? display() : null;
+    note("relayout", `${reason} bots=${snapshot?.bots.length ?? "none"} island=${Boolean(on.island && target)} dock=${Boolean(on.dock && target)} display=${target?.id ?? "none"}`);
     displayId = target?.id ?? null;
     if (on.island && target) island.layout(target, { size: on.size }); else island.close();
     dockCount = snapshot?.bots.length ?? -1;
-    if (on.dock && target) dock.layout(target, { count: dockCount, order: on.order }); else dock.close();
+    const others = target && screen ? screen.getAllDisplays().filter(entry => entry.id !== target.id) : [];
+    if (on.dock && target) dock.layout(target, { count: dockCount, order: on.order, others }); else dock.close();
     tellAll();
     // the app's page summarises its bots only while a surface shows them; meanwhile it must keep up even behind other
     // windows: Electron's background throttling would slow its timers, and (since it also makes the page read as
@@ -132,11 +139,36 @@ export function installAmbient({ ipcMain, BrowserWindow, page, origin, file, ope
     followPointer();
   }
 
-  // electron has no event for the pointer moving to another display: a cheap check, and only while it matters
+  // electron has no event for the pointer moving to another display, and macOS moves windows itself when displays come,
+  // go or swap which is main (a window placed on a display that is not ready yet lands on the main one): a cheap check
+  // that both surfaces sit on the display they belong on, only while there are two displays or more
+  const inside = (bounds, at) => {
+    const x = at.x + at.width / 2, y = at.y + at.height / 2;
+    return x >= bounds.x && x < bounds.x + bounds.width && y >= bounds.y && y < bounds.y + bounds.height;
+  };
+  const strayed = () => {
+    if (!target) return null;
+    const live = screen.getAllDisplays().find(entry => entry.id === target.id);
+    if (!live) return "display gone";
+    for (const surface of [island, dock]) {
+      const at = surface.at();
+      if (at && !inside(live.bounds, at)) return `${surface.surface} off its display`;
+    }
+    return null;
+  };
+  function check() {
+    if (display()?.id !== displayId) { corrections = 0; return relayout(saved().display === "active" ? "pointer on another display" : "display changed"); }
+    const why = strayed();
+    if (!why) { corrections = 0; return; }
+    if (corrections >= MAX_CORRECTIONS) return;
+    corrections += 1;
+    if (corrections === MAX_CORRECTIONS) log(`ambient: the system keeps moving the ${why.split(" ")[0]} off display ${displayId}; left where it is`);
+    relayout(why);
+  }
   function followPointer() {
-    const needed = started && screen && saved().display === "active" && (saved().island || saved().dock) && screen.getAllDisplays().length > 1;
+    const needed = started && screen && (saved().island || saved().dock) && displayId !== null && screen.getAllDisplays().length > 1;
     if (!needed) { clearInterval(follow); follow = null; return; }
-    follow ??= setInterval(() => { if (display()?.id !== displayId) relayout("pointer on another display"); }, FOLLOW_MS);
+    follow ??= setInterval(check, FOLLOW_MS);
     follow.unref?.();
   }
 
@@ -185,12 +217,20 @@ export function installAmbient({ ipcMain, BrowserWindow, page, origin, file, ope
   ipcMain.handle("ambient:wanted", event => event.sender === appPage() && wanted());
   ipcMain.handle("ambient:prefs", fromApp("ambient:prefs", () => view()));
   ipcMain.handle("ambient:set", fromApp("ambient:set", change => {
-    save(applyPrefsChange(saved(), change));
+    save(applyPrefsChange(saved(), change, platform));
     relayout("settings");
     return view();
   }));
 
   const changed = (why = "display or server") => { try { relayout(typeof why === "string" ? why : "display or server"); } catch (error) { log(`ambient relayout failed: ${error?.message ?? error}`); } };
+  // a display came, went or changed: placed now, and again once macOS has finished moving windows around
+  const displaysChanged = () => {
+    corrections = 0;
+    changed("display change");
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(() => { settleTimer = null; if (started) changed("display change settled"); }, DISPLAY_SETTLE_MS);
+    settleTimer.unref?.();
+  };
   return {
     /** Once the app is ready: `screen` exists only then. */
     start(electronScreen) {
@@ -200,7 +240,7 @@ export function installAmbient({ ipcMain, BrowserWindow, page, origin, file, ope
       if (activity) {
         stillness = watchStill({ ...activity, onChange: (still) => { island.send("ambient:still", still); dock.send("ambient:still", still); } });
       }
-      for (const event of ["display-added", "display-removed", "display-metrics-changed"]) screen.on(event, changed);
+      for (const event of ["display-added", "display-removed", "display-metrics-changed"]) screen.on(event, displaysChanged);
       changed();
     },
     /** This app's server came up (the pages load from it) or its address changed. */
@@ -208,6 +248,7 @@ export function installAmbient({ ipcMain, BrowserWindow, page, origin, file, ope
     close() {
       started = false;
       clearInterval(follow); follow = null;
+      clearTimeout(settleTimer); settleTimer = null;
       stillness?.stop(); stillness = null;
       chats.stop();
       island.close(); dock.close();

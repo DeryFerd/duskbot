@@ -110,3 +110,17 @@ test("the surfaces follow the pointer's display, or stay on the built-in or main
   assert.equal(pickDisplay(all, "main", { primary: external, cursor: { x: 10, y: 10 } }).id, 2);
   assert.equal(pickDisplay([], "active", {}), null);
 });
+
+test("the dock's overhang never reaches onto a display that sits against its edge", () => {
+  // the built-in display with an external one to its right: the window ends at the shared edge
+  const beside = dockLayout(builtIn, [builtIn, external]);
+  assert.equal(beside.overhang, 0);
+  assert.equal(beside.window.x + beside.window.width, 1512);
+  // the external one has nothing to its right: the overhang stays, so no seam shows at the screen's edge
+  const alone = dockLayout(external, [builtIn, external]);
+  assert.equal(alone.overhang, DOCK.overhang);
+  assert.equal(alone.window.x + alone.window.width, 1512 + 2560 + DOCK.overhang);
+  // a display to the right but above or below the dock's height is no neighbour
+  const above = { ...external, bounds: { x: 1512, y: -2000, width: 2560, height: 1440 } };
+  assert.equal(dockLayout(builtIn, [above]).overhang, DOCK.overhang);
+});

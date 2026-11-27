@@ -107,7 +107,7 @@ const plain = (error, fallback) => {
  *   holding?<T>(work: () => Promise<T>): Promise<T>,
  *   localRequest(route: string, init?: RequestInit): Promise<Response>,
  *   backups: { save(name: string, bytes: AsyncIterable<Uint8Array> | Uint8Array): Promise<{ file: string, bytes: number }>, open(file: string): Promise<{ body: any, size: number }>, remove?(file: string): void },
- *   localCredentials: { codexAuth(): Promise<string | null>, claudeCli(): Promise<string | null>, claudeToken(cli: string, signal: AbortSignal): Promise<string> },
+ *   localCredentials: { claudeCli(): Promise<string | null>, claudeToken(cli: string, signal: AbortSignal): Promise<string> },
  *   relaunch(): void,
  *   dataSize?(): Promise<number | null>,
  *   proxyFactory?: typeof createTunnelProxy,
@@ -1019,13 +1019,6 @@ export function createVpsLink(deps) {
     const all = await readEngines(link);
     const engine = all.find((entry) => entry.instanceId === instanceId);
     if (!engine) throw new Error("That AI is not on your server.");
-    if (engine.kind === "codex") {
-      const auth = await deps.localCredentials.codexAuth().catch(() => null);
-      if (auth) {
-        await proxy.control("codex-auth", { auth });
-        return signInView({ flowId: null, phase: "succeeded" });
-      }
-    }
     if (engine.kind === "claude") {
       const cli = await deps.localCredentials.claudeCli().catch(() => null);
       if (cli) {
@@ -1051,7 +1044,8 @@ export function createVpsLink(deps) {
         return signInView(flow);
       }
     }
-    // nothing to bring from this mac: the engine's own sign-in, run on the server (a link to open, and a code for claude)
+    // the engine's own sign-in, run on the server (a link to open, and a code for claude). ChatGPT's login is never copied
+    // from this mac: its refresh token is single-use, so two computers renewing one login sign each other out.
     const { auth } = await serverCall(link, "POST", `/api/instances/${encodeURIComponent(instanceId)}/auth/start`, {});
     return signInView({ ...auth, needsCode: engine.kind === "claude" && auth.phase === "waiting" && !auth.userCode });
   }

@@ -27,7 +27,7 @@ interface Minted {
 
 export const SIGN_IN_MESSAGE = "Publishing a page needs a dusk bot account. Sign in to dusk bot in the app's Settings, then ask again.";
 const UNAVAILABLE = "Publishing isn't available right now. Try again in a few minutes.";
-const NOT_TURNED_ON = "Publishing pages isn't turned on for this account yet.";
+const NOT_TURNED_ON = "Publishing pages isn't turned on for this account yet. There is no setting the person can change for it, so don't send them to Settings: share the file in the chat instead.";
 /** A server with no desktop app to sign in through and no Cloud home (`duskbot serve`): no Settings sign-in can help. */
 export const SELF_HOSTED_MESSAGE = "Publishing pages isn't available on self-hosted servers yet.";
 const TOKEN_TIMEOUT_MS = 15_000, UPLOAD_TIMEOUT_MS = 60_000;

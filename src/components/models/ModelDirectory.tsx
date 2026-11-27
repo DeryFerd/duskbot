@@ -69,7 +69,7 @@ export function ModelDirectory() {
             <Search size={15} className="shrink-0 text-ink-tertiary group-focus-within/search:text-ink-secondary" aria-hidden="true" />
             <input data-model-directory-search value={query} onChange={(event) => setQuery(event.target.value)}
               placeholder={t("models.directory.search")} aria-label={t("models.directory.search")} spellCheck={false}
-              className="min-w-0 flex-1 bg-transparent text-[13px] leading-[18px] text-ink outline-none placeholder:text-ink-tertiary" />
+              className="min-w-0 flex-1 self-stretch bg-transparent text-[13px] leading-[18px] text-ink outline-none placeholder:text-ink-tertiary" />
             {query && (
               <button type="button" aria-label={t("model.simple.clearSearch")} onClick={() => setQuery("")}
                 className="flex size-6 shrink-0 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/[0.06] hover:text-ink">

@@ -1,0 +1,6 @@
+{
+  "v": 1,
+  "note": "changes on dev since the last release, in the changelog.json item shape; scripts/release-notes.ts --apply moves them into apps/site/public/landing/releases/changelog.json at release time",
+  "title": "Fresh chats, and a cloud that wakes itself",
+  "items": []
+}

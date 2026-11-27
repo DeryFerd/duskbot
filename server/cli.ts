@@ -7,7 +7,6 @@ import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
-import { phonePairingLink } from "../shared/pairing-link.ts";
 import { parseAllowList } from "./account-signin.ts";
 import { appendAdminAction, flushAdminActivity, sharedSignIn } from "./admin-activity.ts";
 import { bindDecisionRetention, decisionRetentionDays } from "./decision-log.ts";
@@ -19,10 +18,10 @@ import { runServiceCommand } from "./service-cli.ts";
 import { runSentinelCli } from "./sentinel/cli.ts";
 import { explainTailscaleFailure, tailscaleServe, tailscaleServeOff, tailscaleStatus, type TailscaleStatus } from "./tailscale.ts";
 import { defaultSetupIo, SetupCancelled, type SetupIo } from "./cli-prompts.ts";
-import { HEADLESS_VERB_NAMES, USAGE } from "./cli-usage.ts";
-import { normalizePhoneOrigin, phonePairingInstructions, runPhoneSetup } from "./cli-phone-setup.ts";
-import { browserSignInLines, pairingBlock, phoneAppPairing } from "./cli-pairing.ts";
-import type { AppConfig } from "./config.ts";
+import { commandHelp, HEADLESS_VERB_NAMES, USAGE } from "./cli-usage.ts";
+import { normalizePhoneOrigin, runPhoneSetup } from "./cli-phone-setup.ts";
+import { browserSignInLines, pairingBlock, phonePairing, pushReadiness } from "./cli-pairing.ts";
+import type { AppConfig } from "./config.ts"; import { SELF_HOSTED_ENV } from "./host-shell-mcp.ts";
 import {
   cleanupTunnelOrigin,
   createTunnelAccount,
@@ -44,7 +43,7 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 export interface CliOptions {
-  command: "setup" | "start" | "serve" | "pair" | "sessions" | "status" | "login" | "logout" | "access" | "service" | "browser" | "help";
+  command: "setup" | "start" | "serve" | "pair" | "push" | "sessions" | "status" | "login" | "logout" | "access" | "service" | "browser" | "help";
   port: number;
   dataDir: string;
   label?: string;
@@ -72,9 +71,11 @@ export interface CliOptions {
   open?: boolean;
   guided?: boolean;
   phone?: "ios" | "android";
+  /** `push` (status) or `push test` */
+  pushAction?: "status" | "test";
 }
 
-const COMMANDS = ["setup", "start", "serve", "pair", "sessions", "status", "login", "logout", "access", "service", "browser", "help", "--help", "-h"];
+const COMMANDS = ["setup", "start", "serve", "pair", "push", "sessions", "status", "login", "logout", "access", "service", "browser", "help", "--help", "-h"];
 
 export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env): CliOptions | { error: string } {
   const implicitStart = !argv.length || (argv[0]!.startsWith("--") && argv[0] !== "--help");
@@ -127,6 +128,7 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env):
       else if (arg === "--json") options.json = true;
       else if (arg === "--email") options.email = value();
       else if (options.command === "sessions" && arg === "revoke") options.revoke = value();
+      else if (options.command === "push" && !options.pushAction && (arg === "test" || arg === "status")) options.pushAction = arg;
       else if (options.command === "access" && !options.accessAction && (arg === "list" || arg === "add" || arg === "remove")) {
         options.accessAction = arg;
         if (arg !== "list") options.email = value();
@@ -235,19 +237,6 @@ export async function openDashboard(port: number, env = process.env): Promise<bo
   });
 }
 
-/** Its public descriptor must identify this exact server; never sends a pairing code or credential. */
-export async function verifyPhoneEndpoint(port: number, origin: string): Promise<boolean> {
-  if (!normalizePhoneOrigin(origin)) return false;
-  try {
-    const local = await api(port, "/.well-known/duskbot/environment");
-    const remote = await fetch(`${origin}/.well-known/duskbot/environment`, { signal: AbortSignal.timeout(5000), redirect: "error" });
-    if (local.status !== 200 || !remote.ok) return false;
-    const descriptor = await remote.json() as { environmentId?: unknown };
-    return typeof local.body?.environmentId === "string" && local.body.environmentId.length > 0
-      && descriptor.environmentId === local.body.environmentId;
-  } catch { return false; }
-}
-
 export function applyStartupPreferences(options: CliOptions, saved: AppConfig["cliStartup"]): CliOptions {
   if (options.local) return { ...options, tunnel: false, tailscale: false, publicUrl: undefined, phone: undefined };
   if (!saved || options.tunnel || options.tailscale || options.publicUrl) return options;
@@ -273,20 +262,29 @@ function startupPreferences(options: CliOptions): NonNullable<AppConfig["cliStar
   };
 }
 
-async function showPhonePairing(options: CliOptions, origin: string | undefined, log: (line: string) => void): Promise<boolean> {
-  const ready = !!origin && await verifyPhoneEndpoint(options.port, origin);
-  if (!ready) {
-    log("Phone access is not reachable yet. dusk bot is ready on this computer; no phone pairing code was created.");
-    log("Check the HTTPS connection, then run duskbot pair again with the same --data-dir and --port.");
+/** A real phone pairing, printed with where its notifications will go; false (with why, said plainly) when a phone
+ * cannot pair here. `origin` is the https address the phone should use; the server checks it serves this workspace. */
+async function showPhonePairing(options: CliOptions, origin: string | undefined, log: (line: string) => void, scope: { client?: boolean } = { client: true }): Promise<boolean> {
+  const post = (path: string, init: { method: string; body?: string; timeoutMs: number }) => api(options.port, path, init);
+  // the server checks the address answers as itself before any pairing secret is made for it
+  const result = await phonePairing(post, {
+    label: options.label ?? (options.phone === "android" ? "Android" : options.phone === "ios" ? "iPhone" : undefined),
+    client: scope.client, origin, phone: options.phone,
+  });
+  if (!result.ok) {
+    log(result.message);
+    log("No phone pairing code was created. dusk bot still works on this computer.");
     return false;
   }
-  for (const line of phonePairingInstructions(options.phone ?? "ios", { origin: origin!, ready })) log(line);
-  log(await mintPairing(options.port, { client: true, label: options.label ?? (options.phone === "android" ? "Android" : "iPhone / iPad"), publicUrl: origin, phone: options.phone }));
-  log("Waiting for you to connect on the phone. Keep this terminal and the code private.");
+  log(result.block);
+  const push = await pushReadiness(post, options.phone);
+  if (push) log(push);
+  if (scope.client) log("This phone gets chat and approvals, not settings or pairing.");
   return true;
 }
 
-async function mintPairing(port: number, options: { label?: string; client?: boolean; publicUrl?: string; phone?: "ios" | "android"; guided?: boolean }): Promise<string> {
+/** A sign-in code for a web browser. It never pairs the phone app: that is showPhonePairing. */
+async function mintPairing(port: number, options: { label?: string; client?: boolean; publicUrl?: string; guided?: boolean; local?: boolean }): Promise<string> {
   const request: { label?: string; scopes?: string[] } = {};
   if (options.label) request.label = options.label;
   if (options.client) request.scopes = ["client"];
@@ -294,12 +292,9 @@ async function mintPairing(port: number, options: { label?: string; client?: boo
   if (refusedAsService(status, body)) throw new Error(SERVICE_TRUST_HELP);
   if (status !== 200) throw new Error(`server refused to mint a pairing code: ${typeof body?.error === "string" ? body.error : status}`);
   const url = options.publicUrl ? `${options.publicUrl}/pair#code=${body.code}` : typeof body.url === "string" ? body.url : null;
-  const invite = (options.publicUrl && typeof body.credential === "string"
-    ? phonePairingLink({ address: options.publicUrl, token: body.credential, name: typeof body.serverName === "string" ? body.serverName : undefined })
-    : null) ?? (typeof body.inviteUrl === "string" ? body.inviteUrl : null);
-  const localUrl = options.phone ? null : `http://127.0.0.1:${port}/pair#code=${body.code}`;
+  const localUrl = options.local === false ? null : `http://127.0.0.1:${port}/pair#code=${body.code}`;
   if (options.guided && localUrl) return browserSignInLines(localUrl, body.code, body.expiresAt);
-  return pairingBlock({ code: body.code, url, inviteUrl: invite, localUrl, expiresAt: body.expiresAt, hint: typeof body.hint === "string" ? body.hint : null, phone: options.phone });
+  return pairingBlock({ code: body.code, url, localUrl, expiresAt: body.expiresAt, hint: typeof body.hint === "string" ? body.hint : null });
 }
 
 export async function runPair(options: CliOptions): Promise<number> {
@@ -307,6 +302,8 @@ export async function runPair(options: CliOptions): Promise<number> {
     console.error(`no dusk bot server on http://127.0.0.1:${options.port}; start one with \`duskbot serve\` or set DUSK_PORT`);
     return 1;
   }
+  // `--phone`: the phone app, as a paired phone that gets notifications, or a plain no
+  if (options.phone) return await showPhonePairing(options, options.publicUrl, (line) => console.log(line), { client: options.client }) ? 0 : 1;
   if (process.stdin.isTTY && process.stdout.isTTY && !options.label && !options.client) {
     const advertised = await api(options.port, "/api/auth/pairing");
     let launch = options;
@@ -321,15 +318,10 @@ export async function runPair(options: CliOptions): Promise<number> {
         if (!("failure" in status) && status.status.dnsName) origin = `https://${status.status.dnsName}`;
       }
     }
-    if (!origin || !normalizePhoneOrigin(origin)) {
-      const relayed = await phoneAppPairing((path, init) => api(options.port, path, init));
-      if (relayed) { console.log(relayed); return 0; }
-      console.log("Your workspace is running only on this computer. A phone cannot use its localhost address.\nStop the server, run duskbot setup and choose phone access, then start duskbot again.");
-      return 1;
-    }
+    if (origin && !normalizePhoneOrigin(origin)) origin = undefined;
     const ui = defaultSetupIo();
     try {
-      const selected = await ui.choose("Which phone are you connecting?", ["iPhone / iPad: app or Safari", "Android: app or browser", "Cancel"], 0);
+      const selected = await ui.choose("Which phone are you connecting?", ["iPhone / iPad", "Android", "Cancel"], 0);
       if (selected === 2) return 0;
       launch = { ...launch, phone: selected === 0 ? "ios" : "android" };
       return await showPhonePairing(launch, origin, ui.log) ? 0 : 1;
@@ -339,7 +331,12 @@ export async function runPair(options: CliOptions): Promise<number> {
       return 130;
     }
   }
-  console.log((options.client || options.publicUrl ? null : await phoneAppPairing((path, init) => api(options.port, path, init), options.label)) ?? await mintPairing(options.port, { label: options.label, client: options.client, publicUrl: options.publicUrl, phone: options.phone }));
+  // a server with the link service: the phone app's pairing over its relay, which a browser can also type the code of
+  if (!options.client && !options.publicUrl) {
+    const relayed = await phonePairing((path, init) => api(options.port, path, init), { label: options.label });
+    if (relayed.ok && relayed.via.some((route) => route.startsWith("relay "))) { console.log(relayed.block); return 0; }
+  }
+  console.log(await mintPairing(options.port, { label: options.label, client: options.client, publicUrl: options.publicUrl }));
   if (options.client) console.log("(client scope: chat and approvals only; cannot change settings or pair others)");
   return 0;
 }
@@ -541,13 +538,13 @@ export async function runLogout(options: CliOptions, io: CliIo = defaultIo()): P
 }
 
 export async function runBrowser(options: CliOptions, io: CliIo = defaultIo()): Promise<number> {
-  if (options.browserAction === "setup") return (await import("./browser/chrome/host-setup.ts")).setUpThisHost(() => runBrowser({ ...options, browserAction: "install", withDeps: true }, io), io);
   const { browserEngineStatus, describeBrowserEngine, ensureChrome, installAgentBrowserBinary, resolveAgentBrowserBinary } = await import("./browser-engine.ts");
-  const status = browserEngineStatus({ dataDir: options.dataDir });
+  const { setUpThisHost, sudoCommand } = await import("./browser/chrome/host-setup.ts"), status = browserEngineStatus({ dataDir: options.dataDir });
+  if (options.browserAction === "setup") return setUpThisHost(() => runBrowser({ ...options, browserAction: "install", withDeps: true }, io), { ...io, setupCommand: sudoCommand("browser setup") });
   if (options.browserAction === "status") {
-    io.log(describeBrowserEngine(status, status.kind === "ready" ? new (await import("./browser/chrome/launcher.ts")).ChromeLauncher({ dataDir: options.dataDir }).describe() : undefined));
-    if (status.kind !== "ready" && status.installable) io.log("install it with:  duskbot browser install");
-    return status.kind === "ready" ? 0 : 1;
+    const launcher = status.kind === "ready" ? new (await import("./browser/chrome/launcher.ts")).ChromeLauncher({ dataDir: options.dataDir }) : null, noBrowser = launcher?.hostBrowserMissing() === true;
+    io.log(describeBrowserEngine(status, launcher?.describe()) + ((status.kind !== "ready" && status.installable) || noBrowser ? `\n${noBrowser ? "there is no Chrome or Chromium on this computer for the engine to start; " : ""}install it with:  duskbot browser install` : ""));
+    return status.kind === "ready" && !noBrowser ? 0 : 1;
   }
   let binary = resolveAgentBrowserBinary({ dataDir: options.dataDir });
   if (binary) {
@@ -566,10 +563,10 @@ export async function runBrowser(options: CliOptions, io: CliIo = defaultIo()): 
     io.log(`installed ${binary}`);
   }
   try {
-    await ensureChrome(binary, { withDeps: options.withDeps === true, log: io.log });
+    await ensureChrome(binary, { withDeps: options.withDeps === true, dataDir: options.dataDir, log: io.log });
   } catch (error) {
     io.error(`Chrome is not ready: ${message(error)}`);
-    if (process.platform === "linux" && !options.withDeps) io.error("on Linux, install Chrome's system libraries with `sudo duskbot browser install --with-deps`, then retry `duskbot browser install` as the user running serve");
+    if (process.platform === "linux" && !options.withDeps) io.error(`on Linux, install Chrome's system libraries with \`${sudoCommand("browser install --with-deps")}\`, then retry \`duskbot browser install\` as the user running serve`);
     return 1;
   }
   io.log("browser installed for this user and data directory; run serve as the same user, then enable it under Settings → Computers and per bot");
@@ -695,7 +692,7 @@ export async function runServe(options: CliOptions, log: (line: string) => void 
     ...process.env,
     DUSK_DATA_DIR: options.dataDir,
     DUSK_PORT: String(options.port),
-    DUSK_WEBHOOK_PORT: process.env.DUSK_WEBHOOK_PORT || String(options.port + 1),
+    DUSK_WEBHOOK_PORT: process.env.DUSK_WEBHOOK_PORT || String(options.port + 1), [SELF_HOSTED_ENV]: "1",
   };
   if (options.local) delete env.DUSK_PUBLIC_URL;
   // The per-launch secret goes over stdin, not the environment that every engine the server starts inherits.
@@ -958,9 +955,11 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     if ("error" in options) { console.error(options.error); return 2; }
     return runVpsOps(options, { log: (line) => console.log(line), error: (line) => console.error(line) });
   }
+  if (["update", "version", "--version", "-v"].includes(argv[0] ?? "") && !(argv[0]![0] !== "-" && (argv.includes("--help") || argv.includes("-h")))) return (await import("./cli-update.ts")).runUpdateCli(argv, serverVersion(), HERE, USAGE);
   if (argv[0] === "sentinel") return runSentinelCli(argv.slice(1));
   if (argv[0] === "free-backup") return runFreeBackup(argv.slice(1));
   if (HEADLESS_VERB_NAMES.has(argv[0] ?? "") || (argv[0] === "help" && HEADLESS_VERB_NAMES.has(argv[1] ?? ""))) return (await import("./headless/main.ts")).runHeadless(argv);
+  if (argv.length > 1 && !argv[0]!.startsWith("-") && argv.slice(1).some((arg) => arg === "--help" || arg === "-h")) { console.log(commandHelp(argv[0]!)); return 0; }
   const options = parseArgs(argv);
   if ("error" in options) {
     console.error(`${options.error}\n\n${USAGE}`);
@@ -975,6 +974,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       return serveUntilStopped(options);
     case "pair":
       return runPair(options);
+    case "push":
+      return (await import("./cli-push.ts")).runPush(options.pushAction ?? "status", (path, init) => api(options.port, path, init), { log: (line) => console.log(line), error: (line) => console.error(line) });
     case "sessions":
       return runSessions(options);
     case "status":

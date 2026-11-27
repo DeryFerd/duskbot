@@ -52,6 +52,7 @@
 //   FAKE_CODEX_TEXT_REFUSE  `codex exec`: comma-separated models answered with the 400 a ChatGPT account gets for gpt-5.4-mini
 //   FAKE_CODEX_LUNA  "1": model/list also offers gpt-6-luna
 //   FAKE_CODEX_REFUSE_MODELS  comma-separated models whose turns fail as a ChatGPT account's do for a model it can't use
+//   FAKE_CODEX_TURN_MODELS  file each turn/start appends its model to, one line per turn, across relaunches
 // `logout` leaves <CODEX_HOME>/fake-logged-out, and `login status` then answers "Not logged in" until it is removed.
 //   FAKE_CODEX_UPDATED_FILE  while this file exists, the CLI was updated in place: --version answers codex-cli 0.162.1
 //     and model/list also offers gpt-6.1-sol
@@ -800,6 +801,7 @@ process.stdin.on("data", (chunk) => {
           }
         }
         const turnModel = msg.params?.model ?? threadModel;
+        if (process.env.FAKE_CODEX_TURN_MODELS) appendFileSync(process.env.FAKE_CODEX_TURN_MODELS, `${turnModel}\n`);
         if (mode === "plan-model-refused" || process.env.FAKE_CODEX_REFUSE_MODELS?.split(",").includes(turnModel)) {
           out({ jsonrpc: "2.0", id: msg.id, result: { turn: { id: nativeTurnId } } });
           // The reporter's words (2026-11-03): ChatGPT lists gpt-6.1-sol, then refuses it for a ChatGPT account.

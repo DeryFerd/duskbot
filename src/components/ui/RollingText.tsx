@@ -38,6 +38,6 @@ export function RollingText({ text, className }: { text: string; className?: str
         ? <span key={piece.key} data-text={piece.text} className={DRAWN} />
         : <Drum key={piece.key} digit={piece.digit} index={drums++} still={still} />)}
     </span>
-    <span className="text-transparent">{text}</span>
+    <span className="opacity-0">{text}</span>
   </span>;
 }

@@ -17,6 +17,7 @@ const VERSIONS: Array<{ pick: WorkingLinePick; title: string; line: string }> = 
   { pick: "ponder", title: "3  Ponder", line: "Thinking you can see: three small dots rise over its head while it tilts its head." },
   { pick: "rock", title: "4  Rock", line: "Livelier but soft: it lands with a little squash, rocks side to side while thinking, hops in place while writing." },
   { pick: "ellipsis", title: "5  Ellipsis", line: "A quiet mascot; the words carry the thinking with dots that fill in one by one. Comes in from a soft blur." },
+  { pick: "glance", title: "6  Glance", line: "The face does the acting: eyes read, dart and look up to think; the body only breathes. Moved by CSS and timers." },
   { pick: "shipped", title: "Now", line: "What ships today, for comparison." },
 ];
 

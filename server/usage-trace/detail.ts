@@ -74,3 +74,47 @@ export function errorLine(output: unknown): string | undefined {
   const first = output.split("\n").find((line) => line.trim());
   return first ? clip(first, ERROR_MAX) : undefined;
 }
+
+const TEXT_KEYS = ["error", "message", "text", "stderr", "output", "content", "result", "detail", "reason"];
+const PREVIEW_CUT = /\n\[… preview shortened\]$/;
+const QUOTED_TEXT = /"(?:error|message|text|stderr|output)"\s*:\s*"((?:[^"\\]|\\.)*)"/;
+const EXIT_LINE = /^(?:error:\s*)?exit code (-?\d+|unknown)\b/i;
+const MARKER_LINE = /^(?:-{2,}\s*(?:stdout|stderr)\s*-{2,}|\(no output\))$/i;
+
+/** the words inside a parsed preview: a content block list's text, an error's message, a command's exit code and output */
+function textOf(value: unknown, depth = 0): string {
+  if (depth > 4 || value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map((item) => textOf(item, depth + 1)).filter(Boolean).join("\n");
+  if (typeof value !== "object") return "";
+  const fields = value as Record<string, unknown>;
+  const exit = fields.exitCode ?? fields.exit_code;
+  const said = TEXT_KEYS.map((key) => textOf(fields[key], depth + 1)).find((text) => text.trim()) ?? "";
+  return typeof exit === "number" && exit !== 0 ? `Exit code ${exit}\n${said}` : said;
+}
+
+function previewText(output: string): string {
+  if (!/^\s*[[{]/.test(output)) return output;
+  try {
+    return textOf(JSON.parse(output.replace(PREVIEW_CUT, "")));
+  } catch {
+    const quoted = QUOTED_TEXT.exec(output)?.[1];
+    if (!quoted) return output;
+    try { return JSON.parse(`"${quoted}"`) as string; } catch { return quoted; }
+  }
+}
+
+/** A failed tool call's one error line, read from its output as an engine previews it: the text inside a JSON preview
+ * (an MCP result's content, a command's output and exit code) rather than its opening brace, and an "Exit code N"
+ * line joined to the first thing the command printed (its stderr when it printed one). */
+export function toolErrorLine(output: unknown): string | undefined {
+  if (typeof output !== "string") return undefined;
+  const lines = previewText(output).split("\n").map((line) => line.trim()).filter(Boolean);
+  const first = lines[0];
+  if (!first) return undefined;
+  if (!EXIT_LINE.test(first)) return clip(first, ERROR_MAX);
+  const stderr = lines.indexOf("--- stderr ---");
+  const said = (stderr >= 0 ? lines.slice(stderr + 1) : lines.slice(1)).find((line) => !MARKER_LINE.test(line));
+  return clip(said ? `${first}: ${said}` : first, ERROR_MAX);
+}

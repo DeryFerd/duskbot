@@ -70,7 +70,8 @@ describe("a quiet routine", () => {
     page = { ...page, body: page.body.replace("Version 1.0", "Version 1.1 adds dark mode") };
     const changed = await f.runNow(routine.id);
     expect(changed.status).toBe("completed");
-    expect(f.usageRows()).toHaveLength(1);
+    // the ledger is appended after the turn settles, so it is read once the row lands
+    await expect.poll(() => f.usageRows().length, { timeout: 10_000 }).toBe(1);
     const dump = JSON.parse(readFileSync(session!.fixtureDumpPath, "utf8"));
     expect(JSON.stringify(dump)).toContain("changed since the last check");
     expect(JSON.stringify(dump)).toContain("Version 1.1 adds dark mode");
@@ -121,7 +122,7 @@ describe("the weekly allowance", () => {
     expect(refused.status).toBe(409);
     expect(refused.body.error).toMatch(/^Weekly limit reached, so new tasks wait until Monday/);
     expect(refused.body.error).not.toMatch(/\$/);
-    expect(f.usageRows()).toHaveLength(5);
+    await expect.poll(() => f.usageRows().length, { timeout: 10_000 }).toBe(5);
 
     // a routine run is skipped: no card, no alert, only "skipped" on its strip
     const held = await f.runNow(daily.body.routine.id);
@@ -133,6 +134,7 @@ describe("the weekly allowance", () => {
     // Saver mode is the person's choice; then chat works again, on the quick model
     expect((await f.api("POST", "/api/usage/allowance/saver", { on: true })).body).toMatchObject({ saver: true });
     await turn("question 7");
+    await expect.poll(() => f.usageRows().length, { timeout: 10_000 }).toBeGreaterThanOrEqual(6);
     expect(f.usageRows()[5]).toMatchObject({ model: expect.stringMatching(/haiku/), trigger: { kind: "owner" } });
     expect((await f.api("GET", "/api/usage/allowance")).body).toMatchObject({ level: "over", spentUsd: 0.05, overrunUsd: 0 });
 

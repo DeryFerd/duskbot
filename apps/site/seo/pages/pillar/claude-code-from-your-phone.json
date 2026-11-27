@@ -1,18 +1,21 @@
 {
   "path": "/claude-code-from-your-phone",
   "type": "pillar",
-  "title": "Claude Code from your phone: remote control or bot chat",
+  "title": "Claude Code from your phone: 3 ways to run it on mobile",
   "nav": "claude code from your phone",
   "h1": "claude code from your phone: three ways in",
-  "description": "Compare Claude Remote Control, cloud sessions and a dusk bot you text, with pairing steps and a clear account of what must stay on.",
+  "description": "Run Claude Code from an iPhone or Android phone: Remote Control, cloud sessions or a dusk bot you text. Plans, pairing steps and what has to stay on.",
   "keyword": "claude code mobile",
   "keywords": [
     "claude code on phone",
     "claude code from phone",
-    "claude code remote control"
+    "claude code remote control",
+    "claude code mobile app",
+    "claude code on iphone",
+    "claude code on android"
   ],
-  "answer": "**leave the desk and keep the conversation going from your phone.** remote control reaches claude code on your computer. anthropic cloud sessions run elsewhere. dusk lets you text a named bot using claude code. as of 12 november 2026, all three routes exist. pick where the work lives so you know whether the laptop can come with you.",
-  "updated": "2026-11-20",
+  "answer": "**yes, you can run claude code from your phone, three ways.** remote control reaches claude code on your own computer. anthropic cloud sessions run elsewhere, so the laptop can sleep. dusk lets you text a named bot that uses claude code, on iphone or android. as of 12 november 2026, all three exist. pick by where the work lives.",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",
@@ -98,7 +101,7 @@
     },
     {
       "h": "cloud sessions leave the laptop out of the job",
-      "md": "**close the laptop and let a cloud session keep working.** anthropic hosts it elsewhere, so you can read or steer it from another device.[^2]\n\nstart from the mobile **code** tab, claude.ai/code, desktop or `claude --cloud`. usage counts toward your plan limits. as of 12 november 2026, plans include pro, max, ultra, team and eligible enterprise seats.[^2]\n\ntry this for a coding session while travelling before renting another machine. repeating work is a separate decision; see the [claude schedules guide](/guides/claude-scheduled-tasks)."
+      "md": "**close the laptop and let a cloud session keep working.** anthropic hosts it elsewhere, so you can read or steer it from another device.[^2]\n\nstart from the mobile **code** tab, claude.ai/code, desktop or `claude --cloud`. usage counts toward your plan limits. as of 12 november 2026, plans include pro, max, ultra, team and eligible enterprise seats.[^2]\n\ncloud sessions clone your code from github. gitlab, bitbucket and other hosts come with restrictions, so read them before you rely on it.[^2]\n\ntry this for a coding session while travelling before renting another machine. repeating work is a separate decision; see the [claude schedules guide](/guides/claude-scheduled-tasks)."
     },
     {
       "h": "dusk gives the work a named bot",
@@ -109,8 +112,12 @@
       "md": "**use your own sign-in in the unmodified claude code app.** anthropic's legal page, checked on 12 november 2026, permits that end-user setup.[^7]\n\nit also sets conditions for platforms that host claude code.[^7] read the current terms for your setup. phone access keeps the same subscription rules and provider limits."
     },
     {
+      "h": "what each route needs from your plan",
+      "md": "**remote control and cloud sessions both need a paid claude plan.** as of 12 november 2026, remote control works on pro, max, ultra, team and enterprise. it does not work with an api key.[^1]\n\ncloud sessions cover pro, max, ultra, team and eligible enterprise seats. their usage counts toward your plan limits.[^2]\n\ndusk is free for personal use on your own computer. a bot can use your claude sign-in, or an anthropic api key under **settings**, **api keys**.[^6] your ai provider bills that usage, never dusk.[^9]\n\nwant the phone to work with your laptop off? dusk cloud plus is $20 a month or $200 a year.[^5]"
+    },
+    {
       "h": "pair once, then text it from the couch",
-      "md": "**scan the code and send your first message from the phone.** alternatives include a six-digit code, the nearby wi-fi list or tailscale. wi-fi and tailscale pairing need no account. secure pairing asks you to sign in by email.[^3]\n\non iphone, pair the app from the app store. a notification shows the bot's name and “new message” without exposing the text. on android, pair in the browser and choose **install app** until dusk arrives on google play. the android browser sends no notifications.[^3]\n\nyour paired computer needs dusk running. **settings**, **remote access**, **keep this computer awake** helps it stay reachable. pair to dusk cloud for access with your own computer off.[^3][^5]\n\n[overnight hosting](/run-claude-code-24-7) covers that choice. [telegram, discord and slack](/guides/claude-code-telegram-discord-slack) covers separate chat channels."
+      "md": "**scan the code and send your first message from the phone.** alternatives include a six-digit code, the nearby wi-fi list or tailscale. wi-fi and tailscale pairing need no account. secure pairing asks you to sign in by email.[^3]\n\non iphone, get dusk bot from the app store. on android, download the .apk from [the download page](/download); it is not on google play yet. either way, the app tells you when a reply, a question or an approval arrives. a notification shows the bot's name and “new message”, never the text.[^3]\n\nyour paired computer needs dusk running. **settings**, **remote access**, **keep this computer awake** helps it stay reachable. pair to dusk cloud for access with your own computer off.[^3][^5]\n\n[overnight hosting](/run-claude-code-24-7) covers that choice. [telegram, discord and slack](/guides/claude-code-telegram-discord-slack) covers separate chat channels."
     },
     {
       "h": "use the small screen for small decisions",
@@ -119,16 +126,24 @@
   ],
   "faq": [
     {
-      "q": "how are people running claude code from their phone?",
-      "a": "**three routes serve different jobs.** as of 12 november 2026, remote control reaches a local session, cloud sessions run remotely, and dusk offers chat with a named bot. the host decides whether your laptop can sleep.[^1][^2][^3]"
+      "q": "can i use claude code on my phone?",
+      "a": "**yes, three ways, as of 12 november 2026.** remote control opens a claude code session running on your own computer from the claude app. cloud sessions run on anthropic infrastructure and start from the mobile code tab. dusk lets you text a named bot that uses claude code where the bot lives.[^1][^2][^3]"
+    },
+    {
+      "q": "does claude code remote control work with an api key?",
+      "a": "**no.** as of 12 november 2026, anthropic says remote control is for pro, max, ultra, team and enterprise plans, and api keys are not supported. team and enterprise need an owner to turn it on. a dusk bot can use an anthropic api key instead of a subscription.[^1][^6]"
     },
     {
       "q": "why does it stop working when i leave my laptop?",
       "a": "**the local host paused when you left it.** remote control needs the computer and claude process running. dusk paired to that computer needs dusk open too.[^1][^3]"
     },
     {
-      "q": "do i need an app store download to pair dusk?",
-      "a": "**on iphone, get dusk bot from the app store.** on android, pair the browser version for now.[^3]"
+      "q": "is there a dusk bot app for iphone and android?",
+      "a": "**yes.** on iphone, get dusk bot from the app store. on android, download the .apk from dusk.bot/download, because it is not on google play yet. the app tells you when a reply, question or approval arrives, and notifications show only the bot's name and “new message”.[^3]"
+    },
+    {
+      "q": "can i use claude code from my phone with my computer off?",
+      "a": "**yes, if the work runs somewhere else.** an anthropic cloud session keeps going after you close the laptop. a dusk bot on dusk cloud also answers with your computer off. remote control and dusk paired to your own computer both need that computer on.[^2][^3][^5]"
     }
   ],
   "sources": [
@@ -166,6 +181,10 @@
     {
       "label": "dusk bot: computer and approvals",
       "url": "/docs/computer"
+    },
+    {
+      "label": "dusk bot: account and billing",
+      "url": "/docs/account-and-billing"
     }
   ],
   "quick": {
@@ -207,8 +226,8 @@
       "fix": "leave the host powered on with the right app running."
     },
     {
-      "mistake": "waiting for a reply alert on android",
-      "fix": "open the android browser to read replies. on iphone, the app can notify you."
+      "mistake": "looking for the dusk android app on google play",
+      "fix": "it is not there yet. download the .apk from the download page."
     }
   ],
   "tip": {

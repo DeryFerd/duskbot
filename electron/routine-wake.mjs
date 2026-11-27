@@ -74,6 +74,8 @@ export function rememberRoutineWake(userData, patch) {
  * - now?(): number
  * - isOnline?(): boolean, Electron's net.isOnline
  * - notify?(event): Promise<unknown>, tells the server "suspend", "resume" or "online" (POST /api/routines/wake)
+ * - systemAwake?: { start(), stop() }, the stronger assertion (system-awake.mjs), held while the server says something
+ *   is due or running and the hold is on
  */
 export function createRoutineWakeHold(deps) {
   let blockerId = null;
@@ -100,7 +102,10 @@ export function createRoutineWakeHold(deps) {
       .then(() => deps.fetchStatus())
       .catch(() => null);
     const settings = deps.settings();
-    apply(routineWakeDecision({ enabled: settings.keepAwake, pluggedIn: settings.pluggedIn, onBattery: deps.isOnBattery(), status }));
+    const decision = routineWakeDecision({ enabled: settings.keepAwake, pluggedIn: settings.pluggedIn, onBattery: deps.isOnBattery(), status });
+    apply(decision);
+    if (decision.hold && status?.hold === true) deps.systemAwake?.start();
+    else deps.systemAwake?.stop();
     return state();
   };
 
@@ -137,6 +142,7 @@ export function createRoutineWakeHold(deps) {
       if (timer) clearInterval(timer);
       timer = null;
       apply({ hold: false, reason: "stopped", at: null });
+      deps.systemAwake?.stop();
     },
     poll,
     state,

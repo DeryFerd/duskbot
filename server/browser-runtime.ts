@@ -4,6 +4,7 @@ import { DEFAULT_BROWSER_RESULT_BUDGET, describePageChange, OBSERVE_PAGE_SCRIPT,
 import { BrowserLanes } from "./browser-lane.ts";
 import { AGENT_CLOSE_FAILED, BROWSER_CLOSING, BROWSER_CONTROL_REFUSAL, BROWSER_INTERRUPTED, BROWSER_RESTART_TOOL, LANE_BUSY, LAUNCH_CHANGED, PERSON_RESTART_STOPPED, PersonHoldAnswer, personStillHolds, personTookTab, personUsedTab, RESTART_BUSY, browserRefusal } from "./browser-refusals.ts";
 export { BROWSER_CONTROL_REFUSAL, BROWSER_RESTART_TOOL, browserRefusal };
+export { formatBrowserTiming, type BrowserTiming } from "./browser-runtime-results.ts";
 import { trail } from "./trail.ts";
 import { PageSizes, type PageSize } from "./browser-page-size.ts";
 import { SECRET_ON_PAGE, SecretHolds, type SecretHold } from "./browser-secret-hold.ts";
@@ -12,14 +13,16 @@ import { HARNESS_CALL_BUDGET_MS } from "./harness-budget.ts";
 import { launchSettingsKey } from "./browser-launch-key.ts";
 import { AGENT_BROWSER_BATCH_SPEC, agentBrowserStep, planAgentBrowserBatch, PROBE_SCRIPT, probeOfEval, SETTLED_READS, type AgentBrowserCall } from "./browser/agent-browser-batch.ts";
 import { runSteps } from "./browser/batch.ts";
+import { BotDialogs, stoppedLoad, withoutDialogAnswer } from "./browser-dialogs.ts";
+import { answerMisses, plainWait } from "./browser/agent-browser-misses.ts";
 import { settleNote, settlePage, type PageReader } from "./browser/cdp/settle.ts";
 
 import { ThreadTabs, type ClosedThreadTab } from "./browser-thread-tabs.ts";
 import { agentBrowserTypeInLines, runAgentBrowserTypeInLines } from "./line-break-typing.ts";
-import { asToolResult, firstText, lostCallToolError, recoveredResult, stillBusyToolError, stuckBrowserToolError, toolNameOf, type ToolResult } from "./browser-runtime-results.ts";
+import { asToolResult, firstText, resultChars, type BrowserTiming, lostCallToolError, recoveredResult, stillBusyToolError, stuckBrowserToolError, toolNameOf, type ToolResult } from "./browser-runtime-results.ts";
 import { BATCH_TOOL } from "./browser/tools.ts";
 import { BROWSER_HOVER_TOOL, BROWSER_UPLOAD_TOOL, RELAYED_TOOL_SPECS, RELAYED_TOOLS, type RelayedToolSpec } from "./browser-relayed-tools.ts";
-import { NAVIGATING, newTabNavigated, openStillShowing, refusesAutomatedSignIn, withNote, snapshotMissedSelector, WHOLE_PAGE_NOTE, pickPageSelector, readAfterOpen, withAgentBrowserArguments, withPickNote } from "./browser/agent-browser-args.ts";
+import { agentBrowserArguments, NAVIGATING, newTabNavigated, openStillShowing, refusesAutomatedSignIn, withNote, snapshotMissedSelector, WHOLE_PAGE_NOTE, pickPageSelector, readAfterOpen, withAgentBrowserArguments, withPickNote } from "./browser/agent-browser-args.ts";
 
 /** The hosts whose bot check cleared in each browser. */
 const clearedChecks = new WeakMap<object, Set<string>>();
@@ -45,6 +48,7 @@ const PERSON_RESTARTED = "The person restarted your browser from the Browser pan
 /** One bot call, lane wait included, answers within `callBudgetMs`; the engine's action keeps `followUpReserveMs` of it for the reads after. */
 export const BROWSER_CALL_DEFAULTS = { requestTimeoutMs: 120_000, laneWaitMs: 30_000, callBudgetMs: HARNESS_CALL_BUDGET_MS, followUpReserveMs: 15_000 } as const;
 const LATE = Symbol("late"), HOLD_POLL_MS = 500;
+const WAIT_MS_TOOL = "agent_browser_wait_ms";
 
 const PAGE_ACTIONS: ReadonlySet<string> = new Set([
   "agent_browser_click", "agent_browser_fill", "agent_browser_type", "agent_browser_press",
@@ -68,44 +72,6 @@ export function ownsBrowserViewport(env: NodeJS.ProcessEnv): boolean {
 }
 
 export class TransportError extends Error {}
-
-/** One timed browser action (ms), logged with DUSK_BROWSER_TIMING=1; `inFlight` is this session's work already running. */
-export interface BrowserTiming {
-  session: string;
-  tool: string;
-  outcome: "ok" | "error";
-  totalMs: number;
-  launchMs?: number;
-  engineMs?: number;
-  observeMs?: number;
-  stepsMs?: number;
-  chars?: number;
-  inFlight: number;
-}
-
-export function formatBrowserTiming(timing: BrowserTiming): string {
-  const parts = [`browser timing: ${timing.tool} ${timing.outcome}`];
-  const phases: Array<[string, number | undefined]> = [
-    ["total", timing.totalMs], ["launch", timing.launchMs], ["engine", timing.engineMs], ["observe", timing.observeMs], ["steps", timing.stepsMs],
-  ];
-  for (const [label, value] of phases) {
-    if (value !== undefined) parts.push(`${label}=${Math.round(value)}ms`);
-  }
-  if (timing.chars !== undefined) parts.push(`chars=${timing.chars}`);
-  parts.push(`inflight=${timing.inFlight}`, `session=${timing.session}`);
-  return parts.join(" ");
-}
-
-function resultChars(result: unknown): number {
-  const content = (result as { content?: unknown } | null)?.content;
-  if (!Array.isArray(content)) return 0;
-  let chars = 0;
-  for (const item of content) {
-    const text = (item as { text?: unknown } | null)?.text;
-    if (typeof text === "string") chars += text.length;
-  }
-  return chars;
-}
 
 /** The engine answered with a failure (marked `settled: true`): nothing is left running, so no restart is needed. */
 export function isSettledBrowserFailure(error: unknown): boolean {
@@ -333,6 +299,7 @@ export class BrowserRuntime {
   private steps?: Pick<BrowserSteps, "before" | "after" | "signIn" | "note" | "forget" | "recentFrame" | "personTook"> & Partial<Pick<BrowserSteps, "alive">>;
   private lanes = new BrowserLanes(({ call, waitedMs, holder }) => trail("browser.lane.busy", { call, waitedMs, holder: holder?.call ?? null, heldMs: holder ? Date.now() - holder.since : null }));
   private threadTabs = new ThreadTabs();
+  private dialogs = new BotDialogs((session) => this.gate(session).owner !== null);
   /** The page size people's views want; the agent-browser live view sets it, and every bot call applies it first. */
   readonly pageSizes = new PageSizes({
     apply: (session, size) => { const spec = this.gates.get(session)?.spec; return spec && this.applyViewport ? this.applyViewport(spec, size) : Promise.resolve(); },
@@ -483,6 +450,8 @@ export class BrowserRuntime {
 
   /** Every tool result, recovery notes included, is scrubbed of held secrets. */
   async agentRpc(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void, ctx?: StepContext): Promise<unknown> {
+    if (method === "tools/call" && toolNameOf(params) === WAIT_MS_TOOL) return plainWait(agentBrowserArguments(WAIT_MS_TOOL, ((params as { arguments?: unknown } | null)?.arguments ?? {}) as Record<string, unknown>).ms,
+      this.options.callBudgetMs - this.options.followUpReserveMs, () => beforeDispatch?.());
     if (method === "tools/call" && readsAroundBrowser(params)) {
       const split = readAfterOpen(params);
       if (!split) return { isError: true, content: [{ type: "text", text: READ_OPEN_PAGE_ONLY }] };
@@ -534,7 +503,8 @@ export class BrowserRuntime {
     return this.gate(session).lostCall === null ? stuckBrowserToolError() : lostCallToolError(call);
   }
 
-  private async agentRequest(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, deadline: number, beforeDispatch?: () => void, ctx?: StepContext): Promise<unknown> {
+  /** `batched`: a step of agent_browser_batch, whose failure answer carries the page's snapshot itself. */
+  private async agentRequest(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, deadline: number, beforeDispatch?: () => void, ctx?: StepContext, batched = false): Promise<unknown> {
     if (method !== "tools/list" && method !== "tools/call") throw new Error("Unsupported browser method.");
     // tools/list skips withAgentAction, so it must refuse the closing window itself or its client outlives restart().
     if (method !== "tools/call" && this.gate(session).closing) throw new Error(BROWSER_CLOSING);
@@ -591,7 +561,7 @@ export class BrowserRuntime {
         const heldNote = this.holds.note(session);
         if (toolName === "agent_browser_eval" && await this.holds.refuses(session, pageUrl)) return { isError: true, content: [{ type: "text", text: heldNote ?? SECRET_ON_PAGE }] };
         // Launch and session parameters dusk bot owns never reach the engine from a call.
-        const stripped = method === "tools/call" ? stripHarnessOwnedArguments(withAgentBrowserArguments(params)) : params;
+        const stripped = method === "tools/call" ? stripHarnessOwnedArguments(withAgentBrowserArguments(withoutDialogAnswer(params))) : params;
         const labelled = toolName === "agent_browser_tab_new" && ctx
           ? { ...stripped as object, arguments: this.threadTabs.labelNewTab(ctx.threadId, ((stripped as { arguments?: Record<string, unknown> }).arguments) ?? {}) } : stripped;
         const prepared = method === "tools/call" ? this.pageSizes.callArguments(session, ctx ? this.threadTabs.refs.carry(session, ctx.threadId, labelled) : labelled) : params;
@@ -643,17 +613,28 @@ export class BrowserRuntime {
         const relayed = method === "tools/call" && toolName !== undefined ? RELAYED_TOOLS.get(toolName) : undefined;
         const inLines = method === "tools/call" && toolName !== undefined ? agentBrowserTypeInLines(toolName, args) : null;
         const engineEnd = Date.now() + engineTimeoutMs;
-        let result = relayed
-          ? await this.relayTool(session, spec, relayed, args, engineTimeoutMs)
+        const devTools = method === "tools/call" && this.relayCommand && !attachesToChrome(spec.env)
+          ? () => this.relayCommand!(spec, session, { action: "cdp_url" }, 3_000).then((answer) => answer.data?.cdpUrl as string | undefined ?? null) : null;
+        let result = method !== "tools/call" ? await entry.client.rpc(method, request, engineTimeoutMs) : await this.dialogs.during(session, params, devTools, async () => relayed
+          ? this.relayTool(session, spec, relayed, args, engineTimeoutMs)
           : inLines
-            ? await runAgentBrowserTypeInLines(inLines, (step) => {
+            ? runAgentBrowserTypeInLines(inLines, (step) => {
               beforeDispatch?.();
               if (this.gate(session).owner !== null) throw this.taken(session);
               return entry.client.rpc("tools/call", { ...request as object, name: step.name, arguments: step.arguments }, Math.max(1, engineEnd - Date.now()));
             })
-            : await entry.client.rpc(method, request, engineTimeoutMs);
+            : entry.client.rpc(method, request, engineTimeoutMs));
         phases.engineMs = performance.now() - engineStarted;
+        if (stoppedLoad(result)) result = withNote(result, `The page showing now: ${await pageUrl() || "unknown"}.`);
         result = withPickNote(result, picked);
+        if (toolName && !relayed && !inLines) {
+          const engineRpc = (name: string, rpcArgs: Record<string, unknown>, ms: number) => entry.client.rpc("tools/call", { name, arguments: rpcArgs }, ms)
+            .catch((error: unknown) => { if (error instanceof TransportError) throw error; return null; });
+          result = await answerMisses(result, { name: toolName, args: args as Record<string, unknown> | undefined, rpc: engineRpc, batched,
+            again: async (ms) => withPickNote(await entry.client.rpc(method, request, ms), picked), remainingMs: () => engineEnd - Date.now(),
+            checkpoint: () => { beforeDispatch?.(); if (this.gate(session).owner !== null) throw this.taken(session); },
+            saw: (page) => { if (ctx) this.threadTabs.refs.saw(session, ctx.threadId, "agent_browser_snapshot", { compact: true }, page); } });
+        }
         if (toolName && snapshotMissedSelector(toolName, args as Record<string, unknown> | undefined, result)) {
           const { selector, ...whole } = args as Record<string, unknown>;
           const page = await entry.client.rpc("tools/call", { name: toolName, arguments: whole }, engineTimeoutMs) as { content?: unknown[] };
@@ -761,7 +742,7 @@ export class BrowserRuntime {
     const plan = planAgentBrowserBatch((params as { arguments?: unknown } | null)?.arguments, tools);
     if (!plan.ok) return { isError: true, content: [{ type: "text", text: plan.error }] };
     const call = async ({ name, arguments: args }: AgentBrowserCall): Promise<ToolResult> =>
-      asToolResult(await this.agentRequest(session, spec, "tools/call", { name, arguments: args }, deadline, beforeDispatch, ctx));
+      asToolResult(await this.agentRequest(session, spec, "tools/call", { name, arguments: args }, deadline, beforeDispatch, ctx, true));
     return runSteps<AgentBrowserCall>(plan.steps, {
       deadline: Math.min(deadline, Date.now() + plan.limitMs),
       limitMs: plan.limitMs,
@@ -1126,6 +1107,7 @@ export class BrowserRuntime {
     gate.ready = false;
     this.steps?.forget(session);
     this.threadTabs.forget(session);
+    this.dialogs.forget(session);
     this.launch?.stopped(session);
     // Clear before the awaited stop: any uncertain latch after this point must win.
     gate.uncertain = false;

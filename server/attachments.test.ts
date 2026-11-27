@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { link, unlink } from "node:fs/promises";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildZip } from "./testing/zip-fixture.ts";
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const fs = await importOriginal<typeof import("node:fs/promises")>();
@@ -64,6 +65,8 @@ const {
   sanitizeSharedFileName,
   saveAudio,
   saveFile,
+  heifUploadAsPicture,
+  refuseDamagedDocument,
   saveImage,
   saveImageUpload,
   validateAttachmentUploadId,
@@ -305,6 +308,58 @@ describe("aggregate attachment storage", () => {
     })(), "last-byte.txt", "text/plain");
     expect(saved.bytes).toBe(1);
     expect(() => saveImage(Buffer.from("b"), "image/png")).not.toThrow();
+  });
+
+  it.skipIf(process.platform !== "darwin")("turns an iPhone photo into a JPEG picture beside its original", async () => {
+    const { execFileSync } = await import("node:child_process");
+    const png = join(DATA_ROOT, "dot.png");
+    realWriteFileSync(png, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==", "base64"));
+    const heicPath = join(DATA_ROOT, "dot.heic");
+    execFileSync("/usr/bin/sips", ["-s", "format", "heic", png, "--out", heicPath], { stdio: "ignore" });
+    const heic = readFileSync(heicPath);
+    const saved = await saveFile((async function* () { yield heic; })(), "IMG_0042.HEIC", "image/heic");
+    const picture = await heifUploadAsPicture(saved);
+    expect(picture).toMatchObject({ name: "IMG_0042.jpg", mime: "image/jpeg" });
+    expect(picture!.path.endsWith(".jpg")).toBe(true);
+    expect(readFileSync(picture!.path).subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
+    expect(existsSync(saved.path)).toBe(true);
+    const pdf = await saveFile((async function* () { yield Buffer.from("%PDF-1.4"); })(), "a.pdf", "application/pdf");
+    expect(await heifUploadAsPicture(pdf)).toBeNull();
+  });
+
+  it("keeps an iPhone photo as a file and refuses bytes that are not one", async () => {
+    const heic = Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from("ftypheic", "latin1"), Buffer.alloc(40)]);
+    const saved = await saveFile((async function* () { yield heic; })(), "IMG_0042.HEIC", "image/heic");
+    expect(saved).toMatchObject({ name: "IMG_0042.heic", bytes: heic.byteLength });
+    expect(saved.path.endsWith(".heic")).toBe(true);
+    await expect(saveFile((async function* () { yield Buffer.from("just some text pretending"); })(), "x.heic", "image/heic")).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("keeps a zip as a file, whichever name Windows or macOS gives its type, and refuses bytes that are not a zip", async () => {
+    const zip = Buffer.concat([Buffer.from("PK\x03\x04", "latin1"), Buffer.alloc(40)]);
+    for (const mime of ["application/zip", "application/x-zip-compressed"]) {
+      const saved = await saveFile((async function* () { yield zip; })(), "voice.zip", mime);
+      expect(saved).toMatchObject({ name: "voice.zip", bytes: zip.byteLength });
+      expect(saved.path.endsWith(".zip")).toBe(true);
+    }
+    await expect(saveFile((async function* () { yield Buffer.from("MZ not a zip at all"); })(), "setup.zip", "application/zip")).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("refuses and removes a zip whose file list can't be read or a PDF without its header, and keeps whole ones", async () => {
+    const zip = buildZip([{ name: "a.txt", data: "hi" }]);
+    const whole = await saveFile((async function* () { yield zip; })(), "notes.zip", "application/zip");
+    await expect(refuseDamagedDocument(whole)).resolves.toBeUndefined();
+    expect(existsSync(whole.path)).toBe(true);
+    const cut = await saveFile((async function* () { yield zip.subarray(0, 30); })(), "cut.zip", "application/zip");
+    await expect(refuseDamagedDocument(cut)).rejects.toMatchObject({ status: 422 });
+    expect(existsSync(cut.path)).toBe(false);
+    const pdf = await saveFile((async function* () { yield Buffer.from("%PDF-1.4\n%%EOF"); })(), "a.pdf", "application/pdf");
+    await expect(refuseDamagedDocument(pdf)).resolves.toBeUndefined();
+    const renamed = await saveFile((async function* () { yield Buffer.from("not a pdf at all"); })(), "b.pdf", "application/pdf");
+    await expect(refuseDamagedDocument(renamed)).rejects.toMatchObject({ status: 422 });
+    expect(existsSync(renamed.path)).toBe(false);
+    const notes = await saveFile((async function* () { yield Buffer.from("plain"); })(), "c.txt", "text/plain");
+    await expect(refuseDamagedDocument(notes)).resolves.toBeUndefined();
   });
 
   it("keeps an image too large for a picture as a file, and refuses bytes that are not the image they claim", async () => {
@@ -568,11 +623,13 @@ describe("shared files", () => {
     resetDir();
   });
 
-  it("allows useful document mimes but not executables, archives, or active markup", () => {
+  it("allows useful document mimes and zips but not executables, other archives, or active markup", () => {
     expect(extensionForFileMime("text/plain; charset=utf-8")).toBe(".txt");
     expect(extensionForFileMime("application/pdf")).toBe(".pdf");
     expect(extensionForFileMime("application/vnd.openxmlformats-officedocument.wordprocessingml.document")).toBe(".docx");
-    expect(extensionForFileMime("application/zip")).toBeNull();
+    expect(extensionForFileMime("application/zip")).toBe(".zip");
+    expect(extensionForFileMime("application/x-7z-compressed")).toBeNull();
+    expect(extensionForFileMime("application/vnd.rar")).toBeNull();
     expect(extensionForFileMime("application/x-msdownload")).toBeNull();
     expect(extensionForFileMime("application/octet-stream")).toBeNull();
     expect(extensionForFileMime("text/html")).toBeNull();
@@ -584,11 +641,15 @@ describe("shared files", () => {
     expect(sanitizeSharedFileName("notes", "text/markdown")).toBe("notes.md");
     expect(sanitizeSharedFileName("rename.py", "text/plain")).toBe("rename.py");
     expect(sanitizeSharedFileName("rename.py", "application/pdf")).toBe("rename.pdf");
-    expect(sanitizeSharedFileName("page.html", "text/plain")).toBe("page.txt");
+    expect(sanitizeSharedFileName("page.html", "text/plain")).toBe("page.html.txt");
+    expect(sanitizeSharedFileName("Dockerfile", "text/plain")).toBe("Dockerfile");
+    expect(sanitizeSharedFileName("server.log", "text/plain")).toBe("server.log");
+    expect(sanitizeSharedFileName("notes.txt", "text/plain")).toBe("notes.txt");
     expect(() => sanitizeSharedFileName("../../secret.txt", "text/plain")).toThrow(/filename, not a path/);
     expect(() => sanitizeSharedFileName("..\\..\\secret.txt", "text/plain")).toThrow(/filename, not a path/);
     expect(() => sanitizeSharedFileName("..%2F..%2Fsecret.txt", "text/plain")).toThrow(/filename, not a path/);
-    expect(() => sanitizeSharedFileName("notes.txt", "application/zip")).toThrow(/supported document/);
+    expect(sanitizeSharedFileName("voice", "application/zip")).toBe("voice.zip");
+    expect(() => sanitizeSharedFileName("notes.txt", "application/x-7z-compressed")).toThrow(/supported document/);
   });
 
   it("streams a file under a generated name with private permissions", async () => {

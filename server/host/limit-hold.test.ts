@@ -1,12 +1,12 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Checklist } from "../batch-checklist.ts";
 import type { RuntimeEvent } from "../contracts.ts";
 import type { LimitHoldState } from "../../shared/wire.ts";
-import { AFTER_RESET_MS, AFTER_START_MS, createLimitHold, MAX_HOLD_MS, MAX_RESUMES, OPEN_RECHECK_MS, PROBE_RECHECK_MS, probeEngine, refusedStartWaits, resumeNote, UNKNOWN_RESET_RECHECK_MS, type HeldTurn } from "./limit-hold.ts";
+import { AFTER_RESET_MS, AFTER_START_MS, createLimitHold, MAX_HOLD_MS, MAX_RESUMES, OPEN_RECHECK_MS, PROBE_RECHECK_MS, probeEngine, refusedStartWaits, resumeNote, UNKNOWN_RESET_RECHECK_MS, wallClockTimer, type HeldTurn } from "./limit-hold.ts";
 
 const START = Date.parse("2026-11-17T10:00:00Z");
 const HOUR = 3_600_000;
@@ -404,3 +404,49 @@ function fakeTimeAt(at: number) {
   void time.advance(at - START);
   return time;
 }
+
+describe("the wait's own timer", () => {
+  it("fires within a minute of waking when the reset passed while the computer slept", () => {
+    vi.useFakeTimers({ now: START });
+    try {
+      let fired = 0;
+      wallClockTimer(3 * HOUR, () => { fired += 1; });
+      vi.advanceTimersByTime(30 * 60_000);
+      expect(fired).toBe(0);
+      // asleep: the wall clock moves on, the process's timers do not
+      vi.setSystemTime(START + 8 * HOUR);
+      vi.advanceTimersByTime(60_000);
+      expect(fired).toBe(1);
+      vi.advanceTimersByTime(24 * HOUR);
+      expect(fired).toBe(1);
+    } finally { vi.useRealTimers(); }
+  });
+  it("waits the whole time when the computer stays awake, and can be cancelled", () => {
+    vi.useFakeTimers({ now: START });
+    try {
+      let fired = 0;
+      wallClockTimer(2 * HOUR, () => { fired += 1; });
+      vi.advanceTimersByTime(2 * HOUR - 1);
+      expect(fired).toBe(0);
+      vi.advanceTimersByTime(1);
+      expect(fired).toBe(1);
+      const cancelled = wallClockTimer(HOUR, () => { fired += 1; });
+      cancelled.cancel();
+      vi.advanceTimersByTime(2 * HOUR);
+      expect(fired).toBe(1);
+    } finally { vi.useRealTimers(); }
+  });
+});
+
+describe("keeping the computer awake for a waiting turn", () => {
+  it("names when the soonest waiting turn carries on, and nothing once none waits", async () => {
+    const h = harness();
+    expect(h.hold.soonestWake()).toBeUndefined();
+    h.hold.hold({ botId: "kai", threadId: "t1", engine: "claude", engineName: "Claude", resetsAt: START + 2 * HOUR });
+    h.hold.hold({ botId: "kai", threadId: "t2", engine: "claude", engineName: "Claude", resetsAt: START + HOUR });
+    expect(h.hold.soonestWake()).toBe(START + HOUR + AFTER_RESET_MS);
+    h.hold.cancel("t2");
+    h.hold.cancel("t1");
+    expect(h.hold.soonestWake()).toBeUndefined();
+  });
+});

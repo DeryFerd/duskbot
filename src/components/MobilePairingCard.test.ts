@@ -58,7 +58,8 @@ describe("mobile workspace pairing", () => {
   it("tells a server with no way in for phones the command that turns phone access on, with no steps for a code it can't make", () => {
     const source = readFileSync(new URL("./MobilePairingCard.tsx", import.meta.url), "utf8");
     expect(source).toContain('cause instanceof ApiError && cause.body?.code === "unreachable"');
-    expect(source).toContain('const PHONE_ACCESS_COMMAND = "npx duskbot setup";');
+    // duskbot isn't on npm: the installer puts it on the server's PATH, so npx would only 404
+    expect(source).toContain('const PHONE_ACCESS_COMMAND = "duskbot setup";');
     expect(source).toContain("(failed && unreachable) ? null");
     expect((en as Record<string, string>)["settings.phone.unreachable"]).toMatch(/run this and pick phone access/);
   });
@@ -86,5 +87,12 @@ describe("mobile workspace pairing", () => {
     const source = readFileSync(new URL("./MobilePairingCard.tsx", import.meta.url), "utf8");
     expect(source).toContain('data-phone-app-store="" href={storeUrl("ios")}');
     expect(words["mobile.desktop.storesSoon"]).toBe("Google Play soon");
+  });
+
+  it("never says the Android app is coming: its APK is on dusk.bot/download", () => {
+    const words = en as Record<string, string>;
+    const said = Object.entries(words).filter(([, text]) => /android/i.test(text) && /soon|coming/i.test(text));
+    expect(said).toEqual([]);
+    expect(words["mobile.desktop.noStoreApp"]).toContain("On Android, download it from dusk.bot");
   });
 });

@@ -1,8 +1,8 @@
 // The window's own frame in the real app, as the desktop window draws it on macOS and Windows: the top bar (the
-// traffic lights or the caption buttons, the rail's button, the place on screen in its middle, an update, Settings),
-// the rail of places beside it in the bar's colour, the sidebar and the chat in the app's card, the sidebar's edge dragged to
-// its avatars and back, the same window with the frame turned off, and the rail's tiles up close. Against a disposable fake-engine server, with the desktop bridge
-// of scripts/testing/rail-preview.tsx (the window's own rail drawn by its own page, in a frame).
+// traffic lights or the caption buttons and Settings), the sidebar and the chat in the app's card, the sidebar's edge
+// dragged to its avatars and back, and the same window with the frame turned off. The rail of places is gone
+// (66aa712848, 390c292f4a), so each view waits for the sidebar's top row. Against a disposable fake-engine server, with
+// the desktop bridge of scripts/testing/rail-preview.tsx.
 // Run: node --experimental-strip-types scripts/verify-window-frame.ts --shots <dir> [--only <view,view>] [--skins all]
 // Each view is photographed in Daylight and Midnight (every skin with --skins all) at 1280x800, at twice that size,
 // and the views of the bar also as a strip of the bar alone. `tiles` draws each state of a rail tile with every pixel
@@ -26,39 +26,53 @@ const WIDTH = 1280, HEIGHT = 800;
 const ALL_SKINS = ["daylight", "midnight", "atelier", "foundry", "lagoon", "graphite", "linen", "dusk", "meadow", "pop", "halloween"];
 const SKINS = argument("--skins") === "all" ? ALL_SKINS : ["daylight", "midnight"];
 const LOOK: Record<string, string> = { daylight: "light", midnight: "dark" };
-const BAR = "[data-window-frame-bar]";
 const RAIL_PAGE = "document.querySelector('iframe[data-rail-page]')?.contentDocument";
 const RAIL_READY = `${RAIL_PAGE}?.querySelector('[data-rail-place]')`;
+// the window has no rail of places any more (66aa712848, 390c292f4a): a view is ready once the sidebar's top row is there
+const SIDEBAR_READY = "document.querySelector('[data-sidebar-top-row]')";
 
 type Step = (page: HeadlessPage) => Promise<void>;
 /** Each view: its query, what must be on screen before the picture, the window's width, and what to do first. */
 const VIEWS: Array<{ name: string; query: string; ready: string; width?: number; bar?: true; act?: Step }> = [
-  { name: "frame", query: "chrome=1", ready: RAIL_READY, bar: true },
-  { name: "frame-simple", query: "chrome=1&mode=simple", ready: RAIL_READY, bar: true },
-  { name: "frame-windows", query: "chrome=1&platform=win32", ready: RAIL_READY, bar: true },
-  { name: "frame-windows-simple", query: "chrome=1&platform=win32&mode=simple", ready: RAIL_READY, bar: true },
-  { name: "frame-update", query: "chrome=1&update=downloaded", ready: `${RAIL_READY} && document.querySelector('${BAR} [data-update-indicator]')`, bar: true },
-  { name: "frame-downloading", query: "chrome=1&update=downloading", ready: `${RAIL_READY} && document.querySelector('${BAR} [data-update-indicator]')`, bar: true },
-  { name: "frame-team", query: "chrome=1&team=1", ready: RAIL_READY, bar: true },
-  { name: "frame-team-windows", query: "chrome=1&team=1&platform=win32&update=downloaded", ready: `${RAIL_READY} && document.querySelector('${BAR} [data-update-indicator]')`, bar: true },
-  { name: "frame-computer", query: "chrome=1&place=computer&rail=1", ready: RAIL_READY, bar: true },
-  { name: "frame-long-name", query: "chrome=1&team=1&teamname=Northwind%20Analytics%20Research%20and%20Planning%20Group", ready: RAIL_READY, width: 900, bar: true },
-  { name: "frame-icons", query: "chrome=1&density=icons", ready: RAIL_READY },
-  { name: "frame-icons-simple", query: "chrome=1&density=icons&mode=simple", ready: RAIL_READY },
+  { name: "frame", query: "chrome=1", ready: SIDEBAR_READY, bar: true },
+  { name: "frame-simple", query: "chrome=1&mode=simple", ready: SIDEBAR_READY, bar: true },
+  { name: "frame-windows", query: "chrome=1&platform=win32", ready: SIDEBAR_READY, bar: true },
+  { name: "frame-windows-simple", query: "chrome=1&platform=win32&mode=simple", ready: SIDEBAR_READY, bar: true },
+  { name: "frame-team", query: "chrome=1&team=1", ready: SIDEBAR_READY, bar: true },
+  { name: "frame-team-windows", query: "chrome=1&team=1&platform=win32", ready: SIDEBAR_READY, bar: true },
+  { name: "frame-computer", query: "chrome=1&place=computer&rail=1", ready: SIDEBAR_READY, bar: true },
+  { name: "frame-long-name", query: "chrome=1&team=1&teamname=Northwind%20Analytics%20Research%20and%20Planning%20Group", ready: SIDEBAR_READY, width: 900, bar: true },
+  { name: "frame-icons", query: "chrome=1&density=icons", ready: SIDEBAR_READY },
+  { name: "frame-icons-simple", query: "chrome=1&density=icons&mode=simple", ready: SIDEBAR_READY },
   // The sidebar's edge, dragged: narrower (the edge lit), then past the point where it becomes the column of avatars.
-  { name: "frame-drag", query: "chrome=1", ready: `${RAIL_READY} && document.querySelector('[data-sidebar-resize]')`, act: (page) => dragEdge(page, 250) },
-  { name: "frame-drag-simple", query: "chrome=1&mode=simple", ready: `${RAIL_READY} && document.querySelector('[data-sidebar-resize]')`, act: (page) => dragEdge(page, 250) },
-  { name: "frame-drag-avatars", query: "chrome=1", ready: `${RAIL_READY} && document.querySelector('[data-sidebar-resize]')`, act: (page) => dragEdge(page, 110) },
-  { name: "frame-drag-out", query: "chrome=1&density=icons", ready: `${RAIL_READY} && document.querySelector('[data-sidebar-resize]')`, act: (page) => dragEdge(page, 170, true) },
-  { name: "frame-edge-hover", query: "chrome=1&density=icons&mode=simple", ready: `${RAIL_READY} && document.querySelector('[data-sidebar-resize]')`, act: hoverEdge },
+  { name: "frame-drag", query: "chrome=1", ready: `${SIDEBAR_READY} && document.querySelector('[data-sidebar-resize]')`, act: (page) => dragEdge(page, 250) },
+  { name: "frame-drag-simple", query: "chrome=1&mode=simple", ready: `${SIDEBAR_READY} && document.querySelector('[data-sidebar-resize]')`, act: (page) => dragEdge(page, 250) },
+  { name: "frame-drag-avatars", query: "chrome=1", ready: `${SIDEBAR_READY} && document.querySelector('[data-sidebar-resize]')`, act: (page) => dragEdge(page, 110) },
+  { name: "frame-drag-out", query: "chrome=1&density=icons", ready: `${SIDEBAR_READY} && document.querySelector('[data-sidebar-resize]')`, act: (page) => dragEdge(page, 170, true) },
+  { name: "frame-edge-hover", query: "chrome=1&density=icons&mode=simple", ready: `${SIDEBAR_READY} && document.querySelector('[data-sidebar-resize]')`, act: hoverEdge },
   // The frame turned off: macOS's window as it was before the frame, and Windows' own title bar once the app started again.
-  { name: "frame-off", query: "chrome=1&frame=off", ready: RAIL_READY },
-  { name: "frame-off-simple", query: "chrome=1&frame=off&mode=simple", ready: RAIL_READY },
-  { name: "frame-off-icons", query: "chrome=1&frame=off&density=icons", ready: RAIL_READY },
-  { name: "frame-off-windows", query: "chrome=1&frame=off&platform=win32", ready: RAIL_READY },
-  { name: "frame-setting", query: "chrome=1&settings=frame", ready: `${RAIL_READY} && document.querySelector('[data-window-frame-switch]')` },
-  { name: "frame-setting-windows", query: "chrome=1&settings=frame&platform=win32&framepending=1", ready: `${RAIL_READY} && document.querySelector('[data-window-frame-restart]')` },
+  { name: "frame-off", query: "chrome=1&frame=off", ready: SIDEBAR_READY },
+  { name: "frame-off-simple", query: "chrome=1&frame=off&mode=simple", ready: SIDEBAR_READY },
+  { name: "frame-off-icons", query: "chrome=1&frame=off&density=icons", ready: SIDEBAR_READY },
+  { name: "frame-off-windows", query: "chrome=1&frame=off&platform=win32", ready: SIDEBAR_READY },
+  // a narrow window with the frame off: the bot list's button and the chat's header clear the traffic lights
+  { name: "frame-off-narrow", query: "frame=off&place=computer", ready: "document.querySelector('main')", width: 700 },
+  // a toast after Give feedback in a window narrow enough that the sidebar and the chat share it: over the chat only
+  { name: "frame-off-feedback-toast", query: "frame=off&place=computer", ready: "document.querySelector('[data-sidebar-bot-row], [data-sidebar-hero]')", width: 900, act: sendFeedback },
+  { name: "frame-off-narrow-simple", query: "frame=off&place=computer&mode=simple", ready: "document.querySelector('main')", width: 700 },
 ];
+
+/** Opens Give feedback, writes a line and sends it, then waits for the toast that answers. */
+async function sendFeedback(page: HeadlessPage) {
+  await page.evaluate(`[...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Give feedback")?.click()`);
+  await page.until("document.querySelector('textarea[data-autofocus]')");
+  await page.evaluate("document.querySelector('textarea[data-autofocus]').focus()");
+  await page.send("Input.insertText", { text: "The window frame looks good." });
+  await page.evaluate("document.querySelector('[data-feedback-send]').click()");
+  await page.until("document.querySelector('.ui-toast')");
+  await delay(400);
+  await delay(300);
+}
 
 /** Where an element of the window's rail page is, in the window. */
 const railRect = (page: HeadlessPage, selector: string) =>
@@ -89,8 +103,14 @@ async function hoverEdge(page: HeadlessPage) {
 async function open(page: HeadlessPage, url: string, ready: string, width = WIDTH, scale = 2) {
   await page.send("Emulation.setDeviceMetricsOverride", { width, height: HEIGHT, deviceScaleFactor: scale, mobile: false });
   await mouse(page, "mouseMoved", width - 4, HEIGHT - 4);
+  // below 768px the sidebar is a drawer, closed
+  const settled = width < 768 ? `(${ready})` : `(${ready}) && document.querySelector("[data-sidebar-bot-row], [data-sidebar-hero]")`;
   await page.send("Page.navigate", { url });
-  await page.until(`(${ready}) && document.querySelector("[data-sidebar-bot-row], [data-sidebar-hero]")`);
+  // a navigation now and then leaves the preview blank (no main at all): it is loaded once more before the view fails
+  try { await page.until(settled); } catch {
+    await page.send("Page.navigate", { url });
+    await page.until(settled);
+  }
   await delay(900);
 }
 
@@ -172,7 +192,8 @@ try {
         await mouse(page, "mouseReleased", (view.width ?? WIDTH) - 4, HEIGHT - 4);
         console.log(join(shots, `${name}.png`));
       }
-      if (wanted("tiles")) for (const skin of SKINS) {
+      // the rail's tiles went with the rail; only an explicit --only tiles still photographs an older build's
+      if (only?.has("tiles")) for (const skin of SKINS) {
         const file = join(shots, `tiles-${LOOK[skin] ?? skin}.png`);
         await tiles(page, ui.previewUrl, skin, file);
         console.log(file);
@@ -180,7 +201,7 @@ try {
       if (wanted("colours")) for (const skin of SKINS) {
         const pictures: Picture[] = [];
         for (const [label, query] of FRAME_COLOURS) {
-          await open(page, `${ui.previewUrl}?skin=${skin}&chrome=1${query}`, RAIL_READY);
+          await open(page, `${ui.previewUrl}?skin=${skin}&chrome=1${query}`, SIDEBAR_READY);
           pictures.push({ label, png: await page.capture(CORNER), width: CORNER.width });
         }
         const file = join(shots, `colours-${LOOK[skin] ?? skin}.png`);
@@ -192,7 +213,7 @@ try {
         for (const mode of ["", "&mode=simple"]) {
           const pictures: Picture[] = [];
           for (const skin of ALL_SKINS) {
-            await open(page, `${ui.previewUrl}?skin=${skin}&chrome=1${mode}`, RAIL_READY);
+            await open(page, `${ui.previewUrl}?skin=${skin}&chrome=1${mode}`, SIDEBAR_READY);
             pictures.push({ label: skin, png: await page.capture({ x: 0, y: 0, width: 520, height: 300 }), width: 520 });
           }
           for (let at = 0; at < pictures.length; at += 4) rows.push({ label: `${mode ? "Simple" : "Advanced"} ${at / 4 + 1}`, pictures: pictures.slice(at, at + 4) });
@@ -206,7 +227,7 @@ try {
         for (let at = 0; at < ALL_SKINS.length; at += 2) {
           const pictures: Picture[] = [];
           for (const skin of ALL_SKINS.slice(at, at + 2)) {
-            await open(page, `${ui.previewUrl}?skin=${skin}&chrome=1`, RAIL_READY);
+            await open(page, `${ui.previewUrl}?skin=${skin}&chrome=1`, SIDEBAR_READY);
             for (const [corner, clip] of cardCorners(await rectOf(page, "[data-window-card]"))) {
               pictures.push({ label: `${skin}, ${corner}`, png: await page.capture(clip), width: clip.width * 3 });
             }

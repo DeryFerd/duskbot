@@ -263,6 +263,58 @@ describe("connect flow stages", () => {
     expect(flow.state.stage).toBe("connected");
   });
 
+  it("keeps waiting on a paste-code provider whose auth status endpoint returns 404 (Antigravity)", async () => {
+    let done = false;
+    const antigravity = (authenticated: boolean): ConnectInstance => ({
+      instanceId: "antigravity",
+      driverKind: "antigravityAgent",
+      snapshot: { state: "available", authenticated },
+      authentication: { method: "paste-code" },
+    });
+    const { flow, calls } = harness([
+      [antigravity(false)],
+      () => [antigravity(done)],
+    ], {
+      "POST /api/instances/antigravity/auth/start": () => ({
+        auth: { phase: "waiting", flowId: "ag1", authorizationUrl: "https://accounts.google.com/o/oauth2/auth?x=1" },
+      }),
+      "GET /api/instances/antigravity/auth/status": () => Promise.reject(Object.assign(new Error("Sign-in status is unavailable for this provider."), { status: 404 })),
+      "POST /api/instances/antigravity/auth/complete": () => { done = true; return { ok: true }; },
+      "POST /api/instances/antigravity/auth/cancel": () => ({ ok: true }),
+    });
+    flow.start({ tile: "antigravity", candidates: ["antigravity"] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(flow.state).toMatchObject({ stage: "waiting", kind: "paste", flowId: "ag1" });
+    await vi.advanceTimersByTimeAsync(POLL_MS * (LOST_AFTER + 5));
+    expect(flow.state).toMatchObject({ stage: "waiting", kind: "paste", flowId: "ag1" });
+    expect(calls.filter((call) => call.startsWith("GET /api/instances/antigravity/auth/status"))).toHaveLength(1);
+    expect(calls).not.toContain("POST /api/instances/antigravity/auth/cancel");
+    flow.submit("4/0A-google-code");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls).toContain("POST /api/instances/antigravity/auth/complete");
+    expect(flow.state).toEqual({ stage: "connected", reused: false });
+  });
+
+  it("still times out a paste-code sign-in with no status endpoint when the wait deadline expires", async () => {
+    const antigravity: ConnectInstance = {
+      instanceId: "antigravity",
+      driverKind: "antigravityAgent",
+      snapshot: { state: "available", authenticated: false },
+      authentication: { method: "paste-code" },
+    };
+    const { flow, calls } = harness([[antigravity]], {
+      "POST /api/instances/antigravity/auth/start": () => ({
+        auth: { phase: "waiting", flowId: "ag2", authorizationUrl: "https://accounts.google.com/o/oauth2/auth?x=1" },
+      }),
+      "GET /api/instances/antigravity/auth/status": () => Promise.reject(Object.assign(new Error("Sign-in status is unavailable for this provider."), { status: 404 })),
+      "POST /api/instances/antigravity/auth/cancel": () => ({ ok: true }),
+    });
+    flow.start({ tile: "antigravity", candidates: ["antigravity"] });
+    await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUTS.waiting + POLL_MS);
+    expect(flow.state).toMatchObject({ stage: "failed", at: "waiting", reason: "timeout" });
+    expect(calls).toContain("POST /api/instances/antigravity/auth/cancel");
+  });
+
   it("one at a time: starting another cancels the sign-in under way on the server", async () => {
     const { flow, calls, seen } = harness([[codex({ state: "available", authenticated: false }), { ...codex({ state: "available", authenticated: false }), instanceId: "githubCopilot", driverKind: "copilotAgent" }]], {
       "POST /api/instances/codex/auth/start": () => device,
@@ -290,6 +342,78 @@ describe("connect flow stages", () => {
     expect(flow.state).toEqual({ stage: "idle" });
     expect(trail.some(([ev]) => ev === "connect.timeout")).toBe(false);
     expect(trail.find(([ev]) => ev === "connect.cancel")?.[1]).toMatchObject({ stage: "installing" });
+  });
+});
+
+describe("what the server is told when a sign-in ends early", () => {
+  const cancels = (calls: Array<{ path: string; body: string }>) => calls.filter((call) => call.path.endsWith("/auth/cancel")).map((call) => JSON.parse(call.body));
+  const recording = (routes: Record<string, Route>) => {
+    const sent: Array<{ path: string; body: string }> = [];
+    const wrapped: Record<string, Route> = {};
+    for (const [key, route] of Object.entries(routes)) wrapped[key] = (init) => { sent.push({ path: key, body: init?.body ?? "" }); return route(init); };
+    return { sent, routes: wrapped };
+  };
+
+  it("a cancel while the sign-in is still opening stops the start on the server, so its helper does not sit there for 15 minutes", async () => {
+    const { sent, routes } = recording({ "POST /api/instances/codex/auth/start": never, "POST /api/instances/codex/auth/cancel": () => ({ ok: true }) });
+    const { flow } = harness([[codex({ state: "available", authenticated: false })]], routes);
+    flow.start({ tile: "chatgpt", candidates: ["codex"] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(flow.state.stage).toBe("opening");
+    flow.cancel();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cancels(sent)).toEqual([{ flowId: "", pending: true }]);
+  });
+
+  it("a sign-in the app lost track of is told as lost, one that ran out as timed out, a person's cancel plainly", async () => {
+    const lost = recording({ "POST /api/instances/codex/auth/start": () => device, "GET /api/instances/codex/auth/status": () => Promise.reject(new TypeError("unreachable")), "POST /api/instances/codex/auth/cancel": () => ({ ok: true }) });
+    const one = harness([[codex({ state: "available", authenticated: false })]], lost.routes);
+    one.flow.start({ tile: "chatgpt", candidates: ["codex"] });
+    await vi.advanceTimersByTimeAsync(POLL_MS * LOST_AFTER + 10);
+    expect(cancels(lost.sent)).toEqual([{ flowId: "f1", why: "lost" }]);
+
+    const slow = recording({ "POST /api/instances/codex/auth/start": () => device, "GET /api/instances/codex/auth/status": () => ({ auth: { phase: "waiting" } }), "POST /api/instances/codex/auth/cancel": () => ({ ok: true }) });
+    const two = harness([[codex({ state: "available", authenticated: false })]], slow.routes);
+    two.flow.start({ tile: "chatgpt", candidates: ["codex"] });
+    await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUTS.waiting + POLL_MS);
+    expect(cancels(slow.sent)).toEqual([{ flowId: "f1", why: "timeout" }]);
+
+    const person = recording({ "POST /api/instances/codex/auth/start": () => device, "GET /api/instances/codex/auth/status": () => ({ auth: { phase: "waiting" } }), "POST /api/instances/codex/auth/cancel": () => ({ ok: true }) });
+    const three = harness([[codex({ state: "available", authenticated: false })]], person.routes);
+    three.flow.start({ tile: "chatgpt", candidates: ["codex"] });
+    await vi.advanceTimersByTimeAsync(0);
+    three.flow.cancel();
+    expect(cancels(person.sent)).toEqual([{ flowId: "f1" }]);
+  });
+
+  it("the browser sign-in this computer can't take back (its port is taken) is stopped as a retry, not a cancel", async () => {
+    const loop = { authorizationUrl: "https://auth.openai.com/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback", port: 1455, path: "/auth/callback" };
+    const { sent, routes } = recording({
+      "POST /api/instances/codex/auth/start": (init) => JSON.parse(init?.body ?? "{}").browser ? { sameMachine: false, auth: { phase: "waiting", flowId: "b1", authorizationUrl: loop.authorizationUrl, loopback: loop } } : device,
+      "POST /api/instances/codex/auth/cancel": () => ({ ok: true }),
+      "GET /api/instances/codex/auth/status": () => ({ auth: { phase: "waiting" } }),
+    });
+    const relay = { open: async () => false, next: () => new Promise<string | null>(() => {}), done: async () => {}, close: async () => {} };
+    const { flow } = harness([[codex({ state: "available", authenticated: false })]], routes, { relay });
+    flow.start({ tile: "chatgpt", candidates: ["codex"] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(flow.state).toMatchObject({ stage: "waiting", kind: "device" });
+    expect(cancels(sent)).toEqual([{ flowId: "b1", why: "retry" }]);
+  });
+});
+
+describe("a sign-in page the browser did not open", () => {
+  it("says so until Open opens it", async () => {
+    let opens = 0;
+    const { flow } = harness([[{ instanceId: "claude", driverKind: "claudeAgent", snapshot: { state: "available", authenticated: false }, authentication: { method: "paste-code" } }]], {
+      "POST /api/instances/claude/auth/start": () => ({ auth: { phase: "waiting", flowId: "c1", authorizationUrl: "https://claude.com/cai/oauth/authorize?code=true" } }),
+      "GET /api/instances/claude/auth/status": () => ({ auth: { phase: "waiting" } }),
+    }, { open: async () => ++opens > 1 });
+    flow.start({ tile: "claude", candidates: ["claude"] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(flow.state).toMatchObject({ stage: "waiting", kind: "paste", opened: false });
+    await expect(flow.openAgain()).resolves.toBe(true);
+    expect(flow.state).toMatchObject({ stage: "waiting", kind: "paste", opened: true });
   });
 });
 

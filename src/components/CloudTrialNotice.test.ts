@@ -35,13 +35,17 @@ describe("the trial's notice card", () => {
     const element = createElement(CloudTrialNoticeCard, { view, failed, onAction, onClose });
     return { html: renderToStaticMarkup(element), tree: nodes(CloudTrialNoticeCard({ view, failed, onAction, onClose })), onAction, onClose };
   };
-  it("says one message, its next step, and the way down in its last days; it never takes focus", () => {
-    const { html, tree, onAction, onClose } = card(cloudTrialView(trial("active", { switchTo: { tier: "starter", amount: 1500 } })));
+  it("says one message and the way down in its last days, with where to cancel and no button for it; it never takes focus", () => {
+    const { html } = card(cloudTrialView(trial("active", { switchTo: { tier: "starter", amount: 1500 } })));
     for (const text of ["Your free trial ends on Oct 15", "Then Pro is $49/month plus tax, charged on Oct 15.",
-      "Prefer Plus at $15? Tell us from your plan page before Oct 15, and we&#x27;ll switch your plan.", "Manage subscription", "Not now"]) expect(html).toContain(text);
+      "Prefer Plus at $15? Tell us from your plan page before Oct 15, and we&#x27;ll switch your plan.", "To cancel, open Settings › General › Plan &amp; billing before then.", ">OK<"]) expect(html).toContain(text);
+    expect(html).not.toContain("Manage subscription");
     expect(html).toContain('role="status"'); expect(html).not.toContain("autofocus"); expect(html).not.toContain('aria-modal="true"');
     expect(html).toContain('data-notice="cloud-trial-active"');
-    tree.find(node => node.type === "button" && renderToStaticMarkup(node).includes("Manage subscription"))!.props.onClick();
+  });
+  it("its next step, Not now, Close and Escape", () => {
+    const { tree, onAction, onClose } = card(cloudTrialView(trial("ending", { deleteAt: ENDS + 3 * DAY, keep: "portal" })));
+    tree.find(node => node.type === "button" && renderToStaticMarkup(node).includes("Subscribe to keep it"))!.props.onClick();
     expect(onAction).toHaveBeenCalledOnce();
     for (const label of ["Not now"]) tree.find(node => node.type === "button" && renderToStaticMarkup(node).includes(label))!.props.onClick();
     tree.find(node => node.type === "button" && node.props["aria-label"] === "Close")!.props.onClick();

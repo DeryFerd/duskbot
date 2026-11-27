@@ -31,6 +31,8 @@ async function fixture() {
   const listeners = new Set<(change: { type: string; threadId?: string }) => void>();
   const sent: Array<{ threadId: string; text: string; outside: boolean }> = [];
   const answers: Array<{ threadId: string; requestId: string; behavior: string }> = [];
+  const compacted: Array<{ botId: string; threadId: string; focus: string }> = [];
+  const left: string[] = [];
   const change = (threadId: string) => { for (const listener of listeners) listener({ type: "message", threadId }); };
   const key = "d".repeat(64);
   const host = createMessengerHost({
@@ -55,6 +57,8 @@ async function fixture() {
       return { ok: true };
     },
     hookBase: () => null, settleMs: 10, log: () => {},
+    compact: async (botId, threadId, focus) => { compacted.push({ botId, threadId, focus }); return "started"; },
+    leftConversation: (_botId, threadId) => { left.push(threadId); },
   });
   cleanups.push(() => host.stop());
   host.start();
@@ -66,10 +70,29 @@ async function fixture() {
     threads.get(threadId)!.push({ id: `c${Math.random()}`, role: "bot", kind: "text", text: "", card: { subtitle: "", options: [], ...card } } as unknown as Message);
     change(threadId);
   };
-  return { fake, host, sent, titles, reply, answers, card };
+  return { fake, host, sent, titles, reply, answers, card, compacted, left };
 }
 
 describe("Discord chat channel", () => {
+  it("reads /compact with a focus and /new as commands, never as words for the bot", async () => {
+    const f = await fixture();
+    const status = await f.host.connect("bot-nova", "discord", TOKEN);
+    await until(() => f.host.status("bot-nova").platforms[1]!.state === "online");
+    f.fake.message({ author: OWNER, channelId: "301", content: status.pairCode! });
+    await until(() => f.host.status("bot-nova").platforms[1]!.owner);
+    f.fake.message({ author: OWNER, channelId: "301", content: "the deposit is 400 eur" });
+    const turn = await until(() => f.sent[0]);
+    f.fake.message({ author: OWNER, channelId: "301", content: "/compact keep the deposit" });
+    await until(() => f.fake.posted().find((call) => String(call.body.content).startsWith("Compacting this conversation")));
+    expect(f.compacted).toEqual([{ botId: "bot-nova", threadId: turn.threadId, focus: "keep the deposit" }]);
+    f.fake.message({ author: OWNER, channelId: "301", content: "/new" });
+    await until(() => f.fake.posted().find((call) => String(call.body.content).startsWith("Started a new conversation")));
+    expect(f.left).toEqual([turn.threadId]);
+    f.fake.message({ author: OWNER, channelId: "301", content: "fresh start" });
+    expect((await until(() => f.sent[1])).threadId).not.toBe(turn.threadId);
+    expect(f.sent.map((one) => one.text).some((text) => text.startsWith("/"))).toBe(false);
+  });
+
   it("connects over the gateway without the privileged content intent, pairs by DM code and answers with files", async () => {
     const f = await fixture();
     const status = await f.host.connect("bot-nova", "discord", TOKEN);

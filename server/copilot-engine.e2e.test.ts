@@ -121,7 +121,10 @@ async function createAndUpdateRoutineThroughCopilotTools() {
     const routine = (await api("GET", "/api/routines")).routines.find((routine: any) => routine.botId === bot.id);
     expect(routine).toMatchObject({ name: "Copilot report", enabled: true, schedule: placed });
     await turn("Rename the report routine.", { action: "update", trigger_id: routine.id, name: "Updated Copilot report" });
-    const saved = (await api("GET", "/api/routines")).routines.find((row: any) => row.id === routine.id);
+    // a wait that reads the thread before the new turn marks it busy answers with the turn before
+    let saved: any;
+    await expect.poll(async () => (saved = (await api("GET", "/api/routines")).routines.find((row: any) => row.id === routine.id))?.name, { timeout: 25_000 })
+      .toBe("Updated Copilot report");
     expect(saved).toMatchObject({ name: "Updated Copilot report", schedule: { ...placed, expression: routine.schedule.expression } });
     const persisted = JSON.parse(readFileSync(join(dataDir, "routines.json"), "utf8"));
     expect(persisted.routines.find((row: any) => row.id === routine.id)).toMatchObject({ name: "Updated Copilot report", schedule: { ...placed, expression: routine.schedule.expression } });

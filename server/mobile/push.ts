@@ -47,7 +47,12 @@ export interface PushSender {
   send(target: PushTarget, message: PushMessage): Promise<PushOutcome>;
   /** APNs only; `target.token` is the activity's own token, or the push-to-start one */
   sendActivity?(target: PushTarget, push: ActivityPush): Promise<PushOutcome>;
+  /** where pushes leave from now: this server's own keys, and the relay with the services it says it has (null when it
+   * could not be asked) */
+  status?(): Promise<PushStatus>;
 }
+
+export interface PushStatus { own: PushService[]; relay: string | null; relayServices: PushService[] | null }
 
 /** The APNs body of a Live Activity push. */
 export function activityApnsBody(push: ActivityPush): object {
@@ -309,6 +314,18 @@ export function createPushSender(env: NodeJS.ProcessEnv = process.env, deps: {
       } catch {
         return "failed";
       }
+    },
+    async status() {
+      const relay = deps.relay?.() ?? null;
+      let relayServices: PushService[] | null = null;
+      if (relay) {
+        try {
+          const response = await fetch(`${relay}/v1/push`, { signal: AbortSignal.timeout(5_000) });
+          const answer = await response.json().catch(() => null) as { services?: unknown } | null;
+          if (response.ok && Array.isArray(answer?.services)) relayServices = answer.services.filter((one): one is PushService => one === "apns" || one === "fcm");
+        } catch {}
+      }
+      return { own: [...configured], relay, relayServices };
     },
     async sendActivity(target, activity) {
       if (target.service !== "apns") return "skipped";

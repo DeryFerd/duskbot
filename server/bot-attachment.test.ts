@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // attachments.ts reads DATA_DIR at import time.
 const DATA_ROOT = mkdtempSync(join(tmpdir(), "dusk-bot-attachment-"));
 process.env.DUSK_DATA_DIR = join(DATA_ROOT, "data");
-const { attachForTurn, deliveredCopy, guestWorkspaceToHost, saveBotAttachment } = await import("./bot-attachment.ts");
+const { attachForTurn, deliveredCopy, guestWorkspaceToHost, saveBotAttachment, savedScreenAttachment } = await import("./bot-attachment.ts");
 const { ATTACHMENTS_DIR } = await import("./attachments.ts");
 
 const WORK = join(DATA_ROOT, "work");
@@ -323,5 +323,20 @@ describe("deliveredCopy", () => {
     const twice = bot("twice", "second", by("me"));
     expect(deliveredCopy([ask, first, second, twice], twice, "sideboard.png")).toBeNull();
     expect(deliveredCopy([ask, first, twice], { ...twice, parentId: "first" }, "sideboard.png")).toEqual(photo);
+  });
+});
+
+describe("savedScreenAttachment", () => {
+  it("turns a screen the bot posts on purpose into an image in the chat's own store", () => {
+    const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+    const saved = savedScreenAttachment({ png });
+    expect(saved.attachment).toMatchObject({ kind: "image", mime: "image/png" });
+    expect(saved.attachment.path.startsWith(ATTACHMENTS_DIR)).toBe(true);
+    expect(readFileSync(saved.attachment.path)).toEqual(Buffer.from(png, "base64"));
+    expect(saved.bytes).toBe(Buffer.from(png, "base64").length);
+  });
+
+  it("refuses a frame that is no picture", () => {
+    expect(() => savedScreenAttachment({ png: Buffer.from("not a png").toString("base64") })).toThrow();
   });
 });

@@ -10,6 +10,8 @@ import { setSidebarDensity, SIDEBAR_WIDTH_KEY, SIMPLE_SIDEBAR_WIDTH_KEY } from "
 import { GROK_MOVE_NOTICE } from "../../src/lib/notices";
 import { applySkin, type SkinId } from "../../src/lib/skins";
 import "../../src/styles.css";
+import "../../src/styles/overlays.css";
+import "../../src/styles/motion.css";
 
 // Served only by scripts/verify-cloud-rail.ts: the real app, as a Cloud's page in the desktop window sees it, with the
 // desktop bridge a hosted Cloud's page gets (its rail and add-a-Cloud sheet answered here). ?skin= picks the skin,

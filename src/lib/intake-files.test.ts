@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { TURN_IMAGE_MAX_BYTES as SERVER_TURN_IMAGE_MAX_BYTES, TURN_IMAGE_MAX_COUNT as SERVER_TURN_IMAGE_MAX_COUNT } from "../../server/turn-images";
-import { AttachmentTooLargeError, fitImagesToSlots, IMAGE_MAX_BYTES, imageBytesLeft, imageSlotsLeft, TURN_IMAGE_MAX_BYTES, TURN_IMAGE_MAX_COUNT, type Attachment } from "./composer-attachments";
+import { AttachmentEmptyError, AttachmentTooLargeError, fitImagesToSlots, IMAGE_MAX_BYTES, imageBytesLeft, imageSlotsLeft, TURN_IMAGE_MAX_BYTES, TURN_IMAGE_MAX_COUNT, type Attachment } from "./composer-attachments";
 import { imagesThatFit, intakeFiles } from "./intake-files";
 import { FILE_MAX_BYTES } from "../../shared/upload-limits";
 
@@ -91,11 +91,11 @@ describe("intakeFiles", () => {
       allowImages: true,
       getPath: onDisk,
       uploadImage: upload,
-      uploadFile: async () => { throw new Error("private store is full"); },
+      uploadFile: async () => { throw Object.assign(new Error("attachments storage is full (2 GB limit)"), { status: 507 }); },
     });
 
     expect(out.attachments).toEqual([]);
-    expect(out.notice).toContain("notes.pdf: private store is full");
+    expect(out.notice?.text).toBe("notes.pdf wasn't attached: there's no room left for attachments. Clear old ones in settings.");
   });
 
   it("treats an image as an ordinary file when the engine cannot read one", async () => {
@@ -117,8 +117,8 @@ describe("intakeFiles", () => {
       uploadImage: upload,
     });
     expect(out.attachments).toHaveLength(0);
-    expect(out.notice).toMatch(/ghost\.bin/);
-    expect(out.notice).not.toMatch(/Finder|Save it first/);
+    expect(out.notice?.text).toMatch(/ghost\.bin/);
+    expect(out.notice?.text).not.toMatch(/Finder|Save it first/);
   });
 
   it("reports an upload that failed without losing the files that worked", async () => {
@@ -131,7 +131,7 @@ describe("intakeFiles", () => {
       },
     });
     expect(out.attachments).toHaveLength(1);
-    expect(out.notice).toMatch(/bad\.png: too large/);
+    expect(out.notice?.text).toBe("bad.png didn't upload. Check your connection, then retry it or remove it.");
   });
 
   it("stops at the images a message can still take and names the rest", async () => {
@@ -142,7 +142,7 @@ describe("intakeFiles", () => {
     );
     expect(out.attachments.map((a) => "name" in a ? a.name : "")).toEqual(["1.png", "notes.txt"]);
     expect(uploadImage).toHaveBeenCalledTimes(1);
-    expect(out.notice).toBe(`A message takes up to ${TURN_IMAGE_MAX_COUNT} images, 40 MB in all. 2.png, 3.png weren't attached.`);
+    expect(out.notice?.text).toBe(`A message takes up to ${TURN_IMAGE_MAX_COUNT} images, 40 MB in all. 2.png, 3.png weren't attached.`);
   });
 
   it("attaches an image over the image limit as a file, says so, and leaves it out of the image slots", async () => {
@@ -153,7 +153,7 @@ describe("intakeFiles", () => {
     });
     expect(out.attachments.map((a) => `${a.kind}:${"name" in a ? a.name : ""}`)).toEqual(["file:huge.png", "image:ok.png"]);
     expect(uploadImage).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ name: "ok.png" }));
-    expect(out.notice).toBe("huge.png is over 10 MB, so it was attached as a file.");
+    expect(out.notice).toEqual({ text: "huge.png is over 10 MB, so it was attached as a file.", tone: "info" });
   });
 
   it("names a file over the file limit in one sentence", async () => {
@@ -162,7 +162,19 @@ describe("intakeFiles", () => {
       uploadFile: async (f) => { throw new AttachmentTooLargeError(f.name, FILE_MAX_BYTES); },
     });
     expect(out.attachments).toEqual([]);
-    expect(out.notice).toBe("huge.png is over 25 MB.");
+    expect(out.notice?.text).toBe("huge.png is over 25 MB.");
+  });
+
+  it("names an empty file in one plain sentence and keeps the rest", async () => {
+    const out = await intakeFiles([file("empty.txt", "text/plain", 0), file("notes.pdf", "application/pdf")], {
+      allowImages: true, getPath: onDisk, uploadImage: upload,
+      uploadFile: async (f) => {
+        if (f.size === 0) throw new AttachmentEmptyError(f.name);
+        return { kind: "file" as const, id: `id-${f.name}`, name: f.name, path: `/files/${f.name}`, size: f.size };
+      },
+    });
+    expect(out.attachments.map((a) => "name" in a ? a.name : "")).toEqual(["notes.pdf"]);
+    expect(out.notice).toEqual({ text: "empty.txt is empty, so it wasn't attached.", tone: "warning" });
   });
 
   it("splits pasted images by the slots left, passing oversized ones through", () => {
@@ -179,13 +191,13 @@ describe("intakeFiles", () => {
     expect(out.notice).toBeNull();
   });
 
-  it("explains that an archive needs unzipping instead of calling it unsupported", async () => {
-    const out = await intakeFiles([file("아카이브.zip", "application/zip"), file("run.exe", "application/octet-stream")], {
+  it("explains that an archive other than a zip needs zipping or unpacking instead of calling it unsupported", async () => {
+    const out = await intakeFiles([file("아카이브.rar", "application/vnd.rar"), file("run.exe", "application/octet-stream")], {
       allowImages: true, getPath: () => "", uploadImage: upload, uploadFile: async () => null,
     });
     expect(out.attachments).toEqual([]);
-    expect(out.notice).toBe(
-      "Unable to attach run.exe. Choose a supported image, document, or audio file. Archives can't be attached: unzip 아카이브.zip and attach the files inside.",
+    expect(out.notice?.text).toBe(
+      "Unable to attach run.exe. Choose a supported image, document, or audio file. Only .zip archives can be attached: zip 아카이브.rar again, or attach the files inside.",
     );
   });
 
@@ -214,7 +226,7 @@ describe("intakeFiles", () => {
       allowImages: true, getPath: onDisk, uploadImage: upload, imageSlots: imageSlotsLeft(draft), imageBytes: imageBytesLeft(draft),
     });
     expect(out.attachments.map((a) => "name" in a ? a.name : "")).toEqual(["1.png", "2.png", "3.png"]);
-    expect(out.notice).toBe("A message takes up to 10 images, 40 MB in all. 4.png, 5.png weren't attached.");
+    expect(out.notice?.text).toBe("A message takes up to 10 images, 40 MB in all. 4.png, 5.png weren't attached.");
     const notices: string[] = [];
     expect(imagesThatFit([file("a.png", "image/png", big)], 9, (notice) => notices.push(notice), big - 1)).toEqual([]);
     expect(notices).toEqual(["A message takes up to 10 images, 40 MB in all. a.png wasn't attached."]);

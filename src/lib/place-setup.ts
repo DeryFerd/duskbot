@@ -56,11 +56,19 @@ export function pastedPairingLink(text: string): string | null {
   return (found.find((one) => !one.loopback) ?? found[0])?.link ?? null;
 }
 
+/** What `duskbot pair` printed on a server with no address of its own: only its "this computer:" link, which names the
+ * server's own loopback. Opened here it would reach this app's own server, never that one. */
+export function onlyServerLocalLink(text: string): boolean {
+  return /this computer:\s*https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])/i.test(text)
+    && Array.from(text.matchAll(/https?:\/\/([^\s/:"'<>`]+)[^\s"'<>`]*\/pair\/?#code=/g)).every((match) => LOOPBACK.has(match[1]!.toLowerCase()));
+}
+
 /** The pairing link main opens, from what the person typed: a pairing link (or the lines `duskbot pair` printed around
  * it), or an address (https, or plain http on this computer for an SSH tunnel) and an optional code. */
-export function pairingLink(address: string, code: string): { link: string } | { error: "address" | "code" } {
+export function pairingLink(address: string, code: string): { link: string } | { error: "address" | "code" | "serverLocal" } {
   const typed = address.trim();
   if (!typed) return { error: "address" };
+  if (onlyServerLocalLink(typed)) return { error: "serverLocal" };
   if (/#code=/.test(typed)) {
     const link = pastedPairingLink(typed);
     return link ? { link } : { error: "address" };

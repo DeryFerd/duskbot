@@ -114,6 +114,12 @@ describe("the room's working line", () => {
     vi.useRealTimers();
   });
 
+  it("comes and goes like the chat's own line, the picked glance line", () => {
+    const { host, done } = draw(["echo"]);
+    expect(host.querySelector("[data-working-line]")?.getAttribute("data-working-line")).toBe("glance");
+    done();
+  });
+
   it("keeps the slot when nobody works", () => {
     const { host, done } = draw([], false);
     expect(host.querySelector("[data-room-working-line]")).toBeNull();

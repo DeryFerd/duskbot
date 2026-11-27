@@ -17,6 +17,11 @@ on:
         required: false
         type: boolean
         default: false
+      dry_run:
+        description: "Build and check every platform, then stop: no CI lane branch, no draft, no tag, no upload"
+        required: false
+        type: boolean
+        default: false
   push:
     branches:
       - main
@@ -65,7 +70,7 @@ jobs:
         if: steps.pin.outputs.should_release == 'true'
         run: node scripts/check-bot-desktop-published.mjs
       - name: Refuse to overwrite a published canonical release
-        if: steps.pin.outputs.should_release == 'true'
+        if: steps.pin.outputs.should_release == 'true' && !inputs.dry_run
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -86,7 +91,8 @@ jobs:
     # touch) and deletes that branch afterwards.
     name: CI passed on the release commit
     needs: prepare
-    if: needs.prepare.outputs.should_release == 'true'
+    # a dry run builds without the CI verdict: waiting on it starts CI in a release-ci branch
+    if: needs.prepare.outputs.should_release == 'true' && !inputs.dry_run
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     permissions:
@@ -137,6 +143,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Clean generated output
         run: rm -rf dist dist-server dist-native release
+
+      # the speech helper's on-device SpeechAnalyzer needs the macOS 26 SDK; the image's default Xcode is older
+      - name: Use Xcode 26
+        run: |
+          xcode=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -vi beta | sort -V | tail -1)
+          test -n "$xcode" || { echo "::error::no Xcode 26 on this runner image"; ls -d /Applications/Xcode*.app; exit 1; }
+          sudo xcode-select -s "$xcode/Contents/Developer"
+          xcodebuild -version
+          swiftc --version
 
       - name: Import the Developer ID certificate into a throwaway keychain
         if: env.MAC_SIGNED == 'true'
@@ -257,6 +272,10 @@ jobs:
             speech="$res/Dusk Bot Speech.app/Contents/MacOS/speech-helper"
             lipo -archs "$speech" | grep -q "x86_64" || { echo "::error::$speech lacks x86_64"; exit 1; }
             lipo -archs "$speech" | grep -q "arm64" || { echo "::error::$speech lacks arm64"; exit 1; }
+            for arch in arm64 x86_64; do
+              nm -u -arch "$arch" "$speech" | grep -q 'Speech0A11TranscriberC' || {
+                echo "::error::$speech ($arch) was built without SpeechAnalyzer (an SDK older than macOS 26)"; exit 1; }
+            done
             # every other native payload carries only this app's own CPU slice
             expected_arch=x86_64
             case "$app" in *mac-arm64*) expected_arch=arm64 ;; esac
@@ -461,11 +480,14 @@ jobs:
         run: |
           v=$(node -p "require('./package.json').version")
           cp "release/DuskBot-$v-setup.exe" release/DuskBot-setup.exe
+          cp "release/DuskBot-$v-win-x64.zip" release/DuskBot-windows.zip
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-release
           path: |
             release/*.exe
+            release/DuskBot-*-win-x64.zip
+            release/DuskBot-windows.zip
           if-no-files-found: error
           retention-days: 1
 
@@ -562,6 +584,13 @@ jobs:
           cp "release/DuskBot-$v-amd64.deb" release/DuskBot-amd64.deb
           cp "release/DuskBot-$v-x86_64.AppImage" release/DuskBot.AppImage
           (cd release && sha256sum DuskBot-$v-amd64.deb DuskBot-$v-x86_64.AppImage > SHA256SUMS-ubuntu-x64.txt)
+      # the server and CLI as one npm package (Node 24+, any OS), from the dist-server/ and dist/ package:linux built:
+      # duskbot-<version>.tgz and duskbot.tgz, so a self-hoster never has to build it from source
+      - name: Server and CLI package
+        run: |
+          v=$(node -p "require('./package.json').version")
+          node --input-type=module -e "import { packCli } from './scripts/release-assets.ts'; console.log(packCli('release', process.argv[1]))" "$v"
+          tar -xzOf "release/duskbot-$v.tgz" package/package.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const p=JSON.parse(s);if(p.version!==process.argv[1]||p.bin.duskbot!=="cli.js")process.exit(1)})' "$v"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: linux-release
@@ -569,13 +598,74 @@ jobs:
             release/*.deb
             release/*.AppImage
             release/SHA256SUMS-ubuntu-x64.txt
+            release/duskbot-*.tgz
+            release/duskbot.tgz
           if-no-files-found: error
           retention-days: 1
 
+  android:
+    # the shipped APK is signed with the release key on the Mac (apps/mobile/scripts/build-android-apk.sh) and carried
+    # forward by assemble; this proves the phone app still builds from the release commit, with a throwaway key and a
+    # stand-in Firebase config, and never uploads what it built
+    name: Android APK builds
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6.0.10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: 21
+          # Maven Central answers hosted runners with 429 now and then; cached dependencies skip most requests
+          cache: gradle
+          cache-dependency-path: |
+            apps/mobile/android/**/*.gradle*
+            apps/mobile/android/gradle/wrapper/gradle-wrapper.properties
+      - run: pnpm install --frozen-lockfile
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      - name: Build and verify the APK with a throwaway key
+        run: |
+          export DUSK_ANDROID_KEYSTORE="$RUNNER_TEMP/check.keystore"
+          export DUSK_ANDROID_KEYSTORE_PASSWORD="check-$GITHUB_RUN_ID" DUSK_ANDROID_KEY_PASSWORD="check-$GITHUB_RUN_ID" DUSK_ANDROID_KEY_ALIAS=check
+          keytool -genkeypair -keystore "$DUSK_ANDROID_KEYSTORE" -alias check -keyalg RSA -keysize 2048 -validity 2 \
+            -storepass "$DUSK_ANDROID_KEYSTORE_PASSWORD" -keypass "$DUSK_ANDROID_KEY_PASSWORD" -dname "CN=dusk release check" > /dev/null
+          export DUSK_ANDROID_GOOGLE_SERVICES="$RUNNER_TEMP/google-services.json"
+          cat > "$DUSK_ANDROID_GOOGLE_SERVICES" <<'JSON'
+          {"project_info":{"project_number":"000000000000","project_id":"dusk-release-check","storage_bucket":"dusk-release-check.appspot.com"},
+           "client":[{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000000","android_client_info":{"package_name": "bot.dusk.mobile"}},
+           "oauth_client":[],"api_key":[{"current_key":"release-check"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],
+           "configuration_version":"1"}
+          JSON
+          # one retry after a minute, for a 429 from Maven Central
+          DUSK_ANDROID_APK_OUT="$RUNNER_TEMP/apk" apps/mobile/scripts/build-android-apk.sh || {
+            echo "::warning::the APK build failed once; retrying in 60 s"; sleep 60
+            DUSK_ANDROID_APK_OUT="$RUNNER_TEMP/apk" apps/mobile/scripts/build-android-apk.sh; }
+          apk=$(ls "$RUNNER_TEMP"/apk/*.apk)
+          tools=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)
+          "${tools}aapt2" dump badging "$apk" | grep -q "package: name='bot.dusk.mobile'" || {
+            echo "::error::the APK is not bot.dusk.mobile"; exit 1; }
+          for abi in arm64-v8a armeabi-v7a; do
+            unzip -l "$apk" | grep -q "lib/$abi/" || { echo "::error::the APK has no $abi libraries"; exit 1; }
+          done
+          rm -f "$DUSK_ANDROID_KEYSTORE" "$apk"
+
   assemble:
     name: Assemble the draft
-    needs: [prepare, ci, mac, windows, linux]
-    if: needs.prepare.outputs.should_release == 'true'
+    needs: [prepare, ci, mac, windows, linux, android]
+    # a dry run skips the CI wait, so ci is skipped rather than passed
+    if: ${{ !cancelled() && needs.prepare.outputs.should_release == 'true' && needs.mac.result == 'success' && needs.windows.result == 'success' && needs.linux.result == 'success' && needs.android.result == 'success' && (needs.ci.result == 'success' || (inputs.dry_run && needs.ci.result == 'skipped')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     concurrency:
@@ -590,6 +680,14 @@ jobs:
         with:
           path: assets
           merge-multiple: true
+      # the phone app is built and signed on the Mac (apps/mobile/scripts/build-android-apk.sh); a release that built no
+      # new one carries the newest APK forward, so every release has it and latest.json names its version
+      - name: Carry the newest Android APK forward
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test -s assets/DuskBot.apk || gh release download --repo DuskBotAI/duskbot-releases --pattern DuskBot.apk --dir assets
+          test -s assets/DuskBot.apk
       - name: Refuse an incomplete installer set
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
@@ -604,8 +702,10 @@ jobs:
             "DuskBot-$VERSION-browser-darwin-arm64.zip"
             "DuskBot-$VERSION-browser-darwin-x64.zip"
             "DuskBot-$VERSION-x86_64.AppImage"
-            DuskBot-amd64.deb DuskBot-intel.dmg DuskBot-setup.exe
-            DuskBot.AppImage DuskBot.dmg SHA256SUMS-ubuntu-x64.txt
+            "DuskBot-$VERSION-win-x64.zip"
+            "duskbot-$VERSION.tgz"
+            DuskBot-amd64.deb DuskBot-intel.dmg DuskBot-setup.exe DuskBot-windows.zip
+            DuskBot.AppImage DuskBot.dmg DuskBot.apk duskbot.tgz SHA256SUMS-ubuntu-x64.txt
           )
           for file in "${required[@]}"; do
             test -s "assets/$file" || { echo "::error::missing or empty release asset: $file"; exit 1; }
@@ -619,10 +719,16 @@ jobs:
           ref: ${{ needs.prepare.outputs.sha }}
           path: src
           persist-credentials: false
+          # the history since the last tag, for the release notes
+          fetch-depth: 0
           sparse-checkout: |
             package.json
             scripts/release-manifest.ts
+            scripts/release-assets.ts
+            scripts/release-notes.ts
             apps/cloud-service/src/release-signing.ts
+            apps/site/public/landing/releases/changelog.json
+            docs/releases/unreleased.json
           sparse-checkout-cone-mode: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -630,25 +736,30 @@ jobs:
       - name: Sign the update manifest
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
-          DUSK_RELEASE_SIGNING_KEY: ${{ secrets.DUSK_RELEASE_SIGNING_KEY }}
+          # a dry run writes an unsigned latest.json to check the assets and manifest, and keeps it
+          DUSK_RELEASE_SIGNING_KEY: ${{ !inputs.dry_run && secrets.DUSK_RELEASE_SIGNING_KEY || '' }}
+          DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
         run: |
-          if [ -z "$DUSK_RELEASE_SIGNING_KEY" ]; then
+          if [ -z "$DUSK_RELEASE_SIGNING_KEY" ] && [ "$DRY_RUN" != true ]; then
             echo "::warning title=No update manifest::DUSK_RELEASE_SIGNING_KEY is not set, so apps will not hear about this release"
             exit 0
           fi
           mkdir -p site
-          cp assets/DuskBot-"$VERSION"-* assets/DuskBot{.dmg,-intel.dmg,-setup.exe,-amd64.deb,.AppImage} site/
-          node src/scripts/release-manifest.ts site --version "$VERSION"
+          cp assets/DuskBot-"$VERSION"-* assets/DuskBot{.dmg,-intel.dmg,-setup.exe,-amd64.deb,.AppImage,-windows.zip,.apk} assets/duskbot{,-"$VERSION"}.tgz site/
+          # latest.json also names the APK (version from aapt2 on the runner's Android SDK), the CLI package and the image
+          node src/scripts/release-assets.ts "$VERSION" --dir site
+          find site -maxdepth 1 -name 'duskbot*.tgz' -delete
           find site -maxdepth 1 -name 'DuskBot*' -delete
           cat site/SHA256SUMS
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: hashFiles('site/latest.json') != ''
+        if: ${{ !inputs.dry_run && hashFiles('site/latest.json') != '' }}
         with:
           name: dusk-site
           path: site/
           if-no-files-found: error
           retention-days: 90
       - name: Create or update the canonical draft
+        if: ${{ !inputs.dry_run }}
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.prepare.outputs.version }}
@@ -676,8 +787,12 @@ jobs:
               sleep "$delay"
             done
           }
+          # what's new by area, every download, how each install updates (scripts/release-notes.ts; human edits to the draft
+          # survive a rerun because the draft is only created once)
+          notes="$RUNNER_TEMP/notes"
+          if node src/scripts/release-notes.ts "$VERSION" --to "$SHA" --out "$notes" --offline 2>/dev/null; then set -- --notes-file "$notes/$VERSION.md"; else set -- --generate-notes; fi
           ensure_draft "$GITHUB_REPOSITORY" --target "$SHA" \
-            --draft --title "dusk bot $VERSION" --generate-notes
+            --draft --title "dusk bot $VERSION" "$@"
           target=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json targetCommitish --jq .targetCommitish)
           target_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$target" --jq .sha)
           test "$target_sha" = "$SHA" || {
@@ -693,6 +808,7 @@ jobs:
           echo "canonical asset count: $(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets | length')"
 
       - name: Prove the draft contains the exact staged bytes
+        if: ${{ !inputs.dry_run }}
         env:
           CANONICAL_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.prepare.outputs.version }}
@@ -724,7 +840,7 @@ jobs:
           EOF
 
       - name: Publish (only when asked to)
-        if: ${{ inputs.publish }}
+        if: ${{ inputs.publish && !inputs.dry_run }}
         env:
           CANONICAL_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.prepare.outputs.version }}
@@ -734,3 +850,11 @@ jobs:
           GH_TOKEN="$CANONICAL_TOKEN" gh release view "v$VERSION" \
             --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft | grep -q false
           echo "published v$VERSION; put it on dusk.bot with scripts/publish-downloads.sh v$VERSION (docs/LAUNCH.md)"
+
+      - name: Dry run summary
+        if: ${{ inputs.dry_run }}
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          echo "dry run of $VERSION: every platform built and every asset is present; nothing was drafted, tagged or uploaded"
+          ls -la assets

@@ -7,34 +7,38 @@ import { CARRIED_DRIVERS, carriedEngines, localAiSignIns } from "./ai-signins-ca
 import { carryAiKeys } from "./cloud-welcome-carry.mjs";
 import * as shared from "../shared/ai-signins.ts";
 
-test("the kinds and engines are the ones the Admin and the Cloud take", () => {
-  assert.deepEqual(CARRIED_DRIVERS, shared.AI_SIGNIN_DRIVERS);
+test("carries only the kinds a second computer may renew too, with the engines the Cloud names for them", () => {
+  const movable = shared.AI_SIGNIN_KINDS.filter((kind) => !shared.ROTATING_AI_SIGNIN_KINDS.has(kind));
+  assert.deepEqual(Object.keys(CARRIED_DRIVERS), movable);
+  for (const kind of movable) assert.deepEqual(CARRIED_DRIVERS[kind], shared.AI_SIGNIN_DRIVERS[kind]);
 });
 
-test("reads each CLI login kept in a file, and nothing that isn't one", async () => {
+test("reads the Gemini login kept in a file, and never a ChatGPT, Grok or Kimi one whose refresh token is single-use", async () => {
   const home = mkdtempSync(join(tmpdir(), "dusk-carry-"));
   try {
-    assert.deepEqual(await localAiSignIns({ env: {}, home }), []);
+    assert.deepEqual(await localAiSignIns({ home }), []);
     const put = (path, text) => { mkdirSync(join(home, ...path.slice(0, -1)), { recursive: true }); writeFileSync(join(home, ...path), text); };
-    put([".codex", "auth.json"], JSON.stringify({ tokens: { access_token: "a" } }));
-    put([".grok", "auth.json"], "not json");
+    put([".codex", "auth.json"], JSON.stringify({ tokens: { access_token: "a", refresh_token: "r" } }));
+    put([".grok", "auth.json"], JSON.stringify({ "https://auth.x.ai::id": { refresh_token: "r" } }));
+    put([".kimi-code", "credentials", "kimi-code.json"], JSON.stringify({ access_token: "k", refresh_token: "r" }));
+    assert.deepEqual(await localAiSignIns({ home }), []);
+    put([".gemini", "oauth_creds.json"], "not json");
+    assert.deepEqual(await localAiSignIns({ home }), []);
     put([".gemini", "oauth_creds.json"], JSON.stringify({ access_token: "g", refresh_token: "r" }));
-    put([".kimi-code", "credentials", "kimi-code.json"], JSON.stringify({ access_token: "", refresh_token: "" }));
-    put([".kimi-code", "credentials", "kimi-code-env-ab12.json"], JSON.stringify({ access_token: "k", refresh_token: "r" }));
-    put([".kimi-code", "credentials", "notes.json"], JSON.stringify({ access_token: "x" }));
-    const items = await localAiSignIns({ env: {}, home });
-    assert.deepEqual(items.map(({ kind, file }) => (file ? `${kind} ${file}` : kind)), ["codex-auth", "gemini-oauth", "kimi-auth kimi-code-env-ab12.json"]);
+    const items = await localAiSignIns({ home });
+    assert.deepEqual(items.map(({ kind }) => kind), ["gemini-oauth"]);
     assert.ok(shared.parseAiSignInList(items), "what is read is what the Admin takes");
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 
 test("names the engines whose sign-in goes along: a carried login's, or a key's", () => {
   const instances = [
-    { instanceId: "codex", driverKind: "codex" }, { instanceId: "claude", driverKind: "claudeAgent" }, { instanceId: "grok", driverKind: "grokAgent" },
+    { instanceId: "codex", driverKind: "codex" }, { instanceId: "claude", driverKind: "claudeAgent" }, { instanceId: "gemini", driverKind: "geminiAgent" },
     { instanceId: "openrouter", driverKind: "openaiChat" }, { instanceId: "cursor", driverKind: "cursorAgent" },
   ];
-  assert.deepEqual(carriedEngines(instances, ["codex-auth"], ["openrouter"]), ["codex", "openrouter"]);
-  assert.deepEqual(carriedEngines(null, ["codex-auth"]), []);
+  assert.deepEqual(carriedEngines(instances, ["gemini-oauth"], ["openrouter"]), ["gemini", "openrouter"]);
+  assert.deepEqual(carriedEngines(instances, ["codex-auth"]), [], "a ChatGPT login an older build read stays on its computer");
+  assert.deepEqual(carriedEngines(null, ["gemini-oauth"]), []);
 });
 
 test("the keys the cloud lacks go sealed, one at a time; a key it has stays its own", async () => {

@@ -22,12 +22,13 @@
     "/integrations/outlook/decline-calendar-event"
   ],
   "og_line": "the right meeting from the clues you have.",
-  "what": "**one distinctive word can get you back to the appointment.** try a topic, venue or person. the bot returns matches from your primary calendar without changing them. shared and secondary calendars need a different action.\n\nfor personal accounts without microsoft search, give both ends of a date window. every word must match somewhere in the event’s title, preview, location or people. one or two words usually beat a long description.",
+  "what": "**one distinctive word can get you back to the appointment.** try a topic, venue or person. the bot returns matches from your primary calendar without changing them. shared and secondary calendars need a different action.\n\nfor personal accounts without microsoft search, give both ends of a date window. every word must match somewhere in the event’s title, preview, location or people. one or two words usually beat a long description.\n\nfound the right one? [decline calendar event](/integrations/outlook/decline-calendar-event) can turn it down using the event the search returned.",
   "uses": [
     "**recover a workshop date.** search by the workshop name you remember.",
     "**find a venue.** give the place and dates for a personal-calendar scan.",
     "**locate a customer meeting.** use an attendee clue before considering changes.",
-    "**compare similar appointments.** ask for candidates rather than a guessed winner."
+    "**compare similar appointments.** ask for candidates rather than a guessed winner.",
+    "**search before booking.** look for the title first, so [create calendar event](/integrations/outlook/create-calendar-event) never adds a second copy."
   ],
   "routine": {
     "message": "each saturday at 09:10, search my personal outlook primary calendar for \"pottery\" in the next thirty days.\n\n- finish scanning the entire date window\n- list matching titles, dates and locations here\n- say if the scan remains unfinished\n\nnever edit, decline or respond to an event.",
@@ -61,7 +62,7 @@
       "a": "**this action reaches only your primary calendar.** use a separate approach for shared calendars."
     }
   ],
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -113,10 +114,18 @@
     {
       "mistake": "calling the first empty batch \"nothing\"",
       "fix": "finish the date window before drawing that conclusion."
+    },
+    {
+      "mistake": "expecting a full page of matches on a personal account",
+      "fix": "each batch scans a set of events, so it can return few hits. keep going to the end of the window."
     }
   ],
   "tip": {
     "text": "if the meeting lives on a shared calendar, say that first. this search will not reach it."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "you remember a \"kilnworth\" tasting sometime in march.\nit sits on a personal outlook account, so the search needs dates.",
+    "after": "window: 1 to 31 march\nkeyword: kilnworth\nmatch: kilnworth tasting, 14 march, with its venue\nno events changed."
+  }
 }

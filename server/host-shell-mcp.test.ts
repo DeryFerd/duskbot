@@ -1,11 +1,11 @@
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { modelPlace } from "./agents-bridge-switch.ts";
 import { planBox, visibleInBox } from "./bot-box/plan.ts";
-import { commandEnvironment, findFiles, hostShellLaunch, findInvocations, handleHostShellRpc, mountsHostShell, runCommand, type Runner } from "./host-shell-mcp.ts";
+import { commandEnvironment, hostShellTools, shellInvocation, findFiles, hostShellLaunch, findInvocations, handleHostShellRpc, mountsHostShell, runCommand, runProcess, type Runner } from "./host-shell-mcp.ts";
 
 const desktopTurn = { engineHasShell: false, desktopApp: true, cloudHome: false, worksOn: undefined, remoteComputer: false, thisComputerRefused: false, guest: false, testRun: false,
   model: "hosted" as const, platform: "darwin" as const, watched: true };
@@ -21,6 +21,22 @@ describe("mountsHostShell", () => {
       { thisComputerRefused: true }, { guest: true }, { testRun: true }]) {
       expect(mountsHostShell({ ...desktopTurn, ...change })).toBe(false);
     }
+  });
+  it("lends it on a server others sign in to only for its owner's and admins' own lines", () => {
+    const own = { ...desktopTurn, desktopApp: false, selfHosted: true, shared: true, ownerOrAdminRequest: true };
+    expect(mountsHostShell(own)).toBe(true);
+    expect(mountsHostShell({ ...own, ownerOrAdminRequest: false })).toBe(false);
+    expect(mountsHostShell({ ...own, ownerOrAdminRequest: undefined })).toBe(false);
+    expect(mountsHostShell({ ...own, watched: false })).toBe(false);
+    for (const change of [{ engineHasShell: true }, { worksOn: "off" }, { remoteComputer: true }, { guest: true }, { testRun: true }]) {
+      expect(mountsHostShell({ ...own, ...change })).toBe(false);
+    }
+  });
+  it("keeps a duskbot serve server's unsandboxed shell from routines, webhooks and messengers, and from a server others sign in to", () => {
+    const own = { ...desktopTurn, desktopApp: false, selfHosted: true, platform: "linux" as const };
+    expect(mountsHostShell({ ...own, watched: false })).toBe(false);
+    expect(mountsHostShell({ ...own, shared: true })).toBe(false);
+    expect(mountsHostShell({ ...own, shared: false })).toBe(true);
   });
   it("lends a local model the shell only from this machine, off Windows and on a turn a person is behind", () => {
     const local = { ...desktopTurn, model: "loopback" as const };
@@ -97,12 +113,21 @@ describe("run_command", () => {
     expect(seen).toEqual({ PATH: "/bin" });
     expect(commandEnvironment({ dusk_cloud_x: "1", HOME: "/h" })).toEqual({ HOME: "/h" });
   });
-  it("runs PowerShell on Windows", async () => {
+  it("runs PowerShell on Windows, its output read as UTF-8", async () => {
     let call: string[] = [];
     const run: Runner = async (file, args) => { call = [file, ...args]; return { code: 0, stdout: "hi", stderr: "", timedOut: false }; };
     await runCommand({ command: "Get-ChildItem" }, { cwd, platform: "win32", env: {}, run });
     expect(call[0]).toBe("powershell.exe");
-    expect(call.at(-1)).toBe("Get-ChildItem");
+    expect(call).toEqual(expect.arrayContaining(["-NoProfile", "-NonInteractive", "-Command"]));
+    // Windows PowerShell writes in the console's code page, so a file named "résumé" came back garbled and the next step could not find it
+    expect(call.at(-1)).toMatch(/^try \{ \[Console\]::OutputEncoding = \[System\.Text\.UTF8Encoding\]::new\(\$false\); \$OutputEncoding = \[Console\]::OutputEncoding \} catch \{\}; Get-ChildItem$/);
+  });
+  it("prefers PowerShell 7 on Windows when it is installed, where && and || work", () => {
+    const pwsh = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
+    const found = (path: string) => path === pwsh;
+    expect(shellInvocation("git pull && git push", "win32", { ProgramFiles: "C:\\Program Files" }, found).file).toBe(pwsh);
+    expect(shellInvocation("x", "win32", { Path: "C:\\Tools;C:\\Program Files\\PowerShell\\7" }, found).file).toBe(pwsh);
+    expect(shellInvocation("x", "win32", { Path: "C:\\Tools" }, () => false).file).toBe("powershell.exe");
   });
   it("refuses an empty command", async () => {
     expect(await runCommand({ command: "  " }, { cwd })).toEqual({ text: "command is required.", isError: true });
@@ -110,10 +135,35 @@ describe("run_command", () => {
 });
 
 describe("find_files", () => {
-  it("asks Spotlight on macOS, by name or by content, inside a folder", () => {
-    expect(findInvocations("invoice", { content: false, limit: 50, platform: "darwin", home: "/Users/a" })).toEqual([{ file: "mdfind", args: ["-name", "invoice"] }]);
-    expect(findInvocations("invoice", { content: true, folder: "/Users/a/Documents", limit: 50, platform: "darwin", home: "/Users/a" }))
-      .toEqual([{ file: "mdfind", args: ["-onlyin", "/Users/a/Documents", "invoice"] }]);
+  it("asks Spotlight on macOS first, by name or by content, inside a folder", () => {
+    expect(findInvocations("invoice", { content: false, limit: 50, platform: "darwin", home: "/Users/a" })[0]).toEqual({ file: "mdfind", args: ["-name", "invoice"], index: true });
+    expect(findInvocations("invoice", { content: true, folder: "/Users/a/Documents", limit: 50, platform: "darwin", home: "/Users/a" })[0])
+      .toEqual({ file: "mdfind", args: ["-onlyin", "/Users/a/Documents", "invoice"], index: true });
+  });
+  // the walk runs the real POSIX find, which Windows does not have (its find.exe searches text)
+  it.skipIf(process.platform === "win32")("walks the home folder when Spotlight finds nothing, with iCloud Drive and every word of the name", async () => {
+    const home = mkdtempSync(join(tmpdir(), "find-home-"));
+    const put = (path: string, body: string) => { mkdirSync(dirname(join(home, path)), { recursive: true }); writeFileSync(join(home, path), body); };
+    put("Desktop/old stuff/scans 2024/IMG_4471 halyard paddle club card.txt", "member no. HPC-20417");
+    put("Library/Mobile Documents/com~apple~CloudDocs/Trips/oct-weekend.md", "host is Marguerite Oyelaran, Quillmoor cabin");
+    put("Library/Caches/halyard club card.txt", "cache");
+    put(".hidden/halyard club card.txt", "hidden");
+    const calls: string[] = [];
+    const run: Runner = async (file, args, options) => {
+      calls.push(file);
+      return file === "mdfind" ? { code: 0, stdout: "", stderr: "", timedOut: false } : runProcess(file, args, options);
+    };
+    const byName = await findFiles({ query: "club halyard card" }, { platform: "darwin", home, env: process.env, run });
+    expect(calls).toEqual(["mdfind", "find"]);
+    expect(byName).toEqual({ text: join(home, "Desktop/old stuff/scans 2024/IMG_4471 halyard paddle club card.txt") });
+    const byContent = await findFiles({ query: "quillmoor cabin", in_content: true }, { platform: "darwin", home, env: process.env, run });
+    expect(byContent).toEqual({ text: join(home, "Library/Mobile Documents/com~apple~CloudDocs/Trips/oct-weekend.md") });
+    const linux = await findFiles({ query: "paddle" }, { platform: "linux", home, env: process.env, run: async (file, args, options) => (file === "locate" ? { code: 0, stdout: "", stderr: "", timedOut: false } : runProcess(file, args, options)) });
+    expect(linux.text).toContain("IMG_4471 halyard paddle club card.txt");
+    const outside = await findFiles({ query: "quillmoor cabin", in_content: true }, { platform: "darwin", home, env: process.env,
+      run: async (file, args, options) => (file === "mdfind" ? { code: 0, stdout: "/Applications/Notes Helper.app/quillmoor.txt\n", stderr: "", timedOut: false } : runProcess(file, args, options)) });
+    expect(outside).toEqual({ text: [join(home, "Library/Mobile Documents/com~apple~CloudDocs/Trips/oct-weekend.md"), "/Applications/Notes Helper.app/quillmoor.txt"].join("\n") });
+    rmSync(home, { recursive: true, force: true });
   });
   it("asks Windows Search with the query in the environment, then where.exe", () => {
     const [search, where] = findInvocations("it's 50%", { content: false, limit: 20, platform: "win32", home: "C:\\Users\\a" });
@@ -127,7 +177,7 @@ describe("find_files", () => {
     const found = await findFiles({ query: "invoice" }, { platform: "darwin", home: "/Users/a", hidden: ["/Users/a/Library/Application Support/dusk"], env: {}, run });
     expect(found).toEqual({ text: "/Users/a/Documents/invoice.pdf" });
     const none = await findFiles({ query: "zzz" }, { platform: "darwin", home: "/Users/a", env: {}, run: async () => ({ code: 0, stdout: "", stderr: "", timedOut: false }) });
-    expect(none).toEqual({ text: "No files matched \"zzz\"." });
+    expect(none.text).toMatch(/^No files matched "zzz"\./);
   });
   it("falls back to where.exe when Windows Search cannot run", async () => {
     const calls: string[] = [];
@@ -153,5 +203,18 @@ describe("the MCP server", () => {
     const called = await handleHostShellRpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "find_files", arguments: { query: "b" } } }, options);
     expect(called).toEqual({ jsonrpc: "2.0", id: 2, result: { content: [{ type: "text", text: "/a/b.txt" }] } });
     expect(await handleHostShellRpc({ jsonrpc: "2.0", method: "notifications/initialized" }, options)).toBeUndefined();
+  });
+  it("tells a model on Windows to write PowerShell, with a PowerShell example, and one elsewhere a sh one", async () => {
+    const described = (platform: NodeJS.Platform) => {
+      const run = hostShellTools(platform)[0]!;
+      return `${run.description} ${run.inputSchema.properties.command.description}`;
+    };
+    expect(described("win32")).toContain("write PowerShell, not bash");
+    expect(described("win32")).toContain("Get-ChildItem ~\\Downloads | Select-Object -First 50");
+    expect(described("win32")).not.toMatch(/ls -la|\| head/);
+    expect(described("darwin")).toContain("ls -la ~/Downloads | head -50");
+    expect(described("linux")).not.toContain("PowerShell");
+    const listed = await handleHostShellRpc({ jsonrpc: "2.0", id: 1, method: "tools/list" }, { cwd: tmpdir(), hidden: [], platform: "win32", env: {} });
+    expect(JSON.stringify(listed)).toContain("write PowerShell, not bash");
   });
 });

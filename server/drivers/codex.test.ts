@@ -7,7 +7,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { ownMcpHttpRoutes } from "../routes/own-mcp-http.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join, sep } from "node:path";
+import { delimiter, dirname, join, sep } from "node:path";
+import { registerPathDir, resetPathCacheForTests } from "../env-path.ts";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -1917,6 +1918,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(seen.argv.some((arg: string) => arg.startsWith("web_search="))).toBe(false);
     expect(seen.argv).toContain('plugins={ "browser@openai-bundled" = { enabled = false }, "computer-use@openai-bundled" = { enabled = false }, "unified-computer-use@openai-bundled" = { enabled = false } }');
     expect(seen.argv).toContain('mcp_servers.duskbot_browser.default_tools_approval_mode="auto"');
+    expect(seen.argv, "dusk bot answers a browser call within 130 s").toContain("mcp_servers.duskbot_browser.tool_timeout_sec=140");
     expect(seen.argv).not.toContain('mcp_servers.duskbot_browser.default_tools_approval_mode="approve"');
     expect(seen.argv.join(" "), "OpenAI reserves the browser namespace").not.toContain("mcp_servers.browser.");
     expect(seen.argv.join(" ")).toContain("/tmp/harness-mcp-proxy.js");
@@ -3308,6 +3310,28 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(instance.models.options.map((model) => model.id)).toContain("gpt-6.1-sol");
   });
 
+  it.skipIf(process.platform === "win32")("reads the model list from the copy an update put first on PATH, with no restart", async () => {
+    const wrapper = (dir: string, updated: boolean) => {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "codex"), `#!/bin/sh\n${updated ? "FAKE_CODEX_UPDATED_FILE=/ " : "unset FAKE_CODEX_UPDATED_FILE; "}exec '${process.execPath}' --experimental-strip-types '${FAKE_CLI}' "$@"\n`, { mode: 0o755 });
+    };
+    wrapper(join(scratch, "image"), false);
+    wrapper(join(scratch, "app"), true);
+    vi.stubEnv("PATH", `${join(scratch, "image")}${delimiter}${process.env.PATH ?? ""}`);
+    resetPathCacheForTests();
+    try {
+      await create({ cli: "codex", environment: { FAKE_CODEX_VERSION: "codex-cli 0.155.1" } });
+      expect((await instance.snapshot()).version).toBe("codex-cli 0.155.1");
+      expect(instance.models.options.map((model) => model.id)).not.toContain("gpt-6.1-sol");
+      registerPathDir(join(scratch, "app"));
+      expect((await instance.snapshot()).version).toBe("codex-cli 0.162.1");
+      expect(instance.models.options.map((model) => model.id)).toContain("gpt-6.1-sol");
+    } finally {
+      vi.unstubAllEnvs();
+      resetPathCacheForTests();
+    }
+  });
+
   it("passes -c overrides from the CLI setting after app-server, before its own", async () => {
     const dump = join(scratch, "cli-overrides.json"); process.env.FAKE_CODEX_DUMP = dump;
     await create({
@@ -3404,7 +3428,8 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
       expect(message.startsWith(CODEX_SIGN_IN_EXPIRED)).toBe(true);
       expect(message).toContain("workspace routing discovery unauthorized (401)");
       expect(message).not.toContain("Reconnecting");
-      expect(done).toMatchObject({ ok: false, stopReason: message });
+      // a sign-out, so the host never sends the turn to another model of the same signed-out Codex as "did not answer"
+      expect(done).toMatchObject({ ok: false, stopReason: "auth_required" });
       expect(recorder.events.some((e) => e.type === "turn.retrying")).toBe(false);
       const refused = await instance.snapshot();
       expect(refused).toMatchObject({ state: "available", authenticated: false, reason: CODEX_SIGN_IN_EXPIRED });
@@ -3591,12 +3616,17 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
       expect((custom.errors[0] as { message: string }).message).toMatch(/^You've hit your usage limit\. Upgrade to Pro/);
     });
 
-    it("hides a model OpenAI refuses for Codex's ChatGPT sign-in, and runs that bot's next turn on Codex's default model", async () => {
+    it("hides a model OpenAI refuses for Codex's ChatGPT sign-in, answers that turn on Codex's default model with no line, and the next one too", async () => {
       await create({ environment: { ...signedIn(), FAKE_CODEX_LUNA: "1", FAKE_CODEX_REFUSE_MODELS: "gpt-6-luna" } });
       expect(instance.models.options.map((model) => model.id)).toContain("gpt-6-luna");
+      const turns = join(scratch, "own-refused-turns.txt");
+      process.env.FAKE_CODEX_TURN_MODELS = turns;
       const refused = await runTurn("t-own-refused", "gpt-6-luna");
-      expect(refused.done).toMatchObject({ ok: false });
-      expect(refused.errors).toHaveLength(1);
+      delete process.env.FAKE_CODEX_TURN_MODELS;
+      // D-MK7E: gpt-6.2-sol on codex-cli 0.160 failed the turn with "Try again"; the person never needs to see it
+      expect(refused).toMatchObject({ done: { ok: true }, errors: [] });
+      expect(readFileSync(turns, "utf8").trim().split("\n")).toEqual(["gpt-6-luna", "gpt-fake-default"]);
+      expect(recorder.events.filter((e) => e.type === "turn.retrying" && e.turnId === refused.done.turnId)).toEqual([]);
       expect(instance.models.options.map((model) => model.id)).not.toContain("gpt-6-luna");
       expect(instance.models.default).toBe("gpt-fake-default");
       expect(instance.refusedModels?.()).toEqual(["gpt-6-luna"]);
@@ -3609,18 +3639,32 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
       expect(seen.calls.find((call: { method: string }) => call.method === "thread/start").params.model).toBe("gpt-fake-default");
     });
 
+    it("says a refused model once when Codex's default model is refused too, after one unseen try on it", async () => {
+      await create({ environment: { ...signedIn(), FAKE_CODEX_LUNA: "1", FAKE_CODEX_REFUSE_MODELS: "gpt-6-luna,gpt-fake-default" } });
+      const turns = join(scratch, "own-refused-both.txt");
+      process.env.FAKE_CODEX_TURN_MODELS = turns;
+      const refused = await runTurn("t-own-refused-both", "gpt-6-luna");
+      delete process.env.FAKE_CODEX_TURN_MODELS;
+      expect(readFileSync(turns, "utf8").trim().split("\n")).toEqual(["gpt-6-luna", "gpt-fake-default"]);
+      expect(refused.done).toMatchObject({ ok: false });
+      expect(refused.errors).toHaveLength(1);
+      expect((refused.errors[0] as { message: string }).message).toMatch(/^This ChatGPT account can't use this model in Codex/);
+      expect(refused.errors[0]).not.toHaveProperty("setup");
+    });
+
+    // the model the turn was first sent on; a refused one then carries on, unseen, on Codex's default model
     const threadStartModel = async (threadId: string) => {
-      const dump = join(scratch, `${threadId}.json`);
-      process.env.FAKE_CODEX_DUMP = dump;
+      const turns = join(scratch, `${threadId}.turns.txt`);
+      process.env.FAKE_CODEX_TURN_MODELS = turns;
       const turn = await runTurn(threadId, "gpt-6-luna");
-      const seen = JSON.parse(readFileSync(dump, "utf8"));
-      return { turn, model: seen.calls.find((call: { method: string }) => call.method === "thread/start").params.model };
+      delete process.env.FAKE_CODEX_TURN_MODELS;
+      return { turn, model: readFileSync(turns, "utf8").split("\n")[0] };
     };
 
     it("lists a refused model again after Codex's own sign-out, and stops sending its turns to the default model", async () => {
       await create({ environment: { ...signedIn(), FAKE_CODEX_LUNA: "1", FAKE_CODEX_REFUSE_MODELS: "gpt-6-luna" } });
       const refused = await runTurn("t-own-refused-out", "gpt-6-luna");
-      expect((refused.errors[0] as { message: string }).message).toMatch(/^This ChatGPT account can't use this model in Codex/);
+      expect(refused).toMatchObject({ done: { ok: true }, errors: [] });
       expect(instance.models.options.map((model) => model.id)).not.toContain("gpt-6-luna");
 
       await instance.signOut!();
@@ -4010,6 +4054,21 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
       // The thread's running total grew to 14/6/8: the turn reports only its own share.
       expect(second.completed).toMatchObject({ ok: true, usage: { input: 7, output: 3, cachedInput: 4 } });
       expect(recorder.events.filter((event) => event.type === "session.started")).toHaveLength(2);
+    });
+
+    it("retires an idle app-server once the Codex CLI reports a new version", async () => {
+      const updatedFile = join(scratch, "updated-warm");
+      await create({ mode: "resume", environment: { FAKE_CODEX_VERSION: "codex-cli 0.160.0", FAKE_CODEX_UPDATED_FILE: updatedFile } });
+      expect((await instance.snapshot()).version).toBe("codex-cli 0.160.0");
+      process.env.FAKE_CODEX_DUMP = join(scratch, "warm-updated.json");
+      const first = await turn("t-warm-updated");
+      expect(processIsAlive(first.seen.pid)).toBe(true);
+      writeFileSync(updatedFile, "");
+      expect((await instance.snapshot()).version).toBe("codex-cli 0.162.1");
+      await expect.poll(() => processIsAlive(first.seen.pid), { timeout: 5_000 }).toBe(false);
+      const second = await turn("t-warm-updated", { resumeCursor: "codex-thread-1" });
+      expect(second.completed).toMatchObject({ ok: true });
+      expect(second.seen.pid).not.toBe(first.seen.pid);
     });
 
     it("starts a new app-server and resumes the thread when the warm one died while idle", async () => {

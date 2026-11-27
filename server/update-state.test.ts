@@ -63,7 +63,8 @@ describe("update state", () => {
     expect((await runSelfTest({ health: () => true, browser: async () => false }, null)).ok).toBe(true);
   });
 
-  it("opens a page in a headless browser binary, in a throwaway profile", async () => {
+  // the stand-in browser below is a shell script, which Windows cannot run as an executable
+  it.skipIf(process.platform === "win32")("opens a page in a headless browser binary, in a throwaway profile", async () => {
     const dir = tmp(), bin = join(dir, "chrome");
     writeFileSync(bin, `#!/bin/sh\nfor a in "$@"; do case "$a" in --user-data-dir=*) [ -d "\${a#--user-data-dir=}" ] || exit 3 ;; esac; done\nfor a in "$@"; do last="$a"; done\nprintf '<html><body>%s</body></html>' "$last" | sed 's/.*<p>//'\n`);
     chmodSync(bin, 0o755);
@@ -72,7 +73,7 @@ describe("update state", () => {
     expect(await browserPageCheck(async () => join(dir, "missing"))()).toBe(false);
   });
 
-  it("keeps the self-test's browser off the macOS keychain, so no keychain dialog appears", async () => {
+  it.skipIf(process.platform === "win32")("keeps the self-test's browser off the macOS keychain, so no keychain dialog appears", async () => {
     const dir = tmp(), bin = join(dir, "chrome"), args = join(dir, "args");
     writeFileSync(bin, `#!/bin/sh\nprintf '%s\\n' "$@" > "${args}"\nprintf '%s' dusk-selftest-page\n`);
     chmodSync(bin, 0o755);

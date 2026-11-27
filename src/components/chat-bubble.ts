@@ -42,8 +42,9 @@ export function emojiOnly(text: string | undefined): boolean {
 /** An emoji-only message's type; nested prose inherits it while floating reactions and notes keep their own size. */
 export const EMOJI_ONLY_TEXT = "text-ink text-[40px] leading-[48px]";
 
-/** At most 560 wide, 80% of the column, and always 82px short of it, so a reply never meets the far edge. */
-export const SIMPLE_BUBBLE_MAX = "max-w-[min(var(--chat-bubble-max),var(--chat-bubble-pct),calc(100%-82px))]";
+/** At most 560 wide, 80% of the column, and always 82px short of it (118px on a touch screen, where the actions beside
+ * it are 36px buttons), so a reply never meets the far edge and its actions never pass it. */
+export const SIMPLE_BUBBLE_MAX = "max-w-[min(var(--chat-bubble-max),var(--chat-bubble-pct),calc(100%-82px))] pointer-coarse:max-w-[min(var(--chat-bubble-max),var(--chat-bubble-pct),calc(100%-118px))]";
 
 /** A plain-text bot bubble drawn outside the transcript's own Bubble: a widget's text fallback or a row that failed. */
 export function plainBotBubble(): string {

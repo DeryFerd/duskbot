@@ -18,6 +18,8 @@ const SOURCES = ["apps/dashboard/server", "apps/cloud-service/src", "server"];
 const SENDERS: Record<string, "customer" | "admin"> = {
   "apps/dashboard/server/app.ts": "customer",
   "apps/dashboard/server/auth/index.ts": "customer",
+  // the desktop download link, only to the address the visitor typed, capped per network, address and day
+  "apps/dashboard/server/email/desktop-link.ts": "customer",
   // paid, spike, digest (ALERT_KINDS below)
   "apps/dashboard/server/admin/alerts.ts": "admin",
   // outages: "something's wrong" once per incident, "back to normal" once, and the daily email of ones the caps held back
@@ -38,7 +40,7 @@ function files(dir: string): string[] {
     return statSync(path).isDirectory() ? files(path) : /\.(ts|mjs|js)$/.test(name) && !/\.test\.|\.spec\./.test(name) ? [path] : [];
   });
 }
-const sources = SOURCES.flatMap(dir => files(join(ROOT, dir))).map(path => ({ path: relative(ROOT, path), text: readFileSync(path, "utf8") }));
+const sources = SOURCES.flatMap(dir => files(join(ROOT, dir))).map(path => ({ path: relative(ROOT, path).replaceAll("\\", "/"), text: readFileSync(path, "utf8") }));
 
 describe("admin and ops email triggers", () => {
   afterEach(() => vi.restoreAllMocks());

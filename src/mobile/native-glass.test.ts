@@ -629,6 +629,20 @@ describe("useNativeGlass", () => {
     expect(glass.update.mock.lastCall![0].composer?.gap).toBe(36);
   });
 
+  it("measures the composer's gap from where the page rests now, when the home indicator's inset lands after the chat opened", () => {
+    const { glass, $ } = mount();
+    // a cold start into the chat: the first frames know no bottom inset, and the composer sits 12 over the screen's foot
+    $("chat").style.paddingBottom = "0px";
+    place($("shell"), 10, 784, 370, 48);
+    for (let i = 0; i < 31; i += 1) runFrame();
+    expect(glass.update.mock.lastCall![0].composer?.gap).toBe(12);
+    // the inset settles with no resize: the page's layout rises by it, and the native composer must rise with it, not twice
+    $("chat").style.paddingBottom = "34px";
+    place($("shell"), 10, 750, 370, 48);
+    for (let i = 0; i < 31; i += 1) runFrame();
+    expect(glass.update.mock.lastCall![0].composer?.gap).toBe(12);
+  });
+
   it("raises the native field when the page focuses its own", () => {
     const { glass, $ } = mount();
     runFrame();

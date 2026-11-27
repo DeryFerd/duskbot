@@ -17,7 +17,7 @@ describe("SlackThreadMap", () => {
     const loaded = new SlackThreadMap(dir);
     expect(loaded.conversation("bot:ch:C123:1.0")).toEqual(conversation());
     expect(loaded.posted("bot", "C123", "2.0")).toEqual({ threadId: "thread", messageId: "message", at: 2 });
-    expect(statSync(join(dir, SLACK_THREADS_FILE)).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(join(dir, SLACK_THREADS_FILE)).mode & 0o777).toBe(0o600);
   });
   it("keeps the newest 5000 by at", () => {
     const dir = directory(), path = join(dir, SLACK_THREADS_FILE);

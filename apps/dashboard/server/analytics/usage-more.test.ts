@@ -79,6 +79,19 @@ describe("the deeper usage answer", () => {
     expect(m.setup.account.errors).toEqual([{ key: "wrong_code", count: 1 }]);
   });
 
+  it("counts someone the app sent as having the app, since the website skips its app step for them", () => {
+    const m = moreOf({ days: [dayOf(NOW)], daily: new Map(), people: [], snapshots: [], routines: [], from: NOW - DAY, to: NOW + DAY, now: NOW, accounts: [],
+      billing: { checkouts: [], subscriptions: [], feedback: [] },
+      events: [
+        // two from the app, past the plans; one from the website who saw the app step; one from the website who stopped at the plans
+        ...["acct_p", "acct_q"].flatMap(id => [event("onboarding_step", { step: "name", from: "app" }, id), event("onboarding_step", { step: "plan", from: "app" }, id)]),
+        ...["name", "plan", "app"].map(step => event("onboarding_step", { step }, "acct_r")),
+        event("onboarding_step", { step: "name" }, "acct_s"), event("onboarding_step", { step: "plan" }, "acct_s"),
+      ] });
+    expect(m.setup.onboarding.map(row => [row.step, row.reached])).toEqual([["name", 4], ["plan", 4], ["app", 3], ["done", 0]]);
+    expect(m.setup.onboarding.find(row => row.step === "app")?.fromApp).toBe(2);
+  });
+
   it("joins the app's account step, the website's sign-in and onboarding, and the way back into one funnel with times", () => {
     const T = NOW - 3_600_000, s = 1000;
     const app = (props: StoredEvent["props"], at: number, accountId: string | null = null): StoredEvent => ({ ...event("app_action", props, accountId, T + at * s), ctx: { install: "inst_one", session: "app_ses_1" } });
@@ -133,5 +146,17 @@ describe("tool failures", () => {
       { tool: "computer.click", error: "schema_invalid", turns: 2, calls: 10, people: 1 },
     ]);
     expect(m.reliability.toolErrors.find(row => row.kind === "tool" && row.key === "browser")).toMatchObject({ errors: 1 });
+  });
+
+  it("counts turns whose commands only exited non-zero apart from the terminal's errors", async () => {
+    const store = memoryUsageStore(() => NOW);
+    const usage = createUsage({ store, now: () => NOW, optedOut: () => false });
+    const exited = { tools: ["terminal" as const], toolFailures: [{ tool: "terminal", error: "exit_code" as const, count: 3 }] };
+    await usage.ingest("acct_a", "ws_1", { turns: [turn(exited), turn(exited), turn({ tools: ["terminal"], failedTools: ["terminal"], toolFailures: [{ tool: "terminal", error: "not_found", count: 1 }, { tool: "terminal", error: "exit_code", count: 1 }] }), turn({ tools: ["terminal"] })], runs: [] });
+    const days = [dayOf(NOW)], daily = new Map((await store.daily(days[0]!, days[0]!)).map(row => [row.day, row.c]));
+    const m = moreOf({ days, daily, people: await store.people(days[0]!, days[0]!), snapshots: [], routines: [], from: NOW - DAY, to: NOW + DAY, now: NOW, accounts: [], events: [],
+      billing: { checkouts: [], subscriptions: [], feedback: [] } });
+    expect(m.reliability.toolErrors.find(row => row.kind === "tool" && row.key === "terminal")).toEqual({ kind: "tool", key: "terminal", errors: 1, turns: 4, rate: 0.25, expected: 2 });
+    expect(m.reliability.toolFailures.map(row => row.error)).toEqual(["not_found", "exit_code"]);
   });
 });

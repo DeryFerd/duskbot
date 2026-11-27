@@ -46,6 +46,12 @@ export function sliceSize({ waiting, growth, indexedTotal, lastCohortSize }) {
 // app action pages index slower than written pages, so each lane is gated on its own last cohort (cohort "lane", default editorial)
 export const laneOf = (c) => c.lane || 'editorial';
 export const lastInLane = (cohorts, next) => cohorts.filter((c) => c.released && c !== next && laneOf(c) === laneOf(next)).at(-1) || null;
+// the next cohort to go out: the first not yet released with queued pages. one with a hold (its reason, set by hand in
+// seo/release.json) waits whatever the gate says, until the hold is taken out
+export function nextCohort(cohorts, queued) {
+  const waiting = cohorts.filter((c) => !c.released && queued(c.id) > 0);
+  return { next: waiting.find((c) => !c.hold) || null, held: waiting.filter((c) => c.hold) };
+}
 export const frozen = (growth, today) => growth.freeze.find((f) => today >= f.from && today <= f.until) || null;
 
 async function takeSnapshot(urls, today) {
@@ -67,8 +73,10 @@ export async function run({ apply = false, today = localDay(), snapshotFile, sit
   const released = release.cohorts.filter((c) => c.released);
   // a cohort that started going out finishes first, slice by slice, without a new gate
   const going = released.find((c) => inCohort(c.id, 'queued').length);
-  const next = going || release.cohorts.find((c) => !c.released && inCohort(c.id, 'queued').length);
-  if (!next) return log('nothing queued: every cohort is out. add pages (seo/WRITING.md) and a cohort to seo/release.json'), { state: 'idle' };
+  const { next: waitingNext, held } = nextCohort(release.cohorts, (id) => inCohort(id, 'queued').length);
+  for (const c of held) log(`hold: cohort ${c.id} is held (${c.hold})`);
+  const next = going || waitingNext;
+  if (!next) return held.length ? { state: 'hold', why: held.map((c) => `cohort ${c.id}: ${c.hold}`).join('; ') } : (log('nothing queued: every cohort is out. add pages (seo/WRITING.md) and a cohort to seo/release.json'), { state: 'idle' });
   const last = lastInLane(release.cohorts, next);
   const freeze = frozen(growth, today);
   if (freeze) return log(`hold: release freeze until ${freeze.until} (${freeze.why})`), { state: 'freeze' };

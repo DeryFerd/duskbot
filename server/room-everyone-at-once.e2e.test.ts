@@ -158,6 +158,29 @@ describe.skipIf(process.platform === "win32")("a room message goes to everyone a
       rmSync(dir, { recursive: true, force: true });
     }
   }, 120_000);
+  it("gives a member that asks a teammate who answered while it was still answering one closing turn, so the person gets the answer", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "dusk-room-asked-late-"));
+    const markers = join(dir, "markers.json");
+    // the closing turn's note first; then Ada answers at once and Ben, slower, asks her for what she already said
+    writeFileSync(markers, JSON.stringify({
+      "answered what you handed them": "Backwards: 4837.",
+      "as Ada.": "7384",
+      "as Ben.": `${"Working it out. ".repeat(8)}@Ada what number did you get?`,
+    }));
+    const h = await harness({ FAKE_CLAUDE_MARKER_REPLIES: markers, FAKE_CLAUDE_STREAM_CADENCE: "4:25" });
+    try {
+      const { bots, roomId, threadId } = await h.team(["Ada", "Ben"]);
+      const [ada, ben] = bots;
+      await h.send(roomId, "@Ada pick a 4-digit number. @Ben write Ada's number backwards");
+      await expect.poll(async () => (await h.replies(threadId)).map((reply) => reply.text?.trim()).includes("Backwards: 4837."), POLL).toBe(true);
+      await expect.poll(async () => (await h.room(roomId)).working, POLL).toBe(false);
+      const replies = await h.replies(threadId);
+      expect(replies.map((reply) => reply.from?.botId)).toEqual([ada!.id, ben!.id, ben!.id]);
+    } finally {
+      await h.fixture.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 120_000);
   it("runs \"@X …, then @Y …\" in order: Y starts only once X's reply has landed, so it can build on it", async () => {
     const gateDir = mkdtempSync(join(tmpdir(), "dusk-room-chain-"));
     const gate = join(gateDir, "finish.gate");

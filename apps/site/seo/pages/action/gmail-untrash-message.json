@@ -12,7 +12,7 @@
     "ai restore email from trash"
   ],
   "answer": "**bring back the email you meant to keep.** tell the bot which gmail account, who sent it and roughly when. it finds the message in trash and restores the match you choose. restoration needs write access and does not automatically pause. ask to see the subject and date first so a familiar title does not pick the wrong email.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -43,7 +43,7 @@
     "toolkit": "gmail",
     "slug": "GMAIL_UNTRASH_MESSAGE"
   },
-  "what": "**you emptied a newsletter folder and took the flight confirmation with it.** the bot can search trash and restore that message. give it the account, sender, date or subject so it can separate similar results.\n\nrestoring removes the email from trash. this action has no destination-folder choice, so you may still need to find where gmail put it.\n\npermanently deleted mail is beyond this action’s reach.",
+  "what": "**you emptied a newsletter folder and took the flight confirmation with it.** the bot can search trash and restore that message. give it the account, sender, date or subject so it can separate similar results.\n\nrestoring undoes [a move to trash](/integrations/gmail/move-to-trash). this action has no destination-folder choice, so you may still need to find where gmail put it. ask the bot to [search your mail](/integrations/gmail/fetch-emails) afterwards.\n\npermanently deleted mail is beyond this action’s reach.",
   "uses": [
     "**rescue a travel confirmation.** get it back before checking the ticket number.",
     "**undo a bad cleanup.** restore the customer approval you still need.",
@@ -105,10 +105,18 @@
     {
       "mistake": "expecting a chosen folder",
       "fix": "restore first, then ask separately if you need the email moved."
+    },
+    {
+      "mistake": "asking it to restore a thread it deleted for good",
+      "fix": "permanent deletion skips trash. nothing here can bring it back."
     }
   ],
   "tip": {
     "text": "searching trash can stay read only until you have found the email you want."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "trash: 3 emails titled \"your booking\".\nonly the 2 june one from caradoc air holds the flight.",
+    "after": "restored: the 2 june caradoc air email.\nthe other two stay in trash.\nout of trash, though this action picks no folder."
+  }
 }

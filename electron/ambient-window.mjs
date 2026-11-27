@@ -213,6 +213,8 @@ export function createAmbientWindow({ BrowserWindow, surface, url, level, platfo
       if (live() && loaded) win.webContents.send(channel, payload);
     },
     interactive: () => interactive,
+    /** Where the window is now, as the system has it, or null; never while it is in use or closing, when it stays put. */
+    at: () => (live() && !interactive && !settling && !held ? win.getBounds() : null),
     owns: contents => live() && contents === win.webContents,
     shown: () => live(),
     close,

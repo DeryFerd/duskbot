@@ -1,6 +1,6 @@
 import { blankCode, offersSkillCommand } from "../../shared/skill-command";
 
-export type ComposerSlashCommandId = "goal" | "learn" | "setup";
+export type ComposerSlashCommandId = "goal" | "learn" | "setup" | "new" | "compact";
 
 export type ComposerSlashCommand =
   | { kind: "command"; id: ComposerSlashCommandId; label: `/${ComposerSlashCommandId}`; description: string }
@@ -35,7 +35,12 @@ export function slashMenuRows(
   const own = skills.filter((skill) => !(skill.kind === "skill" && skill.fromTools));
   const tools = skills.filter((skill) => skill.kind === "skill" && skill.fromTools);
   const matching = (rows: readonly ComposerSlashCommand[]) => rows.filter((row) => slashCommandMatches(row, query));
-  if (query || moreOpen || !tools.length) return [...matching(commands), ...matching(own), ...matching(tools)];
+  if (query || moreOpen || !tools.length) {
+    const rows = [...matching(commands), ...matching(own), ...matching(tools)];
+    // a name the search starts comes before a row that only mentions it, each group keeping its order
+    const named = (row: ComposerSlashCommand) => Boolean(query) && row.id.startsWith(query.toLowerCase());
+    return [...rows.filter(named), ...rows.filter((row) => !named(row))];
+  }
   return [...commands, ...own, { kind: "more", id: "more", count: tools.length, ...moreLabel(tools.length) }];
 }
 

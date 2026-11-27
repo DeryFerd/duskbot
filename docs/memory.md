@@ -101,8 +101,9 @@ with **Added by your bots** (remove any learned fact; it is not learned
 again) and **Replaced or merged** (restore any). A bot's own memory is under
 **What it remembers** in its settings: edit any file, see every change in the
 journal, undo one. Saying "forget that" in a chat removes exactly that fact
-from both; when your words could mean facts about different people ("forget
-Pune" while a friend lives there too), the bot asks which.
+from both, in every one of your bots; when your words could mean facts about
+different people ("forget Pune" while a friend lives there too), the bot asks
+which.
 
 **Sizes at a glance.**
 
@@ -641,11 +642,18 @@ colleague who moved there), nothing is removed and the bot gets the candidates
 with their ids to ask which one was meant. The facts named go, and every copy
 of them: from `MEMORY.md`, every topic file and the archive, keeping their
 headers, and, when the person asked in their own 1:1 chat, from **About me**,
-learned or written. A note never ends up as a date with no words. What was
+learned or written, and from every other bot's memory of that person too
+(notes, topic files and daily log lines that name it). Off a Team Cloud that is
+every bot; on a Team Cloud only that member's own memory with each bot, never
+the team's shared notes, a room's or another member's; a forget asked in a room
+stays in the asking bot. A note never ends up as a date with no words. What was
 forgotten is kept in `profile-learned.json` so no bot learns it again until the
 person asks a bot to remember it once more: the words themselves when they
 asked with two or more ("forget short answers"), only the facts removed when
-they named one word. The bot confirms in one plain line and names no files.
+they named one word. The bot confirms in one plain line and names no files;
+its tool result says where the fact went (its memory, which other bots', About
+me, how many daily log lines) and that chats still show what was said in them:
+forget never edits a conversation.
 
 **Who may write what.** Each turn knows where its words came from: the
 person, another bot (a hand-off or `coordinate_bots`), or an automation (a

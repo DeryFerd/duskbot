@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
+import { runInNewContext, Script } from "node:vm";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { agentBrowserArguments, needsPageSelector, pageSelectorOf, pickPageSelector, PICK_ATTRIBUTE, resolveSelectorScript } from "./agent-browser-args.ts";
+import { agentBrowserArguments, needsPageSelector, PAGE_SCRIPT_MS, pageScript, pageSelectorOf, pickPageSelector, PICK_ATTRIBUTE, resolveSelectorScript } from "./agent-browser-args.ts";
 import { agentBrowserStep } from "./agent-browser-batch.ts";
 
 describe("arguments as agent-browser 0.37.0 takes them", () => {
@@ -120,5 +121,41 @@ describe("a call with a selector agent-browser cannot read", () => {
     const untouched = async () => { throw new Error("no page read for CSS"); };
     await expect(pickPageSelector(click("#go"), untouched, () => 60_000)).resolves.toEqual({ params: click("#go") });
     await expect(pickPageSelector(click("//a"), untouched, () => 60_000)).resolves.toEqual({ params: click("xpath=//a") });
+  });
+});
+
+describe("a page script as models write it", () => {
+  // agent-browser 0.37.0 answered each of these with "Evaluation error: SyntaxError: ..." or `{}`, or waited 120 s
+  const run = (script: string, page: Record<string, unknown> = {}) =>
+    Promise.resolve(runInNewContext(pageScript(script), { document: { title: "Form" }, setTimeout, Promise, ...page }));
+
+  it.each([
+    ["return document.title", "Form"],
+    ["await new Promise(r => setTimeout(r, 5)); document.title", "Form"],
+    ["const t = await Promise.resolve(document.title);\nreturn t.length", 4],
+    ["const x = 'a;b';\nawait 0;\nx", "a;b"],
+    ["if (document.title) return 5", 5],
+  ])("%j runs", async (script, value) => {
+    expect(() => new Script(script)).toThrow(SyntaxError);
+    await expect(run(script)).resolves.toEqual(value);
+  });
+
+  it.each([["() => document.title", "Form"], ["async () => { return 2 }", 2]])("%j, a function's source, is called", async (script, value) => {
+    expect(typeof runInNewContext(script, {})).toBe("function");
+    await expect(run(script)).resolves.toEqual(value);
+  });
+
+  it("leaves a script that already runs as it is", () => {
+    for (const script of ["document.title", "const a = 1; a + 1", "[...document.querySelectorAll('a')].map(a => a.href)"]) expect(pageScript(script)).toBe(script);
+  });
+
+  it("gives up on a promise that never settles instead of holding the browser", async () => {
+    const quick = (fn: () => void, ms: number) => setTimeout(fn, ms === PAGE_SCRIPT_MS ? 5 : ms);
+    await expect(run("await new Promise(() => {}); 1", { setTimeout: quick })).rejects.toThrow(`the script did not finish within ${PAGE_SCRIPT_MS / 1_000} s`);
+    await expect(run("new Promise(() => {})", { setTimeout: quick })).rejects.toThrow(/did not finish/);
+  });
+
+  it("is rewritten on the way to agent_browser_eval", () => {
+    expect(agentBrowserArguments("agent_browser_eval", { expression: "return 1" })).toEqual({ script: pageScript("return 1") });
   });
 });

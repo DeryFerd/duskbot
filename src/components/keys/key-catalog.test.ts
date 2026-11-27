@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale, t } from "@/lib/i18n";
 import type { ConfigStatus } from "@/state/store";
 import { WORKSPACE_CREDENTIAL_ENV } from "../../../server/credential-env.ts";
 import { CREDENTIAL_TARGETS, credentialConfigPatch, desktopCredentialSlot, isConfigCredentialTarget } from "../../../shared/credential-request";
-import { KEY_CATALOG, KEY_SECTIONS, keyEntry, keyForInstance, keyMatches, looksLikeOtherKey, savedState, type KeyId } from "./key-catalog";
+import { KEY_CATALOG, KEY_SECTIONS, keyEntry, keyForInstance, keyMatches, looksLikeOtherKey, savedState, shownKeyEntry, type KeyId } from "./key-catalog";
 
 const NOT_A_PERSONS_KEY: Record<string, string> = {
   BOX_TOKEN: "retired credential kept in the engine secret denylist",
@@ -90,6 +90,17 @@ describe("every credential has one home on the keys page", () => {
     expect(savedState(live, config)).toEqual({ configured: true, last4: "a1b2" });
     expect(t(live.labelKey)).toBe("OpenAI key");
     expect(t(keyEntry("openai").labelKey)).toBe("OpenAI API key");
+  });
+
+  it("promises live calls on the OpenAI key only in a build that has them", () => {
+    try {
+      vi.stubEnv("VITE_DUSK_LIVE_CALL", "");
+      expect(t(shownKeyEntry("openai", null).purposeKey)).toBe("OpenAI's models, voices and speech to text");
+      vi.stubEnv("VITE_DUSK_LIVE_CALL", "1");
+      expect(t(shownKeyEntry("openai", null).purposeKey)).toBe("OpenAI's models and live calls");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("lists the speech services under voice, saying which listen and which speak, and reuses the OpenAI and Groq keys", () => {

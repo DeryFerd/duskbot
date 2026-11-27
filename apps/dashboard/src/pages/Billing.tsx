@@ -1,16 +1,15 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { APP_CLOUD_LINK, fromApp, markFromApp } from "../lib/from-app";
 import { setFlowNote } from "../lib/flow-note";
-import { Check, ChevronDown, Download } from "@/icons";
+import { Check, ChevronDown } from "@/icons";
 import { useCloud } from "../data/cloud";
 import { LoadError } from "./common";
 import type { BillingInterval, ChangeOffer, LicenseId, PlanCatalog, Selection } from "../data/contracts";
-import { bundleOf, desktopOf, gb, licenseMonthly, licenseOf, perMonthOn } from "../data/pricing";
+import { bundleOf, desktopOf, gb, licenseOf, perMonthOn } from "../data/pricing";
 import { useSession } from "../data/session";
 import { track } from "../lib/analytics";
-import { useCart } from "../data/quote";
-import { longDate, shortDate, usd } from "../lib/format";
-import { navigate, useLocation } from "../lib/router";
+import { longDate, shortDate } from "../lib/format";
+import { Link, navigate, useLocation } from "../lib/router";
 import { planIntent } from "../lib/site";
 import { Badge, Card, cx, PageHeader } from "../ui/kit";
 import { Mascot } from "../ui/Mascot";
@@ -20,17 +19,16 @@ import peaks from "../art/p-peaks.webp";
 import sky from "../art/p-sky.webp";
 import layers from "../art/wide-layers-plain.webp";
 import { SectionHead } from "../ui/table";
-import { regionName } from "./cloud-bits";
 import { AnimatePresence, EASE_OUT, m } from "../ui/motion";
 import { Digits } from "../ui/Digits";
 import { CancelFlow, CONTACT } from "./cancel-flow";
-import { BUSY, cartText, CHECKOUT_PLAN_KEY, IntervalToggle, LicenseSheet, money, OfferLine, offerAction, PlanSheet, planName, planSelection, priceText, sharedRegions, switchedToast, useInterval, Working, type PaidPlan } from "./plan-sheet";
+import { BUSY, CHECKOUT_PLAN_KEY, IntervalToggle, LicenseSheet, OfferLine, offerAction, PlanSheet, planName, planSelection, priceText, sharedRegions, switchedToast, useInterval, Working, type PaidPlan } from "./plan-sheet";
 import { CHECKOUT_SOON, checkoutDone, trialAction } from "./cloud-offer";
 import { PaymentNotice } from "./payment-notice";
+import { members, quiet } from "./plan-billing";
 
 export { IntervalToggle, useInterval };
 
-const members = (n: number) => `${n} ${n === 1 ? "member" : "members"}`;
 export type Tier = "free" | PaidPlan | "team";
 /** the cards the plans page shows: free next to the cloud plans until someone is on one, then team in its place */
 export const tiersFor = (onCloud: boolean): Tier[] => (onCloud ? ["starter", "pro", "team"] : ["free", "starter", "pro"]);
@@ -165,111 +163,6 @@ function Faq() {
   );
 }
 
-function Row({ k, children, action }: { k: string; children: ReactNode; action?: ReactNode }) {
-  return (
-    <div className="grid min-h-14 grid-cols-[160px_minmax(0,1fr)_auto] items-center gap-4 py-2.5 text-14 max-sm:grid-cols-[minmax(0,1fr)_auto] max-sm:gap-y-0.5">
-      <dt className="text-ink-3 max-sm:col-span-2 max-sm:text-13">{k}</dt>
-      <dd className="min-w-0 text-ink">{children}</dd>
-      {action ? <dd className="justify-self-end">{action}</dd> : <dd aria-hidden />}
-    </div>
-  );
-}
-
-const quiet = "text-link inline-flex h-9 items-center rounded-full px-1 text-14 disabled:opacity-45 max-sm:h-11";
-
-function YourBilling({ catalog, onLicense, onManage }: { catalog: PlanCatalog; onLicense(): void; onManage(): void }) {
-  const { billing, clouds, updateCard, changePlan, keep } = useCloud();
-  const { toast } = useSession();
-  const restart = useRestart(catalog);
-  const [keeping, setKeeping] = useState(false);
-  const [keepError, setKeepError] = useState<string | null>(null);
-  const sub = billing?.subscription ?? null;
-  const sel = sub?.selection ?? null;
-  const { cart } = useCart(sel, catalog);
-  const pm = billing?.paymentMethod;
-  const invoices = billing?.invoices ?? [];
-  const files = invoices.some((inv) => inv.url);
-  const lic = sel ? licenseOf(catalog, sel.license) : null;
-  const desk = sel && sel.desktop !== "none" ? desktopOf(catalog, sel.desktop) : null;
-  const plan = sel && desk ? catalog.bundles.find((b) => b.desktop === sel.desktop && b.id !== "team")?.name ?? desk.name : "free";
-  const renews = sub?.status === "past_due" && sub.fixBy ? null : sub ? (sub.cancelAt ? `ends ${longDate(sub.cancelAt)}` : `renews ${longDate(sub.currentPeriodEnd)}`) : null;
-  const applied = billing?.retention?.applied ?? null;
-  return (
-    <>
-      <section className="mt-16" aria-labelledby="billing-title">
-        <SectionHead id="billing-title">your billing</SectionHead>
-        <PaymentNotice />
-        <dl className="">
-          <Row k="plan" action={sub && !sub.cancelAt ? <button type="button" className={quiet} onClick={onManage}>manage subscription</button>
-            : sub && sub.status === "active" ? <button type="button" className={quiet} disabled={keeping} onClick={() => {
-              setKeeping(true); setKeepError(null);
-              keep().then(() => toast(`your plan renews again on ${longDate(sub.currentPeriodEnd)}`), (e: Error) => setKeepError(e.message)).finally(() => setKeeping(false));
-            }}>{keeping ? "restarting" : "restart plan"}</button>
-            : restart.ended ? <button type="button" className={quiet} disabled={restart.busy} onClick={restart.go}>{restart.busy ? "opening checkout" : "restart plan"}</button> : undefined}>
-            {restart.ended && <span className="num block truncate max-sm:whitespace-normal">{planName(catalog, restart.ended.bundle)}<span className="text-ink-3"> ended {longDate(restart.ended.endedAt)}</span></span>}
-            {restart.error && <span role="alert" className="block text-13 text-bad">{restart.error}</span>}
-            {keepError && sub?.cancelAt && <span role="alert" className="block text-13 text-bad">{keepError}</span>}
-            {!restart.ended && <span className="block truncate max-sm:whitespace-normal">{plan}{desk && sel ? <span className="text-ink-3">, {clouds?.[0]?.name ?? desk.name} in {regionName(catalog, sel.region)}</span> : <span className="text-ink-3">, your bots run on your mac</span>}</span>}
-            {sub && <span className="num block truncate text-13 text-ink-3 max-sm:whitespace-normal">{cart ? `${cartText(cart, sub.selection.interval)}${renews ? " · " : ""}` : ""}{renews}{applied && !sub.cancelAt ? ` · ${applied.percent}% off for ${applied.cycles} months` : ""}</span>}
-          </Row>
-          {sub?.scheduled && (
-            <Row k="next plan" action={<button type="button" className={quiet} disabled={keeping} onClick={() => {
-              setKeeping(true); setKeepError(null);
-              changePlan(sub.selection, 0).then(() => toast(`you stay on ${planName(catalog, sub.bundle)}`), (e: Error) => setKeepError(e.message)).finally(() => setKeeping(false));
-            }}>{keeping ? "keeping" : `keep ${planName(catalog, sub.bundle)}`}</button>}>
-              <span className="num block truncate max-sm:whitespace-normal">{planName(catalog, sub.scheduled.bundle)}<span className="text-ink-3">, from {longDate(sub.scheduled.at)} at {money(sub.scheduled.amountUsd)}{sub.scheduled.selection.interval === "year" ? "/yr" : "/mo"}</span></span>
-              <span className="block text-13 text-ink-3">{keepError ? <span role="alert" className="text-bad">{keepError}</span> : `you keep ${planName(catalog, sub.bundle)} and its machine until then. nothing more is charged.`}</span>
-            </Row>
-          )}
-          <Row k="license" action={<button type="button" className={quiet} onClick={onLicense}>{lic?.work ? "change" : "add"}</button>}>
-            {lic?.work && sel ? <span className="block truncate max-sm:whitespace-normal">{lic.name} license<span className="num text-ink-3">, {members(sel.members)} · {bundleOf(catalog, "pro")?.license === sel.license && bundleOf(catalog, "pro")?.desktop === sel.desktop ? "included with pro" : priceText(licenseMonthly(lic, sel.members), sel.interval, catalog)}</span></span> : <span className="text-ink-3">personal use, free</span>}
-          </Row>
-          <Row k="payment method" action={sub && sub.status !== "canceled" && !(sub.status === "past_due" && sub.fixBy) ? <button type="button" className={quiet} onClick={() => void updateCard()}>update</button> : undefined}>
-            {pm ? <span className="num">{pm.brand.toLowerCase()} •••• {pm.last4}<span className="text-ink-3">, expires {String(pm.expMonth).padStart(2, "0")}/{String(pm.expYear).slice(-2)}</span></span> : sub ? <span className="text-ink-3">the card you paid with</span> : <span className="text-ink-3">none yet. you add one at checkout.</span>}
-          </Row>
-        </dl>
-      </section>
-      <section className="mt-12" aria-labelledby="invoices-title">
-        <SectionHead id="invoices-title">invoices</SectionHead>
-        {invoices.length ? (
-          <ul className="">
-            {invoices.map((inv) => (
-              <li key={inv.id} className="flex min-h-12 items-center gap-4 text-14">
-                <span className="num w-16 shrink-0 text-ink-3">{shortDate(inv.date)}</span>
-                <span className="min-w-0 flex-1 truncate text-ink">{inv.description}</span>
-                {inv.status !== "paid" && <span className={cx("text-13", inv.status === "open" ? "text-warn" : "text-ink-3")}>{inv.status === "open" ? "due" : "refunded"}</span>}
-                <span className="num text-ink-2">{usd(inv.amountUsd)}</span>
-                {inv.url ? (
-                  <a href={inv.url} target="_blank" rel="noreferrer" aria-label={`download invoice ${inv.number}`} className="hover-ghost -me-2 grid size-9 shrink-0 place-items-center rounded-full text-ink-3 max-sm:size-11"><Download size={15} strokeWidth={1.5} /></a>
-                ) : files ? <span className="-me-2 size-9 shrink-0 max-sm:size-11" aria-hidden /> : null}
-              </li>
-            ))}
-          </ul>
-        ) : <p className="py-5 text-14 text-ink-3">invoices show up here after your first payment.</p>}
-      </section>
-    </>
-  );
-}
-
-/** after a plan ended: the same plan checks out again in one tap, and a cloud whose data is still kept comes back with it */
-function useRestart(catalog: PlanCatalog) {
-  const { billing, checkout } = useCloud();
-  const { toast } = useSession();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const ended = billing && !billing.subscription ? billing.ended ?? null : null;
-  const go = () => {
-    if (!ended || busy) return;
-    if (catalog.checkoutOpen === false) { setError(CHECKOUT_SOON); return; }
-    setBusy(true); setError(null);
-    track({ name: "plan_chosen", props: { plan: ended.bundle ?? "custom", period: ended.selection.interval } });
-    checkout({ source: "dash_billing", kind: "plan", selection: ended.selection, bundle: ended.bundle })
-      .then((ok) => { if (ok) { toast(checkoutDone(catalog)); navigate("/cloud"); } else setError("checkout didn't open. try again."); })
-      .finally(() => setBusy(false));
-  };
-  return { ended, busy, error, go };
-}
-
 /** a cloud plan from its card, with no sheet: no plan yet goes straight to checkout; a running plan stops once on the
  * card to show what the switch does (today's charge, the next one and when), then changes in place */
 function useDirectPlan(catalog: PlanCatalog | null, interval: BillingInterval) {
@@ -378,7 +271,7 @@ export function BillingPage() {
     else if (want === "team") setLicenseSheet({ license: "team", members: licenseOf(catalog, "team")?.includedMembers ?? 2 });
   }, [catalog, billing, want]);
 
-  if (error && (!catalog || !billing)) return <div><PageHeader title="plans and billing" /><LoadError error={error} retry={refresh} /></div>;
+  if (error && (!catalog || !billing)) return <div><PageHeader title="plans" /><LoadError error={error} retry={refresh} /></div>;
   // paid from the app: the browser's part is over, so it says so and points back, before the plans have even loaded
   if (fromApp() && returned && back === null && !stayed) return <AllSet onStay={() => setStayed(true)} />;
   if (!catalog || billing === null) return <PlansSkeleton />;
@@ -405,7 +298,7 @@ export function BillingPage() {
 
   return (
     <div>
-      <PageHeader title="plans and billing" sub="keep your bots working, laptop open or shut." action={<IntervalToggle value={interval} onChange={setIv} catalog={catalog} />} />
+      <PageHeader title="plans" sub="keep your bots working, laptop open or shut." action={<IntervalToggle value={interval} onChange={setIv} catalog={catalog} />} />
       {fromApp() && back !== "failed" && (paid || returned) && <OpenApp />}
       {back && !paid && <CheckoutBack back={back} onCheck={refresh} onRetry={retry} />}
       <div className="grid gap-3 lg:grid-cols-3">
@@ -425,7 +318,10 @@ export function BillingPage() {
 
 
       <Faq />
-      <YourBilling catalog={catalog} onLicense={() => openLicense()} onManage={manage} />
+      <section className="mt-10" aria-label="your billing">
+        <PaymentNotice />
+        <p className="text-13 text-ink-3">invoices, your payment method and your subscription are in <Link to="/account#billing" className="text-link">account, plan &amp; billing</Link>.</p>
+      </section>
 
       <AnimatePresence>{planSheet && <PlanSheet key="plan" source="dash_billing" start={planSheet} work={ownsLicense} onClose={() => setPlanSheet(null)} />}</AnimatePresence>
       <AnimatePresence>{licenseSheet && <LicenseSheet key="license" source="dash_license" start={licenseSheet} onClose={() => setLicenseSheet(null)} onNothingLeft={manage} />}</AnimatePresence>

@@ -88,7 +88,7 @@ The installer sets dusk bot up as `duskbot.service`, runs the link agent beside 
 
 The installer covers the service and the link, and AI sign-in happens in the app, so the rest of this guide is for paths B and C.
 
-Older guides used `npx duskbot login` and `npx duskbot serve --tunnel` here. Those sign in to a secure access service that dusk.bot does not run today, so they fail; use the installer above, or path B or C for a server you run by hand.
+Older guides used `duskbot login` and `duskbot serve --tunnel` here. Those sign in to a secure access service that dusk.bot does not run today, so they fail; use the installer above, or path B or C for a server you run by hand.
 
 ## Path B: your own domain, with Docker
 
@@ -121,7 +121,7 @@ One container for the server plus Caddy for HTTPS at `https://maus.example.com`.
 
    Caddy requests the certificate on its own; give it a minute. Then `https://maus.example.com` shows a page asking for a pairing code. That is correct: nothing works until you pair.
 
-In this path, every `npx duskbot …` command below is run inside the container instead:
+In this path, every `duskbot …` command below is run inside the container instead:
 
 ```sh
 docker compose exec dusk node dist-server/duskbot.js pair --label "My MacBook"
@@ -132,7 +132,7 @@ docker compose exec dusk node dist-server/duskbot.js pair --label "My MacBook"
 From the administrator shell, install Tailscale on the server and sign in (`curl -fsSL https://tailscale.com/install.sh | sh && sudo tailscale up`). Enable HTTPS certificates for your tailnet once in the admin console (DNS → HTTPS Certificates), then run this from the `maus` shell:
 
 ```sh
-npx duskbot serve --tailscale
+duskbot serve --tailscale
 ```
 
 Tailscale terminates HTTPS with its own certificate and the pairing link uses the server's MagicDNS name (`https://maus.tail1234.ts.net`). Only devices on your tailnet can reach it, which is a very good property for a server that can run tools.
@@ -144,17 +144,25 @@ the image. For path C, install Linux system libraries once from the
 administrator shell:
 
 ```sh
-sudo -H npx --yes duskbot browser install --with-deps
+sudo -H duskbot browser install --with-deps
 ```
 
 Then install the browser in the service account's home, from the `maus` shell:
 
 ```sh
-npx --yes duskbot browser install
+duskbot browser install
 ```
 
 The administrator's browser download is in a different home; it does not install
-the service account's browser. Both commands must finish successfully.
+the service account's browser. Both commands must finish successfully. If
+`duskbot` is installed in the service account's home (`~/.local/bin`), `sudo`
+cannot find it: run the exact command `duskbot browser install` prints, which
+names node and the CLI by path.
+
+On Linux ARM64, agent-browser's own installer fetches no Chrome, so dusk bot
+downloads its pinned Chrome for Testing for ARM64 into the data directory
+(`~/.duskbot/tools/chrome`) and `--with-deps` installs the libraries and `unzip`
+itself.
 
 On Ubuntu 24.04, AppArmor may also require [administrator sandbox setup](#ubuntu-2404-browser-sandbox).
 The one-click installer downloads the browser; it does not grant these OS permissions.
@@ -188,7 +196,7 @@ restarting or upgrading. The systemd example below includes `~/.local/bin` in PA
 `serve` already printed a pairing link and QR code when it started. For another device later:
 
 ```sh
-npx duskbot pair --label "Kitchen iPad"
+duskbot pair --label "Kitchen iPad"
 ```
 
 ```
@@ -208,19 +216,19 @@ Worth knowing: a code works **once** and expires after **five minutes**; the lin
 Every paired device is a session:
 
 ```sh
-npx duskbot sessions              # id, device, scope, last seen, expires
-npx duskbot sessions revoke ID    # signs that device out and closes its stream at once
-npx duskbot status                # what the server says about itself
+duskbot sessions              # id, device, scope, last seen, expires
+duskbot sessions revoke ID    # signs that device out and closes its stream at once
+duskbot status                # what the server says about itself
 ```
 
 ## Keep it running
 
-`npx duskbot serve` is a plain foreground process. For systemd (path C),
+`duskbot serve` is a plain foreground process. For systemd (path C),
 install a chosen release first, from the `maus` shell. Replace `X.Y.Z` with the
 published version you want to run:
 
 ```sh
-npm install --global --prefix "$HOME/.local" duskbot@X.Y.Z
+npm install --global --prefix "$HOME/.local" https://github.com/DuskBotAI/duskbot-releases/releases/download/vX.Y.Z/duskbot-X.Y.Z.tgz
 ```
 
 Stop the foreground server with Ctrl-C before enabling the service. From the
@@ -250,7 +258,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now duskbot
 journalctl -u duskbot -f            # the server's log
 ```
 
-Behind your own HTTPS reverse proxy, use `--public-url https://your.host` instead of `--tailscale`. `--no-pair` skips printing a code at every restart; mint one with `npx duskbot pair` when you need it. Docker (path B) restarts on its own (`restart: unless-stopped`).
+Behind your own HTTPS reverse proxy, use `--public-url https://your.host` instead of `--tailscale`. `--no-pair` skips printing a code at every restart; mint one with `duskbot pair` when you need it. Docker (path B) restarts on its own (`restart: unless-stopped`).
 
 Adjust the account, home, and PATH if yours differ; Node 24 must be available on
 that PATH. The service runs the installed CLI directly, so a restart uses the
@@ -275,13 +283,14 @@ If both are set, `TZ` wins and the app's zone is ignored.
 
   ```sh
   sudo systemctl stop duskbot
-  sudo -iu maus npm install --global --prefix /home/maus/.local duskbot@X.Y.Z
+  sudo -iu maus npm install --global --prefix /home/maus/.local https://github.com/DuskBotAI/duskbot-releases/releases/download/vX.Y.Z/duskbot-X.Y.Z.tgz
   sudo systemctl start duskbot
   ```
 
   Check that installation succeeded before starting. A service restart by itself
-  does not update the installed package. For foreground `npx` usage, specify the
-  desired release as `npx --yes duskbot@X.Y.Z serve --tailscale`.
+  does not update the installed package. `duskbot update --check` says whether a
+  newer release is out and what changed; `duskbot update` installs it (verified against
+  the signed release) for a server you started by hand.
 - **Path B:** `cd duskbot/deploy && docker compose pull dusk && docker compose up -d`.
 
 Routines and queued work survive a restart. A teammate turn running at that moment runs again once at the next start, told to check what it already did, and the bot that asked for it is told. A person's own turn and a running routine are not run again: the conversation says it was interrupted. Update between runs where you can.
@@ -346,7 +355,7 @@ Read this before putting anything else in front of the server.
 
 **A bot says the engine is not signed in.** Sign that engine in again on the server.
 
-**What does the server think it is?** `https://<address>/.well-known/duskbot/environment` is public and shows its id, label, version and capabilities; `npx duskbot status` prints the same on the server.
+**What does the server think it is?** `https://<address>/.well-known/duskbot/environment` is public and shows its id, label, version and capabilities; `duskbot status` prints the same on the server.
 
 **Something else.** `journalctl -u duskbot --since -10m` (or `docker compose logs dusk --tail 100`) shows the server's startup lines. Paste them with your question in the community channel.
 
@@ -363,6 +372,11 @@ copy. Find the service user's downloaded executable:
 ```sh
 find /home/maus/.agent-browser/browsers -type f -name chrome -executable
 ```
+
+On Linux ARM64 it is `/home/maus/.duskbot/tools/chrome/VERSION/linux-arm64/chrome-linux-arm64/chrome`
+instead: copy its `chrome-linux-arm64` directory to `/opt/duskbot-browser/chrome-VERSION`
+(`sudo cp -R /home/maus/.duskbot/tools/chrome/VERSION/linux-arm64/chrome-linux-arm64 /opt/duskbot-browser/chrome-VERSION`)
+and follow the rest unchanged.
 
 Use its actual `chrome-VERSION` directory in every path below; `VERSION` is a
 placeholder, not a fixed Chrome release. Copy the whole directory, including its

@@ -1,5 +1,5 @@
 // the update zip's download: resumes its .part with an HTTP Range request, tries the next source after a failure, waits
-// a little longer after each, and gives up on a connection that sends nothing for STALL_MS (a mac that slept leaves a
+// a little longer after each that got nothing, and gives up on a connection that sends nothing for STALL_MS (a mac that slept leaves a
 // socket that never errors on its own). the file only takes its real name once its sha256 matches.
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream, renameSync, rmSync, statSync } from "node:fs";
@@ -9,7 +9,10 @@ import { pipeline } from "node:stream/promises";
 export const STALL_MS = 60_000;
 export const HEADERS_MS = 30_000;
 export const BACKOFF_MS = Object.freeze([2_000, 5_000, 15_000, 30_000, 60_000]);
+/** tries in a row that add nothing to the .part before the download gives up; a try that adds bytes does not count,
+ * up to this many times as many tries in all */
 export const ATTEMPTS = 6;
+const PROGRESS_TRIES_PER_ATTEMPT = 8;
 
 /** an update failure with the stage it happened at and a short code (a word, never a path or a url) */
 export class UpdateError extends Error {
@@ -116,9 +119,10 @@ export async function resumableDownload({ sources, file, sha256, fetchImpl = fet
     rmSync(file, { force: true });
   }
   const part = `${file}.part`;
-  let source = 0, lastError = null, mismatched = false;
-  for (let tried = 0; tried < attempts; tried += 1) {
+  let source = 0, lastError = null, mismatched = false, fruitless = 0;
+  for (let tried = 0; tried < attempts * PROGRESS_TRIES_PER_ATTEMPT; tried += 1) {
     const url = sources[source % sources.length];
+    const before = sizeOf(part);
     onSource(url);
     try {
       await attempt({ url, part, fetchImpl, stallMs, headersMs, setKick, onBytes: (got, total) => onProgress(total ? Math.min(got / total, 1) : null) });
@@ -132,10 +136,11 @@ export async function resumableDownload({ sources, file, sha256, fetchImpl = fet
       lastError = error;
     }
     source += 1;
-    if (tried + 1 >= attempts) break;
+    fruitless = sizeOf(part) > before ? 0 : fruitless + 1;
+    if (fruitless >= attempts) break;
     onRetry(lastError, tried + 1);
     const woke = lastError instanceof UpdateError && lastError.code === "woke";
-    await wait(woke ? 0 : backoffMs[Math.min(tried, backoffMs.length - 1)]);
+    await wait(woke ? 0 : backoffMs[Math.min(Math.max(fruitless - 1, 0), backoffMs.length - 1)]);
   }
   throw asDownloadError(lastError ?? new UpdateError("download", "no_source"));
 }

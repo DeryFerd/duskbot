@@ -12,7 +12,7 @@
     "ai outlook folder filing"
   ],
   "answer": "**get completed claims out of your inbox and into the folder you'll search later.** a bot finds the outlook message and destination, then moves it within the same mailbox. ask for a subject-and-folder preview before it moves anything. this is a write, so the sending setting won't pause it for review. you get a result for each move.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -43,12 +43,13 @@
     "toolkit": "outlook",
     "slug": "OUTLOOK_MOVE_MESSAGE"
   },
-  "what": "**find both ends before moving anything.** the bot looks up the exact email and destination folder. tell it to stop rather than choose a similar folder name. this stays within one mailbox; it won't transfer mail to a colleague.\n\nif a move fails, have the bot find the message again before retrying. small batches make the result easier to inspect and avoid piling moves on at once.",
+  "what": "**find both ends before moving anything.** the bot looks up the exact email and destination folder. tell it to stop rather than choose a similar folder name. this stays within one mailbox; it won't transfer mail to a colleague.\n\nif a move fails, have the bot find the message again before retrying. small batches make the result easier to inspect and avoid piling moves on at once.\n\nthe move needs the email's full id, which comes from [query emails](/integrations/outlook/query-emails). a shortened id fails. inbox, deleted items, drafts and sent items work by name; your own folders need their full id.",
   "uses": [
     "**close out a warranty claim.** file the completed message under its existing project folder.",
     "**clear a handled confirmation.** move it once its event details are in your plan.",
     "**repair a filing mistake.** return one email to the folder it belongs in.",
-    "**keep supplier mail together.** move the chosen thread's individual messages into the same mailbox folder."
+    "**keep supplier mail together.** move the chosen thread's individual messages into the same mailbox folder.",
+    "**send a stray newsletter to deleted items.** that folder works by name, so no folder lookup is needed."
   ],
   "routine": {
     "message": "every friday at 11:55, read messages in my outlook folder warranties / ready to file for oakmarsh warranties. use that folder as the input, not previous chat messages.\n\nfind the existing warranties / completed folder. show each selected subject and destination here, then ask me before moving anything. move only the messages i confirm and report each result. never create folders, delete mail or guess a message. if nothing is ready, say so briefly.",
@@ -111,5 +112,9 @@
   "tip": {
     "text": "start with one message. if its destination looks wrong, you have one correction instead of a missing inbox."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "a finished warranty claim from juniper tools sits in the inbox.\ntwo folders look close: \"warranty\" and \"warranty 2025\".",
+    "after": "the bot stops and asks which one you mean.\nyou pick \"warranty\". the email moves there.\nits id stays the same, so later lookups still find it."
+  }
 }

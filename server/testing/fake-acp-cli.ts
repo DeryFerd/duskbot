@@ -5,7 +5,7 @@
 //   FAKE_ACP_REJECT_LIVE_LOAD_FILE  while it exists, load/resume of a session live in this process errors
 //     (FAKE_ACP_REJECT_LIVE_LOAD_DSH=1: with dsh 0.2's -32602 "session is already active" instead of -32000)
 //   FAKE_ACP_CACHED_LIVE_LOAD  a live session/load is acknowledged but keeps the old MCP credentials, like Qwen
-//   FAKE_ACP_TEXT_REPLY  answer every session/prompt with only this text
+//   FAKE_ACP_TEXT_REPLY  answer every session/prompt with only this text, after FAKE_ACP_TEXT_REPLY_MS when set
 //   FAKE_ACP_MODE  happy (default) | image | empty-reply | reasoning-only | exit-early | fail-after-text | crash-in-prompt
 //     | abort-in-prompt (a sign-in link, then a TCMalloc CHECK line on stderr, then exit 134 as bubblewrap reports SIGABRT) | hang
 //     | hang-initialize | unkeyed-tool | finished-tools (tool_call frames that arrive already completed or failed, one updated again)
@@ -16,7 +16,8 @@
 //     | interleave (message, tool, message, tool, message) | no-session-config (set_mode/set_model answer -32601)
 //     | ask-peer | delegate-peer | chief-delegate | create-peer (coordinate_bots through the injected agents
 //       MCP; FAKE_ACP_REDELEGATE_FILE, FAKE_ACP_TASKID_FILE; a hand-off result wake gets a fixed line)
-//     | echo-gated (echo the whole prompt; hold until FAKE_ACP_GATE_FILE exists) | safe-agent-reads
+//     | echo-gated (echo the whole prompt; hold until FAKE_ACP_GATE_FILE exists; FAKE_ACP_ECHO_QUOTED=1 quotes each echoed
+//       line with "> ", so the host reads the echoed instructions as a quote, not as the bot saying it did them) | safe-agent-reads
 //     | stall-after-text | stall-after-tool (then silent forever) | slow-tool (silent for FAKE_ACP_TOOL_MS, or until
 //       FAKE_ACP_TOOL_GATE exists when set; FAKE_ACP_TOOL_OUTPUT is the text its running call shows meanwhile)
 //     | quiet-then-answer (silent for FAKE_ACP_QUIET_MS; with QWEN_HOME, append FAKE_ACP_QWEN_LOG lines to
@@ -34,6 +35,9 @@
 //   FAKE_ACP_RPC_FAILURE_FILE  JSON-RPC error for session/prompt; once read the process stays poisoned
 //   FAKE_ACP_RPC_FAILURE_METHOD  initialize, session/new or session/prompt (default)
 //   FAKE_ACP_RPC_FAILURE_GATE  hold the error until this file exists
+//   FAKE_ACP_FAIL_ONCE  marker path: the error (or FAKE_ACP_PROMPT_STOP_REASON) happens only while it is missing, and
+//     creates it, so the next process answers normally
+//   FAKE_ACP_PROMPT_STOP_REASON  session/prompt ends at once with this stopReason and says nothing (agy acp 1.5 "error")
 //   FAKE_ACP_RPC_FAILURE_AFTER_OUTPUT  emit text and a tool result before failing
 //   FAKE_ACP_RPC_FAILURE_AFTER_USAGE  emit the scripted usage updates and FAKE_ACP_UPDATES_FILE's before failing
 //   FAKE_ACP_LOAD_ERROR  JSON-RPC error returned by session/load
@@ -47,6 +51,7 @@
 //   FAKE_ACP_VERBOSE_FAIL_ONCE  marker path: the first `models --verbose` fails, like a new OpenCode home's first run
 //   FAKE_ACP_HANG_MODELS  comma-separated model ids whose session/prompt never answers (a hung free model);
 //     with FAKE_ACP_FREE_LIMIT=1 each also logs Zen's "Free usage limit reached" row under XDG_DATA_HOME
+//   FAKE_ACP_SESSION_NEW_MS  every session/new answers after this long (a slow engine start)
 //   FAKE_ACP_EMPTY_MODELS  comma-separated model ids that end their turn with no reply at all
 //   FAKE_ACP_ERROR_MODELS  JSON map model -> provider error: logs it as opencode 1.18's ERROR row under XDG_DATA_HOME,
 //     then the prompt never answers (opencode retrying on its own)
@@ -72,6 +77,10 @@
 //   FAKE_ACP_CANCEL_STOP_REASON  the stopReason a cancelled hanging prompt answers (default cancelled; OpenCode answers end_turn)
 //   FAKE_ACP_HANG_ONCE_FILE  with FAKE_ACP_HANG_ON, only the first matching prompt hangs; it writes this file
 //   FAKE_ACP_HOLD_FILE  while this file exists, a session/prompt waits before it is answered
+//   FAKE_ACP_REPLAY  a recorded exchange ({t, dir, msg} lines from the recorded session/prompt on): a prompt plays the agent's
+//     frames at their recorded times divided by FAKE_ACP_REPLAY_SPEED (default 1), including any after the prompt result;
+//     frames recorded after a session/cancel play only once the client cancels; with FAKE_ACP_REPLAY_REST, every later
+//     prompt answers only that text
 import { AsyncLocalStorage } from "node:async_hooks";
 import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
@@ -252,6 +261,7 @@ const dumpEnv = Object.fromEntries(
     "VENICE_API_KEY",
     "GEMINI_HOME",
     "AGY_ACP_FORCE_FILE_STORAGE",
+    "AGY_CLI_FORCE_FILE_TOKEN_STORAGE",
     "AGY_CLI_DISABLE_AUTO_UPDATE",
     "SSH_CONNECTION",
     "ANTIGRAVITY_HARNESS_PATH",
@@ -404,6 +414,16 @@ if (argv[0] === "models" || argv.includes("--list-models")) {
 
 // ACP names the session in every update and request: the one whose request this answers, or the live one.
 const answering = new AsyncLocalStorage<string>();
+/** The session's MCP servers as `<dump>.mcp.json` (the last session's, whichever bot) and, where the agents server names
+ * its bot, also `<dump>.mcp.<bot id>.json`, which a test of one bot can read while other bots' sessions come and go. */
+function dumpMcp(servers: unknown, pretty = false) {
+  const text = JSON.stringify(servers, null, pretty ? 2 : undefined);
+  writeFileSync(`${process.env.FAKE_ACP_DUMP}.mcp.json`, text);
+  const agents = Array.isArray(servers) ? servers.find((server: { name?: string }) => server?.name === "agents") : undefined;
+  const botId = Array.isArray(agents?.env) ? agents.env.find((entry: { name?: string }) => entry?.name === "DUSK_BOT_ID")?.value : undefined;
+  if (typeof botId === "string" && /^[\w-]{1,64}$/.test(botId)) writeFileSync(`${process.env.FAKE_ACP_DUMP}.mcp.${botId}.json`, text);
+}
+
 const out = (obj: any) => {
   if ((obj?.method === "session/update" || obj?.method === "session/request_permission") && obj.params && obj.params.sessionId === undefined) {
     obj = { ...obj, params: { sessionId: answering.getStore() ?? liveSession ?? "fake-acp-session", ...obj.params } };
@@ -456,6 +476,23 @@ let pendingAskQuestionId: number | null = null;
 let onAskQuestionAnswered: (() => void) | null = null;
 
 let hangingPromptId: unknown = null;
+let replayTimers: ReturnType<typeof setTimeout>[] = [];
+let replayAfterCancel: any[] = [];
+let replayed = false;
+const replayFrame = (msg: any, promptId: unknown, recordedPromptId: unknown, sessionId: unknown) => {
+  const frame = JSON.parse(JSON.stringify(msg).replaceAll("<session>", String(sessionId)));
+  out(frame.method === undefined && frame.id === recordedPromptId ? { ...frame, id: promptId } : frame);
+};
+const playReplay = (msg: any) => {
+  const frames = readFileSync(process.env.FAKE_ACP_REPLAY!, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
+  const recordedPromptId = frames.find((frame) => frame.dir === ">>" && frame.msg?.method === "session/prompt")?.msg.id;
+  const cancelAt = frames.find((frame) => frame.dir === ">>" && frame.msg?.method === "session/cancel")?.t ?? Infinity;
+  const speed = Number(process.env.FAKE_ACP_REPLAY_SPEED ?? 1) || 1;
+  const agent = frames.filter((frame) => frame.dir === "<<");
+  replayAfterCancel = agent.filter((frame) => frame.t > cancelAt).map((frame) => () => replayFrame(frame.msg, msg.id, recordedPromptId, msg.params?.sessionId));
+  replayTimers = agent.filter((frame) => frame.t <= cancelAt)
+    .map((frame) => setTimeout(() => replayFrame(frame.msg, msg.id, recordedPromptId, msg.params?.sessionId), frame.t / speed));
+};
 let hangKeepAlive: ReturnType<typeof setInterval> | null = null;
 
 type McpEntry = { command: string; args?: string[]; env?: Array<{ name: string; value: string }> };
@@ -549,9 +586,23 @@ function emitSessionReports(): void {
     } catch {}
   }
 }
+function failOnceSpent(): boolean {
+  const marker = process.env.FAKE_ACP_FAIL_ONCE;
+  if (!marker) return false;
+  if (existsSync(marker)) return true;
+  writeFileSync(marker, "1");
+  return false;
+}
+
 function failRpc(msg: { method: string; id: unknown }): boolean {
   if (msg.method !== (process.env.FAKE_ACP_RPC_FAILURE_METHOD ?? "session/prompt")) return false;
+  if (msg.method === "session/prompt" && process.env.FAKE_ACP_PROMPT_STOP_REASON && !rpcFailure && !failOnceSpent()) {
+    recordMethod(`${msg.method}.stop`);
+    out({ jsonrpc: "2.0", id: msg.id, result: { stopReason: process.env.FAKE_ACP_PROMPT_STOP_REASON } });
+    return true;
+  }
   const failureFile = process.env.FAKE_ACP_RPC_FAILURE_FILE;
+  if (!rpcFailure && failureFile && existsSync(failureFile) && process.env.FAKE_ACP_FAIL_ONCE && failOnceSpent()) return false;
   if (failureFile && existsSync(failureFile)) rpcFailure = JSON.parse(readFileSync(failureFile, "utf8"));
   if (!rpcFailure) return false;
   if (msg.method === "session/prompt" && process.env.FAKE_ACP_RPC_FAILURE_AFTER_USAGE === "1") emitSessionReports();
@@ -702,6 +753,10 @@ function handle(msg: any) {
   }
   if (!msg.method) return;
   if (msg.method === "session/prompt" && heldByHoldFile(msg)) return;
+  if (msg.method === "session/new" && process.env.FAKE_ACP_SESSION_NEW_MS && !msg.startDelayed) {
+    setTimeout(() => handle({ ...msg, startDelayed: true }), Number(process.env.FAKE_ACP_SESSION_NEW_MS));
+    return;
+  }
   recordMethod(msg.method, msg.params?.sessionId);
 
   switch (msg.method) {
@@ -795,7 +850,7 @@ function handle(msg: any) {
       agentsMcp = mode === "list-peers" ? agentsMcp ?? offered : offered;
       sessionMcp = acceptedMcp(servers);
       if (process.env.FAKE_ACP_DUMP) {
-        writeFileSync(`${process.env.FAKE_ACP_DUMP}.mcp.json`, JSON.stringify(servers, null, 2));
+        dumpMcp(servers, true);
       }
       const opts = configOptions();
       const mdls = sessionModels();
@@ -843,7 +898,7 @@ function handle(msg: any) {
         agentsMcp ??= offeredAgents(msg.params?.mcpServers ?? []);
       }
       if (process.env.FAKE_ACP_DUMP) {
-        writeFileSync(`${process.env.FAKE_ACP_DUMP}.mcp.json`, JSON.stringify(msg.params?.mcpServers ?? []));
+        dumpMcp(msg.params?.mcpServers ?? []);
       }
       if (!cachedLiveLoad) sessionMcp = acceptedMcp(msg.params?.mcpServers ?? []);
       const opts = configOptions();
@@ -862,7 +917,7 @@ function handle(msg: any) {
         break;
       }
       if (process.env.FAKE_ACP_DUMP) {
-        writeFileSync(`${process.env.FAKE_ACP_DUMP}.mcp.json`, JSON.stringify(msg.params?.mcpServers ?? []));
+        dumpMcp(msg.params?.mcpServers ?? []);
       }
       const opts = configOptions();
       const mdls = sessionModels();
@@ -1029,7 +1084,21 @@ function handle(msg: any) {
         return;
       }
       if (process.env.FAKE_ACP_TEXT_REPLY !== undefined) {
-        out({ jsonrpc: "2.0", method: "session/update", params: { sessionId: msg.params?.sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: process.env.FAKE_ACP_TEXT_REPLY } } } });
+        const reply = () => {
+          out({ jsonrpc: "2.0", method: "session/update", params: { sessionId: msg.params?.sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: process.env.FAKE_ACP_TEXT_REPLY } } } });
+          result(msg.id, { stopReason: "end_turn", _meta: { inputTokens: 12, outputTokens: 4 } });
+        };
+        if (process.env.FAKE_ACP_TEXT_REPLY_MS) setTimeout(reply, Number(process.env.FAKE_ACP_TEXT_REPLY_MS));
+        else reply();
+        return;
+      }
+      if (process.env.FAKE_ACP_REPLAY && !(replayed && process.env.FAKE_ACP_REPLAY_REST !== undefined)) {
+        replayed = true;
+        playReplay(msg);
+        return;
+      }
+      if (process.env.FAKE_ACP_REPLAY) {
+        out({ jsonrpc: "2.0", method: "session/update", params: { sessionId: msg.params?.sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: process.env.FAKE_ACP_REPLAY_REST } } } });
         result(msg.id, { stopReason: "end_turn", _meta: { inputTokens: 12, outputTokens: 4 } });
         return;
       }
@@ -1357,7 +1426,8 @@ function handle(msg: any) {
       }
       if (mode === "echo-gated") {
         const finish = () => {
-          out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: `echo: ${promptText}` } } } });
+          const echoed = process.env.FAKE_ACP_ECHO_QUOTED === "1" ? promptText.split("\n").map((line) => `> ${line}`).join("\n") : promptText;
+          out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: `echo: ${echoed}` } } } });
           complete();
         };
         const gate = process.env.FAKE_ACP_GATE_FILE;
@@ -1516,6 +1586,12 @@ function handle(msg: any) {
       break;
     }
     case "session/cancel":
+      if (replayTimers.length || replayAfterCancel.length) {
+        for (const timer of replayTimers) clearTimeout(timer);
+        for (const play of replayAfterCancel) play();
+        replayTimers = [];
+        replayAfterCancel = [];
+      }
       if (hangingPromptId !== null && process.env.FAKE_ACP_IGNORE_CANCEL !== "1") {
         result(hangingPromptId, { stopReason: process.env.FAKE_ACP_CANCEL_STOP_REASON ?? "cancelled", _meta: {} });
         if (hangKeepAlive) clearInterval(hangKeepAlive);

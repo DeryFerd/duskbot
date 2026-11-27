@@ -135,9 +135,9 @@ describe("classifyRoutineFailure", () => {
   });
 
   it("reads a refusal to start, and leaves an engine that would not spawn a plain failure", () => {
-    expect(dispatchRefusal(Object.assign(new Error("fixture dispatch refused"), { status: 409, code: "fixture_refusal" }))).toEqual({ cause: "refused" });
-    expect(dispatchRefusal(Object.assign(new Error(BUSY), { status: 409 }))).toEqual({ cause: "refused" });
-    expect(dispatchRefusal(Object.assign(new Error("no such bot"), { status: 404 }))).toEqual({ cause: "refused" });
+    expect(dispatchRefusal(Object.assign(new Error("fixture dispatch refused"), { status: 409, code: "fixture_refusal" }))).toEqual({ cause: "dispatch" });
+    expect(dispatchRefusal(Object.assign(new Error(BUSY), { status: 409 }))).toEqual({ cause: "dispatch" });
+    expect(dispatchRefusal(Object.assign(new Error("no such bot"), { status: 404 }))).toEqual({ cause: "dispatch" });
     expect(dispatchRefusal(new Error("spawn claude ENOENT"))).toEqual({});
   });
 });
@@ -204,15 +204,22 @@ describe("an unattended run that fails for a passing reason", () => {
     expect(h.failed.map(({ run: failed }) => failed.id)).toEqual([run.id]);
   });
 
-  it("never starts a run again that the turn watchdog stopped as stalled: its owner and Chief hear at once", async () => {
+  it("starts a run the turn watchdog stopped as stalled once more, quietly, and fails a second stall as timed out", async () => {
     const h = harness();
     const run = await h.start(h.routine().id);
     h.manager.failThread("thread-1", STALL, { cause: "stalled" });
-    expect(h.run(run.id)).toMatchObject({ status: "failed", error: STALL });
-    expect(h.run(run.id).retried).toBeUndefined();
-    await h.advance(MINUTE);
-    expect(h.started).toHaveLength(1);
+    expect(h.run(run.id)).toMatchObject({ status: "queued", retried: "stalled" });
+    expect(h.failed).toEqual([]);
+    expect(h.deferred).toEqual([]);
+    await h.advance(16 * SECOND);
+    expect(h.started).toHaveLength(2);
+    expect(h.started[1]!.prompt).toContain(retryNote("stalled"));
+
+    h.manager.failThread("thread-1", STALL, { cause: "stalled" });
+    expect(h.run(run.id)).toMatchObject({ status: "failed", error: `Failed after one automatic retry: ${STALL}`, failedFor: "stalled" });
     expect(h.failed.map(({ run: failed }) => failed.id)).toEqual([run.id]);
+    await h.advance(MINUTE);
+    expect(h.started).toHaveLength(2);
   });
 
   it("never starts again a run that crashed before doing anything: the same AI would fail it the same way", async () => {

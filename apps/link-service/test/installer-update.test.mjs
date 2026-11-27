@@ -53,7 +53,9 @@ const offer = (version, { signature = sig(version), policyDoc = null } = {}) => 
 PKG_SHA=${shaOf(version)} PKG_VERSION=${version} PKG_SIG='${signature ?? ""}' POLICY_BODY='${policyDoc?.body ?? ""}' POLICY_SIG='${policyDoc?.signature ?? ""}'
 get_package() { printf 'v=${version}' > "$1"; }`;
 
-describe("installer updates", () => {
+// POSIX only: install.sh is the Linux server installer, run here under sh with stub commands on a POSIX PATH; Windows
+// has neither, and no server runs it there.
+describe.skipIf(process.platform === "win32")("installer updates", () => {
   it("pins the same release keys as the service", () => {
     const pinned = /^RELEASE_KEYS="([^$"]+)/m.exec(script)[1];
     expect(pinned).toBe(PINNED_RELEASE_KEYS.map(k => `${k.kid}:${k.x}`).join(","));

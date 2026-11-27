@@ -12,7 +12,7 @@
     "claude combine google calendar events"
   ],
   "answer": "**put your gallery visits, travel and classes on one list.** a bot can gather events across selected google calendars and remove duplicates. give it start and end times with your time zone. ask it to put calendar errors before the appointments. this action only looks, but dusk counts it as a write, so allow it by name.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,7 +45,7 @@
     "toolkit": "googlecalendar",
     "slug": "GOOGLECALENDAR_EVENTS_LIST_ALL_CALENDARS"
   },
-  "what": "**see the appointments together without moving them.** studio, teaching and personal bookings can sit side by side. duplicate events appear once.\n\n- name the calendars, or let the bot use your calendar list\n- give start and end times with your time zone\n- ask for full details when the compact summary leaves out the location\n\nthe bot can expand recurring events into individual dates.",
+  "what": "**see the appointments together without moving them.** studio, teaching and personal bookings can sit side by side. duplicate events appear once.\n\n- name the calendars, or let the bot use your calendar list\n- give start and end times with your time zone\n- ask for full details when the compact summary leaves out the location\n\nthe bot can expand recurring events into individual dates.\n\nonly need busy times? [query calendar availability](/integrations/google-calendar/query-calendar-availability) answers without meeting details. for a deeper search inside one calendar, use [find event](/integrations/google-calendar/find-event).",
   "uses": [
     "**exhibition planning:** gather next month's gallery and travel appointments.",
     "**a customer handover:** find their named appointments across calendars.",
@@ -111,6 +111,10 @@
       "fix": "state the dates and local time zone."
     }
   ],
+  "worked": {
+    "before": "studio, teaching and personal calendars.\nthe week of 9 december, lisbon time.",
+    "after": "11 events in one list\na shared rehearsal shown once, not twice\nteaching calendar returned an error, so that part is incomplete"
+  },
   "tip": {
     "text": "read the coverage note before the appointment list."
   },

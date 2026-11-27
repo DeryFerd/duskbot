@@ -22,6 +22,7 @@ import { compareVersions, NO_POLICY, parsePolicy, type UpdatePolicy } from "../s
 import { parseReleaseKeys, PINNED_RELEASE_KEYS, signRelease } from "../apps/cloud-service/src/release-signing.ts";
 import { signPolicy, verifyPolicy } from "../apps/cloud-service/src/update-policy.ts";
 import type { FleetAnswer } from "../apps/dashboard/server/admin/ops/fleet.ts";
+import { checkAssets, releaseAssets, SOURCE_REPO } from "./release-assets.ts";
 
 const SEMVER = /^\d+\.\d+\.\d+$/;
 export interface Config {
@@ -84,7 +85,7 @@ interface State { version: string; done: Record<string, number>; serial: number;
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 export function createRelease(o: { cfg: Config; env: Record<string, string | undefined>; dryRun: boolean; fetchImpl?: typeof fetch; now?: () => number; sleep?: (ms: number) => Promise<void>;
-  sh?: (cmd: string, args: string[], input?: string) => string; log?: (line: string) => void; stateDir?: string; siteDir?: string }) {
+  sh?: (cmd: string, args: string[], input?: string) => string; log?: (line: string) => void; stateDir?: string; siteDir?: string; changelogFile?: string }) {
   const { cfg, env, dryRun } = o, log = o.log ?? (line => console.log(line)), now = o.now ?? Date.now, fetchImpl = o.fetchImpl ?? fetch;
   const sleep = o.sleep ?? (ms => new Promise<void>(resolve => setTimeout(resolve, ms)));
   const realSh = (cmd: string, args: string[], input?: string) => execFileSync(cmd, args, { cwd: ROOT, encoding: "utf8", stdio: [input === undefined ? "inherit" : "pipe", "pipe", "inherit"], ...(input === undefined ? {} : { input }) }).trim();
@@ -136,7 +137,8 @@ export function createRelease(o: { cfg: Config; env: Record<string, string | und
     return await answer.json() as FleetAnswer;
   }
 
-  return { cfg, place, currentPolicy, publishPolicy, fleet, act, sh, log, now, sleep, keys, signingKey, fetchImpl,
+  const changelogFile = o.changelogFile ?? join(ROOT, "apps", "site", "public", "landing", "releases", "changelog.json");
+  return { cfg, place, currentPolicy, publishPolicy, fleet, act, sh, log, now, sleep, keys, signingKey, fetchImpl, changelogFile,
     stateFile: (version: string) => join(o.stateDir ?? join(ROOT, "release", "auto"), `${version}.json`) };
 }
 type Release = ReturnType<typeof createRelease>;
@@ -203,6 +205,28 @@ export async function release(r: Release, opt: ReleaseOptions): Promise<"done" |
       r.log(`  (dry run) ${why}`);
     }
     if (!r.signingKey()) r.log("  (dry run) DUSK_RELEASE_SIGNING_KEY is not set");
+    // what's new goes out with the release: dusk.bot/changelog, the apps' What's new and duskbot update read this file
+    let top: string | undefined;
+    try { top = (JSON.parse(readFileSync(r.changelogFile, "utf8")) as { releases?: { version?: string }[] }).releases?.[0]?.version; } catch { /* missing */ }
+    if (top !== version) {
+      const why = `changelog.json has no ${version} entry (top: ${top ?? "none"}); run scripts/release-notes.ts ${version} --apply on the release branch before tagging`;
+      if (!dryRun) throw new Error(why);
+      r.log(`  (dry run) ${why}`);
+    }
+  });
+  await step("github-files", () => {
+    // every release carries the desktop apps, the APK, the server and CLI package and the sums (scripts/release-assets.ts)
+    let names: string[] = [];
+    try { names = (JSON.parse(r.sh("gh", ["release", "view", V, "--repo", SOURCE_REPO, "--json", "assets"]) || "{}") as { assets?: { name: string }[] }).assets?.map(a => a.name) ?? []; }
+    catch (error) { if (!dryRun) throw error; }
+    const check = checkAssets(version, names);
+    r.log(`  ${V} on GitHub: ${check.present.length} of ${releaseAssets(version).length} release files`);
+    for (const asset of releaseAssets(version)) r.log(`    ${check.present.some(p => p.name === asset.name) ? "ok     " : "MISSING"} ${asset.name.padEnd(42)} ${asset.label}`);
+    if (check.missing.length) {
+      const why = `${V} lacks ${check.missing.map(a => a.name).join(", ")}: add them with scripts/release-assets.ts ${version} --dir <folder> --pack-cli --carry-apk, then gh release upload`;
+      if (!dryRun) throw new Error(why);
+      r.log(`  (dry run) ${why}`);
+    }
   });
   const first = opt.steps[0]!;
   if (first < 100) await step("desktop-rollout", () => r.publishPolicy(state, { rollout: [version, first] }));

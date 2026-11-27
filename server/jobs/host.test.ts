@@ -4,13 +4,14 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { cpuTimeMs, JOB_MESSAGES, jobTurnRefusal } from "./host.ts";
 import { envNameRefusal } from "./launch.ts";
-import { apiBase, messagesOf, noteFor, wanted } from "./telegram-watch.ts";
+import { apiBase, messagesOf, notesFor, wanted } from "./telegram-watch.ts";
 import { jobsFixture, PERSON_TURN } from "./testing.ts";
 
 const fixtures: Array<{ close(): Promise<void> }> = [];
 afterEach(async () => { for (const fixture of fixtures.splice(0)) await fixture.close(); });
 
-describe("background jobs host", () => {
+// background jobs refuse Windows by design (server/jobs/launch.ts), so they run where jobs can
+describe.skipIf(process.platform === "win32")("background jobs host", () => {
   it("a job's dusk-notify becomes a run of the bot through the event path, and --tell a line in its chat", async () => {
     const fixture = await jobsFixture({ secrets: { "Deals token": "tok-123456789" } });
     fixtures.push(fixture);
@@ -104,8 +105,10 @@ describe("telegram_watch", () => {
     expect(messages.filter((m) => wanted(m, ["deals"], []))).toHaveLength(2);
     expect(messages.filter((m) => wanted(m, [], ["loi"]))).toHaveLength(1);
     expect(messages.filter((m) => wanted(m, ["-11"], []))).toHaveLength(1);
-    expect(noteFor(messages)).toMatch(/^New Telegram messages \(3\), each with all this watch knows of it: chat, sender, time, message id and text:\n\[Brand deals\] Ana \(2023-11-14 22:13 UTC, message 42\): Acme signed the LOI\n\[Friends\] bo \(2023-11-14 22:14 UTC\): lunch\?/);
-    expect(noteFor(messages, 120)).toContain("[more messages were left out]");
+    const [note] = notesFor(updates as never, [], []);
+    expect(note!.text).toMatch(/^New Telegram messages \(3\), each with all this watch knows of it: chat, sender, time, message id and text:\n\[Brand deals\] Ana \(2023-11-14 22:13 UTC, message 42\): Acme signed the LOI\n\[Friends\] bo \(2023-11-14 22:14 UTC\): lunch\?/);
+    expect(note!.offset).toBe(4);
+    expect(notesFor(updates as never, ["friends"], []).map((one) => one.offset)).toEqual([3]);
   });
   it("talks to a test Bot API only on loopback, Telegram otherwise", () => {
     expect(apiBase({ DUSK_TELEGRAM_API_URL: "http://127.0.0.1:9123" })).toBe("http://127.0.0.1:9123");

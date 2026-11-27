@@ -5,6 +5,7 @@ import {
   handoffAttachmentImagePreview,
   imageAttachmentFromFile,
   releaseAttachmentImagePreview,
+  uploadTurnedAway,
   type Attachment,
   type FileAttachment,
   type ImageAttachment,
@@ -15,8 +16,9 @@ import { dropUploadSource, endUpload, keepUploadSource, reportUpload, startUploa
 type Placed = ImageAttachment | FileAttachment;
 
 /**
- * Sends the bytes behind a tile already in the draft and swaps in the saved attachment. A failure keeps the tile,
- * marked failed, so it can be retried or removed; the error is rethrown for the notice.
+ * Sends the bytes behind a tile already in the draft and swaps in the saved attachment. A failure that a retry could fix
+ * keeps the tile, marked failed, so it can be retried or removed; bytes the server turned away for good take the tile
+ * off. Either way the error is rethrown for the notice.
  */
 export async function sendPlacedUpload(draftId: string, placed: Placed, file: File): Promise<void> {
   const { id } = placed;
@@ -32,9 +34,12 @@ export async function sendPlacedUpload(draftId: string, placed: Placed, file: Fi
     endUpload(id);
     // removed while it uploaded
     if (signal.aborted) return;
-    if (replaceDraftAttachment(draftId, id, { ...placed, uploading: false, failed: true })) throw error;
+    const gone = uploadTurnedAway(error);
+    const shown = replaceDraftAttachment(draftId, id, gone ? null : { ...placed, uploading: false, failed: true });
+    if (shown && !gone) throw error;
     dropUploadSource(id);
     if (placed.kind === "image") releaseAttachmentImagePreview(placed);
+    if (shown) throw error;
     return;
   }
   endUpload(id);

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { modelProvider } from "../shared/model-providers.ts";
 import { ModelCatalogStore } from "./model-catalog/catalog.ts";
 import {
-  CatalogIndex, addressProblem, buildConnection, catalogGroups, listProviderModels, moreProviders, probeLocalProviders, resolveProvider,
+  CatalogIndex, addressProblem, buildConnection, catalogGroups, listProviderModels, localBaseUrl, moreProviders, probeLocalProviders, resolveProvider,
 } from "./model-providers.ts";
 
 const def = (id: string) => modelProvider(id)!;
@@ -153,5 +153,24 @@ describe("probeLocalProviders", () => {
     fetch.mockClear();
     expect(await probeLocalProviders("cloud", fetch as unknown as typeof globalThis.fetch)).toEqual(new Set());
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("a local server on the IPv6 loopback or another machine", () => {
+  it("is found on ::1 when 127.0.0.1 is closed, and saved at the address that answered", async () => {
+    const fetch = vi.fn(async (url: string | URL | Request) => {
+      if (String(url).startsWith("http://[::1]:1234/")) return new Response("{}", { status: 200 });
+      throw new TypeError("connection refused");
+    }) as unknown as typeof globalThis.fetch;
+    expect([...await probeLocalProviders("computer", fetch)]).toEqual(["lmstudio"]);
+    expect(await localBaseUrl(def("lmstudio"), "computer", fetch)).toBe("http://[::1]:1234/v1");
+    expect(await localBaseUrl(def("ollama"), "computer", fetch)).toBeNull();
+  });
+
+  it("takes the address of a server on the person's network for Ollama and LM Studio", () => {
+    expect(buildConnection(def("lmstudio"), { fields: { baseUrl: "http://192.168.1.20:1234/v1" } }, "computer"))
+      .toMatchObject({ entry: { config: { url: "http://192.168.1.20:1234/v1" } } });
+    expect(buildConnection(def("ollama"), { fields: { baseUrl: "http://192.168.1.20:11434/v1" } }, "computer"))
+      .toMatchObject({ entry: { config: { url: "http://192.168.1.20:11434/v1" } } });
   });
 });

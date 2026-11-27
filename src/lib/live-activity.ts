@@ -6,6 +6,9 @@ import { progressSize, type LiveStep } from "../../shared/turn-progress";
 
 // Keys, not labels: this array is built at import time, and t() reads the active pack when called.
 const FALLBACK_LABELS: Array<[RegExp, LocaleKey]> = [
+  // Antigravity's timer that wakes the agent, and its check on a background task
+  [/\bschedule\b/i, "toolStep.waitForBackgroundTask"],
+  [/\b(?:manage_task|command_status)\b/i, "toolStep.checkBackgroundTask"],
   [/(?:^|_)coordinate_bots$/i, "chat.activity.handoff"],
   [/(?:^|_)session_search$/i, "chat.activity.searching"],
   [/\b(?:bash|shell|terminal|exec|command|run_command)\b/i, "chat.activity.runCommand"],

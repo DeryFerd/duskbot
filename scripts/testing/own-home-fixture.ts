@@ -159,7 +159,11 @@ await import(${JSON.stringify(pathToFileURL(join(SERVER_DIR, "testing", "fake-cl
   const fixture = { beforeJournalWrite: null as OwnHomeFixture["beforeJournalWrite"] };
   const spies: OwnHomeFixture["spies"] = { lent: [], phoneStops: 0, opened: [] };
   const asks = createLoginHandoffClient();
-  const port = { postMessage: (message: unknown) => { desktop.send(message as object); } };
+  // like a closed utility process's port, a desktop that already exited refuses at once, never with an unhandled error later
+  const port = { postMessage: (message: unknown) => {
+    if (!desktop.connected) throw new Error("the desktop has exited");
+    desktop.send(message as object, (error) => { if (error) console.warn(`own-home fixture: the desktop did not take a message (${error.message})`); });
+  } };
   const wire = () => installOwnHome({
     localRequest: (route, init = {}) => fetch(`${desktopBase}${route}`, { ...init, headers: { ...init.headers as Record<string, string>, "x-dusk-desktop-owner": capability } }),
     fetch: windowFetch,

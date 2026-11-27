@@ -1,6 +1,9 @@
 import { t } from "./i18n";
 import {
+  AttachmentEmptyError,
   AttachmentTooLargeError,
+  FILE_MAX_BYTES,
+  uploadTurnedAway,
   attachmentsFromDroppedFiles,
   fileAttachmentFromFile,
   fitImagesToSlots,
@@ -15,7 +18,15 @@ import {
 } from "./composer-attachments";
 
 const MB = 1024 * 1024;
-const ARCHIVE_NAME = /\.(?:zip|rar|7z|tar|gz|tgz|bz2|xz)$/i;
+const ARCHIVE_NAME = /\.(?:rar|7z|tar|gz|tgz|bz2|xz)$/i;
+
+/** What an attach left out or changed: a problem (warning) the person can fix by picking again, or only news (info). */
+export interface AttachNotice { text: string; tone: "warning" | "info" }
+
+export function attachNotice(problems: readonly string[], info: readonly string[] = []): AttachNotice | null {
+  const text = [...problems, ...info].filter(Boolean).join(" ");
+  return text ? { text, tone: problems.some(Boolean) ? "warning" : "info" } : null;
+}
 
 export function imageLimitNotice(leftOut: readonly string[]): string {
   return t(leftOut.length === 1 ? "composer.attach.imageLimit.one" : "composer.attach.imageLimit.many", {
@@ -38,9 +49,11 @@ export function imagesThatFit<T extends { name: string; size: number }>(images: 
 
 export function uploadFailure(name: string, err: unknown): string {
   if (err instanceof AttachmentTooLargeError) return t("composer.attach.tooLarge", { name: err.fileName, mb: err.maxBytes / MB });
-  const message = err instanceof Error ? err.message : "upload failed";
-  const said = message.includes(name) ? message : `${name}: ${message}`;
-  return /[.!?]$/.test(said) ? said : `${said}.`;
+  if (err instanceof AttachmentEmptyError) return t("composer.attach.empty", { name: err.fileName });
+  const status = typeof err === "object" && err !== null && "status" in err ? err.status : undefined;
+  if (status === 413) return t("composer.attach.tooLarge", { name, mb: FILE_MAX_BYTES / MB });
+  if (status === 507) return t("composer.attach.storageFull", { name });
+  return t(uploadTurnedAway(err) ? "composer.attach.damaged" : "composer.attach.uploadFailed", { name });
 }
 
 export async function intakeFiles<T extends DroppedFile & { type: string }>(
@@ -56,7 +69,7 @@ export async function intakeFiles<T extends DroppedFile & { type: string }>(
     /** Image bytes the message can still take; images past it are left out the same way. */
     imageBytes?: number;
   },
-): Promise<{ attachments: Attachment[]; notice: string | null }> {
+): Promise<{ attachments: Attachment[]; notice: AttachNotice | null }> {
   const { allowImages, getPath, uploadImage } = _opts;
   const asImage = (file: T) => allowImages && isImageFile(file) && !imageSentAsFile(file);
   const images = _files.filter(asImage);
@@ -108,12 +121,11 @@ export async function intakeFiles<T extends DroppedFile & { type: string }>(
   const unsupported = rejectedNames.filter((name) => !ARCHIVE_NAME.test(name));
   const uploadErrors = results.flatMap((result) => result.uploadError ? [result.uploadError] : []);
   const asFiles = results.flatMap((result) => result.asFile ? [result.asFile] : []);
-  const notice = [
+  const notice = attachNotice([
     leftOut.length ? imageLimitNotice(leftOut) : "",
-    asFiles.length ? imagesAsFilesNotice(asFiles) : "",
     unsupported.length ? t("composer.attach.unsupported", { names: unsupported.join(", ") }) : "",
     archives.length ? t("composer.attach.archives", { names: archives.join(", ") }) : "",
     ...uploadErrors,
-  ].filter(Boolean).join(" ") || null;
+  ], [asFiles.length ? imagesAsFilesNotice(asFiles) : ""]);
   return { attachments, notice };
 }

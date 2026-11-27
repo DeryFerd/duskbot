@@ -51,6 +51,14 @@ export function wakeHoldOf(routines: readonly Due[], runs: readonly Run[], now: 
   return due === undefined ? { hold: false } : { hold: true, reason: "due", at: due };
 }
 
+/** A chat turn waiting for its AI's usage limit to reset holds the desktop awake as a due routine does, so the computer
+ * is awake when the turn carries on. */
+export function withHeldTurn(hold: { hold: boolean; reason?: "running" | "due"; at?: number }, turnWakesAt: number | undefined, now: number, horizonMs: number): { hold: boolean; reason?: "running" | "due"; at?: number } {
+  if (turnWakesAt === undefined || turnWakesAt > now + horizonMs) return hold;
+  if (hold.reason === "running" || (hold.at !== undefined && hold.at <= turnWakesAt)) return hold;
+  return { hold: true, reason: "due", at: turnWakesAt };
+}
+
 /** Enabled routines that run on this machine and are not held: what the desktop's keep-awake while plugged in waits on. */
 export const enabledHereOf = (routines: readonly Pick<Routine, "enabled" | "runOn" | "heldFor">[]) =>
   routines.filter((routine) => routine.enabled && !routine.heldFor && (routine.runOn ?? "maus") === "maus").length;

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  AttachmentEmptyError,
   appendPastedText,
   attachmentAudioUrl,
   attachmentBasename,
@@ -9,6 +10,7 @@ import {
   clipboardImageFiles,
   composeMessage,
   documentMime,
+  textFileMime,
   fileAttachment,
   fileAttachmentFromFile,
   handoffAttachmentImagePreview,
@@ -18,6 +20,7 @@ import {
   PASTE_INLINE_MAX_BYTES,
   pastedTextFile,
   pendingFileAttachment,
+  refusedBeforeUpload,
   releaseAttachmentImagePreview,
   splitTranscriptAttachments,
   type ImageAttachment,
@@ -523,6 +526,14 @@ describe("pastedTextFile", () => {
     expect(() => pendingFileAttachment(sized(25 * 1024 * 1024 + 1))).toThrow(expect.objectContaining({ status: 413 }));
   });
 
+  it("refuses an empty file or image before uploading, so it never leaves a failed tile that holds Send", () => {
+    expect(() => pendingFileAttachment({ name: "empty.txt", type: "text/plain", size: 0 })).toThrow(AttachmentEmptyError);
+    expect(() => pendingFileAttachment({ name: "notes.pdf", type: "application/pdf", size: 0 })).toThrow(AttachmentEmptyError);
+    expect(() => optimisticImageAttachment(new File([], "blank.png", { type: "image/png" }))).toThrow(AttachmentEmptyError);
+    expect(refusedBeforeUpload(new AttachmentEmptyError("a.txt"))).toBe(true);
+    expect(refusedBeforeUpload(new Error("network"))).toBe(false);
+  });
+
   it("refuses a paste over the file limit before uploading", () => {
     const file = pastedTextFile("a".repeat(25 * 1024 * 1024 + 1));
     expect(() => pendingFileAttachment(file!)).toThrow(expect.objectContaining({ status: 413 }));
@@ -562,10 +573,28 @@ describe("private document intake", () => {
     }
   });
 
+  it("uploads code, config, logs, videos and iPhone photos under their own names instead of refusing them", () => {
+    const tile = (name: string, type = "") => pendingFileAttachment({ name, type, size: 2048 });
+    for (const name of ["main.py", "deploy.sh", "index.html", "feed.xml", "app.ts", "View.tsx", "main.go", "lib.rs", "App.swift", "q.sql", "ci.yaml", "server.log", "Dockerfile", "Makefile"]) {
+      expect(tile(name), name).toMatchObject({ kind: "file", name, uploading: true });
+    }
+    expect(textFileMime({ name: "notes", type: "text/plain" })).toBe("text/plain");
+    expect(textFileMime({ name: "photo", type: "" })).toBeNull();
+    expect(textFileMime({ name: "setup.exe", type: "application/x-msdownload" })).toBeNull();
+    for (const [name, type] of [["clip.mov", ""], ["clip.mp4", "video/mp4"], ["screen.webm", "video/webm"], ["IMG_0042.HEIC", ""], ["IMG_0043.heic", "image/heic"]]) {
+      expect(tile(name!, type), name).toMatchObject({ kind: "file", name });
+    }
+    expect(tile("setup.exe", "application/x-msdownload")).toBeNull();
+  });
+
   it("recognises supported documents by declared mime or filename", () => {
     expect(documentMime({ name: "notes.bin", type: "text/markdown; charset=utf-8" })).toBe("text/markdown");
     expect(documentMime({ name: "REPORT.PDF", type: "" })).toBe("application/pdf");
-    expect(documentMime({ name: "archive.zip", type: "application/zip" })).toBeNull();
+    expect(documentMime({ name: "archive.zip", type: "application/zip" })).toBe("application/zip");
+    expect(documentMime({ name: "archive.zip", type: "application/x-zip-compressed" })).toBe("application/zip");
+    expect(documentMime({ name: "voice.ZIP", type: "" })).toBe("application/zip");
+    expect(documentMime({ name: "archive.rar", type: "application/vnd.rar" })).toBeNull();
+    expect(pendingFileAttachment({ name: "voice.zip", type: "application/x-zip-compressed", size: 2048 })).toMatchObject({ kind: "file", name: "voice.zip", uploading: true });
   });
 
   it("uses the server path and safe name returned by the private store", async () => {

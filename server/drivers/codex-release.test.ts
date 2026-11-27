@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { codexVersionBehind, createCodexReleaseReader } from "./codex-release.ts";
+import { codexVersionBehind, createCodexReleaseAgeReader, createCodexReleaseReader } from "./codex-release.ts";
 
 describe("Codex stable releases", () => {
   it("compares releases without mistaking newer nightlies or unknown wrappers for old builds", () => {
@@ -39,5 +39,26 @@ describe("Codex stable releases", () => {
   it.each([{}, { version: "nightly" }, { version: "0.157.0-alpha.1" }])("ignores malformed or prerelease stable metadata: %j", async (body) => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(body)));
     expect(await createCodexReleaseReader(fetcher)()).toBeNull();
+  });
+
+  it("reads the latest release's publish time from its tarball's Last-Modified", async () => {
+    const tarball = "https://registry.npmjs.org/@openai/codex/-/codex-0.172.0.tgz";
+    const fetcher = vi.fn<typeof fetch>(async (url, init) => url === tarball && init?.method === "HEAD"
+      ? new Response(null, { headers: { "last-modified": "Tue, 24 Nov 2026 00:09:46 GMT" } })
+      : new Response(JSON.stringify({ version: "0.172.0", dist: { tarball } })));
+    expect(await createCodexReleaseAgeReader(fetcher)()).toEqual({ version: "0.172.0", publishedAt: Date.UTC(2026, 10, 24, 0, 9, 46) });
+  });
+
+  it("leaves the publish time unknown for a tarball off the registry or without the header", async () => {
+    const offRegistry = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ version: "0.172.0", dist: { tarball: "https://example.test/c.tgz" } })));
+    expect(await createCodexReleaseAgeReader(offRegistry)()).toEqual({ version: "0.172.0", publishedAt: null });
+    expect(offRegistry).toHaveBeenCalledTimes(1);
+    const noHeader = vi.fn<typeof fetch>(async (_url, init) => init?.method === "HEAD" ? new Response(null)
+      : new Response(JSON.stringify({ version: "0.172.0", dist: { tarball: "https://registry.npmjs.org/@openai/codex/-/codex-0.172.0.tgz" } })));
+    expect(await createCodexReleaseAgeReader(noHeader)()).toEqual({ version: "0.172.0", publishedAt: null });
+  });
+
+  it.each([{}, { version: "0.172.0-alpha.1" }, { version: "0.172.0+build" }])("has no release for malformed or prerelease metadata: %j", async (body) => {
+    expect(await createCodexReleaseAgeReader(vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(body))))()).toBeNull();
   });
 });

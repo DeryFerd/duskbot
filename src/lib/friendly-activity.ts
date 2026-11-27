@@ -168,7 +168,8 @@ function toolPool(name: string | undefined): PoolName | null {
 export function friendlyNowPhrases(status: LiveStatus | null, message?: Message): LiveActivityPhrases {
   const plain = message?.kind === "activity" && message.tool?.spoken ? { ...message, tool: { ...message.tool, spoken: undefined } } : message;
   const now = turnNowPhrases(status, plain);
-  if (now?.phase.startsWith("notice:")) return now;
+  // a wait on background work says so plainly: no playful words stand in for it
+  if (now?.phase.startsWith("notice:") || now?.phase.startsWith("toolStep.")) return now;
   if (now?.phase.startsWith("step:")) {
     const name = STEP_POOLS[now.phase.split(":")[1] ?? ""];
     return name ? phrases(name) : now;

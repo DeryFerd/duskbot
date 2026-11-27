@@ -10,11 +10,14 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { link, open, unlink } from "node:fs/promises";
+import { link, mkdtemp, open, readFile, rm, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { FILE_MAX_BYTES } from "../shared/upload-limits.ts";
 import { DATA_DIR } from "./config.ts";
 import { boxUploadsDir } from "./bot-box/plan.ts";
+import { ZIP_LIMITS } from "./attached-zip.ts";
+import { readZipDirectory } from "./zip-archive.ts";
 
 export { FILE_MAX_BYTES } from "../shared/upload-limits.ts";
 export const ATTACHMENTS_DIR = join(DATA_DIR, "attachments");
@@ -74,6 +77,9 @@ const IMAGE_MIMES: Record<string, string> = {
 export const SCRIPT_EXTENSIONS: ReadonlySet<string> = new Set([
   ".py", ".sh", ".bash", ".zsh", ".fish", ".ps1", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".rb", ".go", ".rs", ".java", ".kt",
   ".swift", ".c", ".h", ".cpp", ".cc", ".hpp", ".cs", ".php", ".pl", ".lua", ".r", ".sql", ".yaml", ".yml", ".toml", ".ini",
+  ".log", ".xml", ".css", ".scss", ".less", ".vue", ".svelte", ".conf", ".cfg", ".properties", ".gradle", ".proto", ".graphql",
+  ".gql", ".dart", ".scala", ".tf", ".hcl", ".ex", ".exs", ".hs", ".zig", ".env", ".gitignore", ".dockerignore", ".editorconfig",
+  ".diff", ".patch", ".srt", ".vtt",
 ]);
 export const SCRIPT_MAX_BYTES = 1024 * 1024;
 
@@ -120,9 +126,23 @@ const FILE_MIMES: Readonly<Record<string, string>> = {
   "application/vnd.oasis.opendocument.text": ".odt",
   "application/vnd.oasis.opendocument.spreadsheet": ".ods",
   "application/vnd.oasis.opendocument.presentation": ".odp",
+  "image/heic": ".heic",
+  "image/heif": ".heif",
+  "application/zip": ".zip",
+  "application/x-zip-compressed": ".zip",
 };
 
 const IMAGE_HEAD_BYTES = 12;
+
+/** A zip's first bytes: a local file header, or the end record of an empty archive. */
+export function isZipHead(bytes: Buffer): boolean {
+  return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && ((bytes[2] === 3 && bytes[3] === 4) || (bytes[2] === 5 && bytes[3] === 6));
+}
+
+/** An HEIC or HEIF photo's first bytes: an ISO media `ftyp` box with an image brand. */
+export function isHeifHead(bytes: Buffer): boolean {
+  return bytes.length >= 12 && bytes.toString("latin1", 4, 8) === "ftyp" && /^(?:heic|heix|hevc|hevx|heim|heis|hevm|hevs|mif1|msf1|avif)$/.test(bytes.toString("latin1", 8, 12));
+}
 
 /** The image type the bytes themselves say they are, by their magic bytes; null: not an image we take. */
 export function imageMimeOf(bytes: Buffer): string | null {
@@ -440,7 +460,11 @@ export function sanitizeSharedFileName(name: string, mime: string): string {
   }
 
   const dot = normalized.lastIndexOf(".");
-  const withoutExtension = dot > 0 ? normalized.slice(0, dot) : normalized;
+  // plain text keeps the name it came with ("page.html" stays readable as "page.html.txt", "Dockerfile" stays
+  // "Dockerfile"); the stored file and its download are text/plain whatever the name says
+  const ownExtension = dot > 0 ? normalized.slice(dot).toLowerCase() : "";
+  const plain = extension === ".txt" && ownExtension !== ".txt" && !scriptExtensionOf(normalized);
+  const withoutExtension = dot > 0 && !plain ? normalized.slice(0, dot) : normalized;
   const safeCharacters = Array.from(withoutExtension, (character) => {
     const code = character.charCodeAt(0);
     return code <= 31 || code === 127 || "<>:\"|?*".includes(character) ? "_" : character;
@@ -453,6 +477,7 @@ export function sanitizeSharedFileName(name: string, mime: string): string {
   const boundedStem = Array.from(stem).slice(0, 180).join("");
   if (!boundedStem) throw statusError(400, "name must contain visible characters");
   const script = extension === ".txt" ? scriptExtensionOf(normalized) : null;
+  if (plain && dot <= 0) return boundedStem;
   return `${boundedStem}${script ?? extension}`;
 }
 
@@ -512,9 +537,10 @@ export async function saveFile(
     let file: Awaited<ReturnType<typeof open>> | undefined;
     let bytes = 0;
     let head = Buffer.alloc(0);
-    let headChecked = !IMAGE_MIMES[normalized];
+    const zip = extension === ".zip", heif = extension === ".heic" || extension === ".heif";
+    let headChecked = !IMAGE_MIMES[normalized] && !zip && !heif;
     const requireClaimedImage = () => {
-      if (imageMimeOf(head) !== normalized) throw statusError(400, `file bytes are not ${normalized}`);
+      if (zip ? !isZipHead(head) : heif ? !isHeifHead(head) : imageMimeOf(head) !== normalized) throw statusError(400, `file bytes are not ${normalized}`);
       headChecked = true;
     };
     let closed = false;
@@ -724,7 +750,51 @@ export function saveAudio(bytes: Buffer, mime: string): SavedAttachment {
   }
 }
 
+/** A zip whose file list cannot be read, or a PDF without the header every reader looks for, is removed and refused
+ * (422) at upload, so the composer says it wasn't attached instead of only the bot learning it can't be opened. */
+export async function refuseDamagedDocument(saved: SavedFile): Promise<void> {
+  const extension = extname(saved.path).toLowerCase();
+  if (extension !== ".zip" && extension !== ".pdf") return;
+  let damaged: boolean;
+  if (extension === ".zip") {
+    damaged = await readZipDirectory(saved.path, ZIP_LIMITS.entries).then(() => false, () => true);
+  } else {
+    const handle = await open(saved.path, "r");
+    try {
+      const head = Buffer.alloc(1024);
+      const { bytesRead } = await handle.read(head, 0, head.byteLength, 0);
+      // the same test pdf-text.ts makes before it reads one
+      damaged = !head.subarray(0, bytesRead).includes(Buffer.from("%PDF-"));
+    } finally {
+      await handle.close();
+    }
+  }
+  if (!damaged) return;
+  deleteAttachment(saved.path);
+  throw statusError(422, `${extension === ".zip" ? "the zip" : "the PDF"} is damaged`);
+}
+
 /** Takes the per-id lock, so an image and a document with one caller-supplied UUID cannot commit with different extensions. */
+/** An iPhone (HEIC/HEIF) photo as the JPEG picture an engine and the chat can show, or null when it is not one or no
+ * converter on this machine reads it (server/attached-media.ts). The original upload stays as it was. */
+export async function heifUploadAsPicture(saved: SavedFile): Promise<SavedFile | null> {
+  if (!/\.(?:heic|heif)$/i.test(saved.path)) return null;
+  const { heifAsJpeg } = await import("./attached-media.ts");
+  const folder = await mkdtemp(join(tmpdir(), "dusk-heif-"));
+  try {
+    const jpeg = await heifAsJpeg(saved.path, folder);
+    if (!jpeg) return null;
+    const bytes = await readFile(jpeg);
+    if (!bytes.byteLength || bytes.byteLength > IMAGE_MAX_BYTES || imageMimeOf(bytes) !== "image/jpeg") return null;
+    const picture = await saveImageUpload(bytes, "image/jpeg");
+    return { ...picture, name: saved.name.replace(/\.(?:heic|heif)$/i, ".jpg") };
+  } catch {
+    return null;
+  } finally {
+    await rm(folder, { recursive: true, force: true });
+  }
+}
+
 export async function saveImageUpload(
   bytes: Buffer,
   mime: string,

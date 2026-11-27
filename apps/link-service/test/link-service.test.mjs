@@ -179,7 +179,7 @@ describe("setup sessions", () => {
     const pairingAsk = seen.find((entry) => entry.url === "/api/auth/pairing");
     expect(JSON.parse(pairingAsk.body)).toEqual({ label: "Sid's MacBook" });
     const tunnelFile = join(home, ".config", "duskbot-link", "tunnel.json");
-    expect(statSync(tunnelFile).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(tunnelFile).mode & 0o777).toBe(0o600);
 
     const done = await relay.watch(made.id, made.watch, 0);
     expect(done.state).toBe("linked");
@@ -443,7 +443,7 @@ describe("a linked server's own update", () => {
     const ready = JSON.parse(readFileSync(join(staged, "ready.json"), "utf8"));
     expect(ready).toMatchObject({ v: 1, sha256: sha, size: bytes.length, version: "1.2.0" });
     expect(readFileSync(join(staged, `${sha}.tgz`)).equals(bytes)).toBe(true);
-    expect(statSync(join(staged, "ready.json")).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(join(staged, "ready.json")).mode & 0o777).toBe(0o600);
   });
 
   it("the agent logs what each check found, once each time it changes", async () => {

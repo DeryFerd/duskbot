@@ -1,17 +1,21 @@
+import { existsSync } from "node:fs";
 import { serverVersion } from "../environment.ts";
 import { SERVER_ROOT } from "../proxy-paths.ts";
-import { createUpdateChecker, installKind, tracksOfficialLatest, type UpdateCheck } from "../update-check.ts";
+import { createChangelogReader, createUpdateChecker, installKind, LINKED_MARKER, tracksOfficialLatest, type UpdateCheck } from "../update-check.ts";
 import { createComposeUpdates, type ComposeUpdates } from "../compose-updates.ts";
 import { isProxied, type RequestAuth } from "../request-auth.ts";
 import { json, readBody } from "../harness/http.ts";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WorkspaceBackupMaintenance } from "../workspace-backup-maintenance.ts";
 import { PASS, type RouteHandler } from "./table.ts";
+import type { Release } from "../../shared/release-notes.ts";
 
 export interface UpdateCheckRouteDeps {
   check(): Promise<UpdateCheck>;
   compose?: ComposeUpdates;
   owner?: (auth: RequestAuth) => boolean;
+  /** GET /api/updates/changelog: what each release changed (shared/release-notes.ts), empty when there is no list */
+  changelog?: () => Promise<Release[]>;
 }
 
 export function createUpdateCheckRoutes(deps: UpdateCheckRouteDeps): RouteHandler {
@@ -34,6 +38,10 @@ export function createUpdateCheckRoutes(deps: UpdateCheckRouteDeps): RouteHandle
         return json(res, 409, { error: error instanceof Error ? error.message : "Check the host updater service." });
       }
     }
+    if (path === "/api/updates/changelog" && method === "GET") {
+      res.setHeader("cache-control", "no-store");
+      return json(res, 200, { v: 1, releases: deps.changelog ? await deps.changelog() : [] });
+    }
     if (path !== "/api/updates/check" || method !== "GET") return PASS;
     try {
       const check = await deps.check();
@@ -49,7 +57,8 @@ export function serverUpdatesFor(where: { desktopManaged: boolean; managed: bool
   eligible: () => boolean, busy: () => string[], maintenance: WorkspaceBackupMaintenance) {
   const image = process.env.DUSK_COMPOSE_IMAGE;
   const install = installKind({ ...where, serverRoot: SERVER_ROOT });
-  const check = createUpdateChecker({ current: serverVersion(), composeImage: image, releaseImage: process.env.DUSK_RELEASE_IMAGE, install });
+  const check = createUpdateChecker({ current: serverVersion(), composeImage: image, releaseImage: process.env.DUSK_RELEASE_IMAGE, install,
+    linked: existsSync(LINKED_MARKER) });
   const idle = () => busy().length === 0;
   const compose = install === "docker" && tracksOfficialLatest(image)
     ? createComposeUpdates({ check, eligible, idle, reserve: () => maintenance.reserveUpdate(idle) }) : undefined;
@@ -66,5 +75,5 @@ export function serverUpdatesFor(where: { desktopManaged: boolean; managed: bool
     }
     return true;
   }
-  return { check, routes: createUpdateCheckRoutes({ check, owner, compose }), hostRoute };
+  return { check, routes: createUpdateCheckRoutes({ check, owner, compose, changelog: createChangelogReader() }), hostRoute };
 }

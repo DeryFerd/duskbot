@@ -93,6 +93,19 @@ async function uploadedFiles(req: IncomingMessage): Promise<Array<{ name: string
   return Promise.all(files.map(async (file) => ({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) })));
 }
 
+/** A refused upload's body of at most 64 KiB, as its declared length says, read to its end and dropped; false for a
+ * larger, unsized or broken one, which is left unread. */
+const SMALL_REFUSED_BODY = 64 * 1024;
+function drainedSmallBody(req: IncomingMessage): Promise<boolean> {
+  const declared = Number(req.headers["content-length"]);
+  if (!Number.isSafeInteger(declared) || declared < 0 || declared > SMALL_REFUSED_BODY) return Promise.resolve(false);
+  if (req.readableEnded) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    req.once("end", () => resolve(true)).once("error", () => resolve(false)).once("close", () => resolve(req.readableEnded));
+    req.resume();
+  });
+}
+
 /** Gives an upload's files to the page's picker; null when it took them, else why not. Files it did not take are deleted. */
 async function answerUpload(req: IncomingMessage, deps: BrowserViewerRouteDeps, browser: { session: string; spec: Spec }, owner: string, chooser: string): Promise<(Failure & { unread?: boolean }) | null> {
   let files: Array<{ name: string; bytes: Uint8Array }>;
@@ -218,7 +231,9 @@ export function createBrowserViewerRoutes(deps: BrowserViewerRouteDeps): RouteHa
       const refused = !deps.viewers.fileChooserOffered(browser, owner, chooser) ? { status: 409, error: PICKER_CLOSED }
         : uploading.has(owner) ? { status: 429, error: "Your previous upload is still on its way. Wait for it, then try again." } : null;
       if (refused) {
-        res.setHeader("connection", "close");
+        // a small body is read and dropped first, so the client gets this answer, not a reset while it still writes;
+        // a larger one is never read and its connection closes
+        if (!await drainedSmallBody(req)) res.setHeader("connection", "close");
         return json(res, refused.status, { error: refused.error });
       }
       uploading.add(owner);

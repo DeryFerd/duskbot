@@ -1,0 +1,27 @@
+{
+  "title": "Check a PR's CI with gh on the computer, not the browser",
+  "world": "developer",
+  "tags": ["capability", "cli"],
+  "source": "complaints #5 (@hilng77042): a small GitHub task that gh would do; the bot opened the browser instead and was deleted.",
+  "apps": ["slack", "notes"],
+  "cli": ["gh"],
+  "computer": true,
+  "steps": [
+    {
+      "chat": {
+        "label": "pr",
+        "goal": "Find out whether PR #214 in tidepool-hq/api is green, what is failing if not, and get a comment on the PR saying you'll fix lint after lunch. You have gh signed in on this computer; you expect the bot to just use it.",
+        "opener": "is #214 on tidepool-hq/api green yet? if not whats failing. then drop a comment on it saying ill fix the lint after lunch",
+        "knows": "gh is installed and signed in on this computer. Don't connect GitHub as an app, you don't want to.",
+        "maxTurns": 3
+      }
+    }
+  ],
+  "checks": [
+    { "label": "used gh", "tool": { "step": "pr", "match": "\\bgh (pr|api|issue)\\b" }, "min": 1 },
+    { "label": "no browser for it", "tool": { "step": "pr", "match": "^browser_" }, "max": 0 },
+    { "label": "commented on 214", "app": "log", "where": { "app": "^gh$", "action": "gh_comment", "number": "214" }, "min": 1 },
+    { "label": "named what fails", "said": { "step": "pr", "match": "lint|unused|no-unused-vars|failing" } }
+  ],
+  "judge": "Kiran runs gh on the computer (pr checks / pr view), reports that #214 is red with the lint error (unused 'existing') and the failing unit test, and posts the comment with gh pr comment. It never opens a browser or asks Arjun to connect GitHub."
+}

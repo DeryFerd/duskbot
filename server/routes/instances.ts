@@ -30,7 +30,7 @@ export interface InstanceRouteDeps {
   cfg: AppConfig;
   registry: Pick<ProviderRegistry, "get" | "refreshModels" | "installRuntime" | "cliTarget" | "forgetSnapshots">;
   sessions: Pick<SessionRegistry, "isLive">;
-  providerAuthSessions: Pick<ProviderAuthSessions, "status" | "start" | "revokeOwner" | "signOut" | "complete" | "cancel">;
+  providerAuthSessions: Pick<ProviderAuthSessions, "status" | "start" | "revokeOwner" | "signOut" | "complete" | "cancel" | "abandon">;
   providerConfigBusy: BusyFlag;
   providerInstancesChanging: Pick<Set<string>, "add" | "delete">;
   describeInstances(): Promise<unknown>;
@@ -278,7 +278,10 @@ export function createInstanceRoutes(deps: InstanceRouteDeps): RouteHandler {
           return json(res, 200, { ok: true, ...done });
         }
         const body = await readBody(req, 4096);
-        await providerAuthSessions.cancel(instanceId, owner, typeof body?.flowId === "string" ? body.flowId : "");
+        const flowId = typeof body?.flowId === "string" ? body.flowId : "";
+        const why = ["lost", "timeout", "retry"].includes(body?.why) ? body.why as "lost" | "timeout" | "retry" : "person";
+        if (!flowId && body?.pending === true) await providerAuthSessions.abandon(instanceId, owner);
+        else await providerAuthSessions.cancel(instanceId, owner, flowId, why);
         return json(res, 200, { ok: true });
       } catch (error) {
         const requestedStatus = error && typeof error === "object" ? (error as { status?: unknown }).status : undefined;

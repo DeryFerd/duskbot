@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import type { StoredSubscription } from "../../dashboard/server/billing/store.ts";
 import { INSTABOX_SETUP_STATUS } from "./home.ts";
 import { DAY_MS } from "./retention.ts";
@@ -131,4 +131,70 @@ it("a first setup in error pauses its machines, and is tried again later unless 
     for (let n = 0; n < 6 * 8 && c.status !== "running"; n++) { f.advance(10 * 60_000); await f.service.reconcile(); }
     expect(c.status).toBe(scriptBroken ? "error" : "running");
   }
+});
+
+/** a first setup whose home never answers its health check, left until it lands in its error state */
+async function inSetupError(f: Fixture) {
+  f.home.healthy.mockResolvedValue(false);
+  const { c, sub } = ordered(f);
+  for (let n = 0; n < 40 && c.status !== "error"; n++) { c.nextAttemptAt = 0; await f.service.reconcile(); }
+  for (let n = 0; n < 30 && c.status !== "error"; n++) { f.advance(10 * 60_000); c.nextAttemptAt = 0; await f.service.reconcile(); }
+  expect(c.status).toBe("error");
+  c.nextAttemptAt = 0; await f.service.reconcile();
+  expect(c.managed!.setupErrorAt).not.toBeNull();
+  return { c, sub };
+}
+
+it("the operator's retry runs a setup in error on the next pass, not hours later, and is audited once however often it is asked", async () => {
+  const f = await homeFixture();
+  const { c } = await inSetupError(f);
+  f.home.healthy.mockResolvedValue(true);
+  // without the retry, the next pass leaves it waiting for its scheduled try
+  f.advance(60_000); c.nextAttemptAt = 0; await f.service.reconcile();
+  expect(c.status).toBe("error");
+  expect(f.service.retrySetup!(c.id, "admin_panel")).toEqual({ queued: true, already: false });
+  expect(f.service.retrySetup!(c.id, "admin_panel")).toEqual({ queued: true, already: true });
+  // the retry's own pass picks it up: no clock moved, no due time reset by hand
+  await f.service.reconcile();
+  expect(c.status).toBe("provisioning");
+  await f.settle(c, x => x.status === "running", 20);
+  expect(c).toMatchObject({ error: null, setupStep: null });
+  expect(c.managed!.setupRetryAskedAt).toBeNull();
+  const asked = f.audit.entries(c.id).filter(e => e.action === "setup_retry_asked");
+  expect(asked).toHaveLength(1);
+  expect(asked[0]).toMatchObject({ actor: "operator", reason: "admin_panel" });
+  expect(f.audit.entries(c.id).find(e => e.action === "setup_resumed")).toMatchObject({ actor: "operator", reason: "retry_asked" });
+  // a running cloud has nothing to retry
+  expect(f.service.retrySetup!(c.id, "admin_panel")).toEqual({ refused: "not_in_setup_error" });
+});
+
+it("the operator's retry is refused where the scheduled one would not run: suspended, no plan, its script failed every time, a step running", async () => {
+  const f = await homeFixture();
+  const { c, sub } = await inSetupError(f);
+  await f.service.suspend(c.id, "abuse");
+  expect(f.service.retrySetup!(c.id, "admin_panel")).toEqual({ refused: "not_in_setup_error" });
+  // a suspended cloud that still reads as in error (its suspension recorded, not yet applied) is refused for the suspension
+  Object.assign(c, { status: "error" });
+  expect(f.service.retrySetup!(c.id, "admin_panel")).toEqual({ refused: "suspended" });
+  Object.assign(c, { suspended: null });
+  end(f, sub);
+  expect(f.service.retrySetup!(c.id, "admin_panel")).toEqual({ refused: "no_plan" });
+  renew(f, sub);
+  c.managed!.setupFailures = 3;
+  expect(f.service.retrySetup!(c.id, "admin_panel")).toEqual({ refused: "setup_script_failed" });
+  c.managed!.setupFailures = 0;
+  // while a step of the cloud runs, nothing is changed
+  let release = () => {};
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const machine = f.provider.machine.bind(f.provider);
+  const spy = vi.spyOn(f.provider, "machine").mockImplementation(async id => { await held; return machine(id); });
+  c.nextAttemptAt = 0;
+  const pass = f.service.reconcile();
+  for (let n = 0; n < 50 && !spy.mock.calls.length; n++) await new Promise(resolve => setTimeout(resolve, 5));
+  expect(spy).toHaveBeenCalled();
+  expect(f.service.retrySetup!(c.id, "admin_panel")).toEqual({ refused: "busy" });
+  expect(c.managed!.setupRetryAskedAt ?? null).toBeNull();
+  release(); await pass; spy.mockRestore();
+  expect(f.audit.entries(c.id).map(e => e.action)).not.toContain("setup_retry_asked");
+  expect(f.service.retrySetup!(c.id, "admin_panel")).toEqual({ queued: true, already: false });
 });

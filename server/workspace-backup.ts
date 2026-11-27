@@ -47,6 +47,9 @@ const EXCLUDED = new Set([
   // A Team Cloud's engine homes (engine-homes/layout.ts): CLI login homes, each audience's own transcripts and the held
   // folder, which no admin reads.
   "engine-homes",
+  // The memory-recall embedding model (memory-embed.ts): a checked download fetched again when missing, written through a
+  // .part file that a running download renames under the backup's feet.
+  "models",
   WAITS_FILE,
 ]);
 const EXCLUSION_NOTES = [
@@ -348,7 +351,10 @@ export async function createWorkspaceBackupSnapshot(dataDir: string, options: Cr
         if (forbiddenArchivePath(path)) throw new Error("A workspace filename conflicts with a protected authentication or runtime path.");
         if (!validRelative(path)) throw new Error(`Cannot back up a name that cannot be restored on every supported platform, such as one with ":" or "\\", a trailing dot or space, or a Windows device name like CON or AUX; rename it first: ${path}`);
         let source = join(directory, name);
-        let stat = lstatSync(source);
+        let stat: ReturnType<typeof lstatSync>;
+        // a file listed a moment ago can be gone now (a finished download renamed its .part); it is not in the backup
+        try { stat = lstatSync(source); }
+        catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") continue; throw error; }
         if (name === "node_modules" && (stat.isDirectory() || stat.isSymbolicLink())) {
           skippedDependencies++;
           continue;

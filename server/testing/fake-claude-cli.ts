@@ -14,6 +14,8 @@
 //   FAKE_CLAUDE_ANSWER_MODEL  the `model` of its assistant frames, as when the CLI answers with another model than asked
 //   FAKE_CLAUDE_RELEASE  with hang: the turn ends normally once this file exists; a scripted call's `hold` ends then too
 //   FAKE_CLAUDE_DUMP  path for the latest turn's {argv, env, cwd, prompt, systemPrompt, mcpConfig}
+//   FAKE_CLAUDE_DUMP_DIR  also keeps each process's latest turn as <dir>/dump-<pid>.json, so turns of other threads that
+//     overlap never overwrite the one a test reads
 //   FAKE_CLAUDE_ELICIT  JSON request body: a "hang" turn (or a failing FAKE_CLAUDE_TRANSIENTS launch) first asks it
 //     as control_request "elicit-1"
 //   FAKE_CLAUDE_CONTROL_LOG  JSON-lines file every control_response and control_request the host writes is appended to
@@ -908,15 +910,14 @@ const playTurn = (prompt: JsonValue, late = false) => {
   volatileNote = volatileNoteIn(prompt) ?? volatileNote;
   const homeFiles = process.env.FAKE_CLAUDE_HOME_FILES === "1";
   const signedInAs = homeFiles ? homeSignIn() : undefined;
-  if (!late && process.env.FAKE_CLAUDE_DUMP) {
+  if (!late && (process.env.FAKE_CLAUDE_DUMP || process.env.FAKE_CLAUDE_DUMP_DIR)) {
     launchFiles ??= readLaunchFiles();
     // systemPrompt: what the model is instructed with, the system prompt file plus the
     // volatile half a user message carries (claude.ts keeps the file stable for the cache)
     const systemPrompt = volatileNote && typeof launchFiles.systemPrompt === "string" ? `${launchFiles.systemPrompt}\n\n${volatileNote}` : launchFiles.systemPrompt;
-    writeDumpAtomic(
-      process.env.FAKE_CLAUDE_DUMP,
-      JSON.stringify({ pid: process.pid, argv, env: process.env, cwd: process.cwd(), prompt, ...launchFiles, systemPrompt, systemPromptFile: launchFiles.systemPrompt, ...(homeFiles ? { signedInAs } : {}) }, null, 2),
-    );
+    const dump = JSON.stringify({ pid: process.pid, argv, env: process.env, cwd: process.cwd(), prompt, ...launchFiles, systemPrompt, systemPromptFile: launchFiles.systemPrompt, ...(homeFiles ? { signedInAs } : {}) }, null, 2);
+    if (process.env.FAKE_CLAUDE_DUMP) writeDumpAtomic(process.env.FAKE_CLAUDE_DUMP, dump);
+    if (process.env.FAKE_CLAUDE_DUMP_DIR) writeDumpAtomic(join(process.env.FAKE_CLAUDE_DUMP_DIR, `dump-${process.pid}.json`), dump);
   }
 
   if (process.env.FAKE_CLAUDE_ROUTER_PING === "1" && process.env.ANTHROPIC_BASE_URL) {
@@ -1030,7 +1031,10 @@ const playTurn = (prompt: JsonValue, late = false) => {
 
   if (process.env.FAKE_CLAUDE_ROOM_PLAN) {
     const progress = (text: string) => out({ type: "assistant", message: { content: [{ type: "text", text }] } });
-    void runRoomHandoffAgent(argv, process.env.FAKE_CLAUDE_ROOM_PLAN, prompt, undefined, progress, () => steered).then(text => {
+    const toolCall = (phase: "start" | "end", call: { id: string; tool: string; args: unknown; ok?: boolean; text?: string }) => out(phase === "start"
+      ? { type: "assistant", message: { content: [{ type: "tool_use", id: call.id, name: `mcp__agents__${call.tool}`, input: call.args }] } }
+      : { type: "user", message: { content: [{ type: "tool_result", tool_use_id: call.id, is_error: !call.ok, content: [{ type: "text", text: call.text ?? "" }] }] } });
+    void runRoomHandoffAgent(argv, process.env.FAKE_CLAUDE_ROOM_PLAN, prompt, undefined, progress, () => steered, toolCall).then(text => {
       replaySteered();
       const contextTokens = Number(process.env.FAKE_CLAUDE_CONTEXT_TOKENS);
       const usage = Number.isSafeInteger(contextTokens) && contextTokens > 0 ? { input_tokens: contextTokens, output_tokens: 5 } : undefined;
@@ -1104,6 +1108,13 @@ const playTurn = (prompt: JsonValue, late = false) => {
       type: "stream_event",
       parent_tool_use_id: "task-1",
       event: { type: "content_block_delta", delta: { type: "text_delta", text: "SUBAGENT NOISE" } },
+    });
+    // a Task subagent's own closing message, its report back to the bot
+    out({
+      type: "assistant",
+      parent_tool_use_id: "task-1",
+      session_id: sessionId,
+      message: { role: "assistant", content: [{ type: "text", text: "SUBAGENT REPORT: ## Summary of work done\n\nI searched three sources and compiled the findings." }] },
     });
   }
 

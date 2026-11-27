@@ -815,17 +815,17 @@ describe("steer-queue e2e (fake ACP fleet)", () => {
         instances: {
           steer: {
             driver: "grokAgent",
-            environment: { FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: drainGate },
+            environment: { FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: drainGate, FAKE_ACP_ECHO_QUOTED: "1" },
             config: { cli: FAKE_CLI, fullAuto: true },
           },
           steerEarly: {
             driver: "grokAgent",
-            environment: { FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: earlyGate },
+            environment: { FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: earlyGate, FAKE_ACP_ECHO_QUOTED: "1" },
             config: { cli: FAKE_CLI, fullAuto: true },
           },
           steerReceipt: {
             driver: "grokAgent",
-            environment: { FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: receiptGate },
+            environment: { FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: receiptGate, FAKE_ACP_ECHO_QUOTED: "1" },
             config: { cli: FAKE_CLI, fullAuto: true },
           },
           // Wait for session/prompt to be in flight: an earlier interrupt is a no-op on a turn the driver has not registered.
@@ -835,13 +835,14 @@ describe("steer-queue e2e (fake ACP fleet)", () => {
               FAKE_ACP_MODE: "echo-gated",
               FAKE_ACP_GATE_FILE: stopGate,
               FAKE_ACP_RPC_DUMP: stopRpcDump,
+              FAKE_ACP_ECHO_QUOTED: "1",
             },
             config: { cli: FAKE_CLI, fullAuto: true },
           },
           // One gate holds the room's turn open while a 1:1 message arrives.
           steerRoom: {
             driver: "grokAgent",
-            environment: { FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: roomGate, FAKE_ACP_RPC_APPEND_FILE: roomRpcAppend },
+            environment: { FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: roomGate, FAKE_ACP_RPC_APPEND_FILE: roomRpcAppend, FAKE_ACP_ECHO_QUOTED: "1" },
             config: { cli: FAKE_CLI, fullAuto: true },
           },
         },
@@ -929,7 +930,8 @@ describe("steer-queue e2e (fake ACP fleet)", () => {
     await until(async () => receipt() === undefined, "receipt settlement by the replacement's exact provider turn");
     const retried = await api("POST", `/api/bots/${bot.id}/messages`, body);
     expect(retried.body.message).toMatchObject({ queueId: queued.body.queueId, sendId: body.sendId });
-    expect(echoes(await botById(bot.id))).toHaveLength(2);
+    const settled = echoes(await botById(bot.id));
+    expect(settled, JSON.stringify(settled.map((message: any) => String(message.text).slice(0, 400)))).toHaveLength(2);
     evidence.push({ receiptGeneration: { queued, retried, final: await botById(bot.id) } });
   }, 30_000);
 
@@ -965,7 +967,7 @@ describe("steer-queue e2e (fake ACP fleet)", () => {
       const replies = echoes(snapshot);
       expect(replies).toHaveLength(2);
       expect(replies[0].text).toContain("first task please");
-      expect(replies[1].text).toContain("steer two\n\nsteer three");
+      expect(replies[1].text).toContain("> steer two\n> \n> steer three");
       expect(replies[1].text).not.toContain("authenticated outside event");
       expect(replies[1].text).not.toContain("[The user rewound");
       const userTexts = snapshot.messages.filter((m: any) => m.role === "user").map((m: any) => m.text);

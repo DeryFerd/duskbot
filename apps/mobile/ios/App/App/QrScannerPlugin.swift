@@ -88,10 +88,18 @@ public class QrScannerPlugin: CAPPlugin, CAPBridgedPlugin, AVCaptureMetadataOutp
     @available(iOS 16.0, *)
     private func presentFullScreen(_ overlay: ScanOverlay, call: CAPPluginCall) {
         guard var top = bridge?.viewController else { call.reject("no screen to scan on"); return }
-        while let next = top.presentedViewController { top = next }
+        while let next = top.presentedViewController, !next.isBeingDismissed { top = next }
         let scanner = PairScannerViewController(overlay: overlay)
         scanner.onCode = { [weak self] text in self?.notifyListeners("codeScanned", data: ["text": text]) }
-        scanner.onAction = { [weak self] key in self?.notifyListeners("scannerAction", data: ["key": key]) }
+        // every action leaves the scanner, so it goes at once: the page under a full screen controller is out of the
+        // window and may not get to its own stopScan
+        scanner.onAction = { [weak self, weak scanner] key in
+            if let self, let scanner, self.fullScreen === scanner {
+                self.fullScreen = nil
+                scanner.dismiss(animated: true)
+            }
+            self?.notifyListeners("scannerAction", data: ["key": key])
+        }
         scanner.modalPresentationStyle = .fullScreen
         scanner.modalTransitionStyle = .crossDissolve
         fullScreen = scanner
@@ -143,14 +151,34 @@ public class QrScannerPlugin: CAPPlugin, CAPBridgedPlugin, AVCaptureMetadataOutp
 
     @objc func stopScan(_ call: CAPPluginCall) {
         DispatchQueue.main.async { [weak self] in
-            guard let scanner = self?.fullScreen else { return }
+            let finish = {
+                self?.sessionQueue.async { [weak self] in
+                    self?.stopSession()
+                    call.resolve()
+                }
+            }
+            guard let scanner = self?.fullScreen else {
+                // a scanner that dismissed itself may still be animating out; a new one must not present over it
+                if let leaving = self?.leavingScanner(), let coordinator = leaving.transitionCoordinator {
+                    coordinator.animate(alongsideTransition: nil) { _ in finish() }
+                } else {
+                    finish()
+                }
+                return
+            }
             self?.fullScreen = nil
-            scanner.dismiss(animated: true)
+            scanner.dismiss(animated: true) { finish() }
         }
-        sessionQueue.async { [weak self] in
-            self?.stopSession()
-            call.resolve()
+    }
+
+    private func leavingScanner() -> UIViewController? {
+        guard #available(iOS 16.0, *) else { return nil }
+        var next = bridge?.viewController?.presentedViewController
+        while let current = next {
+            if current is PairScannerViewController, current.isBeingDismissed { return current }
+            next = current.presentedViewController
         }
+        return nil
     }
 
     @objc func isTorchAvailable(_ call: CAPPluginCall) {
@@ -254,8 +282,9 @@ final class PairScannerViewController: UIViewController, DataScannerViewControll
     var onAction: ((String) -> Void)?
 
     private let overlay: ScanOverlay
+    // VisionKit's .accurate level keeps full camera resolution so dense v2 pairing QRs decode reliably.
     private let scanner = DataScannerViewController(
-        recognizedDataTypes: [.barcode(symbologies: [.qr])], qualityLevel: .balanced, recognizesMultipleItems: false,
+        recognizedDataTypes: [.barcode(symbologies: [.qr])], qualityLevel: .accurate, recognizesMultipleItems: false,
         isHighFrameRateTrackingEnabled: false, isPinchToZoomEnabled: true, isGuidanceEnabled: true, isHighlightingEnabled: true)
     private let dim = CAShapeLayer()
     private let corners = CAShapeLayer()
@@ -288,6 +317,10 @@ final class PairScannerViewController: UIViewController, DataScannerViewControll
         view.addSubview(scanner.view)
         scanner.didMove(toParent: self)
         scanner.delegate = self
+        let swipe = UISwipeGestureRecognizer(target: self, action: #selector(closeScanner))
+        swipe.direction = .down
+        view.addGestureRecognizer(swipe)
+        NotificationCenter.default.addObserver(self, selector: #selector(closeScanner), name: UIApplication.didEnterBackgroundNotification, object: nil)
 
         let host = scanner.overlayContainerView
         dim.fillRule = .evenOdd
@@ -315,15 +348,15 @@ final class PairScannerViewController: UIViewController, DataScannerViewControll
         NSLayoutConstraint.activate([busyStack.centerXAnchor.constraint(equalTo: busyView.centerXAnchor), busyStack.centerYAnchor.constraint(equalTo: busyView.centerYAnchor)])
         host.addSubview(busyView)
 
-        let close = Self.glassButton()
-        close.configuration?.image = UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold))
-        close.accessibilityLabel = overlay.close
-        close.addAction(UIAction { [weak self] _ in self?.onAction?("close") }, for: .touchUpInside)
+        let closeButton = Self.glassButton()
+        closeButton.configuration?.image = UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold))
+        closeButton.accessibilityLabel = overlay.close
+        closeButton.addAction(UIAction { [weak self] _ in self?.closeScanner() }, for: .touchUpInside)
         torchButton.accessibilityLabel = overlay.torch
         torchButton.isHidden = !(AVCaptureDevice.default(for: .video)?.hasTorch ?? false)
         torchButton.addAction(UIAction { [weak self] _ in self?.toggleTorch() }, for: .touchUpInside)
         refreshTorch()
-        let top = UIStackView(arrangedSubviews: [close, UIView(), torchButton])
+        let top = UIStackView(arrangedSubviews: [closeButton, UIView(), torchButton])
         top.translatesAutoresizingMaskIntoConstraints = false
         host.addSubview(top)
 
@@ -360,9 +393,10 @@ final class PairScannerViewController: UIViewController, DataScannerViewControll
         bottom.translatesAutoresizingMaskIntoConstraints = false
         host.addSubview(bottom)
 
-        let guide = host.safeAreaLayoutGuide
+        // the controller's own safe area: the scanner's overlay container may not carry the notch and home indicator insets
+        let guide = view.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
-            close.widthAnchor.constraint(equalToConstant: 44), close.heightAnchor.constraint(equalToConstant: 44),
+            closeButton.widthAnchor.constraint(equalToConstant: 44), closeButton.heightAnchor.constraint(equalToConstant: 44),
             torchButton.widthAnchor.constraint(equalToConstant: 44), torchButton.heightAnchor.constraint(equalToConstant: 44),
             top.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 16),
             top.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -16),
@@ -372,6 +406,17 @@ final class PairScannerViewController: UIViewController, DataScannerViewControll
             bottom.centerXAnchor.constraint(equalTo: guide.centerXAnchor),
             bottom.bottomAnchor.constraint(equalTo: guide.bottomAnchor, constant: -24),
         ])
+    }
+
+    @objc private func closeScanner() {
+        guard !isBeingDismissed, presentingViewController != nil else { return }
+        onAction?("close")
+    }
+
+    /// VoiceOver's two-finger scrub
+    override func accessibilityPerformEscape() -> Bool {
+        closeScanner()
+        return true
     }
 
     private static func glassButton() -> UIButton {
@@ -385,6 +430,7 @@ final class PairScannerViewController: UIViewController, DataScannerViewControll
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         let bounds = scanner.overlayContainerView.bounds
+        guard !bounds.isEmpty else { return }
         let side = max(240, min(bounds.width - 56, 360)).rounded()
         box = CGRect(x: (bounds.width - side) / 2, y: bounds.height * 0.44 - side / 2, width: side, height: side)
         let path = UIBezierPath(rect: bounds)
@@ -431,7 +477,7 @@ final class PairScannerViewController: UIViewController, DataScannerViewControll
         guard on != busy else { return }
         busy = on
         busyLabel.text = label
-        if on { spinner.startAnimating(); scanner.stopScanning() } else { spinner.stopAnimating(); try? scanner.startScanning() }
+        if on { spinner.startAnimating(); scanner.stopScanning() } else { seen.removeAll(); spinner.stopAnimating(); try? scanner.startScanning() }
         UIView.animate(withDuration: 0.16) { self.busyView.alpha = on ? 1 : 0 }
     }
 
@@ -454,14 +500,23 @@ final class PairScannerViewController: UIViewController, DataScannerViewControll
         torchButton.accessibilityTraits = torchOn ? [.button, .selected] : .button
     }
 
-    func dataScanner(_ dataScanner: DataScannerViewController, didAdd addedItems: [RecognizedItem], allItems: [RecognizedItem]) {
+    // VisionKit can emit a barcode in didAdd before autofocus decodes payloadStringValue and deliver the string in didUpdate.
+    private func deliver(_ items: [RecognizedItem]) {
         guard !busy else { return }
-        for case .barcode(let code) in addedItems {
-            guard let text = code.payloadStringValue, !seen.contains(text) else { continue }
+        for case .barcode(let code) in items {
+            guard let text = code.payloadStringValue, !text.isEmpty, !seen.contains(text) else { continue }
             seen.insert(text)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             onCode?(text)
             return
         }
+    }
+
+    func dataScanner(_ dataScanner: DataScannerViewController, didAdd addedItems: [RecognizedItem], allItems: [RecognizedItem]) {
+        deliver(addedItems)
+    }
+
+    func dataScanner(_ dataScanner: DataScannerViewController, didUpdate updatedItems: [RecognizedItem], allItems: [RecognizedItem]) {
+        deliver(updatedItems)
     }
 }

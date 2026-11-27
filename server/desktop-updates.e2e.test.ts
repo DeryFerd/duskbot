@@ -11,6 +11,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { writeFileAtomic } from "./atomic.ts";
 import { HOST_WHILE_UPDATING, LOCAL_VM_UPDATING, LOCAL_VM_UPDATING_PROBLEM, VPS_OUTDATED_HINT } from "./desktop-updates.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
+import { shouldMountLocalComputer } from "./local-routing.ts";
 import { freePortBlock } from "./testing/ports.ts";
 import { VPS_CONTAINER_LABEL, VPS_MANAGED_LABEL, vpsContainerName } from "./vps-computer.ts";
 
@@ -202,8 +203,9 @@ describe.skipIf(process.platform === "win32")("a bot's old desktop after an app 
 
     const nextThread = await send(bot.id, "Now check the dashboard again.");
     const next = await dumpFor("Now check the dashboard again.");
-    // once nothing awaits an update, Auto on a computer whose own desktop is on offer works there
-    expect(next.mcpConfig.mcpServers.computer.args.some((arg: string) => arg.includes("local-computer-proxy"))).toBe(true);
+    // once nothing awaits an update, Auto works on this computer's own desktop where Auto may (macOS, Windows), else on its own
+    const hostForAuto = shouldMountLocalComputer({ requested: undefined, providerSupportsLocal: true });
+    expect(next.mcpConfig.mcpServers.computer.args.some((arg: string) => arg.includes(hostForAuto ? "local-computer-proxy" : "container-mcp"))).toBe(true);
     expect(next.systemPrompt).not.toContain("is being updated");
     await finish(bot.id, nextThread);
   }, 60_000);
@@ -283,7 +285,11 @@ describe.skipIf(process.platform === "win32")("a bot's old desktop after an app 
     // per-bot: a fresh install's shared workspace computer is not this bot's own desktop
     expect((await api("PUT", "/api/config", { vps: { sshAlias: defaultAlias, mode: "per-bot" } })).status).toBe(200);
     const { bot } = await apiOk("POST", "/api/bots", { name, browser: false });
-    await apiOk("PATCH", `/api/bots/${bot.id}`, { cloudBackend: "vps", computer: null, ...(botAlias ? { vpsAlias: botAlias } : {}) });
+    // a VPS action the server started by itself can hold the lifecycle a moment, and an alias change waits for it
+    await expect.poll(async () => {
+      const patched = await api("PATCH", `/api/bots/${bot.id}`, { cloudBackend: "vps", computer: null, ...(botAlias ? { vpsAlias: botAlias } : {}) });
+      return patched.status === 409 && patched.body?.code === "server_busy" ? "server_busy" : patched.status;
+    }, { timeout: 20_000, interval: 250 }).toBe(200);
     const threadId = await send(bot.id, "Check the VPS desktop.");
     const sent = await dumpFor("Check the VPS desktop.");
     expect(sent.mcpConfig?.mcpServers?.computer, "this computer must not stand in for the VPS").toBeUndefined();

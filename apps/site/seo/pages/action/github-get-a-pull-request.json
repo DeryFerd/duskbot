@@ -12,7 +12,7 @@
     "ai summarise specific github pr"
   ],
   "answer": "**walk into standup knowing what the pr does.** paste the github link and a bot reads the pull request into plain words. the link gives it the repository owner, name and request number. you get the returned details without changing the pr. fetch changed files, reviews and test results separately when you're deciding whether to merge.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -43,7 +43,7 @@
     "toolkit": "github",
     "slug": "GITHUB_GET_A_PULL_REQUEST"
   },
-  "what": "**get the point of the pr before opening another tab.** this action reads a known pull request. the bot takes the owner, repository and number from its link. it goes straight there rather than searching for a likely match.\n\nask what changed, why the author wants it and whether the pr is still open. use separate reads for changed files and reviewer comments.",
+  "what": "**get the point of the pr before opening another tab.** this action reads a known pull request. the bot takes the owner, repository and number from its link. it goes straight there rather than searching for a likely match.\n\nask what changed, why the author wants it and whether the pr is still open. use separate reads for changed files and reviewer comments.\n\nwant to tell the author what you think? the bot can [comment on the pull request](/integrations/github/create-an-issue-comment). no link? [search issues and pull requests](/integrations/github/search-issues-and-pull-requests) to find it.",
   "uses": [
     "**walk into standup knowing what the pr does.** paste the link, get three plain lines.",
     "**spot a pr that changed overnight.** ask for the current title, status and description beside yesterday's summary.",
@@ -120,5 +120,9 @@
       "reviews and tests need their own evidence"
     ]
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "teodor pastes github.com/solent/api/pull/44.\nyou have five minutes before standup.",
+    "after": "title: retry failed webhook calls\nstate: open, not merged\nwhy: the author wants retries after timeouts\nfiles and reviews: a separate read."
+  }
 }

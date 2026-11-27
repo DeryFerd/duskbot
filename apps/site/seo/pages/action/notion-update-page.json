@@ -22,7 +22,7 @@
     "/integrations/notion/query-database-with-filter"
   ],
   "og_line": "a precise property change on a known page.",
-  "what": "**get the tracker to reflect the work you've approved.** paste the page link or let the bot search by name. it reads the row and database for the real field names and allowed choices.\n\nthis action changes page details, including icon, cover and archive state. body paragraphs need a content action. keep the routine focused on the property you chose.",
+  "what": "**get the tracker to reflect the work you've approved.** paste the page link or let the bot search by name. it reads the row and database for the real field names and allowed choices.\n\nthis action changes page details, including icon, cover and archive state. body paragraphs need a content action. keep the routine focused on the property you chose.\n\nfind the rows with [query the database](/integrations/notion/query-database-with-filter). explain the change to the team with [a comment](/integrations/notion/create-comment).",
   "uses": [
     "**mark a reviewed catalogue item ready.** use the status that already exists in its database.",
     "**correct a misspelled title.** target the known page rather than searching by the mistaken spelling alone.",
@@ -60,7 +60,7 @@
       "a": "**yes.** ask for the icon alone and tell it to leave other properties as they are."
     }
   ],
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -117,5 +117,9 @@
   "tip": {
     "text": "the field name your team says aloud may differ from the one notion actually uses."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "vanya says the yarrowby catalogue entry is ready.\nstatus choices in the database: draft, in review, approved.",
+    "after": "no \"ready\" option exists.\nproposed: status set to approved.\nchanged after your yes.\narchive state left alone."
+  }
 }

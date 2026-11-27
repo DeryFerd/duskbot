@@ -16,14 +16,14 @@ beforeEach(() => setLocale("en"));
 afterEach(() => setLocale("en"));
 
 describe("a free trial, in one message and at most one next step per state", () => {
-  it("active: when it ends, what is charged and when, how to cancel, and nothing to do", () => {
+  it("active: when it ends, what is charged and when, where to cancel, and nothing to do", () => {
     const view = cloudTrialView(trial("active", { chargeAt: ENDS }));
     expect(view.title).toBe("Your free trial ends on Oct 15");
-    expect(view.body).toBe("Then Pro is $49/month plus tax, charged on Oct 15. The cloud keeps running, so there's nothing to do. To cancel, choose Manage subscription before then.");
-    expect(view.action).toEqual({ kind: "manage", label: "Manage subscription" });
-    expect(view.body).toContain(view.action!.label);
+    expect(view.body).toBe("Then Pro is $49/month plus tax, charged on Oct 15. The cloud keeps running, so there's nothing to do. To cancel, open Settings › General › Plan & billing before then.");
+    // cancelling lives in Settings > Account > Plan & billing, so the trial has no button of its own for it
+    expect(view.action).toBeNull();
     const unpriced = cloudTrialView(trial("active", { amount: null, tier: "max" }));
-    expect(unpriced.body).toBe("Then Max is charged monthly, plus tax, from Oct 15. The cloud keeps running, so there's nothing to do. To cancel, choose Manage subscription before then.");
+    expect(unpriced.body).toBe("Then Max is charged monthly, plus tax, from Oct 15. The cloud keeps running, so there's nothing to do. To cancel, open Settings › General › Plan & billing before then.");
     expect(cloudTrialView(trial("active", { tier: "team-2027" })).body).toContain("Then Cloud is $49/month");
     expect(cloudTrialView(trial("active", { tier: undefined })).body).toContain("Then your plan is $49/month");
     expect(cloudTrialView(trial("active", { amount: 5831 })).body).toContain("$58.31/month");

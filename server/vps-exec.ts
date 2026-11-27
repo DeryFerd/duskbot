@@ -14,7 +14,7 @@ const MAX_COMMAND = 20_000;
 const WRAPPER = 'timeout -k 5 "$1" sh -lc "$2"; code=$?; printf "\\n%s%s\\n" "$3" "$code" >&2';
 
 export const NO_EXEC_COMPUTER =
-  "You have no Local VM or VPS desktop in this turn, so there is nowhere to run this command. For work on a computer, call select_computer first; otherwise use your own shell tool.";
+  "You have no Local VM or VPS desktop in this turn, so this command did not run. For a command on this computer use your own shell tool (Bash, shell_run_command) if you have one; for a VM or VPS desktop call select_computer first; with neither, do the task another way and do not call vm_exec again this turn.";
 export const VPS_EXEC_CHANGED = "Your VPS computer changed during this call, so the command did not run. Retry once.";
 
 function refusal(message: string, status: number): Error {

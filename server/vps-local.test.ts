@@ -89,7 +89,8 @@ it("reports a failed guest browser relay so readiness can be rechecked", async (
   try {
     const client = createConnection({ host: "127.0.0.1", port: Number(new URL(relay.url).port) });
     await new Promise<void>(resolve => client.once("close", () => resolve()));
-    expect(failed).toHaveBeenCalledOnce();
+    // the relay's output ends the connection before the exited relay's close event can land, so wait for the report
+    await vi.waitFor(() => expect(failed).toHaveBeenCalledOnce());
   } finally { relay.close(); }
 });
 

@@ -52,6 +52,24 @@ export function decodeCodexSelection(id: string | null | undefined): {
   return { model: id, modelProvider: MODEL_ID.test(id) ? OFFICIAL_CODEX_PROVIDER : null };
 }
 
+/** The official model a turn on a refused one carries on with: the list's default, else its first official row. */
+export function codexUsableModel(catalog: ModelCatalog, refused: ReadonlySet<string>): string | undefined {
+  return [catalog.default, ...catalog.options.map((option) => option.id)]
+    .find((id) => id && !refused.has(id) && decodeCodexSelection(id).modelProvider === OFFICIAL_CODEX_PROVIDER);
+}
+
+/** The id a saved model on this catalog now goes by, or undefined while it is listed as it is. Codex's config can send its
+ * models through a provider of its own (CLIProxyAPI), and then the ChatGPT row of a model the provider serves is no longer
+ * listed: a bot saved on that row moves to the provider's row of the same model, else to the default, which is the
+ * provider's own pick. */
+export function codexListedModel(catalog: ModelCatalog, model: string): string | undefined {
+  if (!model || model.includes(SEP) || catalog.options.some((option) => option.id === model)) return undefined;
+  const routedThrough = decodeCodexSelection(catalog.default).modelProvider;
+  if (!routedThrough || routedThrough === OFFICIAL_CODEX_PROVIDER) return undefined;
+  const sameModel = catalog.options.find((option) => option.custom && option.id === encodeCodexSelection(routedThrough, model));
+  return sameModel?.id ?? catalog.default;
+}
+
 interface CodexAppServerModel {
   id?: unknown;
   displayName?: unknown;
@@ -265,10 +283,12 @@ function providerName(provider: string, known: Map<string, CodexProvider>): stri
   return known.get(provider)?.name || provider;
 }
 
-function niceLabel(model: string, provider: string, known: Map<string, CodexProvider>, named: Map<string, string>): string {
+function niceLabel(model: string, provider: string, known: Map<string, CodexProvider>, named: Map<string, string>, official: ModelCatalog): string {
   const encoded = encodeCodexSelection(provider, model);
   if (named.has(encoded)) return named.get(encoded)!;
   const host = providerName(provider, known);
+  const officialLabel = official.options.find((option) => option.id === model)?.label;
+  if (officialLabel) return `${officialLabel} (${host})`;
   return qualifiedModelLabel(model, host, {
     redundantWhen: () => host === provider,
     decorate: (facet) => ` (${facet})`,
@@ -411,7 +431,11 @@ async function catalogAround(
   );
   for (const row of live.flat()) remember(row.provider, row.model);
 
-  const options = official.options.map((option) => ({ ...option }));
+  // Codex sends every model through the provider its config.toml chooses, so where that provider serves an official model
+  // too, the ChatGPT row is the same model on a sign-in this Codex does not use: only the provider's row is listed.
+  const routed = main.modelProvider && main.modelProvider !== OFFICIAL_CODEX_PROVIDER
+    ? new Set(extras.filter((extra) => extra.provider === main.modelProvider).map((extra) => extra.model)) : new Set<string>();
+  const options = official.options.filter((option) => !routed.has(option.id)).map((option) => ({ ...option }));
   const seen = new Set(options.map((option) => option.id));
   for (const extra of extras) {
     const id = encodeCodexSelection(extra.provider, extra.model);
@@ -419,7 +443,7 @@ async function catalogAround(
     seen.add(id);
     options.push({
       id,
-      label: niceLabel(extra.model, extra.provider, known, named),
+      label: niceLabel(extra.model, extra.provider, known, named, official),
       custom: true,
     });
   }

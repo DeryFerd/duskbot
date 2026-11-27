@@ -149,11 +149,12 @@ describe("the sidebar's feedback and update spot", () => {
     expect(spot()?.dataset.sidebarSpot).toBe("feedback");
   });
 
-  it("is Give feedback on a page that isn't this computer's own, and in a browser", async () => {
+  it("offers the app's own restart on a client of another server, and is Give feedback in a browser", async () => {
     (window as unknown as { duskDesktop: unknown }).duskDesktop = { appUpdate: bridge, remoteClient: { active: true } };
     now = { ready: "0.2.7", available: "0.2.7", progress: null, mode: "self" };
     await mount();
-    expect(spot()?.dataset.sidebarSpot).toBe("feedback");
+    expect(spot()?.dataset.sidebarSpot).not.toBe("feedback");
+    expect(spot()?.textContent).toContain("Restart to update");
     await act(async () => { root.unmount(); });
     root = createRoot(host);
     (window as unknown as { duskDesktop: unknown }).duskDesktop = undefined;

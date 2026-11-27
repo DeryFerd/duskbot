@@ -395,26 +395,26 @@ function addressText(r: Json): string {
 }
 
 /** What the bot should say about a schedule it just set: what it assumed, with the time zone and the next run in words. */
-function closingWords(r: Json, action: string): string {
+function closingWords(r: Json, action: string, forOtherBot: boolean): string {
   const zone = typeof r.timeZone === "string" ? r.timeZone : "";
   const plain = zone ? plainTimeZone(zone) : "";
   const next = typeof r.nextRunAt === "number" && zone ? `${plainWhen(r.nextRunAt, zone)} ${plain}` : "";
   if (next && action === "create") {
-    return `In a sentence or two of plain words, tell the person what you set up and what you assumed: when it runs, saying the time zone as "${plain}", never as a zone id; where its results will appear (here in this chat); what each run covers; that the first run is ${next}; and that they can change, pause or stop it by saying so here.`;
+    return `In a sentence or two of plain words, tell the person what you set up and what you assumed: when it runs, saying the time zone as "${plain}", never as a zone id; where its results will appear (${forOtherBot ? "in that bot's own chat" : "here in this chat"}); what each run covers; that the first run is ${next}; and that they can change, pause or stop it by saying so here.`;
   }
   if (next && (action === "update" || action === "resume")) return `Tell the person in one plain sentence what changed, saying the time zone as "${plain}", and that the next run is ${next}.`;
   if (action === "create") return "Tell the person in a sentence or two what will happen, and that they can change, pause or stop it by saying so here.";
   return "Tell the person in one sentence what will happen.";
 }
 
-function appliedText(r: Json, done: string, action: string): ToolCallResult {
+function appliedText(r: Json, done: string, action: string, forOtherBot: boolean): ToolCallResult {
   const summary = typeof r.summary === "string" && r.summary.trim() ? `\n\n${r.summary.trim()}` : "";
   const detail = typeof r.detail === "string" && r.detail.trim() ? `\n\n${r.detail.trim()}` : "";
   const id = typeof r.resultId === "string" ? r.resultId : jsonRecord(r.result) && typeof r.result.resultId === "string" ? r.result.resultId : "";
   const attention = r.settlementPending && typeof r.message === "string" ? `\n\nNeeds attention: ${r.message}`
     : jsonRecord(r.result) && typeof r.result.message === "string" ? `\n\nNeeds attention: ${r.result.message}` : "";
   return {
-    text: `${done}${id ? ` (trigger id ${id})` : ""}. It applied at once; the person sees it right here in the chat, with Pause, Edit and Undo.${summary}${detail}${attention}${addressText(r)}\n\nDo not ask for confirmation. ${closingWords(r, action)}`,
+    text: `${done}${id ? ` (trigger id ${id})` : ""}. It applied at once; the person sees it right here in the chat, with Pause, Edit and Undo.${summary}${detail}${attention}${addressText(r)}\n\nDo not ask for confirmation. ${closingWords(r, action, forOtherBot)}`,
   };
 }
 
@@ -428,7 +428,7 @@ async function request(body: Json, context: ToolCallContext, done: string): Prom
     return { text: `The trigger change did not apply: ${error}\n\nDo not claim it was applied. Fix what the error says, or tell the person plainly what is missing.`, isError: true };
   }
   if (r.state === "pending") return { text: "Not applied yet: this check runs a command with no AI, so a card in this chat now asks the person to allow it, showing the exact command. It applies once they confirm. Tell them in one sentence and end your turn; do not set it up again." };
-  return appliedText(r, done, String(body.action ?? ""));
+  return appliedText(r, done, String(body.action ?? ""), typeof body.forBotId === "string" && body.forBotId !== context.botId);
 }
 
 /** Everything a trigger call may carry beyond the fields it sets. */

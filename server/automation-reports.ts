@@ -102,7 +102,7 @@ type Waiting =
   | { kind: "card"; run: RoutineRun; threadId: string; messageId: string };
 
 export interface AutomationReportDeps {
-  store: Pick<Store, "activePath" | "appendMessage" | "bot" | "botByThread" | "messagesFor" | "onChange" | "patchMessage" | "patchTask" | "taskByThread">;
+  store: Pick<Store, "activePath" | "appendMessage" | "bot" | "botByThread" | "groupByThread" | "messagesFor" | "onChange" | "patchMessage" | "patchTask" | "taskByThread">;
   routines(): Pick<RoutineManager, "listRuns" | "noteReport" | "runForThread"> | null;
   /** A turn runs or settles in this conversation. */
   busy(botId: string, threadId: string): boolean;
@@ -121,14 +121,20 @@ export function createAutomationReports(deps: AutomationReportDeps) {
   let resumed = false;
   let flushing = false;
 
-  const destination = (run: RoutineRun): { bot: BotRecord; threadId: string } | null => {
+  const destination = (run: RoutineRun): { bot: BotRecord; threadId: string; room?: true } | null => {
     const bot = run.resultsThreadId && run.resultsThreadId !== run.threadId ? store.bot(run.botId) : undefined;
-    const task = bot && !bot.hidden ? store.taskByThread(bot.id, run.resultsThreadId!) : undefined;
-    return bot && task && !task.routineRunId ? { bot, threadId: task.threadId } : null;
+    if (!bot || bot.hidden) return null;
+    const task = store.taskByThread(bot.id, run.resultsThreadId!);
+    if (task) return task.routineRunId ? null : { bot, threadId: task.threadId };
+    const room = store.groupByThread(run.resultsThreadId!);
+    return room && !room.dm && room.memberIds.includes(bot.id) ? { bot, threadId: run.resultsThreadId!, room: true } : null;
   };
+  /** In a room a line says which member wrote it. */
+  const speaker = (target: { bot: BotRecord; room?: true }) =>
+    target.room ? { from: { botId: target.bot.id, name: target.bot.name, color: target.bot.color } } : {};
 
   /** A run in the bot's own chat that failed before that chat showed any failure of it: the line goes there. */
-  const ownChat = (run: RoutineRun): { bot: BotRecord; threadId: string } | null => {
+  const ownChat = (run: RoutineRun): { bot: BotRecord; threadId: string; room?: true } | null => {
     if (!run.threadId || (run.resultsThreadId && run.resultsThreadId !== run.threadId)) return null;
     const bot = store.bot(run.botId);
     const task = bot && !bot.hidden ? store.taskByThread(bot.id, run.threadId) : undefined;
@@ -168,14 +174,14 @@ export function createAutomationReports(deps: AutomationReportDeps) {
     store.messagesFor(threadId).find((message) => message.automation?.runId === run.id && message.automation.copyOf === originalId);
 
   /** An option card is copied whole and answered through its request; any other card the run waits on is named. */
-  const writeCopy = (line: Extract<Waiting, { kind: "card" }>, target: { bot: BotRecord; threadId: string }) => {
+  const writeCopy = (line: Extract<Waiting, { kind: "card" }>, target: { bot: BotRecord; threadId: string; room?: true }) => {
     const original = store.messagesFor(line.threadId).find((message) => message.id === line.messageId);
     const named = original ? waitingCardText(original, deps.threadLanguage?.(target.threadId)) : null;
     if (!original || (!named && !liveCardKind(original.card))) return;
     const automation = lineOf(line.run, { needsYou: true, copyOf: original.id });
-    store.appendMessage(target.threadId, named ? { role: "bot", kind: "text", text: named, automation } : { role: "bot", kind: "options", card: { ...original.card! }, automation });
+    store.appendMessage(target.threadId, named ? { role: "bot", kind: "text", text: named, automation, ...speaker(target) } : { role: "bot", kind: "options", card: { ...original.card! }, automation, ...speaker(target) });
     if (named) deps.wrote(target.bot, target.threadId);
-    store.patchTask(target.bot.id, target.threadId, { unread: true });
+    if (!target.room) store.patchTask(target.bot.id, target.threadId, { unread: true });
   };
 
   /** False while the chat it goes to is busy. */
@@ -208,13 +214,13 @@ export function createAutomationReports(deps: AutomationReportDeps) {
     }
     const reply: Extract<RunReply, { quiet: false }> = said.quiet ? { quiet: false, text: recoveredText(run.routineName, run.finishedAt ?? Date.now(), language) } : said;
     const posted = store.appendMessage(target.threadId, {
-      role: "bot", kind: "text", text: reply.text,
+      role: "bot", kind: "text", text: reply.text, ...speaker(target),
       ...(source?.attachments?.length && !recovered ? { attachments: source.attachments } : {}),
       automation: lineOf(run, line.kind === "failure" ? { failed: true, ...(run.partial ? { partial: true as const } : {}) } : recovered ? { recovered: true } : reply.question ? { needsYou: true } : {}),
     });
     deps.routines()?.noteReport(run.id, { state: "posted", threadId: target.threadId, messageId: posted.id });
     deps.wrote(target.bot, target.threadId);
-    store.patchTask(target.bot.id, target.threadId, { unread: true });
+    if (!target.room) store.patchTask(target.bot.id, target.threadId, { unread: true });
     if (line.kind === "reply" && !recovered) deps.notify(reply.question ? "question" : "done", target.bot, target.threadId, `${run.routineName}: ${reply.question ?? reply.text}`);
     return true;
   };

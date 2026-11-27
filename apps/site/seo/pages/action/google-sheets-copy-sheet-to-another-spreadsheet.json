@@ -22,7 +22,7 @@
     "/integrations/google-sheets/create-a-google-sheet"
   ],
   "og_line": "the briefing tab goes where you need it.",
-  "what": "**hand over the useful tab without sending the whole workbook.** the bot finds the tab from its name and copies it into the destination file. say which link is the source and which is the destination.\n\nthe destination must already exist. this action can't choose a new tab name or copy just a few cells. those need separate steps. it's a snapshot: later edits to the source won't follow.",
+  "what": "**hand over the useful tab without sending the whole workbook.** the bot finds the tab from its name and copies it into the destination file. say which link is the source and which is the destination.\n\nthe destination must already exist. this action can't choose a new tab name or copy just a few cells. those need separate steps. it's a snapshot: later edits to the source won't follow.\n\nno destination yet? [create a google sheet](/integrations/google-sheets/create-a-google-sheet) makes one first. want a print-ready copy instead? use [export sheet as pdf](/integrations/google-sheets/export-sheet-as-pdf).",
   "uses": [
     "**put the agenda where the meeting happens.** copy its prepared tab into the existing meeting workbook.",
     "**start a project from an agreed plan.** copy the planning tab from your template file.",
@@ -61,7 +61,7 @@
       "a": "**this copy action cannot name it.** renaming needs another allowed action."
     }
   ],
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -115,6 +115,10 @@
       "fix": "look in the destination first. the tab may already be there."
     }
   ],
+  "worked": {
+    "before": "template file: agenda tab.\ndestination: the quarterly review workbook, already created.",
+    "after": "agenda tab copied into the review workbook\nthe tab name follows google, not your choice\nlater edits to the template stay behind"
+  },
   "checklist": {
     "h": "before the handoff",
     "items": [

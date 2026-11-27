@@ -1,4 +1,4 @@
-import { constants, copyFileSync, existsSync, linkSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import { constants, copyFileSync, cpSync, existsSync, linkSync, lstatSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { decodeAttachmentAttribute, escapeAttribute } from "../src/lib/composer-attachments.ts";
 import { ATTACHMENTS_DIR } from "./attachments.ts";
@@ -7,6 +7,7 @@ import { boxUploadsDir, taskWorkspaceIds } from "./bot-box/plan.ts";
 import { DATA_DIR } from "./config.ts";
 
 const TAG = /(<attached-(?:file|image)[\t ]+path=")([^"\r\n]*)(")/g;
+const ZIP_TAG = /(<attached-zip-files[\t ]+path=")([^"\r\n]*)(")/g;
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /**
@@ -21,7 +22,7 @@ export function attachmentsForBox(text: string, cwd: string | undefined, boxed =
   const ids = taskWorkspaceIds(resolve(cwd), resolve(dataDir));
   if (!ids) return text;
   const uploads = resolve(attachmentsDir), shown = boxUploadsDir(resolve(dataDir), ids.botId, ids.threadId);
-  return text.replace(TAG, (tag, open: string, raw: string, close: string) => {
+  return unpackedForBox(text, resolve(dirname(uploads), "attachment-text"), shown).replace(TAG, (tag, open: string, raw: string, close: string) => {
     const path = decodeAttachmentAttribute(raw), name = basename(path);
     if (resolve(dirname(path)) !== uploads || !NAME.test(name) || !existsSync(path)) return tag;
     const target = join(shown, name);
@@ -40,6 +41,32 @@ export function attachmentsForBox(text: string, cwd: string | undefined, boxed =
           } finally {
             rmSync(partial, { force: true });
           }
+        }
+      }
+    } catch {
+      return tag;
+    }
+    return `${open}${escapeAttribute(target)}${close}`;
+  });
+}
+
+/** An unpacked zip's folder (server/attached-zip.ts) is copied whole into the conversation's uploads folder the same way. */
+function unpackedForBox(text: string, unpackedDir: string, shown: string): string {
+  if (!text.includes("<attached-zip-files")) return text;
+  return text.replace(ZIP_TAG, (tag, open: string, raw: string, close: string) => {
+    const path = decodeAttachmentAttribute(raw), name = basename(path);
+    if (resolve(dirname(path)) !== unpackedDir || !NAME.test(name) || !name.endsWith("-files")) return tag;
+    const target = join(shown, name);
+    try {
+      if (!lstatSync(path).isDirectory()) return tag;
+      if (!existsSync(target)) {
+        mkdirSync(shown, { recursive: true, mode: 0o700 });
+        const partial = `${target}.${process.pid}.partial`;
+        try {
+          cpSync(path, partial, { recursive: true, dereference: false, verbatimSymlinks: true, errorOnExist: true, force: false });
+          renameSync(partial, target);
+        } finally {
+          rmSync(partial, { recursive: true, force: true });
         }
       }
     } catch {

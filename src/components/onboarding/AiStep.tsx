@@ -1,104 +1,74 @@
-// The first run's one AI choice: the AI already signed in on this computer in one tap, free models, or a plan the
-// person already has (the grid of AIs, AiCards). More ways opens every other provider and API keys.
-import { useEffect, useState, type ReactNode } from "react";
-import { ChevronLeft, LoaderCircle, RefreshCw, Sparkles } from "../../icons";
+// The first run's AI step, a connections screen: the grid of AIs (AiCards), where every AI already signed in on this
+// computer is connected the moment the step opens (marked as the person's own, on this computer's server only; nothing
+// new is sent anywhere), any other connects in place with one tap, and Continue goes on with what is connected, or on the
+// free model when nothing is. More providers or an API key opens every other provider.
+import { useEffect, useRef, useState } from "react";
+import { LoaderCircle, RefreshCw } from "../../icons";
 import { engineReady } from "@/components/EngineLibrary";
-import { ProviderMark } from "@/components/ProviderIcons";
-import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
-import { useStore, type InstanceInfo } from "@/state/store";
-import { AiCards } from "./AiCards";
+import { api, useStore, type InstanceInfo } from "@/state/store";
+import { AiCards, bringBackAi } from "./AiCards";
 import { ConnectAiDialog } from "./ConnectAi";
-import { aiName, aiTileOf, aiTiles, freeModel, type AiTileId } from "./funnel";
-import { PRIMARY, QUIET, SECONDARY, StepArt, StepFrame, TILE } from "./FunnelSteps";
+import { aiTileOf, aiTiles, autoConnects, freeModel, type AiTileId } from "./funnel";
+import { PRIMARY, QUIET, StepArt, StepFrame } from "./FunnelSteps";
 import type { WelcomeAiNow } from "./welcome-ai";
 
-export type AiChoice = "own" | "free" | "connected" | "later";
+export type AiChoice = "connected" | "free" | "later";
 
-function ChoiceTile({ kind, icon, title, sub, busy = false, wide = false, autoFocus = false, onClick }: {
-  kind: string; icon: ReactNode; title: string; sub: ReactNode; busy?: boolean; wide?: boolean; autoFocus?: boolean; onClick: () => void;
-}) {
-  return (
-    <button type="button" {...{ [`data-funnel-${kind}`]: "" }} disabled={busy} aria-busy={busy || undefined} autoFocus={autoFocus} onClick={onClick}
-      className={cn(TILE, "flex min-h-11 min-w-0 flex-col items-start gap-3 p-5 text-start disabled:cursor-default disabled:hover:bg-ink/[0.035]", wide && "sm:col-span-2")}>
-      <span aria-hidden="true" className="flex h-7 items-center gap-1.5">{icon}</span>
-      <span className="text-[15px] font-semibold leading-5 text-ink">{title}</span>
-      <span className="text-[13px] leading-[18px] text-ink-secondary">{sub}</span>
-    </button>
-  );
+/** Marks each AI found here as the person's own, once per step, then reads the list again: from then on it counts as
+ * connected everywhere (the new-bot default, Dusk's first chat), exactly as if its card had been tapped. */
+function useAutoConnect(instances: readonly InstanceInfo[], failed: readonly string[]) {
+  const { refreshInstances } = useStore();
+  const asked = useRef(new Set<string>());
+  const due = autoConnects(instances, engineReady, failed).filter((instance) => !asked.current.has(instance.instanceId));
+  const key = due.map((instance) => instance.instanceId).join(",");
+  useEffect(() => {
+    if (!key) return;
+    const ids = key.split(",");
+    for (const id of ids) asked.current.add(id);
+    void Promise.allSettled(ids.map((id) => api(`/api/instances/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ chosen: true }), signal: AbortSignal.timeout(10_000) })))
+      .then(() => Promise.resolve(refreshInstances?.()).catch(() => {}));
+  }, [key, refreshInstances]);
 }
 
-/** `onNext` says what the person chose, for the funnel's numbers. `cloud`: the person's dusk cloud is being made meanwhile,
- * which the line says, with the AIs whose sign-in goes along. */
+/** `onNext` says how the person went on, for the funnel's numbers. `cloud`: the person's dusk cloud is being made
+ * meanwhile, which the line says, with the AIs whose sign-in goes along. */
 export function AiStep({ tested, cloud = false, computerAis = [], onNext }: { tested: WelcomeAiNow | null; cloud?: boolean;
   /** on a cloud the desktop app set up: the AIs signed in on that computer, by instance id */
   computerAis?: readonly string[]; onNext: (how: AiChoice) => void }) {
-  const { state } = useStore();
-  const [plan, setPlan] = useState(false);
-  const own = tested && tested.state !== "failed" ? tested : null;
+  const { state, refreshInstances } = useStore();
+  const [more, setMore] = useState(false);
+  const failed = tested?.state === "failed" ? [tested.instance.instanceId] : [];
+  useAutoConnect(state.instances, failed);
+  const tiles = aiTiles(state.instances, engineReady);
+  const connected = tiles.filter((tile) => engineReady(tile.instance) && !failed.includes(tile.instance.instanceId));
   // a dusk cloud being made brings free models of its own
   const free = cloud ? "ready" : freeOffer(state.instances, state.config?.freeBackupDownloading === true);
-  if (plan) return <PlanStep tested={tested} cloud={cloud} computerAis={computerAis} onNext={onNext} onBack={() => setPlan(false)} />;
-  const ownName = own ? aiName(own.instance) : "";
-  const checking = own?.state === "testing";
-  return (
-    <StepFrame art={<StepArt art="plug" />} title={t("funnel.ai.chooseTitle")} sub={cloud ? t("funnel.ai.chooseCloud") : t(free ? "funnel.ai.chooseSub" : "funnel.ai.sub")} wide>
-      <div role="group" aria-label={t("funnel.ai.chooseTitle")} className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
-        {own && (
-          <ChoiceTile kind="own" wide autoFocus={!checking} busy={checking} onClick={() => onNext("own")}
-            icon={<ProviderMark driverKind={own.instance.driverKind} size={24} />}
-            title={t("funnel.ai.useOwn", { name: ownName })}
-            sub={checking
-              ? <span role="status" className="flex items-center gap-1.5"><LoaderCircle size={13} aria-hidden="true" className="shrink-0 animate-spin motion-reduce:animate-none" />{t("onboarding.engines.checkingAnswer", { name: ownName })}</span>
-              : t("funnel.ai.useOwnSub")} />
-        )}
-        {free && (
-          <ChoiceTile kind="free" autoFocus={!own && free === "ready"} busy={free === "downloading"} onClick={() => onNext("free")}
-            icon={<Sparkles size={22} strokeWidth={1.5} className="text-ink-secondary" />}
-            title={t("funnel.ai.useFree")} sub={free === "ready" ? t("funnel.ai.useFreeSub")
-              : <span role="status" className="flex items-center gap-1.5"><LoaderCircle size={13} aria-hidden="true" className="shrink-0 animate-spin motion-reduce:animate-none" />{t("funnel.ai.useFreeDownloading")}</span>} />
-        )}
-        <ChoiceTile kind="plan" wide={!free} autoFocus={!own && !free} onClick={() => setPlan(true)}
-          icon={<><ProviderMark driverKind="claudeAgent" size={20} /><ProviderMark driverKind="codex" size={20} /><ProviderMark driverKind="antigravityAgent" size={20} /></>}
-          title={t("funnel.ai.usePlan")} sub={t("funnel.ai.usePlanSub")} />
-      </div>
-    </StepFrame>
-  );
-}
-
-/** A plan the person already has: the grid, Continue once one is connected, free models instead, or back to the choice. */
-function PlanStep({ tested, cloud, computerAis, onNext, onBack }: { tested: WelcomeAiNow | null; cloud: boolean; computerAis: readonly string[];
-  onNext: (how: AiChoice) => void; onBack: () => void }) {
-  const { state } = useStore();
-  const [more, setMore] = useState(false);
-  const free = freeModel(state.instances, engineReady);
-  const tiles = aiTiles(state.instances, engineReady);
-  const connected = tiles.filter((tile) => engineReady(tile.instance));
   const used = computerTiles(computerAis, state.instances);
   const usedLeft = tiles.filter((tile) => used.includes(tile.id) && !engineReady(tile.instance));
   const carried = useCarriedTiles(cloud && connected.length > 0, connected.map((tile) => tile.instance.instanceId).join(","));
   const staysHere = carried ? connected.filter((tile) => !carried.includes(tile.id)).map((tile) => tile.id) : [];
-  const sub = usedLeft.length
-    ? t("funnel.ai.subComputer", { ais: list(usedLeft) })
+  const sub = usedLeft.length ? t("funnel.ai.subComputer", { ais: list(usedLeft) })
     : cloud && carried && connected.length ? carriedLine(connected, staysHere)
-    : connected.length ? t("funnel.ai.subMore") : cloud ? t(free ? "funnel.ai.subCloud" : "funnel.ai.subCloudNoFree") : t("funnel.ai.sub");
+    : cloud ? t(free ? "funnel.ai.subCloud" : "funnel.ai.subCloudNoFree")
+    : connected.length ? t("funnel.ai.connectSubFound", { ais: list(connected) }) : t("funnel.ai.connectSub");
+  const goes = connected.length > 0 || free === "ready";
   return (
-    <StepFrame art={<StepArt art="plug" />} title={t("funnel.ai.title")} sub={sub} wide
+    <StepFrame art={<StepArt art="plug" />} title={t("funnel.ai.connectTitle")} sub={sub} wide
       footer={<>
-        <button type="button" data-primary="" data-funnel-ai-continue="" disabled={connected.length === 0} onClick={() => onNext("connected")} className={PRIMARY}>{t("funnel.next")}</button>
-        {connected.length === 0 && (free || cloud) && <button type="button" data-funnel-free="" onClick={() => onNext("free")} className={SECONDARY}>{t("funnel.ai.useFreeInstead")}</button>}
-        <button type="button" data-funnel-choices="" onClick={onBack} className={cn(QUIET, "inline-flex items-center gap-0.5")}>
-          <ChevronLeft size={14} strokeWidth={1.5} aria-hidden="true" className="rtl:-scale-x-100" />{t("funnel.ai.otherChoices")}
-        </button>
+        <button type="button" data-primary="" data-funnel-ai-continue="" autoFocus={goes} disabled={!goes}
+          onClick={() => onNext(connected.length ? "connected" : "free")} className={PRIMARY}>{t("funnel.next")}</button>
+        {!connected.length && free === "ready" && !cloud && <p data-funnel-free-line="" className="text-center text-[13px] leading-[18px] text-ink-tertiary">{t("funnel.ai.freeUntil")}</p>}
+        {!connected.length && free === "downloading" && (
+          <p role="status" data-funnel-free-line="" className="flex items-center gap-1.5 text-[13px] leading-[18px] text-ink-tertiary">
+            <LoaderCircle size={13} aria-hidden="true" className="shrink-0 animate-spin motion-reduce:animate-none" />{t("funnel.ai.freeGettingReady")}
+          </p>
+        )}
+        {!goes && !free && <button type="button" data-funnel-later="" onClick={() => onNext("later")} className={QUIET}>{t("funnel.ai.later")}</button>}
       </>}>
-      <AiCards tested={tested} onMore={() => setMore(true)} suggested={used} staysHere={staysHere} />
+      <AiCards tested={tested} onMore={() => setMore(true)} suggested={used} staysHere={staysHere} foundFirst
+        onMissing={(id) => bringBackAi(id, refreshInstances, () => setMore(true))} />
 
-      {tested?.state === "testing" && (
-        <p role="status" data-ai-checking="" className="mt-5 flex items-center gap-2 text-[14px] text-ink-secondary">
-          <LoaderCircle size={15} aria-hidden="true" className="shrink-0 animate-spin motion-reduce:animate-none" />
-          {t("onboarding.engines.checkingAnswer", { name: aiName(tested.instance) })}
-        </p>
-      )}
       {tested?.state === "failed" && (
         <div role="alert" data-ai-silent="" className="mt-5 flex flex-col items-center gap-2 text-[13px] leading-5 text-ink">
           <p>{tested.error ?? t("onboarding.engines.noAnswer", { name: tested.instance.displayName })}</p>

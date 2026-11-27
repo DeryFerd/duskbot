@@ -225,6 +225,9 @@ export interface CloudsService {
   all?(): StoredCloud[];
   view(cloud: StoredCloud): CloudDesktopView;
   rename(accountId: string, cloudId: string, patch: { name?: string; color?: CloudSwatch | null }): StoredCloud;
+  /** the operator's "retry setup now" for a managed cloud whose first setup is in its error state; refused ("busy") while
+   *  a step of that cloud runs, and otherwise as the backend decides */
+  retrySetup?(cloudId: string, reason: string): import("./managed.ts").RetrySetupAnswer;
   /** operator action against abuse (pool and dedicated alike) */
   suspend(cloudId: string, reason: string): Promise<void>;
   resume(cloudId: string): Promise<void>;

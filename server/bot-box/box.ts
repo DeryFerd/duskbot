@@ -3,7 +3,7 @@
 // with owner "bot") in bubblewrap by the plan (plan.ts). Nothing here changes a spawn when the box is off: the command,
 // its arguments and its environment go through untouched, so every host that is not a Cloud home behaves as before.
 import { existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, delimiter, dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, join, posix, resolve } from "node:path";
 
 import { homedSpawn } from "../engine-homes/layout.ts";
 import { engineInstallRoots, vendorEngineRoots } from "../engine-roots.ts";
@@ -223,7 +223,8 @@ export function requiredFence(home: string, dataDir: string): BoxFence {
 
 /** DUSK_BOX_CODE_ROOTS: more folders of code (an npm prefix's bin and lib in the server's HOME) the box sees read-only. */
 export function extraCodeRoots(env: Record<string, string | undefined>): string[] {
-  return (env.DUSK_BOX_CODE_ROOTS ?? "").split(delimiter).filter((root) => root && isAbsolute(root)).map((root) => resolve(root));
+  // the box is a Linux sandbox: its roots are POSIX paths, listed with ":" like PATH there
+  return (env.DUSK_BOX_CODE_ROOTS ?? "").split(":").filter((root) => root && posix.isAbsolute(root)).map((root) => posix.resolve(root));
 }
 
 export function defaultCodeRoots(): string[] {

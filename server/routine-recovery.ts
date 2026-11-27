@@ -4,6 +4,7 @@
 // owner can fix fails at once and is told to them once per bot and cause, until one of that bot's runs completes.
 import type { RuntimeEvent } from "../shared/runtime-events.ts";
 import type { RoutineRetryCause } from "../shared/routines.ts";
+import { failureOf, type RoutineFailedFor, type UsageReason } from "../shared/usage-signals.ts";
 import { engineFailureKind, limitResetFromWords } from "./drivers/engine-errors.ts";
 import { classifyError } from "./drivers/retry.ts";
 import type { RoutineRun } from "./routines.ts";
@@ -15,8 +16,9 @@ export type RoutineOwnerCause = "signed_out" | "credits" | "usage_limit" | "setu
 /** What is known about a failure besides its words: a cause the server words itself, and the engine's own flags. */
 export interface RoutineFailureFacts {
   /** stalled: the turn watchdog stopped it; cap: a turn cap (or the repeat guard) ended it; refused: the server
-   * would not start it, or its start failed before the turn began (judged by its words, never retried as a crash). */
-  cause?: "stalled" | "busy" | "cap" | "refused";
+   * would not start it (judged by its words, never retried as a crash); dispatch: its AI could not start the turn,
+   * which starts once more when its words read as for now (an engine still starting, a network blip). */
+  cause?: "stalled" | "busy" | "cap" | "refused" | "dispatch";
   stopReason?: string | null;
   setup?: boolean;
   stalled?: boolean;
@@ -40,9 +42,11 @@ export interface RoutineAlert { detail: string }
 
 export interface RoutineOwnerNotice { botId: string; cause: RoutineOwnerCause; at: number }
 
-export type RoutineRecovery = { queued: true; alert?: RoutineAlert } | { queued: false; error: string; alert?: RoutineAlert | null };
+export type RoutineRecovery = { queued: true; alert?: RoutineAlert } | { queued: false; error: string; alert?: RoutineAlert | null; failedFor?: RoutineFailedFor };
 
 const RETRY_MS = 15_000;
+/** An engine that could not start, or a sign-in that just lapsed, gets a minute to come up or renew before its one retry. */
+const NOT_READY_RETRY_MS = 60_000;
 const RATE_LIMIT_RETRY_MS = 60_000;
 export const ROUTINE_BUSY_RECHECK_MS = 30_000;
 export const ROUTINE_BUSY_WAIT_MS = 60 * 60_000;
@@ -63,6 +67,16 @@ const NOT_RETRIED_STOPS = new Set(["cancelled", "interrupted", "refusal", "tool_
 /** What the provider answered for a reason a second start would meet again. */
 const REFUSED_KINDS = new Set(["refused", "tool_schema", "tool_count", "session_id"]);
 const OWNER_CAUSES = new Set<RoutineOwnerCause>(["signed_out", "credits", "usage_limit", "setup"]);
+/** A start that failed for one of these reasons is counted as its AI not being ready; a named one keeps its name. */
+const NOT_READY_REASONS = new Set<UsageReason>(["unknown", "crashed", "cli_exit_early", "no_reply"]);
+/** The words of a start that may work in a minute: an engine still starting or being changed, or one that just quit. */
+const NOT_READY_WORDS = /try again (?:shortly|in a moment|soon|later)|still (?:starting|loading|being)|not ready|is starting|starting up|being updated|in progress|(?:could|did) not start|didn'?t start|before it was ready|not running|exited|closed|no response|did not answer/i;
+
+/** A turn that could not start for now: its words read as an engine coming up or a passing network or provider error. */
+export function startsLater(failure: string): boolean {
+  const engine = engineFailureKind(failure);
+  return NOT_READY_WORDS.test(failure) || classifyError({ text: failure }).transient || engine === "rate_limit" || engine === "overloaded" || engine === "server";
+}
 
 const OWNER_ACTION: Record<Exclude<RoutineOwnerCause, "setup">, string> = {
   signed_out: "This bot's AI is signed out. Sign in again in Settings → Models.",
@@ -97,8 +111,9 @@ export function classifyRoutineFailure(failure: string, facts: RoutineFailureFac
   if (facts.setup || facts.stopReason === "update_required" || facts.stopReason === "setup_required") return { kind: "owner", cause: "setup" };
   if (engine === "rate_limit" || reason === "rate_limited") return { kind: "retry", cause: "rate_limited" };
   if (engine === "overloaded" || engine === "server" || transient) return { kind: "retry", cause: "provider" };
+  if (facts.cause === "dispatch" && startsLater(failure)) return { kind: "retry", cause: "provider" };
   // A failure nothing above names (a crash, an exit before the result): one more start. A refused start or a named refusal never.
-  return reason === "unknown" && facts.cause !== "refused" && !(engine && REFUSED_KINDS.has(engine)) ? { kind: "retry", cause: "failed" } : { kind: "final" };
+  return reason === "unknown" && facts.cause !== "refused" && facts.cause !== "dispatch" && !(engine && REFUSED_KINDS.has(engine)) ? { kind: "retry", cause: "failed" } : { kind: "final" };
 }
 
 /** Why startTurn would not start a run: busy for now or any other refusal. A start that threw
@@ -106,7 +121,7 @@ export function classifyRoutineFailure(failure: string, facts: RoutineFailureFac
 export function dispatchRefusal(error: unknown): RoutineFailureFacts {
   const { code, status } = (error ?? {}) as { code?: unknown; status?: unknown };
   if (typeof code === "string" && BUSY_CODES.has(code)) return { cause: "busy" };
-  return typeof code === "string" || (typeof status === "number" && status >= 400 && status < 500) ? { cause: "refused" } : {};
+  return typeof code === "string" || (typeof status === "number" && status >= 400 && status < 500) ? { cause: "dispatch" } : {};
 }
 
 export function engineFacts({ setup, stalled, limitResetsAt, limit, partial }: RuntimeEvent & { type: "runtime.error" }): RoutineFailureFacts {
@@ -157,6 +172,13 @@ export function requeueForLimit(run: RoutineRun, failure: string, now: number, r
   return true;
 }
 
+/** A run whose AI ended without a word: quiet once it ran a tool or on its second start, else started once more; null
+ * when it did not end silently. */
+export function silentEnd(run: Pick<RoutineRun, "target" | "output" | "retried">, stopReason: string | null | undefined, worked: boolean): "quiet" | "again" | null {
+  if (stopReason !== "empty_turn" || run.target !== "bot" || run.output) return null;
+  return worked || run.retried !== undefined ? "quiet" : "again";
+}
+
 /** The second start's own line, so a run that already did part of its work does not do it twice. */
 export function retryNote(cause: RoutineRetryCause): string {
   return `[dusk bot: this run's first start ${FIRST_START[cause]} before it finished. If it already did part of the work, ` +
@@ -186,6 +208,9 @@ export function wakeBusyWaits(runs: RoutineRun[], threadId: string, now: number)
 export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailureFacts, now: number, notices: RoutineOwnerNotice[]): RoutineRecovery {
   const verdict: RoutineFailureClass = run.target === "bot" ? classifyRoutineFailure(failure, facts) : { kind: "final" };
   const again = run.retried ? `Failed after one automatic retry: ${failure}` : failure;
+  // A stall is the AI or its connection hanging for now (often a computer that slept mid-run): one more start, quietly.
+  if (facts.cause === "stalled") return run.target === "bot" && requeueOnce(run, "stalled", failure, now) ? { queued: true } : { queued: false, error: again, failedFor: "stalled" };
+  const notReady = facts.cause === "dispatch" && NOT_READY_REASONS.has(failureOf(failure).reason) ? { failedFor: "not_ready" as const } : {};
   if (verdict.kind === "busy") {
     run.deferredAt ??= now;
     // A run of checked items waits as long as it takes: its bot is busy with the person, which is not a failure.
@@ -197,8 +222,8 @@ export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailu
     return { queued: true };
   }
   if (verdict.kind === "retry" && verdict.cause === "failed" && !run.output) return { queued: false, error: `${failure} (not retried: it failed before doing anything)` };
-  if (verdict.kind === "retry") return requeueOnce(run, verdict.cause, failure, now) ? { queued: true } : { queued: false, error: again };
-  if (verdict.kind === "final") return { queued: false, error: again };
+  if (verdict.kind === "retry") return requeueOnce(run, verdict.cause, failure, now, facts.cause === "dispatch" ? now + NOT_READY_RETRY_MS : undefined) ? { queued: true } : { queued: false, error: again, ...notReady };
+  if (verdict.kind === "final") return { queued: false, error: again, ...notReady };
   if (verdict.cause === "usage_limit" && facts.backupReady && requeueOnce(run, "usage_limit", failure, now, now + RETRY_MS)) {
     run.attention = "Starting again on the backup AI: this bot's AI reached its usage limit";
     return { queued: true };
@@ -208,6 +233,9 @@ export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailu
     run.attention = "Starting again on the backup AI: this bot's AI is signed out";
     return { queued: true };
   }
+  // A sign-in that just lapsed often renews on the engine's next start: one quiet retry before the owner is told.
+  // An engine that says it is not signed in at all (auth_required, a setup error) is not retried: no new start signs it in.
+  if (verdict.cause === "signed_out" && !facts.setup && facts.stopReason !== "auth_required" && requeueOnce(run, "provider", failure, now, now + NOT_READY_RETRY_MS)) return { queued: true };
   const first = firstNotice(notices, run.botId, verdict.cause, now);
   const named = verdict.resetsAt ?? (verdict.cause === "usage_limit" ? limitResetFromWords(failure, now) : undefined);
   const reset = named && named > now ? named : undefined;

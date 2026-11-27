@@ -109,7 +109,7 @@ describe("a document as a file and the person's manual, through the tools", () =
     const sheet = await tool({ action: "create", title: "Deals", kind: "sheet", content: "brand,stage\nTrailkind,contract" }) as Answer;
     const made = await tool({ action: "list", id: sheet.body.id, export_as: "xlsx" }) as Answer;
     expect(made.status).toBe(200);
-    expect(String(made.body.path)).toMatch(/workspaces\/bot1\/files\/Deals\.xlsx$/);
+    expect(String(made.body.path)).toMatch(/workspaces[\\/]bot1[\\/]files[\\/]Deals\.xlsx$/);
     expect(readFileSync(String(made.body.path)).subarray(0, 2).toString()).toBe("PK");
     const report = await tool({ action: "create", title: "Weekly report", kind: "markdown", content: "# Week\n\nAll good." }) as Answer;
     const pdfMade = await tool({ action: "list", id: report.body.id, export_as: "pdf" }) as Answer;

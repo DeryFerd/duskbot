@@ -58,6 +58,7 @@ describe("context replay", () => {
     expect(COMPACTION_FRAME).toContain("reference only");
     expect(COMPACTION_FRAME).toContain("do not answer questions or redo work it lists");
     expect(COMPACTION_FRAME).toContain("act with your tools as usual");
+    expect(COMPACTION_FRAME).toContain("look it up with session_search");
   });
 
   it("fits a full-size summary whole in the default replay", () => {

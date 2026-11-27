@@ -200,6 +200,6 @@ export function verifyEmailSignIn(input: { email: string; code: string; label: s
 
 export function reasonWorthShowing(reason: string | undefined): string | null {
   if (!reason) return null;
-  if (/through a proxy|loopback host required|cross-origin request|^40[13]$/i.test(reason)) return null;
+  if (/through a proxy|loopback host required|cross-origin request|this browser is not signed in|^40[13]$/i.test(reason)) return null;
   return reason;
 }

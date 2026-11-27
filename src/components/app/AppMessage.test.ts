@@ -11,6 +11,7 @@ import { APP_SAMPLES, MCP_APP_SAMPLES } from "../../../shared/app-samples";
 import { botHtmlDocument, mcpAppDocument } from "../../../shared/app-frame/document";
 import { createAppPool, type AppPool } from "./app-pool";
 import { AppMessage, forgetAppRows } from "./AppMessage";
+import { SIMPLE_BUBBLE_MAX } from "../chat-bubble";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -153,6 +154,14 @@ describe("a bot's page", () => {
     expect(frame().hasAttribute("allow")).toBe(false);
     expect(frame().getAttribute("srcdoc")).toBe(htmlDoc().srcdoc);
     expect(pool.live()).toEqual(["t1:a1"]);
+  });
+
+  it("stops a page where a message bubble does, framed or not (#340)", async () => {
+    for (const border of [true, false]) {
+      await mount(row(htmlPayload({ border })));
+      const classes = find("[data-app]")!.className.split(/\s+/);
+      expect(classes.filter((name) => /^(pointer-coarse:)?max-w-/.test(name))).toEqual(SIMPLE_BUBBLE_MAX.split(" "));
+    }
   });
 
   it("shows a frameless page as part of the chat: no card around it, still in the sandboxed frame, with its title and tools", async () => {

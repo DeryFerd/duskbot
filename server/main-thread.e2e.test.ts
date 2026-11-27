@@ -179,3 +179,37 @@ it("marks a job's review answer and a webhook post unread where they land", asyn
     await fixture.close();
   }
 }, 120_000);
+
+it("keeps the person's own chat main after they open and write in a thread the bot opened for itself (#336)", async () => {
+  const { fixture, dataDir, api, cli, wire, thread, replied } = await launch();
+  try {
+    await api("PUT", "/api/config", { threads: { maxConcurrentPerBot: 1 } });
+    const { bot } = await cli("new-bot", "--name", "Starter");
+    writeFileSync(join(dataDir, "room-plan.json"), JSON.stringify({
+      [bot.id]: { turns: [
+        { steps: [{ tool: "start_thread", arguments: { title: "Fix the login bug", message: "Fix the login bug." } }], reply: "Opened a new session for it." },
+        { reply: "Looking into the login bug." },
+        { reply: "Done with the login bug." },
+        { reply: "Back in the main chat." },
+      ] },
+    }));
+    const main = bot.activeTaskId as string;
+    await cli("send", "--bot", bot.id, "--task", main, "--text", "Open a new local session for the login bug.");
+    const side = await thread(bot.id, "Fix the login bug");
+    await replied(bot.id, side.threadId, "Looking into the login bug.");
+    // the person opens the new session and writes in it
+    await api("POST", `/api/bots/${bot.id}/tasks/${side.threadId}?messages=50`, {});
+    await cli("send", "--bot", bot.id, "--task", side.threadId, "--text", "Also check the logout button.");
+    await replied(bot.id, side.threadId, "Done with the login bug.");
+    const after = await wire(bot.id);
+    expect(after.threadId).toBe(side.threadId);
+    // the bot's row still leads back to the chat the person started in
+    expect(after.mainThreadId).toBe(main);
+    // writing in the main chat again keeps it main
+    await cli("send", "--bot", bot.id, "--task", main, "--text", "Thanks, back here.");
+    await replied(bot.id, main, "Back in the main chat.");
+    expect((await wire(bot.id)).mainThreadId).toBe(main);
+  } finally {
+    await fixture.close();
+  }
+}, 120_000);

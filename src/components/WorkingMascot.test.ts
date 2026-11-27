@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { stillSvgPaths } from "@/pixel/engine";
 import { WORKING_MOODS, type WorkingMood } from "@/lib/working-mood";
 import { MOOD_FACES, WorkingMascot } from "./WorkingMascot";
+import { PIXEL_BODY_IDS } from "../../shared/pixel-bodies";
+import { GLANCE_SWAP_S } from "@/lib/working-glance";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -89,7 +91,7 @@ describe("the working mascot's face", () => {
   it("moves the picked working line's mascot in the chat line, and keeps the plain loops where it has no mood", () => {
     reduce(false);
     drawShipped("thinking");
-    expect(mascot().dataset.workingLine).toBe("rock");
+    expect(mascot().dataset.workingLine).toBe("glance");
     expect(mascot().dataset.motion).toBeUndefined();
     drawShipped();
     expect(mascot().dataset.motion).toBeUndefined();
@@ -134,5 +136,78 @@ describe("the working mascot's face", () => {
     const xs = (d: string | null) => [...(d ?? "").matchAll(/M(-?\d+) /g)].map((m) => Number(m[1]));
     const rest = xs(stillSvgPaths("kit", { scale: 1 }).eyes);
     expect(Math.sign(Math.min(...xs(right)) - Math.min(...rest)), "it looks one way").toBe(-Math.sign(Math.min(...xs(left)) - Math.min(...rest)));
+  });
+});
+
+describe("the glance working mascot", () => {
+  const glance = () => mascot().querySelector<HTMLElement>("[data-glance]")!;
+  const eyePaths = () => [...glance().querySelectorAll(".glance-eyes path")].map((p) => p.getAttribute("d"));
+
+  it("acts with its face on timers and a CSS breath, never on a frame loop", () => {
+    reduce(false);
+    const raf = vi.spyOn(window, "requestAnimationFrame");
+    for (const mood of WORKING_MOODS) {
+      drawShipped(mood);
+      act(() => void vi.advanceTimersByTime(4_000));
+    }
+    expect(raf).not.toHaveBeenCalled();
+    expect(glance().querySelector(".glance-breathe")).not.toBeNull();
+  });
+
+  it("looks about while it thinks and reads along a line", () => {
+    reduce(false);
+    drawShipped("thinking");
+    const thinking = new Set<string>();
+    for (let i = 0; i < 40; i++) { act(() => void vi.advanceTimersByTime(250)); thinking.add(glance().dataset.gaze!); }
+    expect([...thinking].every((g) => g.endsWith(",-1")), "it looks up to think").toBe(true);
+    expect(thinking.size).toBeGreaterThan(1);
+    act(() => root.unmount());
+    root = createRoot(host);
+    drawShipped("reading");
+    act(() => void vi.advanceTimersByTime(30));
+    const read = [glance().dataset.gaze];
+    for (const ms of [360, 360]) { act(() => void vi.advanceTimersByTime(ms)); read.push(glance().dataset.gaze); }
+    expect(read).toEqual(["-1,0", "0,0", "1,0"]);
+  });
+
+  it("changes its face behind a blink partway through a change of step", () => {
+    reduce(false);
+    drawShipped("searching");
+    act(() => void vi.advanceTimersByTime(2_000));
+    expect(glance().dataset.face).toBe("wide");
+    drawShipped("error");
+    expect(glance().dataset.face, "the old face holds at first").toBe("wide");
+    act(() => void vi.advanceTimersByTime(GLANCE_SWAP_S * 1000 - 60));
+    const closing = eyePaths();
+    act(() => void vi.advanceTimersByTime(80));
+    expect(glance().dataset.face).not.toBe("wide");
+    act(() => void vi.advanceTimersByTime(600));
+    expect(glance().dataset.face).toBe("sad");
+    expect(closing).not.toEqual(eyePaths());
+  });
+
+  it("holds the step's face still under reduced motion, with nothing scheduled", () => {
+    reduce(true);
+    drawShipped("error");
+    expect(glance().dataset.face).toBe("sad");
+    expect(glance().querySelector(".glance-breathe")).toBeNull();
+    const before = eyePaths();
+    act(() => void vi.advanceTimersByTime(20_000));
+    expect(eyePaths()).toEqual(before);
+    drawShipped("done");
+    expect(glance().dataset.face).toBe("happy");
+    drawShipped("searching");
+    expect(glance().dataset.face).toBe("wide");
+  });
+
+  it("draws every body with its eyes and moving parts", () => {
+    reduce(false);
+    for (const body of PIXEL_BODY_IDS) {
+      act(() => root.render(createElement(WorkingMascot, { bot: { ...bot, mascotBody: body }, size: 26, seed: "s", mood: "searching" })));
+      act(() => void vi.advanceTimersByTime(1_000));
+      const [l, r] = eyePaths();
+      expect(l, body).toMatch(/^M/);
+      expect(r, body).toMatch(/^M/);
+    }
   });
 });

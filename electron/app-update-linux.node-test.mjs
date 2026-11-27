@@ -16,6 +16,8 @@ function manifest(version, sums) {
   return { v: 1, version, sha256sums: sha(sums), signature: `${head}.${sign(null, Buffer.from(head), privateKey).toString("base64url")}` };
 }
 
+// an AppImage swaps its own executable file in place, with POSIX modes: a Linux-only path, never taken on Windows
+const LINUX_SWAP = { skip: process.platform === "win32" && "an AppImage only runs on Linux" };
 const IMAGE = "DuskBot-1.1.0-x86_64.AppImage";
 const NEW = "new appimage bytes";
 
@@ -52,7 +54,7 @@ function world({ served = Buffer.from(NEW), routes: extra = {}, blocked, current
 }
 const done = (w) => rmSync(w.root, { recursive: true, force: true });
 
-test("an AppImage downloads its release, checked against the signed sums, and replaces its own file in place", async () => {
+test("an AppImage downloads its release, checked against the signed sums, and replaces its own file in place", LINUX_SWAP, async () => {
   const w = world();
   assert.equal(await w.updater.check(), "1.1.0");
   assert.equal(readFileSync(w.target, "utf8"), NEW);
@@ -68,7 +70,7 @@ test("an AppImage downloads its release, checked against the signed sums, and re
   done(w);
 });
 
-test("without dusk.bot's copy it takes the downloads repo's stable AppImage", async () => {
+test("without dusk.bot's copy it takes the downloads repo's stable AppImage", LINUX_SWAP, async () => {
   assert.deepEqual(appImageSources("1.1.0", IMAGE), [mirrorUrl("1.1.0", IMAGE), zipUrl("1.1.0", "DuskBot.AppImage")]);
   const w = world({ served: undefined, routes: { [zipUrl("1.1.0", "DuskBot.AppImage")]: Buffer.from(NEW) } });
   assert.equal(await w.updater.check(), "1.1.0");
@@ -76,7 +78,7 @@ test("without dusk.bot's copy it takes the downloads repo's stable AppImage", as
   done(w);
 });
 
-test("an AppImage whose bytes do not match the signed sums is never put in place", async () => {
+test("an AppImage whose bytes do not match the signed sums is never put in place", LINUX_SWAP, async () => {
   const w = world({ served: Buffer.from("tampered bytes") });
   assert.equal(await w.updater.check(), null);
   assert.equal(readFileSync(w.target, "utf8"), "old appimage bytes");
@@ -95,7 +97,7 @@ test("an AppImage in a folder it can't write gets a link to the new AppImage ins
   done(w);
 });
 
-test("a download on another disk is copied next to the AppImage and checked before the swap", async () => {
+test("a download on another disk is copied next to the AppImage and checked before the swap", LINUX_SWAP, async () => {
   let crossed = 0;
   const w = world({ fsImpl: { ...fs, renameSync: (from, to) => { if (!crossed++ && from.endsWith(IMAGE)) throw Object.assign(new Error("cross-device"), { code: "EXDEV" }); return fs.renameSync(from, to); } } });
   assert.equal(await w.updater.check(), "1.1.0");
@@ -104,7 +106,7 @@ test("a download on another disk is copied next to the AppImage and checked befo
   done(w);
 });
 
-test("a swap that fails leaves the old AppImage and no part file", async () => {
+test("a swap that fails leaves the old AppImage and no part file", LINUX_SWAP, async () => {
   const w = world({ fsImpl: { ...fs, chmodSync: () => { throw Object.assign(new Error("not permitted"), { code: "EPERM" }); } } });
   assert.equal(await w.updater.check(), null);
   assert.equal(w.failures[0].stage, "install");
@@ -113,7 +115,7 @@ test("a swap that fails leaves the old AppImage and no part file", async () => {
   done(w);
 });
 
-test("a version that was swapped in while this app stays older is offered by hand until the person asks again", async () => {
+test("a version that was swapped in while this app stays older is offered by hand until the person asks again", LINUX_SWAP, async () => {
   const w = world();
   mkdirSync(w.dir, { recursive: true });
   writeFileSync(join(w.dir, SWAPPED), JSON.stringify({ version: "1.1.0" }));

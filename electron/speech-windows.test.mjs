@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -57,7 +58,7 @@ describe("built-in Windows speech", () => {
   it("runs the shipped script in Windows PowerShell with piped output and no window", () => {
     const session = begin({ endpointMs: 900, locale: "de-DE", finishOnRelease: ["control"] });
     expect(session.file).toBe("D:\\Win\\System32\\WindowsPowerShell\\v1.0\\powershell.exe");
-    expect(session.args.slice(0, 6)).toEqual(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "/synthetic-speech-resources/windows-speech.ps1"]);
+    expect(session.args.slice(0, 6)).toEqual(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", join("/synthetic-speech-resources", "windows-speech.ps1")]);
     expect(session.args.slice(6)).toEqual(["-EndpointMs", "900", "-Locale", "de-DE", "-StopFile", session.stop, "-FinishFile", session.finish]);
     expect(session.options).toEqual({ stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
     expect(session.args).not.toContain("--finish-on-release");

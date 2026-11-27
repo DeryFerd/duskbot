@@ -17,7 +17,7 @@ let lastStop: Promise<unknown> = Promise.resolve();
 
 /** Our own viewfinder over the live camera: four soft corners, a slow sweep, and a mascot peeking over the top edge that
  * looks down at the code. The camera itself draws behind a transparent page natively, or into a <video> in a browser. */
-export function Scanner({ platform, busy, onCode, onClose, onEnterCode, onPaste }: {
+export function Scanner({ platform, busy, onCode, onClose, onEnterCode, onPaste, onDenied }: {
   platform: MobilePlatform;
   /** A code was read and is being redeemed: the sweep stops and the mascot works. */
   busy: boolean;
@@ -25,6 +25,8 @@ export function Scanner({ platform, busy, onCode, onClose, onEnterCode, onPaste 
   onClose: () => void;
   onEnterCode: () => void;
   onPaste: () => void;
+  /** The camera was refused after all (turned off in Settings since it was asked): the scanner has closed. */
+  onDenied: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const session = useRef<CameraSession | null>(null);
@@ -36,8 +38,12 @@ export function Scanner({ platform, busy, onCode, onClose, onEnterCode, onPaste 
   const [mode, setMode] = useState<"pending" | "web" | "native">(platform.kind === "ios" ? "pending" : "web");
   const read = useRef(onCode);
   read.current = onCode;
-  const actions = useRef({ onClose, onEnterCode, onPaste });
-  actions.current = { onClose, onEnterCode, onPaste };
+  const actions = useRef({ onClose, onEnterCode, onPaste, onDenied });
+  actions.current = { onClose, onEnterCode, onPaste, onDenied };
+  const end = useRef(() => {});
+  // every way out stops the camera at once, not when the exit animation ends: under VisionKit's full screen scanner
+  // (iOS) the web view is out of the window and gets no animation frames, so that animation would never end
+  const leave = (next: () => void) => { end.current(); next(); };
   const native = mode === "native";
 
   useEffect(() => {
@@ -59,9 +65,8 @@ export function Scanner({ platform, busy, onCode, onClose, onEnterCode, onPaste 
       },
       onAction: (key) => {
         if (stopped) return;
-        if (key === "close") actions.current.onClose();
-        else if (key === "code") actions.current.onEnterCode();
-        else if (key === "paste") actions.current.onPaste();
+        const next = key === "close" ? actions.current.onClose : key === "code" ? actions.current.onEnterCode : key === "paste" ? actions.current.onPaste : null;
+        if (next) { end.current(); next(); }
       },
       onCode: (text) => {
         if (stopped) return;
@@ -79,14 +84,27 @@ export function Scanner({ platform, busy, onCode, onClose, onEnterCode, onPaste 
       if (stopped) return;
       setMode(fullScreen ? "native" : "web");
       if (live.torch) setTorch(false);
-    }).catch(() => { if (!stopped) { setUnavailable(true); setMode("web"); } });
-    return () => {
+    }).catch(async () => {
+      if (stopped) return;
+      const permission = await camera.permission().catch(() => "prompt");
+      if (stopped) return;
+      if (permission === "denied") { end.current(); actions.current.onDenied(); return; }
+      setUnavailable(true);
+      setMode("web");
+    });
+    const stop = () => {
+      if (stopped) return;
       stopped = true;
       session.current = null;
       // the native camera needs a beat after closing before it will open again
       lastStop = starting.then((live) => live?.stop()).then(() => new Promise((resolve) => setTimeout(resolve, 250))).catch(() => {});
     };
+    end.current = stop;
+    return stop;
   }, [platform]);
+
+  useEffect(() => platform.onPause?.(() => { end.current(); actions.current.onClose(); }), [platform]);
+  useEffect(() => platform.onBack?.(() => { end.current(); actions.current.onClose(); return true; }), [platform]);
 
   useEffect(() => {
     if (native) session.current?.busy?.(busy, t("mobile.onboarding.linking"));
@@ -101,7 +119,7 @@ export function Scanner({ platform, busy, onCode, onClose, onEnterCode, onPaste 
   const systemBar = useNativeBar(BAR_RANK.camera, platform.chrome ? {
     leading: [{ id: "close", role: "close", label: t("mobile.sheet.close") }],
     trailing: torch === null ? [] : [{ id: "torch", symbol: torch ? "flashlight.on.fill" : "flashlight.off.fill", label: t("mobile.onboarding.torch") }],
-  } : null, { close: onClose, torch: toggleTorch });
+  } : null, { close: () => leave(onClose), torch: toggleTorch });
 
   return (
     <motion.div
@@ -144,7 +162,7 @@ export function Scanner({ platform, busy, onCode, onClose, onEnterCode, onPaste 
       </div>
 
       {!systemBar && <div className="absolute inset-x-0 top-0 flex items-center justify-between px-4 pt-[calc(var(--m-safe-top)+8px)]">
-        <button type="button" onClick={onClose} aria-label={t("mobile.sheet.close")} className="mobile-press flex size-11 items-center justify-center rounded-full bg-white/[0.14] text-white backdrop-blur-md"><X size={20} /></button>
+        <button type="button" onClick={() => leave(onClose)} aria-label={t("mobile.sheet.close")} className="mobile-press flex size-11 items-center justify-center rounded-full bg-white/[0.14] text-white backdrop-blur-md"><X size={20} /></button>
         {torch !== null && (
           <button type="button" onClick={toggleTorch} aria-pressed={torch} aria-label={t("mobile.onboarding.torch")} className="mobile-press flex size-11 items-center justify-center rounded-full bg-white/[0.14] text-white backdrop-blur-md">
             {torch ? <Flashlight size={19} /> : <FlashlightOff size={19} />}
@@ -159,8 +177,8 @@ export function Scanner({ platform, busy, onCode, onClose, onEnterCode, onPaste 
           <p className="mt-1.5 text-[15px] leading-6 text-white/65">{t("mobile.onboarding.scanHint")}</p>
         </div>
         <div className="flex gap-2.5">
-          <button type="button" onClick={onEnterCode} className="mobile-press flex h-11 items-center gap-2 rounded-full bg-white/[0.14] px-4 text-[15px] font-medium text-white backdrop-blur-md"><Keyboard size={17} />{t("mobile.onboarding.enterCode")}</button>
-          <button type="button" onClick={onPaste} className="mobile-press flex h-11 items-center gap-2 rounded-full bg-white/[0.14] px-4 text-[15px] font-medium text-white backdrop-blur-md"><Link2 size={17} />{t("mobile.onboarding.pasteLink")}</button>
+          <button type="button" onClick={() => leave(onEnterCode)} className="mobile-press flex h-11 items-center gap-2 rounded-full bg-white/[0.14] px-4 text-[15px] font-medium text-white backdrop-blur-md"><Keyboard size={17} />{t("mobile.onboarding.enterCode")}</button>
+          <button type="button" onClick={() => leave(onPaste)} className="mobile-press flex h-11 items-center gap-2 rounded-full bg-white/[0.14] px-4 text-[15px] font-medium text-white backdrop-blur-md"><Link2 size={17} />{t("mobile.onboarding.pasteLink")}</button>
         </div>
       </motion.div>
       </>}

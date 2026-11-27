@@ -95,10 +95,6 @@ export async function cloudMove(id: string): Promise<true | string> {
   }
 }
 
-/** Whether a rail of places stands beside this page: the window's own (main says so: `beside`), or one drawn on it from a
- * list main gave it (two places or more). */
-export const railShown = (state: RailState): boolean => state.beside === true || state.places.length > 0;
-
 /** A circle's letters: the first of up to two words, so "Client A" is CA and "Acme" is A. */
 export function placeInitials(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);

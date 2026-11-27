@@ -17,10 +17,16 @@ export function compactionReading<T>(capabilities: { contextReading?: "meter" } 
   return capabilities?.contextReading === "meter" ? undefined : reading;
 }
 
+/** Where a conversation is folded unless config.json's `context.compactAt` says otherwise: 80% of the model's window, never
+ * past 200k tokens. 200k is where Claude Code compacts on a 200k model and starts compacting while idle, and where xAI
+ * doubles the price of a prompt; a 1M window read in full at 80% costs four times as much per message and reads worse. */
+export const DEFAULT_COMPACT_FRACTION = 0.8;
+export const DEFAULT_COMPACT_CAP_TOKENS = 200_000;
+
 /** Leave headroom even for a small local model: an 8k floor would make compaction unreachable on an 8k window. */
 export function compactBudget(window: number, compactAt?: number, nativeCompactAt?: number): number {
   if (!positive(window)) throw new Error("invalid model context window");
-  const configured = positive(compactAt) ? (compactAt < 1 ? window * compactAt : compactAt) : window * 0.8;
+  const configured = positive(compactAt) ? (compactAt < 1 ? window * compactAt : compactAt) : Math.min(window * DEFAULT_COMPACT_FRACTION, DEFAULT_COMPACT_CAP_TOKENS);
   return Math.max(1, Math.floor(Math.min(configured, window * 0.9, positive(nativeCompactAt) ? nativeCompactAt * 0.9 : Infinity)));
 }
 

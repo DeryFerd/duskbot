@@ -9,13 +9,16 @@ import { createMacExecutor, folderName, jobSummary, macLogFile, resolveMacPath, 
 
 const job = (tool, args = {}, extra = {}) => ({ id: `job-${tool}`, tool, arguments: args, bot: { id: "b1", name: "Nova" }, expiresAt: Date.now() + 60_000, ...extra });
 
+// the Mac tools run only on a Mac (servesMacJobs): Mac paths and a POSIX shell, so their runs skip on Windows
+const MAC_ONLY = { skip: process.platform === "win32" && "the Mac tools run only on a Mac" };
+
 function scratchHome(t) {
   const home = realpathSync(mkdtempSync(path.join(tmpdir(), "dusk-mac-home-")));
   t.after(() => rmSync(home, { recursive: true, force: true }));
   return home;
 }
 
-test("paths start at the home folder and a bot's name makes one safe folder", () => {
+test("paths start at the home folder and a bot's name makes one safe folder", MAC_ONLY, () => {
   assert.equal(resolveMacPath("~", "/Users/me"), "/Users/me");
   assert.equal(resolveMacPath("~/Downloads/x", "/Users/me"), "/Users/me/Downloads/x");
   assert.equal(resolveMacPath("notes.txt", "/Users/me"), "/Users/me/notes.txt");
@@ -29,7 +32,7 @@ test("the log line names the command or the paths, never what is written", () =>
   assert.equal(jobSummary(job("mac_write_file", { path: "~/a.txt", content: "secret" })), "~/a.txt");
 });
 
-test("exec, write, read, list and open run on this computer and each is logged", async (t) => {
+test("exec, write, read, list and open run on this computer and each is logged", MAC_ONLY, async (t) => {
   const home = scratchHome(t);
   const opened = [];
   const execute = createMacExecutor({ home, shell: "/bin/sh", opener: async (args) => { opened.push(args); } });

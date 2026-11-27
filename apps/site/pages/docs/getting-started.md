@@ -57,4 +57,7 @@ it shows what it is doing while it works, and asks before the scary stuff: sendi
 
 - read [tips for using bots](/docs/tips). ten minutes there saves hours later.
 - want bots that keep working with your laptop shut? that is [dusk cloud](/docs/dusk-cloud).
-- text them from anywhere with [the phone app](/docs/phone).
+- text them from anywhere with [the phone app](/docs/phone). running claude code? here's how to use [claude code from your phone](/claude-code-from-your-phone).
+- want a job done every morning? [scheduled ai tasks](/scheduled-ai-tasks) compares the options, and [grok tasks](/guides/grok-tasks) helps if you're coming from grok bot.
+- still choosing? see [how to pick a personal ai agent](/personal-ai-agent), or how dusk bot compares as a [hermes agent alternative](/alternatives/hermes-agent).
+- found a security problem? [here's how to report it](/security).

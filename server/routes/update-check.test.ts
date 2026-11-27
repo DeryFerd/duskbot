@@ -7,14 +7,15 @@ import { requiredScope } from "../request-auth.ts";
 import type { UpdateCheck } from "../update-check.ts";
 import { dispatchRoutes } from "./table.ts";
 import { createUpdateCheckRoutes } from "./update-check.ts";
+import type { Release } from "../../shared/release-notes.ts";
 
 const servers: Server[] = [];
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => new Promise((done) => server.close(done))));
 });
 
-async function serve(check: () => Promise<UpdateCheck>): Promise<string> {
-  const routes = [createUpdateCheckRoutes({ check })];
+async function serve(check: () => Promise<UpdateCheck>, changelog?: () => Promise<Release[]>): Promise<string> {
+  const routes = [createUpdateCheckRoutes({ check, changelog })];
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const handled = await dispatchRoutes(routes, {
@@ -48,5 +49,14 @@ describe("update check route", () => {
     const response = await fetch(`${base}/api/updates/check`);
     expect(response.status).toBe(502);
     expect(await response.json()).toEqual({ error: "Could not check for updates: GitHub answered 403" });
+  });
+
+  it("hands any client the changelog, and an empty list when there is none", async () => {
+    expect(requiredScope("GET", "/api/updates/changelog")).toBe("client");
+    const releases: Release[] = [{ version: "0.2.32", items: [{ text: "Check for updates on the phone", area: "phone" }] }];
+    const withList = await serve(async () => ({ current: "0.2.31", install: "docker", available: false }), async () => releases);
+    expect(await (await fetch(`${withList}/api/updates/changelog`)).json()).toEqual({ v: 1, releases });
+    const without = await serve(async () => ({ current: "0.2.31", install: "docker", available: false }));
+    expect(await (await fetch(`${without}/api/updates/changelog`)).json()).toEqual({ v: 1, releases: [] });
   });
 });

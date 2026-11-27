@@ -18,11 +18,13 @@ import { Icon } from "./Icon";
 import { useHeldMenuMotion } from "./MenuMotion";
 import { GROK_LABEL, GROK_MENU_ITEM, GROK_ROW_FILL, MENU_SHEET } from "./menu-recipe";
 import { mdPrimaryCls } from "./ui/GrokDialog";
+import { UpdatedDialog } from "./UpdatedDialog";
 
 const DOWNLOAD_PAGE = "https://dusk.bot/download";
 
+/** this app's own updater, wherever main gives this page one (electron/preload.cjs) */
 function ownBridge() {
-  return window.duskDesktop?.remoteClient?.active === true ? undefined : window.duskDesktop?.appUpdate;
+  return window.duskDesktop?.appUpdate;
 }
 
 function restartInto(bridge: AppUpdateBridge, setRestarting: (on: boolean) => void) {
@@ -167,12 +169,11 @@ export function SpotView({ className, state, cta = null }: { className?: string;
   const { spot, act, updated, seen } = state;
   const feedbackHidden = useSidebarFeedbackHidden();
   const showFeedback = spot.kind === "feedback" && !cta && !feedbackHidden;
-  // an update shows no line; it is marked seen quietly
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (updated) seen(); }, [updated]);
-  if (spot.kind === "feedback" && !cta && feedbackHidden) return null;
+  const line = state.bridge ? <UpdatedDialog updated={updated} seen={seen} /> : null;
+  if (spot.kind === "feedback" && !cta && feedbackHidden) return line;
   return (
     <div className={className}>
+      {line}
       {spot.kind !== "feedback" ? <UpdateCard spot={spot} act={act} className={CARD} />
         : cta ? (cta.card ? <SpotCloudCard cta={cta} card={cta.card} /> : <SpotCtaCard cta={cta} />)
         : showFeedback ? <FeedbackCard onOpen={act} /> : null}

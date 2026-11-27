@@ -99,10 +99,13 @@ async function screenCalls(server: AgentsIntegration, count: number): Promise<Ar
 /** Plan fields: `launch` replaces Claude's argv files; `progress`/`progressAfterGate` stream around the
  * gate; `approve` asks through Claude's permission-prompt tool (`replyIfDenied` otherwise);
  * `screenCalls` calls the mounted computer that many times; `echoSteered` ends a scripted reply with what
- * `steered` says was sent into the turn while it ran. */
+ * `steered` says was sent into the turn while it ran; `streamTools` reports each scripted step to `toolCall`, so the engine
+ * stream shows the calls a real turn would (the host's claim check reads them). */
+export interface ScriptedToolCall { id: string; tool: string; args: unknown; ok?: boolean; text?: string }
 export async function runRoomHandoffAgent(argv: string[], planPath: string, prompt?: unknown,
   launch?: { integration: AgentsIntegration; system: string; evidence?: Record<string, unknown> },
-  progress?: (text: string) => void, steered: () => readonly string[] = () => []): Promise<string> {
+  progress?: (text: string) => void, steered: () => readonly string[] = () => [],
+  toolCall?: (phase: "start" | "end", call: ScriptedToolCall) => void): Promise<string> {
   const arg = (flag: string) => argv[argv.indexOf(flag) + 1];
   const mounted = launch ? [] : Object.values(JSON.parse(readAtLaunch(arg("--mcp-config"))).mcpServers as Record<string, AgentsIntegration>);
   // With a tool selection every server sits behind the gate, which names its upstream in DUSK_GATE_UPSTREAM.
@@ -201,16 +204,21 @@ export async function runRoomHandoffAgent(argv: string[], planPath: string, prom
       evidence.push(await call("tools/list"));
       evidence.push(await call("tools/call", { name: "list_room_targets", arguments: {} }));
       // `server` names another server the turn mounted ("browser", or a person's own MCP server); `capture` { name: regex }
-      // keeps the first group of the result for later steps' `{{name}}`; `delayMs` waits that long before the step.
+      // keeps the first group of the result for later steps' `{{name}}`; `delayMs` waits that long before the step; `anyOutcome`
+      // records a step that may fail or not without ending the turn.
       const captured: Record<string, string> = {};
       for (const step of steps) {
         if (typeof step.delayMs === "number") await new Promise((resolve) => setTimeout(resolve, step.delayMs));
         const server = step.server ? (launch ? undefined : JSON.parse(readAtLaunch(arg("--mcp-config"))).mcpServers?.[step.server] as AgentsIntegration | undefined) : undefined;
         if (step.server && !server) throw new Error(`A scripted ${step.server} step needs that server mounted for the turn`);
         const args = withCaptured(step.arguments, captured);
+        const shown = plan.streamTools && toolCall ? { id: `scripted-${process.pid}-${evidence.length}`, tool: String(step.tool ?? "coordinate_bots"), args } : undefined;
+        if (shown) toolCall!("start", shown);
+        const startedAt = Date.now();
         const response = server ? await serverToolCall(server, step.tool, args) : await call("tools/call", { name: step.tool ?? "coordinate_bots", arguments: args });
-        evidence.push({ step, response });
-        if (Boolean(response.error || response.result?.isError) !== Boolean(step.expectError)) throw new Error(`Unexpected tool outcome: ${JSON.stringify(response)}`);
+        if (shown) toolCall!("end", { ...shown, ok: !(response.error || response.result?.isError), text: (response.result?.content ?? []).map((part: any) => part?.text ?? "").join("\n") });
+        evidence.push({ step, response, ms: Date.now() - startedAt });
+        if (!step.anyOutcome && Boolean(response.error || response.result?.isError) !== Boolean(step.expectError)) throw new Error(`Unexpected tool outcome: ${JSON.stringify(response)}`);
         for (const [name, pattern] of Object.entries((step.capture ?? {}) as Record<string, string>)) {
           const text = (response.result?.content ?? []).map((part: any) => part?.text ?? "").join("\n");
           const found = new RegExp(pattern).exec(text)?.[1];

@@ -10,7 +10,7 @@ import { aboutOwner, factsOf } from "./memory-facts.ts";
 import { botMemoryUpdate, UNVERIFIED_TOPIC } from "./memory-forget.ts";
 import { createMemoryUpkeep } from "./memory-upkeep.ts";
 import { closeMessageDb } from "./message-db.ts";
-import { ensureWorkspace, readMemoryTopic, workspaceDir, writeMemoryFile, writeMemoryTopic, WORKSPACES_DIR } from "./workspace.ts";
+import { ensureWorkspace, readMemoryLog, readMemoryTopic, searchMemoryFiles, workspaceDir, writeMemoryFile, writeMemoryLog, writeMemoryTopic, WORKSPACES_DIR } from "./workspace.ts";
 
 const BOT = "v2-writes";
 
@@ -20,7 +20,8 @@ beforeEach(() => {
   rmSync(WORKSPACES_DIR, { recursive: true, force: true });
 });
 
-const memory = () => readFileSync(join(workspaceDir(BOT), "MEMORY.md"), "utf8");
+const memoryText = (bot: string) => readFileSync(join(workspaceDir(bot), "MEMORY.md"), "utf8");
+const memory = () => memoryText(BOT);
 
 function aboutMeStore(initial: string) {
   let text = initial;
@@ -50,6 +51,44 @@ describe("forget, precisely", () => {
     expect(result).toMatchObject({ ok: true, forgotten: ["The person prefers short answers"], aboutMe: ["The person prefers short answers"] });
     expect(memory()).toContain("Atlas deploys on Fridays");
     expect(store.text()).toBe("");
+  });
+});
+
+describe("forget, across the person's bots", () => {
+  const log = (bot: string) => readMemoryLog(bot, "2026-11-26.md") ?? "";
+
+  it("clears the fact from every other bot's notes and daily logs the person owns, and leaves another person's alone", () => {
+    const [scout, pepper, other] = ["fg-scout", "fg-pepper", "fg-pepper--member-p_cleo"];
+    writeMemoryFile(scout, "- 2026-11-26 · Meera's birthday is March 14\n- 2026-11-26 · The staging server is kestrel-02\n");
+    writeMemoryFile(pepper, "- 2026-11-26 · Meera's birthday is March 14\n- 2026-11-26 · The person lives in Pune\n");
+    writeMemoryLog(pepper, "2026-11-26.md", "# 2026-11-26\n- 18:24 · from chat \"what's my staging server called a…\" · Staging server: kestrel-02 - Meera's birthday: March 14 - You live in Pune\n- 18:30 · Booked the dentist for Friday\n");
+    writeMemoryLog(other, "2026-11-26.md", "# 2026-11-26\n- 18:24 · Meera's birthday: March 14\n");
+    const store = aboutMeStore("");
+    const result = botMemoryUpdate(scout, { action: "forget", oldText: "Meera's birthday" },
+      { source: "chat", aboutMe: store.aboutMe, about: { owner: aboutOwner(), text: "" }, elsewhere: [{ layer: pepper, name: "Pepper" }] });
+    expect(readFileSync(join(workspaceDir(pepper), "MEMORY.md"), "utf8")).toBe("- 2026-11-26 · The person lives in Pune\n");
+    expect(log(pepper), "Pepper's daily log").toBe("# 2026-11-26\n- 18:30 · Booked the dentist for Friday\n");
+    expect(memoryText(scout)).toBe("- 2026-11-26 · The staging server is kestrel-02\n");
+    expect(log(other), "another person's memory with the same bot is never touched").toContain("Meera's birthday");
+    expect(searchMemoryFiles(pepper, "Meera", 5)).toEqual([]);
+    expect(result).toEqual({ ok: true, forgotten: ["Meera's birthday is March 14"], aboutMe: [], logLines: 1, ownMemory: true, otherBots: ["Pepper"] });
+  });
+
+  it("takes a forgotten fact out of the chat name another bot's kept note quotes, even cut short, and keeps the note", () => {
+    const [scout, pepper] = ["fg-scout-q", "fg-pepper-q"];
+    writeMemoryFile(scout, "- 2026-11-26 · Meera's birthday is March 14\n");
+    writeMemoryFile(pepper, "- 2026-11-26 · from chat \"so when is Meera's birth…\" · The person lives in Pune\n- 2026-11-26 · from chat \"plan the week\" · Atlas deploys on Fridays\n");
+    const result = botMemoryUpdate(scout, { action: "forget", oldText: "Meera's birthday" },
+      { source: "chat", aboutMe: null, elsewhere: [{ layer: pepper, name: "Pepper" }] });
+    expect(readFileSync(join(workspaceDir(pepper), "MEMORY.md"), "utf8")).toBe("- 2026-11-26 · from chat · The person lives in Pune\n- 2026-11-26 · from chat \"plan the week\" · Atlas deploys on Fridays\n");
+    expect(result).toMatchObject({ ok: true, otherBots: ["Pepper"] });
+  });
+
+  it("without other bots named (a room, the team's memory) stays in the asking bot's memory", () => {
+    writeMemoryFile("fg-solo", "- 2026-11-26 · Meera's birthday is March 14\n");
+    writeMemoryLog("fg-elsewhere", "2026-11-26.md", "# 2026-11-26\n- 18:24 · Meera's birthday: March 14\n");
+    expect(botMemoryUpdate("fg-solo", { action: "forget", oldText: "Meera's birthday" }, { source: "chat", aboutMe: null })).toMatchObject({ ok: true, otherBots: [] });
+    expect(log("fg-elsewhere")).toContain("Meera's birthday");
   });
 });
 

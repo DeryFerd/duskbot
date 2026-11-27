@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY_VIEW, type VpsLinkView } from "./vps-link";
 import { pairingBlock } from "../../server/cli-pairing";
-import { installChecklist, installPhase, pairingLink, pastedPairingLink } from "./place-setup";
+import { installChecklist, installPhase, onlyServerLocalLink, pairingLink, pastedPairingLink } from "./place-setup";
 
 const at = (view: Partial<VpsLinkView>): VpsLinkView => ({ ...EMPTY_VIEW, ...view });
 const states = (view: VpsLinkView, now = 0) => installChecklist(view, now).map((step) => `${step.key}:${step.state}`);
@@ -59,13 +59,26 @@ describe("connecting by address", () => {
 
   it("takes the public link out of everything `duskbot pair` printed, pasted as it is", () => {
     const printed = pairingBlock({
-      code: "ABCD-2345-EFGH", url: "https://bots.example.com/pair#code=ABCD-2345-EFGH", inviteUrl: "duskbot://pair?address=bots.example.com&token=x",
+      code: "ABCD-2345-EFGH", url: "https://bots.example.com/pair#code=ABCD-2345-EFGH",
       localUrl: "http://127.0.0.1:8799/pair#code=ABCD-2345-EFGH", expiresAt: Date.now() + 60_000,
     });
     expect(pairingLink(printed, "")).toEqual({ link: "https://bots.example.com/pair#code=ABCD-2345-EFGH" });
     // a one-line field drops the line breaks of a paste
     expect(pairingLink(printed.replace(/\n/g, ""), "")).toEqual({ link: "https://bots.example.com/pair#code=ABCD-2345-EFGH" });
     expect(pastedPairingLink("open or scan:  https://bots.example.com/pair#code=abcd2345efgh")).toBe("https://bots.example.com/pair#code=ABCD-2345-EFGH");
+  });
+
+  // QA A3: on a server with no address `duskbot pair` prints only its own loopback link; opened on another computer it
+  // reached that computer's own server
+  it("refuses what a server with no address printed, saying why, instead of opening this app's own server", () => {
+    const printed = pairingBlock({ code: "ABCD-2345-EFGH", url: null, localUrl: "http://127.0.0.1:8799/pair#code=ABCD-2345-EFGH", expiresAt: Date.now() + 60_000, hint: "set DUSK_PUBLIC_URL" });
+    expect(onlyServerLocalLink(printed)).toBe(true);
+    expect(pairingLink(printed, "")).toEqual({ error: "serverLocal" });
+    expect(pairingLink(printed.replace(/\n/g, ""), "")).toEqual({ error: "serverLocal" });
+    // with a public link too, the public one wins as before; an SSH tunnel's link typed alone still opens
+    const both = pairingBlock({ code: "ABCD-2345-EFGH", url: "https://bots.example.com/pair#code=ABCD-2345-EFGH", localUrl: "http://127.0.0.1:8799/pair#code=ABCD-2345-EFGH", expiresAt: Date.now() + 60_000 });
+    expect(onlyServerLocalLink(both)).toBe(false);
+    expect(pairingLink("http://127.0.0.1:8790/pair#code=ABCD-2345-EFGH", "")).toEqual({ link: "http://127.0.0.1:8790/pair#code=ABCD-2345-EFGH" });
   });
 
   it("falls back to a loopback link only when nothing else was pasted", () => {

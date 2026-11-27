@@ -181,7 +181,9 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
   // One log line per browser call and preview frame.
   if (parentEnv.DUSK_BROWSER_TIMING === "1") childEnv.DUSK_BROWSER_TIMING = "1";
   // Warm summaries' minutes as seconds (server/warm-summary.ts), and the switch that turns them off.
-  for (const key of ["DUSK_WARM_SUMMARY_TIME_SCALE", "DUSK_WARM_SUMMARY", "DUSK_CODEX_WARM", "DUSK_QUOTA_SWITCH"]) if (parentEnv[key]) childEnv[key] = parentEnv[key];
+  for (const key of ["DUSK_WARM_SUMMARY_TIME_SCALE", "DUSK_WARM_SUMMARY", "DUSK_CODEX_WARM", "DUSK_QUOTA_SWITCH", "DUSK_IDLE_COMPACT_HOURS", "DUSK_IDLE_SWEEP_MS", "DUSK_IDLE_COMPACT_MIN_TOKENS"]) if (parentEnv[key]) childEnv[key] = parentEnv[key];
+  // OpenAI-compatible chat engines' retry waits, scaled down so a fixture provider's rate limit fails in milliseconds.
+  if (/^0?\.\d+$/.test(parentEnv.FAKE_CHAT_RETRY_SCALE ?? "")) childEnv.FAKE_CHAT_RETRY_SCALE = parentEnv.FAKE_CHAT_RETRY_SCALE;
   // The built-in voice's downloaded models, so a fixture with a throwaway home does not fetch them again.
   if (parentEnv.DUSK_VOICE_MODELS_DIR) childEnv.DUSK_VOICE_MODELS_DIR = parentEnv.DUSK_VOICE_MODELS_DIR;
   // A loopback fake only: the key never reaches a real provider.
@@ -221,6 +223,11 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
   // Routine probe checks may read this one loopback page server (server/host/routine-quiet-host.ts), and nothing else local.
   const probeOrigin = parentEnv.DUSK_PROBE_LOOPBACK_ORIGIN?.trim() ?? "";
   if (/^http:\/\/127\.0\.0\.1:\d{1,5}$/.test(probeOrigin)) childEnv.DUSK_PROBE_LOOPBACK_ORIGIN = probeOrigin;
+  // Loopback only: a push relay stub (scripts/push-pairing-e2e.ts), and the CA that trusts its local https front.
+  const pushRelay = parentEnv.DUSK_PUSH_RELAY?.trim() ?? "";
+  if (/^http:\/\/127\.0\.0\.1:\d{1,5}$/.test(pushRelay)) childEnv.DUSK_PUSH_RELAY = pushRelay;
+  const extraCa = parentEnv.NODE_EXTRA_CA_CERTS?.trim() ?? "";
+  if (isAbsolute(extraCa)) childEnv.NODE_EXTRA_CA_CERTS = extraCa;
   const tregUrl = parentEnv.DUSK_TREG_URL?.trim() ?? "";
   if (/^http:\/\/127\.0\.0\.1:\d{1,5}$/.test(tregUrl)) childEnv.DUSK_TREG_URL = tregUrl;
   // Loopback only, for harness mechanics: a fake ElevenLabs the measurement
@@ -292,7 +299,7 @@ export async function launchVerificationServer(
   browser?: { binaryPath: string; executablePath: string },
   room?: { scripted: boolean },
   /** Optional repository-owned fake providers for multi-engine setup checks. */
-  extraProviders: Array<"codex" | "cline" | "copilot" | "customAcp" | "cursorLogin"> = [],
+  extraProviders: Array<"codex" | "cline" | "copilot" | "customAcp" | "cursorLogin" | "hermes"> = [],
   /** Programmatic web UI qualification against the fixture's static server. */
   staticDir?: string,
 ): Promise<VerificationServer> {
@@ -318,6 +325,12 @@ export async function launchVerificationServer(
   const evidenceDir = join(tmpdir(), "duskbot-verification-evidence");
   mkdirSync(evidenceDir, { recursive: true });
   const logPath = join(evidenceDir, `server-${Date.now()}-${process.pid}.log`);
+  if (extraProviders.includes("hermes")) {
+    mkdirSync(join(dataDir, "hermes-fixture"), { recursive: true });
+    writeFileSync(join(dataDir, "hermes-fixture", "config.yaml"), "model:\n  provider: openrouter\n  default: fixture/first\n");
+    writeFileSync(join(dataDir, "hermes-fixture", ".env"), "OPENROUTER_API_KEY=fixture-only\n");
+    writeFileSync(join(dataDir, "hermes-servable.txt"), "openrouter:fixture/first,openrouter:fixture/second");
+  }
   writeFileSync(join(dataDir, "config.json"), JSON.stringify({
     // A setup card's answers would be one more engine call at every new bot, taking replies a test scripts for its turns.
     features: { smartSetupChoices: false },
@@ -344,6 +357,14 @@ export async function launchVerificationServer(
         driver: "cursorAgent", displayName: "Cursor",
         config: { cli: fileURLToPath(new URL("../server/testing/fake-login-cli.ts", import.meta.url)) },
         environment: { FAKE_LOGIN_PROVIDER: "cursor", FAKE_LOGIN_OUTCOME: "never" },
+      } } : {}),
+      // Hermes' session/new, session/load and set_model model handling (server/testing/fake-hermes-acp.ts); the fixture
+      // edits hermes-fixture/config.yaml and hermes-servable.txt to switch or retire models.
+      ...(extraProviders.includes("hermes") ? { hermes: {
+        driver: "hermesAgent", displayName: "Verification Hermes",
+        config: { cli: fileURLToPath(new URL("../server/testing/fake-hermes-acp.ts", import.meta.url)) },
+        environment: { HERMES_HOME: join(dataDir, "hermes-fixture"), FAKE_HERMES_SERVABLE_FILE: join(dataDir, "hermes-servable.txt"),
+          FAKE_HERMES_LOG: join(dataDir, "hermes-rpc.jsonl") },
       } } : {}),
       ...(extraProviders.includes("customAcp") ? { myAgent: {
         driver: "customAcp", displayName: "Verification custom ACP",

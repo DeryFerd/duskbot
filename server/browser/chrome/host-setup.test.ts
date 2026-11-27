@@ -7,7 +7,7 @@ import { removeTempDir } from "../../testing/cleanup.ts";
 import { parseArgs } from "../../cli.ts";
 import {
   APPARMOR_PROFILE_PATH, appArmorProfile, BrowserHostError, diagnoseLaunchFailure, missingLibraries, sandboxBlocked, sandboxDisabled, SETUP_COMMAND,
-  setUpBrowserHost, SYSTEM_CHROME, USERNS_RESTRICTION, type HostSetupDeps,
+  setUpBrowserHost, sudoCommand, SYSTEM_CHROME, USERNS_RESTRICTION, type HostSetupDeps,
 } from "./host-setup.ts";
 
 const folders: string[] = [];
@@ -106,5 +106,13 @@ describe("browser setup", () => {
     expect(await setUpBrowserHost(d.all)).toBe(1);
     expect(d.written).toEqual([]);
     expect(d.errors[0]).toContain(SYSTEM_CHROME);
+  });
+});
+
+describe("commands printed for sudo", () => {
+  it("name node and the CLI by path, since sudo's PATH has no ~/.local/bin duskbot", () => {
+    expect(sudoCommand("browser install --with-deps", "/usr/bin/node", "/home/maus/.local/bin/duskbot")).toBe("sudo /usr/bin/node /home/maus/.local/bin/duskbot browser install --with-deps");
+    expect(sudoCommand("browser setup", "/home/maus/.nvm/versions/node/v22.1.0/bin/node", "/home/maus/my tools/duskbot")).toBe("sudo /home/maus/.nvm/versions/node/v22.1.0/bin/node '/home/maus/my tools/duskbot' browser setup");
+    expect(sudoCommand("browser setup", "/usr/bin/node", "")).toBe("sudo duskbot browser setup");
   });
 });

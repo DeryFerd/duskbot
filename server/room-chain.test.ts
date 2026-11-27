@@ -17,6 +17,22 @@ describe("chainsMentions", () => {
   });
 });
 
+describe("chainsMentions with the members' names", () => {
+  const names = ["Scout", "Pepper", "Morning Brief"];
+  it("reads a later member told to go then, after an earlier one", () => {
+    expect(chainsMentions("@Scout make up a random 4-digit number and say only it. @Pepper then write Scout's number backwards", names)).toBe(true);
+    expect(chainsMentions("@Scout what is staging? @Pepper, then turn that into a title", names)).toBe(true);
+    expect(chainsMentions("@Scout find it. @Morning Brief next sum it up", names)).toBe(true);
+  });
+
+  it("does not read a question or a lone mention as a chain", () => {
+    expect(chainsMentions("@Scout hi. @Pepper what's next?", names)).toBe(false);
+    expect(chainsMentions("@Scout and @Pepper then?", names)).toBe(false);
+    expect(chainsMentions("@Pepper then write it", names)).toBe(false);
+    expect(chainsMentions("@Scout @Pepper what do you think?", names)).toBe(false);
+  });
+});
+
 describe("inMentionOrder", () => {
   it("orders members as the message names them", () => {
     const members = [{ name: "Morning Brief" }, { name: "Forge" }];

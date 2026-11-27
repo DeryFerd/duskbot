@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 const spawnSync = vi.hoisted(() => vi.fn((file: string) => ({ status: 0, stdout: file === "osascript" ? "/Applications/Google Chrome.app\n" : "" })));
@@ -80,7 +81,18 @@ describe("which Chrome the bots' browser runs", () => {
   it("on a server uses the Chrome for Testing agent-browser installed, newest first", () => {
     const server = host("linux", ["/home/ada/.agent-browser/browsers/chrome-152.0.1.2/chrome", "/home/ada/.agent-browser/browsers/chrome-153.0.8010.47/chrome"]);
     expect(resolveChromePlan(server, managed)).toEqual({ kind: "chrome", chrome: { path: "/home/ada/.agent-browser/browsers/chrome-153.0.8010.47/chrome", source: "agent-browser" }, fallback: null });
-    expect(resolveChromePlan(host("linux", []), managed)).toEqual({ kind: "legacy", reason: "no Chrome is installed and none is pinned for this platform" });
+    expect(resolveChromePlan({ ...host("linux", []), arch: "x64" }, managed)).toEqual({ kind: "legacy", reason: "no Chrome is installed and none is pinned for this platform" });
+  });
+
+  it("downloads its pinned Chrome for Testing on a Linux ARM64 server, where agent-browser's own install refuses", () => {
+    expect(chromeForTestingPin("linux", "arm64")).toMatchObject({ version: CHROME_FOR_TESTING_VERSION, platform: "linux-arm64", sha256: expect.stringMatching(/^[0-9a-f]{64}$/u) });
+    expect(resolveChromePlan(host("linux", []), managed)).toEqual({ kind: "download", pin: chromeForTestingPin("linux", "arm64") });
+    const pin = chromeForTestingPin("linux", "arm64")!;
+    expect(chromeForTestingExecutable("/data", pin)).toBe(join("/data", "tools", "chrome", CHROME_FOR_TESTING_VERSION, "linux-arm64", "chrome-linux-arm64", "chrome"));
+    expect(resolveChromePlan(host("linux", [chromeForTestingExecutable("/data", pin)]), managed)).toEqual({ kind: "chrome", chrome: { path: chromeForTestingExecutable("/data", pin), source: "downloaded" }, fallback: null });
+    // a Chrome already there comes first, and an engine someone named still picks its own
+    expect(resolveChromePlan(host("linux", ["/opt/google/chrome/chrome"]), managed)).toMatchObject({ kind: "chrome", chrome: { source: "installed" } });
+    expect(resolveChromePlan(host("linux", []), { managed: false }).kind).toBe("legacy");
   });
 
   it("wraps a Chrome named by the environment, as the Docker image names its Chrome for Testing", () => {
@@ -133,8 +145,8 @@ describe("which Chrome the bots' browser runs", () => {
 });
 
 describe("whether agent-browser finds a browser of its own on this host", () => {
-  it("is false on a Linux server with no Chrome anywhere, such as an ARM VPS, and true once any is there", () => {
-    const bare = host("linux", []);
+  it("is false on a Linux server with no Chrome anywhere and true once any is there", () => {
+    const bare = { ...host("linux", []), arch: "x64" };
     expect(resolveChromePlan(bare, managed).kind).toBe("legacy");
     expect(legacyBrowserFound(bare)).toBe(false);
     for (const files of [["/usr/bin/chromium"], ["/usr/bin/google-chrome-stable"], ["/home/ada/.agent-browser/browsers/chrome-140/chrome"],

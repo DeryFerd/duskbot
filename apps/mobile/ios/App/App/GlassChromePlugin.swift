@@ -1051,10 +1051,6 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         switch phase {
         case .active:
             mainSheetFreeze = .active
-            pendingState = nil
-            pendingHome = nil
-            pendingTopPill = nil
-            pendingMainTakeover = nil
             if text.isFirstResponder { text.resignFirstResponder() }
             if lift > 0 || keyboardOverlap > 0 { settleKeyboardGone("sheet") }
         case .thawing:
@@ -1100,10 +1096,11 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
             if inSheet {
                 if state != nil, let webHost { takeover.attach(to: webHost) }
                 if takeover.view.superview === webHost {
+                    pendingMainTakeover = nil
                     takeover.apply(state)
                     keepOnTop()
+                    return
                 }
-                return
             }
             pendingMainTakeover = .some(state)
             return
@@ -1634,6 +1631,16 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
             KeyboardTrace.log("button \(kind)", ["index": CGFloat(index)])
             self?.emit(["type": "button", "index": index, "kind": kind])
         }, for: .touchUpInside)
+        button.gestureRecognizers?.filter { $0 is SendHold }.forEach(button.removeGestureRecognizer)
+        if kind == "send" || kind == "waits" {
+            // a held Send does the other follow-up (steer instead of queue), the page's Ctrl/⌘-click; the press then
+            // never reaches touchUpInside
+            let hold = SendHold { [weak self] in
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                self?.emit(["type": "button", "index": index, "kind": kind, "alternate": true])
+            }
+            button.addGestureRecognizer(hold)
+        }
         if button is SlotButton { return }
         var config = UIButton.Configuration.plain()
         let symbol = Self.symbol(kind)
@@ -2079,4 +2086,17 @@ private extension UIColor {
         guard hex.count == 8, let n = UInt32(hex, radix: 16) else { return nil }
         self.init(red: CGFloat((n >> 24) & 0xff) / 255, green: CGFloat((n >> 16) & 0xff) / 255, blue: CGFloat((n >> 8) & 0xff) / 255, alpha: CGFloat(n & 0xff) / 255)
     }
+}
+
+/// A long press on the composer's Send that fires once and cancels the tap under it.
+private final class SendHold: UILongPressGestureRecognizer {
+    private let fire: () -> Void
+    init(_ fire: @escaping () -> Void) {
+        self.fire = fire
+        super.init(target: nil, action: nil)
+        minimumPressDuration = 0.45
+        cancelsTouchesInView = true
+        addTarget(self, action: #selector(changed))
+    }
+    @objc private func changed() { if state == .began { fire() } }
 }

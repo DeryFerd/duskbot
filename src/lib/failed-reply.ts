@@ -127,8 +127,9 @@ const WORDS: Record<Exclude<ErrorKind, "signed_out" | "computer" | "repeating">,
 
 /** The card's one plain sentence for a kind. Never the engine's or the server's own words: those stay in the server's
  * log under the row's reference code. */
-export function failedReplyDetail(kind: FailedReplyKind, engineName: string, onServer: boolean): string {
+export function failedReplyDetail(kind: FailedReplyKind, engineName: string, onServer: boolean, ownKeys: string | null = null): string {
   const named = errorKind(kind);
+  if (named === "key_rejected" && ownKeys) return t("failedReply.keyRejectedOwn", { engine: engineName, command: ownKeys });
   if (named === "signed_out") return t(onServer ? "failedReply.signedOutServer" : "failedReply.signedOutHere", { engine: engineName });
   if (kind === "claude_update") return t("chat.claudeUpdate.offer");
   if (named === "computer" || named === "repeating") return t("error.plain.generic");
@@ -140,7 +141,14 @@ export function failedReplyDetail(kind: FailedReplyKind, engineName: string, onS
 export function failurePreviewLine(tool: NonNullable<Message["tool"]>, engine: InstanceInfo | undefined): string {
   const kind = failedReplyKind(tool, engine, true);
   if (kind === "blocker" && tool.blocker) return blockerDetail(tool.blocker);
-  return failedReplyDetail(kind, engine?.displayName ?? t("failedReply.yourAi"), false);
+  return failedReplyDetail(kind, engine?.displayName ?? t("failedReply.yourAi"), false, ownKeyCommand(engine));
+}
+
+/** An AI that keeps its own keys (Hermes, pi, a custom agent): a key saved in dusk bot's Settings never reaches it, so a
+ * key it turns down is changed with its own command. */
+export function ownKeyCommand(engine: InstanceInfo | undefined): string | null {
+  const command = engine?.access === "custom" ? engine.install?.signInCommand?.trim() : undefined;
+  return command && !/\s(?:in|on) (?:Settings|the server)\b/.test(command) ? command : null;
 }
 
 export function blockerDetail(blocker: BrowserBlocker): string {

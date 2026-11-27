@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CLOUD_STATUSES, CLOUD_SWATCHES } from "../../../../shared/billing-api.ts";
 import type { CloudDesktopView, CloudStatus, MachineSpec } from "../../../../shared/billing-api.ts";
+import { movableAiSignIns } from "../../../../shared/ai-signins.ts";
 import { createJsonStore } from "../billing/json-store.ts";
 import { dedicatedUserData, linkKeys, originFor, poolBootstrap } from "./bootstrap.ts";
 import { PoolFullError } from "./pool.ts";
@@ -135,20 +136,18 @@ export function createCloudsService(options: CloudsServiceOptions): CloudsServic
       if (c.status !== "running" || !c.origin || c.suspended !== null) continue;
       const client = c.backend ? options.managedHome ?? home : home;
       if (!client.signIns) continue;
-      const held = await stash.open(id);
-      if (!held) continue;
+      const opened = await stash.open(id);
+      if (!opened) continue;
+      const held = { ...opened, items: movableAiSignIns(opened.items) };
+      if (!held.items.length) { await stash.drop(id); continue; }
       if (held.accountId !== c.accountId) { await stash.drop(id); continue; }
       const secret = sealer.unseal(c.bootstrapSecret);
       try {
         await client.signIns(c.origin, secret, held.items);
         await stash.drop(id);
       } catch (error) {
-        // a home on an older image refuses kinds it doesn't know: it still takes the ChatGPT login, the one kind every home takes
-        const older = (error as { status?: unknown }).status === 400 && held.items.some(item => item.kind !== "codex-auth");
-        const known = held.items.filter(item => item.kind === "codex-auth");
-        if (older && known.length) {
-          try { await client.signIns(c.origin, secret, known); await stash.drop(id); continue; } catch {}
-        } else if (older) { await stash.drop(id); continue; }
+        // a home on an older image refuses kinds it doesn't know, and it never will take them
+        if ((error as { status?: unknown }).status === 400) { await stash.drop(id); continue; }
         console.warn(`clouds: handing held AI sign-ins to cloud ${c.id} failed; it is tried again on the next pass`);
       }
     }
@@ -463,6 +462,15 @@ export function createCloudsService(options: CloudsServiceOptions): CloudsServic
         if (c.serverId) { if (c.placement === "pool") await providers.pool.resume(c.serverId); else await providers.dedicated.power(c.serverId, "on"); }
         c.suspended = null; c.suspensionApplied = undefined; c.wantPower = "on"; c.status = c.setupStep ? "provisioning" : c.serverId ? "running" : "checkout"; c.nextAttemptAt = 0; save(c);
       });
+    },
+    retrySetup(id, reason) {
+      const c = requireCloud(id);
+      if (!c.backend || !managed?.retrySetup) return { refused: "not_in_setup_error" };
+      // never beside a running step: the attempt itself runs in the reconciler's own pass
+      if (stepping.has(c.id) || detached.has(c.id)) return { refused: "busy" };
+      const answer = managed.retrySetup(c, reason);
+      if ("queued" in answer) kick();
+      return answer;
     },
     hide(accountId, id) { const c = requireOwned(accountId, id); if (!["stopped", "destroyed", "error", "checkout"].includes(c.status)) throw new CloudError(409, "not_removable"); c.hidden = true; save(c); return c; },
     async power(accountId, id, action) { const c = requireOwned(accountId, id);

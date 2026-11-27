@@ -2,7 +2,7 @@
 // memory layer a turn reads and writes, whose "About you" and profile a turn gets, who "you" is for a member session,
 // and what that session is told. On any server that is not a Team Cloud every answer here is the plain one (the bot's own
 // memory, the server's profile), so a My Cloud and a desktop behave exactly as before.
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import type { ThreadAudiences } from "../bot-visibility.ts";
@@ -102,6 +102,16 @@ export function createCloudTeamHost(deps: CloudTeamHostDeps) {
     team,
     audienceOf,
     layer,
+    /** The same person's memory with every other bot, which their "forget" clears too: off a team every other bot's own
+     * folder (one person owns them all); on a team only that member's own layers with other bots that exist, never the
+     * team's, a room's or another member's. */
+    sameOwnerLayers(botId: string, threadId: string, botIds: readonly string[]): string[] {
+      const others = botIds.filter((id) => id !== baseBotId(botId));
+      if (!team) return others;
+      const audience = audienceOf(threadId);
+      if (!audienceMember(audience)) return [];
+      return others.map((id) => layerId(id, audience)).filter((id) => existsSync(workspaceDir(id)));
+    },
     /** What a turn in this conversation reads: its own layer and the team's (the bot's own folder). */
     memoryIds(botId: string, threadId: string): string[] {
       const own = layer(botId, threadId);

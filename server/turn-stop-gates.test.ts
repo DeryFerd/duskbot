@@ -153,6 +153,16 @@ describe("TurnGates", () => {
     gates.ran("mail_send", "{}", true, "ok");
     expect(gates.gate("Sent. I'll let you know when they reply.")).toBeNull();
   });
+
+  it("backs a claim with an app tool run through tool search's call_tool", () => {
+    const gates = new TurnGates();
+    gates.mount(["agents_set_status", "mcp_search_tools", "mcp_describe_tool", "mcp_call_tool"]);
+    gates.ran("mcp_search_tools", JSON.stringify({ query: "post a slack message" }), true, "{}");
+    gates.ran("mcp_describe_tool", JSON.stringify({ name: "slack_slack_post" }), true, "{}");
+    gates.ran("mcp_call_tool", JSON.stringify({ name: "slack_slack_post", arguments: { channel: "eng", text: "CI is red" } }), true, '{"ok":true,"ts":"1796097631.468"}');
+    expect(gates.gate("Posted the CI summary in #eng.")).toBeNull();
+    expect(gates.applied.size).toBe(0);
+  });
 });
 
 describe("honest status words", () => {

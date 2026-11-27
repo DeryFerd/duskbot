@@ -120,4 +120,14 @@ describe("composer slash commands", () => {
     expect(slashMenuRows(commands, skills, "can", false, more).map((row) => row.label)).toEqual(["/canvas"]);
     expect(slashMenuRows(commands, skills.filter((row) => row.label === "/standup"), "", false, more).map((row) => row.label)).toEqual(["/goal", "/standup"]);
   });
+
+  it("puts a row whose name starts with the search above rows that only match it in their description", () => {
+    const commands = [
+      { kind: "command" as const, id: "goal" as const, label: "/goal" as const, description: "Keep working until it's complete" },
+      { kind: "command" as const, id: "compact" as const, label: "/compact" as const, description: "Shorten the chat" },
+    ];
+    const skills = skillSlashCommands([{ name: "notes", description: "Compiles notes." }, { name: "compose", description: "Writes." }]);
+    const more = () => ({ label: "More", description: "Other tools" });
+    expect(slashMenuRows(commands, skills, "comp", false, more).map((row) => row.label)).toEqual(["/compact", "/compose", "/goal", "/notes"]);
+  });
 });

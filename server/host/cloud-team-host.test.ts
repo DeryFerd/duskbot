@@ -73,3 +73,19 @@ describe("which of a bot's folders a conversation's box puts back", () => {
     expect(host.boxFolders("scout", "room-chat")).toEqual([workspaceDir("scout--room-launch")]);
   });
 });
+
+describe("whose memory a forget also clears", () => {
+  const bots = ["scout", "pepper", "atlas"];
+
+  it("off a team: every other bot's, as one person owns them all", () => {
+    expect(host(null).sameOwnerLayers("scout", "main-chat", bots)).toEqual(["pepper", "atlas"]);
+  });
+
+  it("on a Team Cloud: only the member's own layers with other bots, never the team's, a room's or another member's", () => {
+    const team = host({ id: "team-acme-1", name: "Acme" });
+    for (const id of ["pepper--member-p_ada", "pepper--member-p_cleo", "pepper--room-launch"]) mkdirSync(workspaceDir(id), { recursive: true });
+    expect(team.sameOwnerLayers("scout--member-p_ada", "ada-chat", bots)).toEqual(["pepper--member-p_ada"]);
+    expect(team.sameOwnerLayers("scout", "main-chat", bots)).toEqual([]);
+    expect(team.sameOwnerLayers("scout--room-launch", "room-chat", bots)).toEqual([]);
+  });
+});

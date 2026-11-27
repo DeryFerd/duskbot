@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -9,11 +8,17 @@ import {
 } from "./app-parts.ts";
 import { browserPartPending, browserEngineStatus, resolveAgentBrowserBinary } from "./browser-engine.ts";
 import { createBrowserPartHost, type BrowserPartFrame } from "./host/browser-part.ts";
+import { hostTimeout } from "./testing/host-timeout.ts";
+import { buildZip } from "./testing/zip-fixture.ts";
 
 const dirs: string[] = [];
 const temp = () => { const dir = mkdtempSync(join(tmpdir(), "dusk-parts-")); dirs.push(dir); return dir; };
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
+/** Setting a part up unzips it with a real child process and checks it, which takes over vitest's 1 s default wait on a
+ * busy Windows runner, so the wait is the host's own test budget. */
+const landsReady = (downloader: { state(name: "browser"): { phase: string } | null }) =>
+  vi.waitFor(() => expect(downloader.state("browser")?.phase).toBe("ready"), { timeout: hostTimeout(10_000), interval: 20 });
 const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
 function spec(bytes: Uint8Array, over: Partial<PartSpec> = {}): PartSpec {
@@ -46,19 +51,18 @@ function server(body: Uint8Array, options: { ignoreRange?: boolean; failFirst?: 
   return { fetchImpl: fetchImpl as unknown as typeof fetch, calls };
 }
 
-/** A real zip of a fake browser bundle, as the release ships it. */
+/** A zip of a fake browser bundle laid out as the release ships it, written without a zip tool (Windows has none). */
 function bundleZip(target = "linux-x64"): Uint8Array {
-  const root = temp();
-  const bundle = join(root, "bundle");
-  const chrome = join(bundle, "chrome", "chrome-headless-shell-linux64");
-  mkdirSync(chrome, { recursive: true });
-  mkdirSync(join(bundle, "licenses"));
-  writeFileSync(join(bundle, "agent-browser"), "engine", { mode: 0o755 });
-  writeFileSync(join(chrome, "chrome-headless-shell"), "chrome", { mode: 0o755 });
-  writeFileSync(join(bundle, "licenses", "README.md"), "licenses");
-  writeFileSync(join(bundle, "manifest.json"), JSON.stringify({ target }));
-  execFileSync("zip", ["-qr", join(root, "part.zip"), "."], { cwd: bundle });
-  return readFileSync(join(root, "part.zip"));
+  const chrome = "chrome/chrome-headless-shell-linux64/";
+  return buildZip([
+    { name: "agent-browser", data: "engine", mode: 0o100755 },
+    { name: "chrome/", mode: 0o40755 },
+    { name: chrome, mode: 0o40755 },
+    { name: `${chrome}chrome-headless-shell`, data: "chrome", mode: 0o100755 },
+    { name: "licenses/", mode: 0o40755 },
+    { name: "licenses/README.md", data: "licenses", mode: 0o100644 },
+    { name: "manifest.json", data: JSON.stringify({ target }), mode: 0o100644 },
+  ]);
 }
 
 describe("parts manifest", () => {
@@ -177,7 +181,7 @@ describe("createPartsDownloader", () => {
     });
     downloader.start();
     expect(await downloader.ready("browser")).toBe(false);
-    await vi.waitFor(() => expect(downloader.state("browser")?.phase).toBe("ready"));
+    await landsReady(downloader);
     expect(await downloader.ready("browser")).toBe(true);
     expect(states).toContain("failed");
     expect(states.at(-1)).toBe("ready");
@@ -229,7 +233,7 @@ describe("createPartsDownloader", () => {
     }) as unknown as typeof fetch;
     const downloader = createPartsDownloader({ manifest: { v: 1, parts: [spec(zip, { url: github })] }, root, platform: "linux", fetchImpl, retryMs: [10] });
     downloader.start();
-    await vi.waitFor(() => expect(downloader.state("browser")?.phase).toBe("ready"));
+    await landsReady(downloader);
     expect(asked).toEqual([[github, null], [mirror, `bytes=${cut}-`]]);
     downloader.stop();
   });
@@ -240,7 +244,7 @@ describe("createPartsDownloader", () => {
     const { fetchImpl, calls } = server(zip, { cutAt: Math.floor(zip.length * 0.8) });
     const downloader = createPartsDownloader({ manifest: { v: 1, parts: [spec(zip)] }, root, platform: "linux", fetchImpl, retryMs: [10] });
     downloader.start();
-    await vi.waitFor(() => expect(downloader.state("browser")?.phase).toBe("ready"));
+    await landsReady(downloader);
     expect(calls).toEqual([null, `bytes=${Math.floor(zip.length * 0.8)}-`]);
     downloader.stop();
   });
@@ -257,7 +261,7 @@ describe("createPartsDownloader", () => {
         onChange: (_name, state) => { if (state.phase === "failed") throw new Error("listener broke"); },
       });
       downloader.start();
-      await vi.waitFor(() => expect(downloader.state("browser")?.phase).toBe("ready"));
+      await landsReady(downloader);
       await new Promise((resolve) => setTimeout(resolve, 20));
       expect(unhandled).not.toHaveBeenCalled();
       downloader.stop();

@@ -1,7 +1,7 @@
 {
   "name": "duskbot",
   "private": true,
-  "version": "0.2.31",
+  "version": "0.2.32",
   "description": "A local-first chat app for running a team of AI agents.",
   "homepage": "https://dusk.bot",
   "repository": {
@@ -92,7 +92,7 @@
     "package:linux:dir": "pnpm package:prepare && pnpm build:cua:linux && electron-builder --config build/electron-builder.yml --linux dir --x64 --publish never -c.productName=dusk-bot",
     "package": "pnpm package:mac",
     "test:packaged-server": "pnpm build:server && node scripts/smoke-packaged-server.mjs",
-    "broker:types": "wrangler types --config apps/cloudflare/composio-broker/wrangler.jsonc apps/cloudflare/composio-broker/worker-configuration.d.ts",
+    "broker:types": "wrangler types --strict-vars=false --config apps/cloudflare/composio-broker/wrangler.jsonc apps/cloudflare/composio-broker/worker-configuration.d.ts",
     "broker:check": "pnpm broker:types && tsc -p apps/cloudflare/composio-broker/tsconfig.json",
     "broker:test": "vitest run --config apps/cloudflare/composio-broker/vitest.config.ts",
     "broker:deploy": "wrangler deploy --config apps/cloudflare/composio-broker/wrangler.jsonc",

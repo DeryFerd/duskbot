@@ -10,6 +10,8 @@ import type { TurnImageInput } from "./contracts.ts";
 import { DOCUMENT_EXTENSIONS, documentText, DocumentTextError, pdfPagePictures } from "./document-text.ts";
 import { headOf, outlineOf } from "./document-excerpts.ts";
 import { decodeAttachmentAttribute } from "./message-file.ts";
+import { unpackAttachedZip, zipBlock, ZipUnpackError } from "./attached-zip.ts";
+import { HEIF_EXTENSIONS, heifAsJpeg, VIDEO_EXTENSIONS, videoNote } from "./attached-media.ts";
 
 /** Characters of document text one turn carries; past it the bot is told to read the rest with extract. */
 export const ATTACHED_TEXT_MAX_CHARS = 60_000;
@@ -26,7 +28,7 @@ type Read = { text: string } | { scanned: true } | { problem: string };
 
 async function ownedDocument(path: string, attachmentsDir: string): Promise<string | null> {
   const name = basename(path);
-  if (!OWNED_NAME.test(name) || !DOCUMENT_EXTENSIONS.has(extname(name)) || resolve(path) !== resolve(attachmentsDir, name)) return null;
+  if (!OWNED_NAME.test(name) || !(DOCUMENT_EXTENSIONS.has(extname(name)) || extname(name) === ".zip" || VIDEO_EXTENSIONS.has(extname(name)) || HEIF_EXTENSIONS.has(extname(name))) || resolve(path) !== resolve(attachmentsDir, name)) return null;
   try {
     const entry = await lstat(resolve(attachmentsDir, name));
     if (!entry.isFile() || entry.isSymbolicLink()) return null;
@@ -77,6 +79,14 @@ function textBlock(name: string, text: string, room: number): string {
     + `[${name} is long: ${head.text ? `only ${part} are shown` : "none of it fits here"}${outline.length ? ", with an outline of the whole" : ""}. For anything past that, call the extract tool with this file and the fields you need; it reads the whole file.]`;
 }
 
+async function zipFiles(path: string, name: string, cacheDir: string): Promise<string> {
+  try {
+    return zipBlock(name, await unpackAttachedZip(path, cacheDir));
+  } catch (error) {
+    return `[${name} could not be unpacked: ${error instanceof ZipUnpackError ? error.message : "it could not be read"}.]`;
+  }
+}
+
 export interface AttachedDocuments {
   /** The text with each document's block right under its tag, or at the end when the tag is not in it. */
   apply(text: string): string;
@@ -97,6 +107,22 @@ export async function prepareAttachedDocuments(source: string, options: Attached
     if (!path || seen.has(path)) continue;
     seen.add(path);
     const name = quoteName(decodeAttachmentAttribute(tag[2] ?? basename(path)));
+    if (extname(path) === ".zip") {
+      blocks.push({ tag: tag[0].trim(), block: await zipFiles(path, name, cacheDir) });
+      continue;
+    }
+    if (VIDEO_EXTENSIONS.has(extname(path))) {
+      blocks.push({ tag: tag[0].trim(), block: videoNote(name, (await lstat(path)).size) });
+      continue;
+    }
+    if (HEIF_EXTENSIONS.has(extname(path))) {
+      const jpeg = options.vision && images.length < options.imageRoom ? await heifAsJpeg(path, cacheDir) : null;
+      if (jpeg) images.push({ path: jpeg, mime: "image/jpeg", bytes: (await lstat(jpeg)).size });
+      blocks.push({ tag: tag[0].trim(), block: jpeg
+        ? `[${name} is an iPhone photo, attached as a picture.]`
+        : `[${name} is an iPhone (HEIC) photo that can't be shown as a picture here; its file is at the path above.]` });
+      continue;
+    }
     const read = await readOnce(path, cacheDir);
     let block: string;
     if ("text" in read) {

@@ -123,7 +123,8 @@ export function resolveChromePlan(host: ChromeHost, engine: ChromeEngine | null)
     return { kind: "chrome", chrome: { path: paths(platform).isAbsolute(named) ? named : resolve(named), source: "named" }, fallback: null };
   }
   if (!engine?.managed) return { kind: "legacy", reason: "agent-browser was named, so it picks its own browser" };
-  const pin = platform === "darwin" || platform === "win32" ? chromeForTestingPin(platform, host.arch) : null;
+  // Linux x64 takes the Chrome for Testing `agent-browser install` fetches; agent-browser fetches none for Linux ARM64.
+  const pin = platform === "darwin" || platform === "win32" || (platform === "linux" && host.arch === "arm64") ? chromeForTestingPin(platform, host.arch) : null;
   const installed = installedGoogleChrome(host);
   if (installed && !chromePolicyManaged(host)) return { kind: "chrome", chrome: { path: installed, source: "installed" }, fallback: pin };
   if (platform === "linux" && env.DUSK_RESOURCES_PATH) return { kind: "legacy", reason: installed ? "Google Chrome here is managed by an organization" : "Google Chrome is not installed" };

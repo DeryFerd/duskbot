@@ -249,6 +249,20 @@ describe("side reply routing", () => {
     expect(turn.steered[0]).toContain("answer them together, once");
   });
 
+  it("folds a burst sent before the engine has started the turn into that turn once it starts, not into a second turn", async () => {
+    const options: { fresh: boolean; steerOutcome: SteerOutcome } = { fresh: true, steerOutcome: "refused" };
+    const { replies, turn, send } = setup(options);
+    const sent = send("find me cheap flights to Goa");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(turn.steered).toEqual([]);
+    options.steerOutcome = "steered";
+    replies.onEvent(event({ type: "turn.started" }));
+    expect(await sent).toBe("folded");
+    expect(turn.steered).toHaveLength(1);
+    expect(turn.steered[0]).toContain("answer them together, once");
+    expect(turn.queued).toEqual([]);
+  });
+
   it("folds a burst on an engine that cannot steer by pausing the silent turn and running both together", async () => {
     const { turn, posts, send } = setup({ fresh: true, steers: false, pauses: true });
     expect(await send("find me cheap flights to Goa")).toBe("folded");

@@ -13,10 +13,10 @@ const WHY: Readonly<Record<string, ServerLineKey>> = {
 };
 
 /** The row a driver's `turn.retrying` leaves in the chat, in plain words: the engine's reason code never shows. */
-export function retryLine(language: string | undefined, event: { attempt: number; delayMs: number; reason: string }): string {
+export function retryLine(language: string | undefined, event: { attempt: number; delayMs: number; reason: string; maxAttempts?: number }): string {
   const attempt = event.attempt + 1;
   const seconds = Math.round(event.delayMs / 1000);
   const why = serverLine(language, Object.hasOwn(WHY, event.reason) ? WHY[event.reason]! : "server.retry.why.other");
-  const params = { attempt, max: Math.max(RETRY_MAX_ATTEMPTS, attempt), why };
+  const params = { attempt, max: Math.max(event.maxAttempts ?? RETRY_MAX_ATTEMPTS, attempt), why };
   return seconds > 0 ? serverLine(language, "server.retry.in", { ...params, seconds }) : serverLine(language, "server.retry.now", params);
 }

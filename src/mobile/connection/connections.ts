@@ -119,6 +119,8 @@ type ConnectionStore = {
   /** `relay`: the phone's own relay channel as the place serves it now */
   setRoutes(id: string, via: MobileTransport[], relay?: MobileRelayChannel): Promise<void>;
   setAccount(id: string, account: { id: string; email: string }): Promise<void>;
+  /** the place now lists this phone as one of its paired phones */
+  setDevice(id: string, deviceId: string): Promise<void>;
 };
 const stores = new WeakMap<MobilePlatform, ConnectionStore>();
 
@@ -203,6 +205,9 @@ export function createConnectionStore(platform: MobilePlatform): ConnectionStore
     },
     setAccount(id, account) {
       return serialize(async () => write((await read()).map((entry) => entry.id === id ? { ...entry, account: { id: account.id, email: account.email } } : entry)));
+    },
+    setDevice(id, deviceId) {
+      return serialize(async () => write((await read()).map((entry) => entry.id === id ? { ...entry, deviceId } : entry)));
     },
   };
   stores.set(platform, store);

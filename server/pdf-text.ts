@@ -40,10 +40,15 @@ export async function pdfText(bytes: Buffer, signal?: AbortSignal): Promise<stri
         if (error) reject(error); else resolve(text!);
       };
       const cancelled = () => finish(new PdfTextError("PDF extraction was cancelled."));
-      const timer = setTimeout(() => finish(new PdfTextError("Reading the PDF took too long. Split it into smaller PDFs.")), PDF_TEXT_LIMITS.timeoutMs);
+      const tooLong = () => finish(new PdfTextError("Reading the PDF took too long. Split it into smaller PDFs."));
+      // starting the worker (loading pdf.js) has its own, longer cap: on a busy machine it alone can take seconds
+      let timer = setTimeout(tooLong, PDF_TEXT_LIMITS.startMs);
       signal?.addEventListener("abort", cancelled, { once: true });
-      parser.once("message", (reply: PdfTextReply) => {
-        if ("error" in reply) finish(new PdfTextError(ERRORS[reply.error]));
+      parser.on("message", (reply: PdfTextReply) => {
+        if ("ready" in reply) {
+          clearTimeout(timer);
+          timer = setTimeout(tooLong, PDF_TEXT_LIMITS.timeoutMs);
+        } else if ("error" in reply) finish(new PdfTextError(ERRORS[reply.error]));
         else if (Buffer.byteLength(reply.text) > PDF_TEXT_LIMITS.textBytes) finish(new PdfTextError(ERRORS.large));
         else finish(undefined, reply.text);
       });

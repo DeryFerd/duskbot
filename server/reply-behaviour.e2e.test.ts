@@ -44,7 +44,7 @@ it("remembers at once, learns only what the person said, forgets everywhere, and
   const cli = (...args: string[]) => runControlDusk([...args, "--url", fixture.info.url]) as Promise<any>;
   const turn = async (bot: { id: string; activeTaskId: string }, text: string, steps: Step[], reply: string) => {
     const before = evidence().length;
-    writeFileSync(planPath, JSON.stringify({ [bot.id]: { steps, reply } }));
+    writeFileSync(planPath, JSON.stringify({ [bot.id]: { steps, reply, streamTools: true } }));
     await cli("send", "--bot", bot.id, "--task", bot.activeTaskId, "--text", text);
     await expect.poll(() => evidence().length, { timeout: 20_000 }).toBe(before + 1);
     await cli("wait", "--bot", bot.id, "--task", bot.activeTaskId, "--timeout", "20");
@@ -108,7 +108,7 @@ it("remembers at once, learns only what the person said, forgets everywhere, and
       { tool: "memory_update", arguments: { action: "forget", old_text: "short answers" } },
       { tool: "memory_update", arguments: { action: "forget", old_text: "IST" } },
     ], "Done: I've forgotten both.");
-    expect(forgot.results[0]).toBe('Forgotten everywhere it was saved, About me included, which all their bots read: "The person prefers short answers". Confirm to the person in one plain line what you forgot.');
+    expect(forgot.results[0]).toBe('Forgotten from your memory and About me (which all their bots read), 1 daily log line included: "The person prefers short answers". Their chats still show what was said in them; don\'t bring it back from there. Confirm to the person in one plain line what you forgot.');
     expect(forgot.results[1]).toContain('"The person is in India (IST)"');
     for (const text of forgot.results) expect(text).not.toMatch(/MEMORY\.md|memory\//);
     expect(await notes(bot.id)).not.toMatch(/short answers|\(IST\)/);

@@ -971,7 +971,7 @@ it("tells the Chief a teammate's provider refused the turn, in the provider's wo
     const resumed = f.evidence().find((turn: any) => turn.botId === f.chief.id && turn.resumed);
     expect(resumed.prompt.message.content).toContain("Rate limit reached for loop-model");
   } finally { await close(); }
-}), 45_000);
+}, { FAKE_CHAT_RETRY_SCALE: "0.01" }), 45_000);
 
 it("keeps a teammate working through a provider settings save that does not touch its engine", () => fixture(async f => {
   const gate = join(f.session.info.dataDir, "lead-ready");

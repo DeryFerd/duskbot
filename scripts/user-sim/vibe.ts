@@ -2,7 +2,7 @@
 // straight from the bot's lines, and blind pairwise comparisons between two builds on the same scenarios (each pair
 // judged twice with the order swapped; a side wins only when both orders agree).
 //   node --experimental-strip-types scripts/user-sim/vibe.ts score <run dir> [--judge gpt-6.2-sol]
-//   node --experimental-strip-types scripts/user-sim/vibe.ts pair <run dir A> <run dir B> [--judge gpt-6.2-sol]
+//   node --experimental-strip-types scripts/user-sim/vibe.ts pair <run dir A> <run dir B> [--judge gpt-6.2-sol] [--rubric vibe|fit]
 //   node --experimental-strip-types scripts/user-sim/vibe.ts table <run dir>... [--pairs <pairs.json>...]
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
@@ -10,6 +10,7 @@ import { parseArgs } from "node:util";
 import { gatewayFromEnv, type Gateway } from "../memory-eval/sandbox.ts";
 import { chat } from "../workflow-eval/person.ts";
 import { loadWorld } from "./world.ts";
+import { loadScenarios } from "./scenario.ts";
 
 export const DIMENSIONS = {
   funny: "funny, has personality: real humor, banter and comebacks, opinions and a bit of attitude; bland, polite or corporate scores 1-2 even when correct",
@@ -164,11 +165,50 @@ Answer with JSON only: {${[...DIMS, "overall"].map((d) => `"${d}": "1"|"2"|"tie"
   return askJson(gateway, prompt);
 }
 
+/** The fit rubric: whether the voice suits the bot's role (a work bot crisp and output first, a companion bot warm and
+ * funny) rather than the Poke bar, for scenarios where the bot's job sets how serious it should be. */
+export const FIT_DIMENSIONS = {
+  clear: "clear output first: the answer, result or number leads each reply, with no greeting, warm-up, filler or narration; easy to act on at a glance",
+  fits: "the voice fits this bot's role and this person's register: a work bot (code, ops, money) is crisp and serious with at most a dry half-line; a friend or companion bot is warm and funny; wording follows how the person writes",
+  done: DIMENSIONS.done,
+  tactful: DIMENSIONS.tactful,
+} as const;
+const FIT_DIMS = Object.keys(FIT_DIMENSIONS) as Array<keyof typeof FIT_DIMENSIONS>;
+
+function botRole(s: Story): string {
+  const scenario = loadScenarios().find((x) => x.id === s.id);
+  const bot = scenario?.bots?.[0];
+  if (!bot) return "a general personal assistant";
+  return [bot.name, bot.title && `role: ${bot.title}`, bot.description, bot.soul && `setup: ${bot.soul}`].filter(Boolean).join("; ");
+}
+
+async function compareFitOnce(gateway: Gateway, first: Story, second: Story) {
+  const side = (s: Story) => `<story>\n${s.story.slice(-12_000)}\n</story>\n<apps>\n${s.apps.slice(0, 2_500)}\n</apps>`;
+  const rubricFit = FIT_DIMS.map((d) => `- ${d}: ${FIT_DIMENSIONS[d]}`).join("\n");
+  const prompt = `Two builds of the same AI bot went through the same situation with the same person (the person is simulated, so their messages differ a little where the bot's replies differed). The bot they talk to is: ${botRole(first)}. The person said: "I prefer clear output over a warm welcome 90% of the time", and a bot's seriousness should follow its job.
+
+Scenario: ${first.title}
+
+Bot 1:
+${side(first)}
+
+Bot 2:
+${side(second)}
+
+For each dimension, which bot was better? Answer 1, 2 or "tie" (tie only when truly equal):
+${rubricFit}
+- overall: which one this person would rather have doing this bot's job
+
+Answer with JSON only: {${[...FIT_DIMS, "overall"].map((d) => `"${d}": "1"|"2"|"tie"`).join(", ")}, "why": "<one or two short sentences on the deciding difference>"}`;
+  return askJson(gateway, prompt);
+}
+
 /** Blind comparison in both orders; a side wins a dimension only when both orders pick it. */
-export async function comparePair(gateway: Gateway, a: Story, b: Story) {
-  const [ab, ba] = await Promise.all([compareOnce(gateway, a, b), compareOnce(gateway, b, a)]);
+export async function comparePair(gateway: Gateway, a: Story, b: Story, rubricName: "vibe" | "fit" = "vibe") {
+  const once = rubricName === "fit" ? compareFitOnce : compareOnce;
+  const [ab, ba] = await Promise.all([once(gateway, a, b), once(gateway, b, a)]);
   const out: Record<string, "a" | "b" | "tie"> = {};
-  for (const d of [...DIMS, "overall"]) {
+  for (const d of [...(rubricName === "fit" ? FIT_DIMS : DIMS), "overall"]) {
     const x = String(ab?.[d] ?? "tie"), y = String(ba?.[d] ?? "tie");
     out[d] = x === "1" && y === "2" ? "a" : x === "2" && y === "1" ? "b" : "tie";
   }
@@ -204,7 +244,7 @@ export function summarise(scored: Array<{ id: string; scores: Record<Dimension, 
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { judge: { type: "string", default: "gpt-6.2-sol" }, pairs: { type: "string", multiple: true, default: [] }, parallel: { type: "string", default: "6" } } });
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { judge: { type: "string", default: "gpt-6.2-sol" }, pairs: { type: "string", multiple: true, default: [] }, parallel: { type: "string", default: "6" }, rubric: { type: "string", default: "vibe" } } });
   const [cmd, ...dirs] = positionals;
   const gateway = gatewayFromEnv(values.judge!);
   const n = Number(values.parallel);
@@ -223,12 +263,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const [da, db] = dirs.map((d) => resolve(d));
     const a = readStories(da!), b = new Map(readStories(db!).map((s) => [`${s.id}-${s.run}`, s]));
     const both = a.filter((s) => b.has(`${s.id}-${s.run}`));
-    const pairs = await pool(both, n, async (s) => ({ id: s.id, run: s.run, ...(await comparePair(gateway, s, b.get(`${s.id}-${s.run}`)!)) }));
-    const tally = Object.fromEntries([...DIMS, "overall"].map((d) => {
+    const fit = values.rubric === "fit";
+    const pairs = await pool(both, n, async (s) => ({ id: s.id, run: s.run, ...(await comparePair(gateway, s, b.get(`${s.id}-${s.run}`)!, fit ? "fit" : "vibe")) }));
+    const tally = Object.fromEntries([...(fit ? FIT_DIMS : DIMS), "overall"].map((d) => {
       const w = pairs.map((p) => p.result[d]);
       return [d, { a: w.filter((x) => x === "a").length, b: w.filter((x) => x === "b").length, tie: w.filter((x) => x === "tie").length }];
     }));
-    const file = join(db!, `pairs-vs-${basename(da!)}.json`);
+    const file = join(db!, `pairs${fit ? "-fit" : ""}-vs-${basename(da!)}.json`);
     writeFileSync(file, JSON.stringify({ a: da, b: db, tally, pairs }, null, 1));
     console.log(`a=${basename(da!)} b=${basename(db!)} n=${pairs.length}`);
     for (const [d, t] of Object.entries(tally)) console.log(`${d.padEnd(9)} a ${t.a}  b ${t.b}  tie ${t.tie}`);

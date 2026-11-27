@@ -252,9 +252,9 @@ export class ConnectFlow {
     this.abort = null;
     this.pasteDone = null;
     this.closeRelay();
-    if (state.stage === "waiting" && this.instanceId) {
-      void this.deps.api(`/api/instances/${encodeURIComponent(this.instanceId)}/auth/cancel`, { method: "POST", body: JSON.stringify({ flowId: state.flowId }) }).catch(() => {});
-    }
+    if (state.stage === "waiting" && this.instanceId) this.cancelOnServer(this.instanceId, { flowId: state.flowId });
+    // a start the server is still running would otherwise wait out its 15 minutes with the helper holding the sign-in
+    else if (state.stage === "opening" && this.instanceId) this.cancelOnServer(this.instanceId, { flowId: "", pending: true });
     if (this.running) this.deps.trail("connect.cancel", { tile: this.target?.tile, instance: this.instanceId, stage: state.stage });
     this.run = run;
     this.state = { stage: "idle" };
@@ -266,14 +266,21 @@ export class ConnectFlow {
     const state = this.state;
     const link = state.stage === "waiting" || state.stage === "failed" ? state.link : null;
     if (!link) return false;
+    const run = this.run;
     const opened = await this.deps.open(link).catch(() => false);
     this.deps.trail("connect.open", { tile: this.target?.tile, instance: this.instanceId, opened, again: true });
+    const now = this.state;
+    if (opened && now.stage === "waiting" && !now.opened) this.set({ ...now, opened: true }, run);
     return opened;
   }
 
   /** The code a provider showed after sign-in (Claude), or the address its sign-in landed on, pasted back. */
   submit(code: string): void {
     if (this.state.stage === "waiting" && (this.state.kind === "paste" || this.state.kind === "redirect") && code.trim()) this.pasteDone?.(code.trim());
+  }
+
+  private cancelOnServer(instanceId: string, body: { flowId: string; why?: "lost" | "timeout" | "retry"; pending?: true }): Promise<unknown> {
+    return this.deps.api(`/api/instances/${encodeURIComponent(instanceId)}/auth/cancel`, { method: "POST", body: JSON.stringify(body) }).catch(() => {});
   }
 
   private closeRelay(): void {
@@ -491,7 +498,7 @@ export class ConnectFlow {
     }
     const loopback = answer.auth.loopback;
     if (!loopback || answer.auth.phase !== "waiting" || answer.sameMachine || await this.openRelay(loopback)) return answer;
-    if (answer.auth.flowId) await this.deps.api(`/api/instances/${encodeURIComponent(candidate.instanceId)}/auth/cancel`, { method: "POST", body: JSON.stringify({ flowId: answer.auth.flowId }) }).catch(() => {});
+    if (answer.auth.flowId) await this.cancelOnServer(candidate.instanceId, { flowId: answer.auth.flowId, why: "retry" });
     this.deps.trail("connect.fallback", { tile: this.target?.tile, from: candidate.instanceId, to: "device" });
     return startOnce(candidate, false);
   }
@@ -529,7 +536,8 @@ export class ConnectFlow {
   private cancelServerFlow(): void {
     const state = this.state;
     if (state.stage !== "failed" || state.at !== "waiting" || !this.instanceId || !this.flowId) return;
-    void this.deps.api(`/api/instances/${encodeURIComponent(this.instanceId)}/auth/cancel`, { method: "POST", body: JSON.stringify({ flowId: this.flowId }) }).catch(() => {});
+    const why = state.reason === "lost" ? "lost" : state.reason === "timeout" ? "timeout" : undefined;
+    void this.cancelOnServer(this.instanceId, { flowId: this.flowId, ...(why ? { why } : {}) });
   }
 
   /** Until the sign-in finishes: polling the server's flow, or the AI's status for a callback, or the pasted code. */
@@ -608,6 +616,9 @@ export class ConnectFlow {
         }
       } catch (cause) {
         if (cause instanceof StageEnded || signal.aborted) throw cause;
+        if (kind === "paste" && ((cause as { status?: number }).status === 404 || (cause as { status?: number }).status === 405)) {
+          return new Promise<void>(() => {});
+        }
         if (wakingError(cause)) continue;
         if (++missed >= LOST_AFTER) throw new StageEnded("lost");
       }

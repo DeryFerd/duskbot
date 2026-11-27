@@ -4,7 +4,9 @@ import { DATA_INSTRUCTIONS } from "./data/instructions.ts";
 import { EMAIL_INSTRUCTIONS } from "./email/instructions.ts";
 import { PHONE_INSTRUCTIONS, PHONE_RECOVERY } from "./phones/instructions.ts";
 import { HARNESS_PROXY_TIMEOUT_MS, HARNESS_PROXY_TIMEOUTS_MS } from "./harness-budget.ts";
+import { fitToolListResult } from "./mcp-tool-schema.ts";
 import { capToolListResult } from "./tool-count-limit.ts";
+import type { ToolSchemaProfile } from "./tool-schema-profile.ts";
 
 export const MAX_INPUT_BYTES = 1_048_576;
 export const MAX_OUTPUT_BYTES = 16_777_216;
@@ -14,7 +16,7 @@ export type HarnessMcpKind = "browser" | "computer" | "data" | "email" | "device
 const NAMES: Record<HarnessMcpKind, string> = { browser: "Browser", computer: "Cloud computer", data: "Data", email: "Email", device: "Phone" };
 const INSTRUCTIONS: Partial<Record<HarnessMcpKind, string>> = { data: DATA_INSTRUCTIONS, email: EMAIL_INSTRUCTIONS, device: PHONE_INSTRUCTIONS };
 const RECOVERY: Record<HarnessMcpKind, string> = {
-  browser: " This failure does not establish that all browsers are unavailable. Inspect available connections with select_computer if that tool is present. Keep the requested computer and account; do not bypass a permission refusal or human takeover, and do not repeat an uncertain action without checking its result.",
+  browser: " Your built-in browser is still yours: when this says it is getting ready or could not start, make the same call again in a moment, and read pages with web search meanwhile; never tell the person you have no browser. Keep the requested computer and account; do not bypass a permission refusal or human takeover, and do not repeat an uncertain action without checking its result.",
   computer: " Keep working on the assigned cloud computer only; do not bypass a person's control of it, and take a fresh screenshot before repeating an action whose result is uncertain.",
   data: " The tables already loaded are unchanged; check with data_describe or SHOW TABLES before repeating a load, and do not repeat a statement whose result is uncertain.",
   email: " A send may or may not have gone; look in the Sent folder (EMAIL_SEARCH_MESSAGES) before repeating one.",
@@ -63,7 +65,7 @@ async function boundedJson(response: Response, name: string): Promise<unknown> {
 
 export async function harnessMcpRequest(
   frame: unknown,
-  connection: { url: string; token: string; kind: HarnessMcpKind; toolLimit?: number; stop?: AbortSignal },
+  connection: { url: string; token: string; kind: HarnessMcpKind; toolLimit?: number; schemaProfile?: ToolSchemaProfile; stop?: AbortSignal },
 ): Promise<unknown | undefined> {
   if (!frame || typeof frame !== "object" || Array.isArray(frame)) return failure(null, null, "Invalid request.", -32600);
   const message = frame as { id?: RpcId; jsonrpc?: unknown; method?: unknown; params?: unknown };
@@ -96,8 +98,9 @@ export async function harnessMcpRequest(
     if (!response.ok || !payload || typeof payload !== "object" || !Object.hasOwn(payload, "result")) {
       throw new Error(typeof payload?.error === "string" ? payload.error.slice(0, 2_000) : `${name} server is unavailable. Start a new bot turn or try again.`);
     }
+    const log = (line: string) => console.warn(`[${connection.kind}] ${line}`);
     const result = message.method === "tools/list"
-      ? capToolListResult(payload.result, connection.toolLimit, (line) => console.warn(`[${connection.kind}] ${line}`)) : payload.result;
+      ? capToolListResult(fitToolListResult(payload.result, connection.schemaProfile, log), connection.toolLimit, log) : payload.result;
     return { jsonrpc: "2.0", id, result };
   } catch (error) {
     return failure(id, message.method, unansweredText(error, name, HARNESS_PROXY_TIMEOUTS_MS[connection.kind] ?? HARNESS_PROXY_TIMEOUT_MS) + RECOVERY[connection.kind]);

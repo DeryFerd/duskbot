@@ -55,6 +55,13 @@ describe("a new bot's intro words", () => {
     expect(prompt).toContain("never an em dash");
   });
 
+  it("keeps a work bot's hello crisp, with no remark about their day", () => {
+    const work = introPrompt(base({ voice: "work" }));
+    expect(work).toContain("Your role is work, so keep it crisp: no greeting beyond your name, no remark about their day, no joke.");
+    expect(work).not.toContain("Read the moment");
+    expect(introPrompt(base({}))).toContain("Read the moment");
+  });
+
   it("names a bot made by another bot, and a from-scratch bot with nothing else to go on", () => {
     expect(introPrompt(base({ origin: { kind: "bot", by: "dusk bot" } }))).toContain("dusk bot made you just now because the person asked it to");
     const prompt = introPrompt(base({ apps: null, language: "de" }));

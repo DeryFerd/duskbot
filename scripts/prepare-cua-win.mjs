@@ -39,12 +39,20 @@ if (expectedVersion !== release.version) {
 async function binaryVersion(candidate) {
   if (!candidate || !existsSync(candidate)) return null;
   if (cross) return expectedVersion;
+  let out;
   try {
-    const { stdout } = await run(candidate, ["--version"], { timeout: 5000, windowsHide: true });
-    return stdout.match(/cua-driver\s+([\d.]+)/)?.[1] ?? null;
-  } catch {
-    return null;
+    out = await run(candidate, ["--version"], { timeout: 5000, windowsHide: true });
+  } catch (error) {
+    out = error;
   }
+  const printed = `${out.stdout ?? ""}\n${out.stderr ?? ""}`;
+  const version = printed.match(/cua-driver\s+([\d.]+)/)?.[1] ?? null;
+  if (!version) {
+    console.error(
+      `${candidate} --version gave no version (exit ${out.code ?? 0}${out.signal ? `, signal ${out.signal}` : ""}${out.killed ? ", timed out" : ""}): ${printed.trim().slice(0, 500) || "no output"}`,
+    );
+  }
+  return version;
 }
 
 async function officialBinary() {
@@ -71,13 +79,12 @@ async function officialBinary() {
   if (cross) {
     await run("unzip", ["-q", "-o", archive, "-d", cache], { timeout: 60_000 });
   } else {
-    await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
-      "Expand-Archive -LiteralPath $env:DUSK_CUA_ARCHIVE -DestinationPath $env:DUSK_CUA_EXTRACT"], {
-      env: { ...process.env, DUSK_CUA_ARCHIVE: archive, DUSK_CUA_EXTRACT: cache },
-      timeout: 60_000,
-      windowsHide: true,
-    });
+    // Windows' own bsdtar reads zips. Expand-Archive under powershell.exe started from a pwsh step inherits pwsh's
+    // PSModulePath, cannot load its module, and still exits 0 with nothing extracted.
+    const tar = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe");
+    await run(tar, ["-xf", archive, "-C", cache], { timeout: 60_000, windowsHide: true });
   }
+  if (!existsSync(cachedBinary)) throw new Error(`${release.file} unpacked without cua-driver.exe in ${cache}`);
   if ((await binaryVersion(cachedBinary)) !== expectedVersion) {
     throw new Error(`downloaded CUA Driver does not report version ${expectedVersion}`);
   }

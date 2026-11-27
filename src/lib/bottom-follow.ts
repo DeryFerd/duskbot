@@ -41,21 +41,28 @@ export function useBottomFollowResize(
   followingRef: RefObject<boolean>,
   observeKey: string | null,
   onHold?: () => void,
+  onUnfollowedResize?: () => void,
 ): void {
   const hold = useRef(onHold);
   hold.current = onHold;
+  const unfollowed = useRef(onUnfollowedResize);
+  unfollowed.current = onUnfollowedResize;
   useLayoutEffect(() => {
     const scroller = scrollRef.current;
     const transcript = transcriptRef.current;
     if (!scroller || !transcript || observeKey === null) return;
 
     const observer = new ResizeObserver(() => {
-      const top = followingRef.current ? growthHold(scroller, transcript) : null;
+      if (!followingRef.current) { unfollowed.current?.(); return; }
+      const top = growthHold(scroller, transcript);
       if (top === null) { followBottomGrowth(scroller, followingRef.current); return; }
       scroller.scrollTop = top;
       hold.current?.();
     });
     observer.observe(transcript);
+    // the view getting shorter moves its end under the composer just as a taller transcript does: a phone's bottom inset
+    // settling after the chat opened (a cold start into it), or its navigation bar changing
+    observer.observe(scroller);
     return () => observer.disconnect();
   }, [followingRef, observeKey, scrollRef, transcriptRef]);
 }

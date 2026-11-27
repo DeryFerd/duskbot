@@ -12,7 +12,7 @@
     "ai notion review comments summary"
   ],
   "answer": "**walk into the review knowing what still needs an answer.** a bot reads unresolved comments on a notion page or one block and brings the questions to your chat. it only reads, with access to that page and its comments. resolved discussions stay out. name the page or paragraph you mean, and ask it to finish the list before summarising.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,7 +45,7 @@
     "toolkit": "notion",
     "slug": "NOTION_FETCH_COMMENTS"
   },
-  "what": "**point to the discussion you actually want.** name the page or paste its link. for a comment on one paragraph, point out that part and let the bot find it. page discussion and block discussion have different scopes.\n\nthe connection needs permission to read the page's comments. a sharing problem can look like a missing page. ask the bot to show the error instead of claiming nobody left feedback.",
+  "what": "**point to the discussion you actually want.** name the page or paste its link. for a comment on one paragraph, point out that part and let the bot find it. page discussion and block discussion have different scopes.\n\nthe connection needs permission to read the page's comments. a sharing problem can look like a missing page. ask the bot to show the error instead of claiming nobody left feedback.\n\nonce the queue is clear, the bot can [reply in a thread](/integrations/notion/create-comment) you approve.",
   "uses": [
     "**prepare the next proposal.** collect open questions before sending another version.",
     "**focus on a disputed paragraph.** read its comments without searching every document.",
@@ -115,5 +115,9 @@
   "tip": {
     "text": "ask the bot to finish with what it could not read. the missing part often matters more than the summary."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "saoirse wants feedback on the q3 venue brief.\nthe page has 140 open comments.",
+    "after": "first batch: 100 comments read.\nsecond batch: 40 more.\nopen questions grouped by topic: 6.\nresolved comments not included."
+  }
 }

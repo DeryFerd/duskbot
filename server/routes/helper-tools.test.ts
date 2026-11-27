@@ -132,7 +132,7 @@ describe("extract", () => {
     writeFileSync(join(work, "cv.docx"), buildZip([{ name: "word/document.xml", data: "<w:document><w:body><w:p><w:r><w:t>Notice period: 30 days</w:t></w:r></w:p></w:body></w:document>" }]));
     for (const [file, expected] of [["cv.pdf", "Notice period: 60 days"], ["cv.docx", "Notice period: 30 days"]]) {
       const result = await call("/api/internal/helpers/extract", { fields: FIELDS, file });
-      expect(result.status).toBe(200);
+      expect(result.status, `${file}: ${JSON.stringify(result.payload)}`).toBe(200);
       expect(result.payload?.text).toContain(expected);
     }
   });

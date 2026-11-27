@@ -11,6 +11,7 @@ import {
   ALL_OS, AREA_CHECKS, ciOutputs, FULL_LANE_EVENTS, FULL_SCOPE, laneOf, LINUX_OS, MAIN_SCOPE, moveLinuxIntoStatic, QUEUED_SCOPE, SELECTABLE_JOBS,
   selectCiScope,
   selectPushScope, SRC_OUTSIDE_RENDERER, versionOnlyPackageJson, VITEST_SUBSETS, vitestMatrix, WINDOWS_LABEL, WINDOWS_OS, windowsReason,
+  withoutMissingEvals,
 } from "./ci-scope.mjs";
 import { HOST_E2E } from "./testing/host-e2e.ts";
 
@@ -36,8 +37,11 @@ function fixture(source = "src/page.ts") {
   git("config", "commit.gpgsign", "false");
   mkdirSync(dirname(join(directory, source)), { recursive: true });
   mkdirSync(join(directory, "docs"), { recursive: true });
+  // an evals suite in the base commit, so the scope keeps behavior evals as a checkout that carries one does
+  mkdirSync(join(directory, "evals"), { recursive: true });
+  writeFileSync(join(directory, "evals", "tsconfig.json"), "{}\n");
   writeFileSync(join(directory, source), "source\n");
-  git("add", "--", source);
+  git("add", "--", source, "evals/tsconfig.json");
   git("commit", "--quiet", "-m", "base");
   return { directory, git, base: git("rev-parse", "HEAD") };
 }
@@ -251,6 +255,13 @@ describe("the Linux work in the static job, on a self-hosted VM", () => {
     expect(out.linux_lanes).toEqual({ vitest: linuxShards, evals: true, packaged_server: true });
     expect(out.vitest_matrix).toEqual(vitestMatrix(LINUX));
     expect(out.vitest_os).toEqual(LINUX);
+  });
+
+  it("leaves behavior evals out while the checkout has no evals suite, and keeps them once it has one", () => {
+    const full = ciOutputs(FULL_SCOPE, PR);
+    expect(withoutMissingEvals(full, true)).toEqual(full);
+    expect(withoutMissingEvals(full, false).jobs).toEqual(SELECTABLE_JOBS.filter((job) => job !== "behavior-evals"));
+    expect(moveLinuxIntoStatic(withoutMissingEvals(full, false)).linux_lanes.evals).toBe(false);
   });
 
   it("keeps the Windows shards and packaged server as jobs", () => {

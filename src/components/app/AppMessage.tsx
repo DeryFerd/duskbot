@@ -10,8 +10,10 @@ import { APP_POOL_LIMITS, useAppPoolSlot, type AppPool } from "./app-pool";
 import { AppHeader, AppInfo, AppOpenButton, AppPlaceholder, AppStrip, APP_SURFACE } from "./AppChrome";
 import { AppFrame, type AppFrameHandle, type AppFrameProblem } from "./AppFrame";
 import { PAGE_HEIGHT, PageFullScreen, PageNotes, PageToolbar, usePagePoint, usePageShare, usePageVersion } from "./PageTools";
+import { SIMPLE_BUBBLE_MAX } from "../chat-bubble";
 
-const WIDTH = "max-w-[760px]";
+// a page or visualization stops where a message bubble does (full screen still opens it wide)
+const WIDTH = SIMPLE_BUBBLE_MAX;
 const DOC_REUSE_MS = 60_000;
 
 const heights = new Map<string, number>();

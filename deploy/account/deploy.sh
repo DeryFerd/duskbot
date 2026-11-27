@@ -5,6 +5,8 @@
 #   deploy/account/deploy.sh production   # dusk.bot: the same paths, with the waitlist site (dusk-landing) at /
 # the app's env is built from ~/.config/duskbot/dusk.env (deploy/env.mjs) into a temp file that is removed after the
 # deploy; ENV_FILE sends a ready env file instead (0600, names in production.env.example).
+# the home package check reaches the VPS as `ssh contabo`; without Tailscale set DUSK_PACKAGE_SSH_HOST and
+# DUSK_PACKAGE_SSH_JUMP (deploy/account/PRODUCTION-CLOUD.md).
 set -euo pipefail
 target="${1:-}"
 case "$target" in

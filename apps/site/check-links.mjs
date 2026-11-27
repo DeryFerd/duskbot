@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { trackingLink } from './check-index.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(here, 'public', 'landing');
@@ -46,6 +47,7 @@ for (const file of pages) {
     const ref = raw.replace(/&amp;/g, '&');
     if (/^(https?:|mailto:|data:|tel:|duskbot:)/.test(ref)) continue;
     checked++;
+    if (trackingLink(ref)) problems.push(`${from}: ${ref} carries a tracking query, a crawlable copy of its page (put the source in data-dusk-source)`);
     const [beforeHash, hash] = ref.split('#');
     const urlPath = beforeHash.split('?')[0];
     let target = urlPath === '' ? file : null, to = urlPath;

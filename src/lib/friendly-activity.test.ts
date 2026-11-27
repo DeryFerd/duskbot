@@ -22,6 +22,12 @@ describe("Simple mode's working line", () => {
     expect(plainWord("working")).toBe("Working");
   });
 
+  it("says plainly that Antigravity is waiting on a background task, never a playful word", () => {
+    expect(friendlyNowPhrases({ activity: "tool", tool: "Run schedule", itemId: "t" })).toEqual({ phase: "toolStep.waitForBackgroundTask", phrases: ["Waiting for a background task"] });
+    expect(friendlyNowPhrases(null, running("Run schedule")).phrases).toEqual(["Waiting for a background task"]);
+    expect(friendlyNowPhrases({ activity: "tool", tool: "Run manage_task", itemId: "m" }).phrases).toEqual(["Checking a background task"]);
+  });
+
   it("keeps every word short (four at most), Sentence case, with no dots, emoji or machine talk", () => {
     const words = [...(Object.keys(WORD_POOLS) as PoolName[]).filter((name) => name !== "publish").flatMap((name) => poolWords(name)), ...funWords()];
     for (const word of words) {

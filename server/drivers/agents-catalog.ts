@@ -344,7 +344,7 @@ const TOOL_DEFINITIONS = [
   {
     name: "vm_exec",
     description:
-      "Run a shell command on your own computer, your Local VM or your VPS desktop (as its desktop user, starting in /home/cua/workspace), and get its exit code, stdout and stderr back as text. Use this for all command-line work there: downloading with curl, calling an API, parsing a page or writing a CSV with python3, installing software, checking a file's size with ls -l. Do not type commands into a terminal window and read screenshots: that is slow and unreliable. GUI programs you start appear on that desktop. For a long job raise timeout_seconds (default 60, at most 300). Only available while this turn has a Local VM or VPS desktop.",
+      "Run a shell command on your Local VM or VPS desktop (as its desktop user, starting in /home/cua/workspace), and get its exit code, stdout and stderr back as text. Use this for all command-line work there: downloading with curl, calling an API, parsing a page or writing a CSV with python3, installing software, checking a file's size with ls -l. Do not type commands into a terminal window and read screenshots: that is slow and unreliable. GUI programs you start appear on that desktop. For a long job raise timeout_seconds (default 60, at most 300). Only available while this turn has a Local VM or VPS desktop; a command for the person's own computer goes to your own shell tool.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -808,7 +808,7 @@ const TOOL_DEFINITIONS = [
   {
     name: "skill_manage",
     description:
-      "Submit a new or updated reusable SKILL.md for one kind of work. Update a learned skill when the person corrected how that work is done, asked you to revise it, or it misled you; never update one the person wrote or imported unless they asked for that named skill. If the result is pending, a create stays inactive and an update leaves the current version unchanged." + APPLIES_OUTCOME,
+      "Submit a new or updated reusable SKILL.md for one kind of work. Update a learned skill when the person corrected how that work is done, asked you to revise it, or it misled you; never update one the person wrote or imported unless they asked for that named skill. Build a new skill on known good practice (the official docs or a well-regarded public skill, searched when you can); their preferences win. If the result is pending, a create stays inactive and an update leaves the current version unchanged." + APPLIES_OUTCOME,
     inputSchema: {
       type: "object",
       additionalProperties: false,

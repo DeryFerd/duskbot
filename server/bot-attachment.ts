@@ -11,6 +11,7 @@ import {
   scriptExtensionOf,
   saveImage,
 } from "./attachments.ts";
+import { decodeGeneratedImage } from "./generated-image.ts";
 import { mimeFor, openFileSavedSince, openMessageFile, type OpenedMessageFile } from "./message-file.ts";
 import type { Message } from "./store.ts";
 
@@ -160,4 +161,11 @@ export async function attachForTurn<S>(
       if (saved !== undefined) hooks.discard(saved);
     }
   }
+}
+
+/** A picture of the screen the bot posts on purpose (attach_file with screen): an image in the chat like any it attaches. */
+export function savedScreenAttachment(frame: { png: string }): { attachment: BotAttachment; bytes: number } {
+  const decoded = decodeGeneratedImage(frame.png);
+  const saved = saveImage(decoded.bytes, decoded.mime);
+  return { attachment: { kind: "image", path: saved.path, mime: saved.mime, name: "Screenshot" }, bytes: saved.bytes };
 }

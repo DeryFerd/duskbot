@@ -5,13 +5,15 @@ import { join } from "node:path";
 import { expect, it } from "vitest";
 
 import { launchVerificationServer } from "../scripts/control-dusk.ts";
+import { WIDGET_TOOL_DEFINITIONS } from "./drivers/agents-widget-tools.ts";
 import { removeTempDir } from "./testing/cleanup.ts";
 
 it("answers a bot's yes-or-no question with a 👍, and the bot goes on by itself", async () => {
   const scratch = mkdtempSync(join(tmpdir(), "dusk-reactions-"));
   const promptLog = join(scratch, "prompts.jsonl");
   const fixture = await launchVerificationServer({
-    FAKE_CLAUDE_REPLIES: JSON.stringify(["I drafted the email to Sam. Shall I send it?", "Sent it to Sam.", "Glad it helped.", "Understood: I'll recall it.", "Then it stays sent."]),
+    // replies that claim nothing done, so the claim check (no send tool runs here) never sends one back
+    FAKE_CLAUDE_REPLIES: JSON.stringify(["I drafted the email to Sam. Shall I send it?", "Okay, going ahead with the email to Sam.", "Glad it helped.", "Understood: I'll recall it.", "Then it stays as it is."]),
     FAKE_CLAUDE_REPLY_STATE: join(scratch, "reply-state"),
     FAKE_CLAUDE_TOOL_CALLS: "[]",
     FAKE_CLAUDE_PROMPTS: promptLog,
@@ -48,7 +50,7 @@ it("answers a bot's yes-or-no question with a 👍, and the bot goes on by itsel
 
     const yes = await react(asked.id, "👍", true);
     expect(yes).toMatchObject({ delivery: "started", message: { id: asked.id, reactions: [{ emoji: "👍", by: "user", at: expect.any(Number) }] } });
-    await settled("Sent it to Sam.");
+    await settled("Okay, going ahead with the email to Sam.");
     const afterYes = await transcript();
     const line = afterYes.find((message) => message.role === "user" && message.replyToId === asked.id);
     expect(line).toMatchObject({ kind: "text", text: "👍", reaction: "👍", sendId: expect.stringMatching(new RegExp(`^reaction-[0-9a-f]{32}-${yes.message.reactions[0].at}y$`)) });
@@ -57,11 +59,12 @@ it("answers a bot's yes-or-no question with a 👍, and the bot goes on by itsel
       ["user", "Draft an email to Sam about Friday."],
       ["bot", "I drafted the email to Sam. Shall I send it?"],
       ["user", "👍"],
-      ["bot", "Sent it to Sam."],
+      ["bot", "Okay, going ahead with the email to Sam."],
     ]);
     expect(prompts()).toHaveLength(2);
-    expect(JSON.parse(readFileSync(fixture.fixtureDumpPath, "utf8")).systemPrompt).toContain(
-      "A yes or no is one short sentence, no widget.");
+    // the yes-or-no rule lives with show_widget, which every turn is sent
+    expect(WIDGET_TOOL_DEFINITIONS.find((tool) => tool.name === "show_widget")!.description).toContain(
+      "A plain yes or no needs none: ask it in your message, and a word or a 👍 or 👎 answers it.");
     const reactionPrompt = prompts()[1]!;
     evidence.push({ reactionPrompt });
     expect(reactionPrompt).toContain("The current message is the person's reaction: they reacted 👍 to your earlier message instead of typing a reply.");
@@ -74,7 +77,7 @@ it("answers a bot's yes-or-no question with a 👍, and the bot goes on by itsel
     expect((await transcript()).filter((message) => message.role === "user")).toHaveLength(2);
     expect(prompts()).toHaveLength(2);
 
-    const sent = afterYes.find((message) => message.text === "Sent it to Sam.");
+    const sent = afterYes.find((message) => message.text === "Okay, going ahead with the email to Sam.");
     expect(await react(sent.id, "❤️")).toMatchObject({ delivery: "noted", message: { reactions: [{ emoji: "❤️", by: "user" }] } });
     expect((await api("GET", "/api/bots?messages=0")).bots.find((candidate: any) => candidate.id === bot.id).busy).toBeFalsy();
     expect(prompts()).toHaveLength(2);
@@ -83,14 +86,14 @@ it("answers a bot's yes-or-no question with a 👍, and the bot goes on by itsel
     await settled("Glad it helped.");
     const thanks = prompts()[2]!;
     evidence.push({ thanks });
-    expect(thanks).toMatch(/\(\S+ reacted ❤️ to your message “Sent it to Sam\.”\.\)\n\nThanks!/);
+    expect(thanks).toMatch(/\(\S+ reacted ❤️ to your message “Okay, going ahead with the email to Sam\.”\.\)\n\nThanks!/);
     expect(thanks).not.toContain("reacted 👍");
 
     expect(await react(asked.id, "👎", true)).toMatchObject({ delivery: "started", message: { reactions: [{ emoji: "👎", by: "user" }] } });
     await settled("Understood: I'll recall it.");
     expect(prompts()[3]).toContain("they reacted 👎 to your earlier message instead of typing a reply.\n👎 means no, not that.");
     expect(await react(asked.id, "👍", true)).toMatchObject({ delivery: "started" });
-    await settled("Then it stays sent.");
+    await settled("Then it stays as it is.");
     expect(prompts()[4]).toContain("they reacted 👍 to your earlier message instead of typing a reply.\n👍 means yes, go ahead.");
     const answers = (await transcript()).filter((message) => message.reaction);
     expect(answers.map((message) => [message.reaction, message.sendId.slice(-1)])).toEqual([["👍", "y"], ["👎", "n"], ["👍", "y"]]);

@@ -67,8 +67,9 @@ export const LONG_TURN_MS = 15_000;
 /** The status label rules: the mark comes alone, its first words follow 1.8 to 2.6 s after the send (drawn per turn,
  * about 1.2 to 1.4 s after the mark). Whatever the line says then stays for its swap and a full dwell (STATUS_HOLD_MS)
  * before the next step's words, however fast the steps come: the newest step wins and the ones between are never said.
- * Steps in one coarse group (wordGroup) keep the words they found. In a long turn a pool's words move to another of them
- * 7 to 9 s after the last swap ended. */
+ * Plain words (Thinking, Working) are the exception: a step's own words take their place once they have been up for a
+ * swap (WORD_SWAP.duration). Steps in one coarse group (wordGroup) keep the words they found. In a long turn a pool's
+ * words move to another of them 7 to 9 s after the last swap ended. */
 export const STATUS_QUIET_MS = { min: 1800, max: 2600 } as const;
 export const STATUS_HOLD_MS = WORD_SWAP.duration + WORD_DWELL_MS;
 const wordHoldMs = (seed: string, step: number) => WORD_SWAP.duration + rotationHoldMs(seed, step);
@@ -82,10 +83,8 @@ function quietFor(seed: string): number {
 
 type ShownLabel = { phase: string; step: number; text: string; at: number; key: string };
 
-/** A step's own words follow a moment of "Thinking": every turn opens with it. */
-const OPENING_PHASE = "friendly:opening";
-/** A line first seen this long into its turn (a chat opened mid-turn) says what is happening at once. */
-const OPENING_WITHIN_MS = STATUS_QUIET_MS.max + 1_500;
+/** Words that say nothing about the step: the line's own Thinking and the pools with no lead phrase. */
+const plainPhase = (phase: string) => phase === "label:thinking" || startsAnywhere(phase);
 
 /** Writing a reply only moves forward: its words in order, then the last one held, never back to the first. */
 export function typingWord(pool: readonly string[], step: number): string {
@@ -113,17 +112,18 @@ export function useStatusLabel(phrases: readonly string[] | null, phase: string,
   const holdUntil = held ? held.at + STATUS_HOLD_MS : 0;
   const rotateAt = (from: ShownLabel) => Math.max(from.at + wordHoldMs(phaseSeed, from.step), start + LONG_TURN_MS);
   const rotates = (from: ShownLabel) => Boolean(pool && pool.length > 1 && !(typing && from.step >= pool.length - 1));
+  // a step's own words take over from plain ones once those have been up for their swap
+  const gives = Boolean(held && pool && held.phase !== phase && plainPhase(held.phase) && !plainPhase(phase));
+  const givesAt = gives && held ? held.at + WORD_SWAP.duration : 0;
   let next: ShownLabel | null;
-  if (held && pool && held.phase !== phase && wordGroup(held.phase) === wordGroup(phase)) next = { ...held, phase };
-  else if (held && (held.phase !== phase || !pool) && now < holdUntil) next = held;
+  if (held && pool && held.phase !== phase && !gives && wordGroup(held.phase) === wordGroup(phase)) next = { ...held, phase };
+  else if (held && (held.phase !== phase || !pool) && now < (gives ? givesAt : holdUntil)) next = held;
   else if (held && pool && held.phase === phase) next = rotates(held) && now >= rotateAt(held) ? label(held.step + 1, held.text) : held;
   else if (!pool || !(typing || now >= quietUntil)) next = null;
-  else if (!held && !typing && !plain && phase.startsWith("friendly:") && now - start < OPENING_WITHIN_MS) next = { phase: OPENING_PHASE, step: 0, text: plainWord("thinking"), at: now, key: OPENING_PHASE };
   else next = label(0);
   shown.current = next;
   const nextTurn = next && pool && next.phase === phase && rotates(next) ? rotateAt(next) : 0;
-  const opened = next?.phase === OPENING_PHASE ? next.at + STATUS_HOLD_MS : 0;
-  const due = Math.min(...[quietUntil, holdUntil, nextTurn, opened].filter((at) => at > now));
+  const due = Math.min(...[quietUntil, holdUntil, nextTurn, givesAt].filter((at) => at > now));
   useEffect(() => {
     if (!active || !Number.isFinite(due)) return;
     const timer = setTimeout(() => wake((tick) => tick + 1), due - Date.now());

@@ -6,10 +6,10 @@ export function createDockWindow({ BrowserWindow, url, platform = process.platfo
   const overlay = createAmbientWindow({ BrowserWindow, surface: "dock", url, level: "floating", platform, onMessage, log, trace, hoverKey: false, cursor });
   return {
     ...overlay,
-    layout(display, { order }) {
-      const layout = dockLayout(display);
+    layout(display, { order, others = [] }) {
+      const layout = dockLayout(display, others);
       overlay.place(layout.window);
-      overlay.send("ambient:layout", { surface: "dock", width: layout.window.width, height: layout.window.height, body: layout.body, top: layout.top, dock: DOCK, order });
+      overlay.send("ambient:layout", { surface: "dock", width: layout.window.width, height: layout.window.height, body: layout.body, top: layout.top, dock: { ...DOCK, overhang: layout.overhang }, order });
       return layout;
     },
   };

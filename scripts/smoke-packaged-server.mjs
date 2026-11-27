@@ -181,7 +181,7 @@ writeFileSync(pdfProbe, [
   'const worker = new Worker(new URL("./pdf-text.worker.js", import.meta.url), { workerData: data, execArgv: [], stdout: true, stderr: true, resourceLimits: { maxOldGenerationSizeMb: 128, maxYoungGenerationSizeMb: 16 } });',
   'worker.stdout.resume(); worker.stderr.resume();',
   'const timer = setTimeout(() => { void worker.terminate(); process.exitCode = 1; }, 10000);',
-  'worker.once("message", reply => { console.log(JSON.stringify(reply)); clearTimeout(timer); void worker.terminate(); });',
+  'worker.on("message", reply => { if (reply.ready) return; console.log(JSON.stringify(reply)); clearTimeout(timer); void worker.terminate(); });',
   'worker.once("error", error => { clearTimeout(timer); console.error(error.message); process.exitCode = 1; });',
 ].join("\n"));
 let pdfReport = null;

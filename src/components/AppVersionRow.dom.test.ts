@@ -17,6 +17,8 @@ const bridge = {
   restart: vi.fn(async () => true),
   download: vi.fn(async () => found),
   seen: vi.fn(async () => {}),
+  open: vi.fn(async () => true),
+  move: vi.fn(async () => true),
   onState: vi.fn((cb: (state: AppUpdateState) => void) => { tell = cb; return () => {}; }),
 };
 let host: HTMLDivElement, root: Root;
@@ -84,11 +86,62 @@ it("the sidebar shows no line after the app updated, and marks it seen", async (
   expect(bridge.seen).toHaveBeenCalledOnce();
 });
 
-it("uses the linked workspace even when an older Mac bridge also offers app updates", async () => {
+it("keeps the linked workspace's own update row, with the app's own beside it", async () => {
   vi.stubGlobal("duskDesktop", { app: { ownPage: false }, appUpdate: bridge });
   try {
     await act(async () => { root.render(createElement(AppVersionRow, { fallback: createElement("p", { "data-fallback": "" }) })); });
     expect(host.querySelector("[data-fallback]")).not.toBeNull();
-    expect(bridge.state).not.toHaveBeenCalled();
+    expect(row()?.textContent).toContain("Check for updates");
   } finally { vi.unstubAllGlobals(); }
+});
+
+it("an update the app can't install itself offers the download, never the latest version", async () => {
+  await mount();
+  await hear({ ...now, available: "0.2.32", manual: { version: "0.2.32", url: "https://dusk.bot/download" } });
+  expect(row()?.textContent).toContain("Download 0.2.32");
+  expect(row()?.textContent).not.toContain("latest");
+  await act(async () => { row()?.click(); });
+  expect(bridge.open).toHaveBeenCalledTimes(1);
+  expect(bridge.download).not.toHaveBeenCalled();
+});
+
+it("an app run from Downloads offers Move to Applications", async () => {
+  await mount();
+  await hear({ ...now, available: "0.2.32", blocked: "move" });
+  expect(row()?.textContent).toContain("Move to Applications");
+  await act(async () => { row()?.click(); });
+  expect(bridge.move).toHaveBeenCalledTimes(1);
+});
+
+it("a dropped download says it is retrying", async () => {
+  await mount();
+  await hear({ ...now, available: "0.2.32", progress: 0.3, retrying: true });
+  expect(row()?.textContent).toContain("Retrying download");
+});
+
+it("on another server's page (a place, or this app as a client of one) the app's own update has its row, beside the server's", async () => {
+  window.duskDesktop = { app: { version: "0.2.26", ownPage: false } } as unknown as typeof window.duskDesktop;
+  try {
+    now = { ready: "0.2.28", available: "0.2.28", progress: 1, mode: "self" };
+    await act(async () => { root.render(createElement(AppVersionRow, { bridge, other: true, fallback: createElement("p", { "data-fallback": "" }, "Server 0.2.28") })); });
+    expect(row()?.textContent).toContain("dusk bot app 0.2.26");
+    expect(row()?.textContent).toContain("Restart to update");
+    expect(host.querySelector("[data-fallback]")?.textContent).toBe("Server 0.2.28");
+    await act(async () => { row()?.click(); });
+    expect(bridge.restart).toHaveBeenCalledTimes(1);
+  } finally {
+    delete (window as { duskDesktop?: unknown }).duskDesktop;
+  }
+});
+
+it("finds the app's updater on any page main hands it to, a client of another server's included", async () => {
+  window.duskDesktop = { app: { version: "0.2.26", ownPage: true }, remoteClient: { active: true }, appUpdate: bridge } as unknown as typeof window.duskDesktop;
+  try {
+    now = { ready: "0.2.28", mode: "self" };
+    await act(async () => { root.render(createElement(AppVersionRow, { fallback: createElement("p", { "data-fallback": "" }) })); });
+    expect(row()?.textContent).toContain("Restart to update");
+    expect(row()?.textContent).toContain("dusk bot app 0.2.26");
+  } finally {
+    delete (window as { duskDesktop?: unknown }).duskDesktop;
+  }
 });

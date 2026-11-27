@@ -5,10 +5,10 @@ import { CURATED_CONNECTOR_SLUGS } from "./connector-curated.ts";
 import { TOOL_NAMESPACE, toolSurfaceKind } from "./tool-surface.ts";
 import { traceToolLook } from "./usage-trace.ts";
 
-export const USAGE_ENGINES = ["claude", "codex", "gemini", "grok", "opencode", "cursor", "kimi", "deepseek", "qwen", "copilot", "api", "other"] as const;
+export const USAGE_ENGINES = ["claude", "codex", "gemini", "antigravity", "grok", "opencode", "cursor", "kimi", "deepseek", "qwen", "copilot", "api", "other"] as const;
 export type UsageEngine = (typeof USAGE_ENGINES)[number];
 const ENGINE_BY_DRIVER: Readonly<Record<string, UsageEngine>> = {
-  claudeAgent: "claude", codex: "codex", geminiAgent: "gemini", grokAgent: "grok", grok: "grok", opencodeGo: "opencode", cursorAgent: "cursor", kimiAgent: "kimi",
+  claudeAgent: "claude", codex: "codex", geminiAgent: "gemini", antigravityAgent: "antigravity", grokAgent: "grok", grok: "grok", opencodeGo: "opencode", cursorAgent: "cursor", kimiAgent: "kimi",
   deepseekAgent: "deepseek", qwenAgent: "qwen", copilotAgent: "copilot", "openai-compat": "api", mistral: "api", cerebras: "api", groq: "api", greenference: "api",
   meta: "api", minimax: "api",
 };
@@ -67,13 +67,17 @@ export function toolSignals(names: readonly string[]): { tools: UsageTool[]; app
 }
 
 /** why one tool call failed, read from its error on the workspace. `schema_invalid` is the model sending arguments the
- * tool refused (a weak model's mistake), counted apart so it never reads as the tool breaking */
-export const USAGE_TOOL_ERRORS = ["timeout", "permission", "not_found", "schema_invalid", "network", "bot_wall", "crashed", "other"] as const;
+ * tool refused (a weak model's mistake) and `exit_code` a command that ran and exited non-zero (grep finding nothing, a
+ * failing test being checked): both are counted apart so they never read as the tool breaking. A command that could not
+ * run (not found, no permission, out of time) keeps its own class. */
+export const USAGE_TOOL_ERRORS = ["timeout", "permission", "not_found", "schema_invalid", "network", "bot_wall", "crashed", "exit_code", "other"] as const;
+/** the classes the model meets and handles itself; a turn's tool counts as failed only for the others */
+export const EXPECTED_TOOL_ERRORS: ReadonlySet<UsageToolError> = new Set(["schema_invalid", "exit_code"]);
 export type UsageToolError = (typeof USAGE_TOOL_ERRORS)[number];
 const TOOL_ERROR_WORDS: ReadonlyArray<[UsageToolError, RegExp]> = [
   ["schema_invalid", /invalid[ _-]?(?:arg|param|input|type|enum|selector|json|request params)|-32602|is required|required (?:property|field|param)|missing required|expected (?:a |an )?(?:string|number|integer|boolean|object|array)|must be (?:a|an|one of) |unknown (?:argument|parameter|property|field|key|tool)|unrecognized (?:argument|parameter|key)|additional propert|validation (?:error|failed)|does not match (?:the )?schema|no such tool|tool .{0,60} not found/i],
   ["bot_wall", /captcha|turnstile|cloudflare|human check|verify you are (?:a )?human|are you a robot|unusual traffic|bot detection|perimeterx|datadome|you have been (?:rate[- ]limited|blocked)|(?:request|access) (?:was |has been )?blocked/i],
-  ["timeout", /timed? ?out|timeout|deadline exceeded|took too long/i],
+  ["timeout", /timed? ?out|timeout|deadline exceeded|took too long|ran past its .{0,20}limit/i],
   ["permission", /permission|not permitted|\beacces\b|\beperm\b|screen recording|accessibility (?:access|is not|isn't|not)|not allowed|forbidden|denied|unauthori[sz]ed|\b40[13]\b/i],
   ["network", /econnrefused|econnreset|enotfound|eai_again|ehostunreach|enetunreach|net::err_|err_(?:name|internet|connection|network)|socket hang up|fetch failed|network|\bdns\b|offline|unreachable|\b50[234]\b/i],
   ["not_found", /not found|no (?:such|matching) |no (?:element|file|tab|window|app|node|frame) |\benoent\b|\b404\b|does not exist|doesn't exist|could not find|couldn't find|cannot find|can't find|unable to (?:locate|find)/i],
@@ -84,8 +88,22 @@ const TOOL_ERROR_WORDS: ReadonlyArray<[UsageToolError, RegExp]> = [
 export function toolErrorClass(text: unknown): UsageToolError {
   const line = typeof text === "string" ? text.slice(0, 500) : "";
   if (!line) return "other";
+  const exit = EXIT_LINE.exec(line);
+  if (exit) return exitClass(Number(exit[1]), line.slice(exit[0].length));
   for (const [kind, pattern] of TOOL_ERROR_WORDS) if (pattern.test(line)) return kind;
   return "other";
+}
+
+const EXIT_LINE = /^(?:error:\s*)?exit code (-?\d+)\b/i;
+const COMMAND_MISSING = /command not found|is not recognized as (?:the name of )?(?:a cmdlet|an internal or external command)|commandnotfoundexception|could not find executable/i;
+const COMMAND_STOPPED = /timed? ?out|timeout|took too long|ran past its|killed/i;
+const COMMAND_REFUSED = /operation not permitted|\beperm\b|\beacces\b|unauthorizedaccess|access (?:to the path .{0,80} )?is denied|requested permissions|not allowed/i;
+/** a command that ran and exited non-zero: its own result unless the shell says it never got to run */
+function exitClass(code: number, said: string): UsageToolError {
+  if (code === 127 || COMMAND_MISSING.test(said)) return "not_found";
+  if (code === 124 || COMMAND_STOPPED.test(said)) return "timeout";
+  if (code === 126 || COMMAND_REFUSED.test(said)) return "permission";
+  return "exit_code";
 }
 
 const TOOL_ACTION = /^[a-z][a-z0-9_]{0,31}$/;
@@ -94,7 +112,7 @@ const FAILED_TOOL = /^(?:browser|computer)\.[a-z][a-z0-9_]{0,31}$/;
 export function failedToolName(name: string): string {
   const surface = toolSurfaceKind(name);
   if (!surface) return toolSignals([name]).tools[0] ?? "other";
-  const bare = name.toLowerCase().replace(TOOL_NAMESPACE, "").replace(surface === "browser" ? /^(?:agent_browser_|browser_)/ : /^computer_/, "");
+  const bare = name.toLowerCase().replace(TOOL_NAMESPACE, "").replace(surface === "browser" ? /^(?:browser_(?=agent_browser_|browser_))?(?:agent_browser_|browser_)/ : /^computer_/, "");
   return `${surface}.${TOOL_ACTION.test(bare) ? bare : "other"}`;
 }
 
@@ -126,8 +144,26 @@ function cleanToolFailures(value: unknown): UsageToolFailure[] {
 }
 
 export const USAGE_REASONS = ["rate_limit", "quota", "auth", "timeout", "network", "context", "refused", "crashed", "tool", "model_not_found", "bad_request", "provider_down",
-  "cli_missing", "cli_exit_early", "no_reply", "unknown"] as const;
+  "cli_missing", "cli_exit_early", "no_reply", "missed", "held", "not_ready", "script", "restarted", "unanswered", "unknown"] as const;
 export type UsageReason = (typeof USAGE_REASONS)[number];
+/** why a routine run ended without its work, as its runner knew it: `missed` the computer was off or asleep past the
+ * run's window, `held` a plan limit, spend cap or ended watch kept it from starting (not a failure), `not_ready` its AI
+ * could not start, `script` its own script failed, `restarted` dusk bot restarted under it twice, `stalled` and
+ * `run_limit` it ran out of time, `unanswered` nobody answered its question */
+export const ROUTINE_FAILED_FOR = ["missed", "held", "not_ready", "script", "restarted", "stalled", "run_limit", "unanswered"] as const;
+export type RoutineFailedFor = (typeof ROUTINE_FAILED_FOR)[number];
+const REASON_OF_FAILED_FOR: Readonly<Record<RoutineFailedFor, UsageReason>> = {
+  missed: "missed", held: "held", not_ready: "not_ready", script: "script", restarted: "restarted", stalled: "timeout", run_limit: "timeout", unanswered: "unanswered",
+};
+/** a finished routine run's outcome and, when it did not work, why: the runner's own cause first, else its error's words */
+export function runOutcome(run: { status: string; error?: string; failedFor?: RoutineFailedFor }): { outcome: UsageOutcome; reason?: UsageReason } {
+  if (run.status === "completed") return { outcome: "ok" };
+  if (run.failedFor === "held") return { outcome: "cancelled", reason: "held" };
+  if (run.status === "cancelled") return { outcome: "cancelled" };
+  if (run.failedFor && Object.hasOwn(REASON_OF_FAILED_FOR, run.failedFor)) return { outcome: "failed", reason: REASON_OF_FAILED_FOR[run.failedFor] };
+  if (run.status === "missed") return { outcome: "failed", reason: "missed" };
+  return { outcome: "failed", reason: failureOf(run.error).reason };
+}
 /** a failure's code and its short sanitized detail: an HTTP status, a provider's or engine's error code or class, an
  * errno, a cli exit code or signal, joined by ":" (like "http_429:insufficient_quota" or "exit_1"); never message text */
 export interface UsageFailure { reason: UsageReason; detail?: string }
@@ -242,7 +278,7 @@ const AUTH_WORDS = /\bauth(?:enticat|oriz)|sign(?:ed)? ?in\b|log(?:ged)? ?in\b|u
 const REFUSED_WORDS = /refus|content policy|safety|flagged/i;
 const DOWN_WORDS = /overloaded|internal server error|bad gateway|service unavailable|gateway timeout|server (?:error|problem)|temporar(?:y|ily) unavailable|upstream (?:error|outage)/i;
 const TIMEOUT_WORDS = /time ?out|timed out|took too long|stalled|deadline|did not answer in time/i;
-const NETWORK_WORDS = /network|econn|enotfound|socket|fetch failed|unreachable|\bdns\b|offline|could not be reached|connection (?:error|reset|refused|closed)|stream (?:disconnected|closed|error)|disconnected|terminated|error sending request/i;
+const NETWORK_WORDS = /network|econn|enotfound|socket|fetch failed|unreachable|\bdns\b|(?:could not|couldn't|can't|cannot|unable to) resolve (?:host|hostname|name)|name resolution|offline|could not be reached|connection (?:error|reset|refused|closed)|stream (?:disconnected|closed|error)|disconnected|terminated|error sending request/i;
 const MISSING_WORDS = /isn't installed|not installed|isn't on this app's PATH|command not found|CLI not found/i;
 const BAD_REQUEST_WORDS = /invalid request|bad request|malformed|invalid (?:parameter|argument|value)|unsupported (?:parameter|value)|is not supported|unprocessable/i;
 const NO_REPLY_WORDS = /no (?:completion|reply|response)\b|returned no|empty (?:reply|response|completion)|stopped without saying why|didn'?t reply|no free backup model answered/i;

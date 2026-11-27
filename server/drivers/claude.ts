@@ -13,7 +13,8 @@ import { writeFileAtomicIfChanged } from "../atomic.ts";
 import { augmentedPath } from "../env-path.ts";
 import { brokerSocketPath, cliVersionReader, describeSpawnFailure, execCli, killCliTree, lentBotFolders, readOnlyBotFolders, spawnCli } from "../procs.ts";
 import { conversationLanguage, serverLine } from "../server-lines.ts";
-import { claudeAuthStatus } from "./claude-auth-status.ts";
+import { claudeAuthStatus, type ClaudeAuthStatus } from "./claude-auth-status.ts";
+import { killClaudeTree } from "./claude-stored-login.ts";
 import { projectMcpServers } from "./claude-project-mcp.ts";
 import { botSettingsFor, withBotSettings } from "./claude-bot-settings.ts";
 import { claudeBilling, claudeCallUsage } from "./claude-billing.ts";
@@ -70,7 +71,7 @@ import type { KeepWarmContract } from "./claude-keepwarm.ts"; import { claudeFor
 import { BACKGROUND_CALL_TIMEOUT_MS, backgroundCallArgs, spawnBackgroundCall } from "./claude-background.ts";
 import { permissionLaunchCwd, shellRequest } from "./permission-command.ts"; import { readToolPaths } from "../own-file-reads.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts"; import { OWN_APPS_SERVER } from "../../shared/own-apps.ts";
-import { extractMcpImages } from "../mcp-tool-images.ts"; import { claudeToolDraft } from "./tool-progress.ts";
+import { claudeToolDraft } from "./tool-progress.ts";
 import {
   ASK_USER_QUESTION_TOOL,
   ASK_USER_TOOL,
@@ -841,7 +842,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
     const sessionIdle = sessionIdlePolicy("CLAUDE");
 
     const stopSession = (session: Session) => {
-      void killCliTree(session.child).then((stopped) => {
+      void killClaudeTree(session.child, environment()).then((stopped) => {
         if (stopped) void session.finishClose?.();
       });
     };
@@ -899,6 +900,14 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
 
     const effortByControl = () => claudeEffortByControl(cliVersionChecked, cliVersion);
     const applyEffort = (s: Session, threadId: string, effort: string | undefined) => applyClaudeEffort(s, effort, (msg) => appendNative(threadId, { dir: "out", source: "claude.sdk.message", msg }));
+    /** A turn's prompt still on its way to the CLI: a steer waits for it, so the words never arrive ahead of the prompt. */
+    const prompting = new Map<string, Promise<boolean>>();
+    const writePrompt = (s: Session, threadId: string, effort: string | undefined, message: ClaudeUserMessage): Promise<boolean> => {
+      const written = (async () => (await applyEffort(s, threadId, effort)) && (await writeUser(s, threadId, message)))();
+      prompting.set(threadId, written);
+      void written.finally(() => { if (prompting.get(threadId) === written) prompting.delete(threadId); });
+      return written;
+    };
 
     const authRecovery = claudeAuthRecovery((event: RuntimeEvent) => {
       for (const l of Array.from(listeners)) l(event);
@@ -1181,7 +1190,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
         live.volatile = volatile;
         const running = live.turn;
         // A warm process can exit just as the next turn is written; its close resumes this turn.
-        if (!(await applyEffort(live, threadId, turn.effort) && await writeUser(live, threadId, message)) && !running?.stopRequested) closeSession(threadId, "stdin write failed");
+        if (!(await writePrompt(live, threadId, turn.effort, message)) && !running?.stopRequested) closeSession(threadId, "stdin write failed");
         if (mcpConfigPath) {
           try {
             rmSync(dirname(mcpConfigPath), { recursive: true, force: true });
@@ -1502,7 +1511,9 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
               if (!session.turn?.stopRequested) emit({ ...base(threadId, currentTurnId()), type: "runtime.error", message: claudeApiErrorMessage(o, text) });
               break;
             }
-            if (text.trim()) {
+            // A Task subagent's prose, its closing report included, is for the bot that sent it, never the person:
+            // the bot relays what matters in its own reply. Its tool calls still show in the steps.
+            if (text.trim() && !o.parent_tool_use_id) {
               // fallback delta for CLIs/paths that never streamed the block
               if (!session.turn?.sawStreamDelta) emit({ ...base(threadId, currentTurnId()), type: "content.delta", streamKind: "assistant_text", delta: text });
               if (session.turn) session.turn.sawStreamDelta = false;
@@ -1545,9 +1556,6 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
             for (const b of Array.isArray(o.message?.content) ? o.message.content : []) {
               if (b.type === "tool_result") {
                 emit({ ...base(threadId, currentTurnId()), type: "item.completed", itemType: "tool", itemId: b.tool_use_id, ok: !b.is_error, output: toolDetailPreview(b.content) });
-                for (const img of extractMcpImages(b.content)) {
-                  emit({ ...base(threadId, currentTurnId()), type: "item.completed", itemType: "assistant_image", data: img.data });
-                }
               }
             }
             break;
@@ -1858,7 +1866,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
       emit({ ...base(threadId, turnId), type: "turn.started" });
 
       // Prompt over stdin, never argv (ARG_MAX); stdin stays open for steers and the next turn.
-      if (!(await applyEffort(session, threadId, turn.effort)) || !(await writeUser(session, threadId, halves.stable !== null && halves.volatile.trim() ? claudeUserMessage(withVolatileNote(turn.text, halves.volatile, true), turn.images) : promptMsg))) {
+      if (!(await writePrompt(session, threadId, turn.effort, halves.stable !== null && halves.volatile.trim() ? claudeUserMessage(withVolatileNote(turn.text, halves.volatile, true), turn.images) : promptMsg))) {
         if (!session.turn?.stopRequested) settle(false, "stdin_write_failed");
         closeSession(threadId, "stdin write failed");
       }
@@ -1867,6 +1875,8 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
     };
 
     const steer = async (threadId: string, text: string, images?: readonly ClaudeImage[]): Promise<SteerOutcome> => {
+      const prompt = prompting.get(threadId);
+      if (prompt) await prompt;
       const s = sessions.get(threadId);
       if (!s || !s.turn || s.turn.settled || s.closing || s.child.exitCode !== null) return "refused";
       const turn = s.turn;
@@ -1888,7 +1898,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
     };
 
     const login = new ClaudeLoginController({ cli: config.cli, environment, onAuthenticated: async () => { await refreshModels(); } });
-    let lastAuth: Awaited<ReturnType<typeof claudeAuthStatus>> = {};
+    let lastAuth: Omit<ClaudeAuthStatus, "renewalDue"> = {};
 
     const snapshot = async (): Promise<ProviderSnapshot> => {
       const env = environment();
@@ -1901,8 +1911,8 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
       const update = claudeCliUpdate(version, config.cli);
       const warning = claudeInheritWarning(env);
       if (config.requireApiKey && !input.environment.ANTHROPIC_API_KEY) return { state: "unavailable", version, reason: NO_ANTHROPIC_KEY };
-      const probed: typeof lastAuth = config.requireApiKey ? { authenticated: true } : await claudeAuthStatus(config.cli, env);
-      const auth = probed.authenticated === undefined ? lastAuth : (lastAuth = probed);
+      const probed: ClaudeAuthStatus = config.requireApiKey ? { authenticated: true } : await claudeAuthStatus(config.cli, env);
+      const auth = probed.renewalDue ? { ...lastAuth, authenticated: true } : probed.authenticated === undefined ? lastAuth : (lastAuth = probed);
       return { state: "available", version, ...auth, ...claudeBilling(env, auth.account), ...(update ? { update } : {}), ...(warning ? { warning } : {}) };
     };
 
@@ -1931,11 +1941,11 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
           else resolve(stdout.trim());
         };
         const onAbort = () => {
-          killCliTree(child);
+          void killClaudeTree(child, env);
           finish(new Error("Claude review aborted"));
         };
         const timer = setTimeout(() => {
-          killCliTree(child);
+          void killClaudeTree(child, env);
           finish(new Error("Claude review timed out"));
         }, timeoutMs ?? BACKGROUND_CALL_TIMEOUT_MS);
         timer.unref?.();
@@ -1944,7 +1954,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
         child.stdout.on("data", (chunk: string) => {
           stdout += chunk;
           if (stdout.length > 1_000_000) {
-            killCliTree(child);
+            void killClaudeTree(child, env);
             finish(new Error("Claude review output exceeded 1 MB"));
           }
         });

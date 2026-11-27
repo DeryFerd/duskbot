@@ -45,8 +45,10 @@ ${body}
 
 const NEW_GATE = 'export const DEFAULT_PULL = ["ghcr.io/duskbotai/dusk-desktop"];\n';
 
+// POSIX only: install.sh is the Linux server installer, run here under sh with stub commands on a POSIX PATH; Windows
+// has neither, and no server runs it there.
 describe("root's server update keeps the docker gate in step with the build (install.sh refresh_gate)", () => {
-  it("installs the gate a verified build carries and restarts it; the same gate again changes nothing", async () => {
+  it.skipIf(process.platform === "win32")("installs the gate a verified build carries and restarts it; the same gate again changes nothing", async () => {
     const dir = await mkdtemp(join(tmpdir(), "omb-gate-refresh-")); dirs.push(dir);
     const tgz = await build(dir, "aaa", NEW_GATE);
     await mkdir(join(dir, "lib"), { recursive: true });
@@ -60,7 +62,7 @@ describe("root's server update keeps the docker gate in step with the build (ins
     expect(again.log.filter((line) => line.startsWith("x "))).toEqual([]);
   });
 
-  it("leaves the gate alone for an unsigned server, a build without one, or one that does not parse", async () => {
+  it.skipIf(process.platform === "win32")("leaves the gate alone for an unsigned server, a build without one, or one that does not parse", async () => {
     const dir = await mkdtemp(join(tmpdir(), "omb-gate-refresh-")); dirs.push(dir);
     const unsigned = await inInstaller(dir, `refresh_gate ${await build(dir, "a", NEW_GATE)}`, { state: { signed: "0" } });
     expect(unsigned.installed).toBeNull();
@@ -68,7 +70,7 @@ describe("root's server update keeps the docker gate in step with the build (ins
     expect((await inInstaller(dir, `refresh_gate ${await build(dir, "c", "export const = ;\n")}`)).installed).toBeNull();
   });
 
-  it("the running build's gate, once per build and only while no bot is working: what an older updater installed catches up", async () => {
+  it.skipIf(process.platform === "win32")("the running build's gate, once per build and only while no bot is working: what an older updater installed catches up", async () => {
     const dir = await mkdtemp(join(tmpdir(), "omb-gate-refresh-")); dirs.push(dir);
     await build(dir, "bbb", NEW_GATE);
     const sync = `_running=$(state_get running-package | sed 's/^sha256://')
@@ -96,14 +98,14 @@ as_user() { printf 'as_user %s\\n' "$*" >> "$log"; ${answers ? "return 0" : "ret
 heal_gate`);
   }
 
-  it("starts a gate that does not answer the server account again, and has docker want it from then on", async () => {
+  it.skipIf(process.platform === "win32")("starts a gate that does not answer the server account again, and has docker want it from then on", async () => {
     const r = await heal();
     expect(r.log).toContain("systemctl add-wants docker.service omb-docker-gate.service");
     expect(r.log).toContain("x systemctl restart omb-docker-gate.service");
     expect(r.out).toContain("the docker gate did not answer");
   });
 
-  it("leaves an answering gate alone, and does nothing while docker is down or on a server without the gate", async () => {
+  it.skipIf(process.platform === "win32")("leaves an answering gate alone, and does nothing while docker is down or on a server without the gate", async () => {
     expect((await heal({ answers: true })).log.filter((line) => line.startsWith("x "))).toEqual([]);
     expect((await heal({ up: false })).log.filter((line) => line.startsWith("x ") || line.startsWith("as_user"))).toEqual([]);
     expect((await heal({ unit: false })).log.filter((line) => line.startsWith("x ") || line.startsWith("as_user"))).toEqual([]);

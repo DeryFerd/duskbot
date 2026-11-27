@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { afterEach, expect, it } from "vitest";
 
 import { claudeDenyRules, claudeRulePath, codexWorkspaceFilesystem, engineReadScope } from "./engine-read-scope.ts";
@@ -17,7 +17,7 @@ function dataDir() {
   return { data, home, project, chat, otherChat };
 }
 
-const covers = (paths: readonly string[], target: string) => paths.some((path) => target === path || target.startsWith(`${path}/`));
+const covers = (paths: readonly string[], target: string) => paths.some((path) => target === path || target.startsWith(`${path}/`) || target.startsWith(`${path}${sep}`));
 
 it("leaves the chat's own folder readable to Claude and Codex from a project folder, boxed or not, and hides other bots' chats", () => {
   const { data, home, project, chat, otherChat } = dataDir();

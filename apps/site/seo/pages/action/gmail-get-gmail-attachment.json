@@ -12,7 +12,7 @@
     "claude retrieve gmail attachment"
   ],
   "answer": "**walk into the call with the signed agreement open.** give the bot the sender, subject and filename. it finds the gmail message, selects the attachment and returns a download in your chat.\n\nyou get a copy. the original email and attachment stay in gmail, ready to find again.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,11 +45,12 @@
     "toolkit": "gmail",
     "slug": "GMAIL_GET_ATTACHMENT"
   },
-  "what": "**last month's unsigned contract is no help on today's call.** the bot finds the email, reads its attachment list and downloads the file you mean. it can name the downloaded copy so you recognise it.\n\ngive it the sender and rough date as well as the filename. open the returned file and look for the signature.",
+  "what": "**last month's unsigned contract is no help on today's call.** the bot finds the email, reads its attachment list and downloads the file you mean. it can name the downloaded copy so you recognise it.\n\ngive it the sender and rough date as well as the filename. open the returned file and look for the signature.\n\n**it starts from the email, not the filename.** the download needs the message and the attachment's internal id. the bot [searches your mail](/integrations/gmail/fetch-emails) to get both. once you've read the file, it can [reply in the same thread](/integrations/gmail/reply-to-email-thread).",
   "uses": [
     "**bring the signed agreement to the call.** fetch it from the venue booking email.",
     "**use the corrected drawing.** choose the supplier message that replaced the earlier version.",
-    "**find the travel receipt again.** start from the airline email instead of guessing where you saved it."
+    "**find the travel receipt again.** start from the airline email instead of guessing where you saved it.",
+    "**rename the copy you keep.** save a supplier's \"scan001.pdf\" under the order name, so you find it next time."
   ],
   "routine": {
     "message": "every tuesday at 9:30, find emails received since last tuesday from yasmin at fenwick hall. retrieve pdf attachments that the messages describe as signed agreements. return each download here with its email subject and date.\n\nif two files could be the signed version, ask which i mean. if no new agreement arrived, say so briefly. never forward files or change messages.",
@@ -111,5 +112,9 @@
   "tip": {
     "text": "ask for the email date beside the download. it makes the wrong version easier to spot."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "two emails from brackenhill joinery both hold \"drawing.pdf\":\none from 3 march, one from 17 march.",
+    "after": "the bot opens the 17 march email and reads its attachment list.\nsaved as brackenhill-drawing-rev-b.pdf.\nthe 3 march version stays in gmail, untouched."
+  }
 }

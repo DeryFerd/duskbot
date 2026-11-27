@@ -121,7 +121,7 @@ describe("CI concurrency", () => {
     const smoke = readFileSync(new URL("./smoke-approval-modes.cjs", import.meta.url), "utf8");
     const delegated = smoke.slice(smoke.indexOf("const peerTarget ="), smoke.indexOf("const customCalls ="));
     expect(delegated).toContain("const peerWorkThreadId = peerResponse.body.receipts[0].threadId;");
-    expect(delegated).toContain("assert.notEqual(peerWorkThreadId, peerThread.threadId);");
+    expect(delegated).toContain("assert.ok(peerWorkThreadId);");
     expect(delegated).toContain("task.threadId === peerWorkThreadId)?.busy === false");
     expect(delegated).toContain("/tasks/${peerWorkThreadId}`");
     expect(delegated).toContain("assert.equal(askPeerResponse.body.receipts[0].threadId, peerWorkThreadId);");
@@ -146,6 +146,36 @@ describe("CI concurrency", () => {
     expect(readFileSync(new URL("./release-ci.mjs", import.meta.url), "utf8")).toContain(`job.name === "${workflow.jobs.gate.name}"`);
     // The release lane is a branch, so its runs get their own concurrency group.
     expect(workflow.on).toHaveProperty("workflow_dispatch");
+  });
+
+  // a dry run builds every platform and checks the asset set, and never touches a release, a tag or the CI lane
+  it("keeps a dry run of the release away from drafts, tags, uploads and the CI lane", () => {
+    const release = parse(readFileSync(new URL("../.github/workflows/release.yml", import.meta.url), "utf8"));
+    expect(release.on.workflow_dispatch.inputs.dry_run).toMatchObject({ type: "boolean", default: false });
+    expect(release.jobs.ci.if).toContain("!inputs.dry_run");
+    type Step = { name?: string; if?: string; run?: string; uses?: string; with?: Record<string, unknown>; env?: Record<string, string> };
+    const steps = Object.values(release.jobs as Record<string, { steps?: Step[] }>).flatMap((job) => job.steps ?? []);
+    const writes = steps.filter((step) => /gh release (create|upload|edit)|release-ci\.mjs/.test(step.run ?? "")
+      || (step.uses?.startsWith("actions/upload-artifact@") && step.with?.["retention-days"] === 90));
+    expect(writes.length).toBeGreaterThanOrEqual(3);
+    for (const step of writes) {
+      const gated = (step.if ?? "").includes("!inputs.dry_run") || release.jobs.ci.steps.includes(step);
+      expect(gated, step.name ?? step.uses).toBe(true);
+    }
+    const sign = release.jobs.assemble.steps.find((step: Step) => step.name === "Sign the update manifest");
+    expect(sign.env.DUSK_RELEASE_SIGNING_KEY).toContain("!inputs.dry_run");
+    for (const job of ["mac", "windows", "linux", "android"]) expect(release.jobs.assemble.needs).toContain(job);
+  });
+
+  // regression: the runner's default Xcode lacked the macOS 26 SDK, so the speech helper failed to build (0.2.26-0.2.31)
+  it("builds the Mac release with Xcode 26 and refuses a speech helper without SpeechAnalyzer", () => {
+    const release = parse(readFileSync(new URL("../.github/workflows/release.yml", import.meta.url), "utf8"));
+    const steps = release.jobs.mac.steps as { name?: string; run?: string }[];
+    const xcode = steps.findIndex((step) => step.name === "Use Xcode 26");
+    expect(xcode).toBeGreaterThan(-1);
+    expect(xcode).toBeLessThan(steps.findIndex((step) => step.run === "pnpm package:mac"));
+    expect(steps[xcode].run).toContain("xcode-select -s");
+    expect(steps.some((step) => step.run?.includes("Speech0A11TranscriberC"))).toBe(true);
   });
 
   // regression: no packaging step had the clients, so every release shipped with each one-click sign-in off

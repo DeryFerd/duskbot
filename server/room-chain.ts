@@ -3,10 +3,19 @@
 
 const CHAIN = /\b(?:then|after that|afterwards|after (?:it|they|that)(?:'s| is| are)? done|once (?:it|they|that)(?:'s| is| are)? (?:done|ready|finished)|next)\b[^@\n]{0,48}@/i;
 
-/** Whether the message asks for a later @mention to build on an earlier one. */
-export function chainsMentions(text: string): boolean {
+// "@Scout find it. @Pepper then write it up": a later member's name followed by then, before what it should do
+const THEN_AFTER_NAME = /^[,:]?\s+(?:then|next|after that|afterwards)\b[,:]?\s+\p{L}/u;
+
+/** Whether the message asks for a later @mention to build on an earlier one; `names` are the members it may name. */
+export function chainsMentions(text: string, names: readonly string[] = []): boolean {
   const first = text.indexOf("@");
-  return first !== -1 && CHAIN.test(text.slice(first + 1));
+  if (first === -1) return false;
+  if (CHAIN.test(text.slice(first + 1))) return true;
+  const lower = text.toLocaleLowerCase();
+  return names.some((name) => {
+    const at = lower.indexOf(`@${name.toLocaleLowerCase()}`);
+    return at > first && THEN_AFTER_NAME.test(lower.slice(at + name.length + 1));
+  });
 }
 
 /** `members` in the order the message names them; any it does not name keep their place after those it does. */

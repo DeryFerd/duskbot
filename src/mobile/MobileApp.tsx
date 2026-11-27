@@ -1,4 +1,5 @@
 import { useProductScreen } from "@/lib/product-analytics-app";
+import { PhoneUpdatedLine } from "./PhoneUpdatedLine";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { MotionConfig } from "motion/react";
 import { openBot, openBotThread, openRoomThread, rereadWithoutStream, StoreProvider, useStore } from "@/state/store";
@@ -340,6 +341,7 @@ function Shell() {
         <PhoneBrowserTakeover bot={takeoverBot} signIn={browserTakeover.signIn} onClose={() => setBrowserTakeover(null)} />
       )}
       <AiConsentSheet />
+      <PhoneUpdatedLine />
       <Sheet open={desktopOnly} onClose={() => setDesktopOnly(false)} title={t("mobile.desktopOnly.title")}>
         <div className="px-5 pb-[calc(var(--m-safe-bottom)+16px)]">
           <p className="text-[15px] leading-6 text-ink-secondary">{t("mobile.desktopOnly.body")}</p>

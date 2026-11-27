@@ -2,6 +2,9 @@ import type { Bot, Group, Message } from "@/state/store";
 import { isQuestionCard } from "@/lib/question-card";
 import { effectiveDefaultResponder } from "@/lib/group-routing";
 import { t } from "@/lib/i18n";
+import { followUpKeyGlyphs } from "@/lib/follow-up";
+import type { SendKey } from "@/lib/send-key";
+import type { FollowUpDefault } from "../../shared/follow-up";
 import type { CSSProperties } from "react";
 import { BOT_BUTTON, botButtonStyle, botButtonTone, type BotButton } from "@/lib/bot-button";
 import { cn } from "@/lib/cn";
@@ -73,6 +76,16 @@ export function sendLabels({ busy, canSteer, name, sendLabel }: { busy: boolean;
     return { label: queue, title: queue };
   }
   return { label: t("composer.send.message"), title: `${t("chat.send")} (${sendLabel})` };
+}
+
+/** "↵ Queue · ⌘↵ Steer": what Enter does to a message typed while the bot works, then what Ctrl/⌘ with it does. */
+export function followUpHintWords(enter: FollowUpDefault, sendKey: SendKey): { text: string; aria: string } {
+  const keys = followUpKeyGlyphs(sendKey);
+  const words = {
+    sendKey: keys.send, alternateKey: keys.alternate,
+    first: t(`composer.followUp.hint.${enter}`), other: t(`composer.followUp.hint.${enter === "queue" ? "steer" : "queue"}`),
+  };
+  return { text: t("composer.followUp.keyHint", words), aria: t("composer.followUp.keyHintAria", words) };
 }
 
 /** The newest question card still waiting on the person, in the bot's own conversation. */

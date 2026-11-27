@@ -7,6 +7,21 @@ it("keeps compaction reachable below small model windows", () => {
   expect(compactBudget(100_000, 0.7, 50_000)).toBe(45_000);
 });
 
+it("folds at 80% of the window, never past 200k tokens unless config names a threshold", () => {
+  expect(compactBudget(128_000)).toBe(102_400);
+  expect(compactBudget(200_000)).toBe(160_000);
+  expect(compactBudget(272_000)).toBe(200_000);
+  expect(compactBudget(400_000)).toBe(200_000);
+  expect(compactBudget(1_000_000)).toBe(200_000);
+  expect(compactBudget(2_000_000)).toBe(200_000);
+  // an explicit setting still wins over the cap, inside the window's headroom
+  expect(compactBudget(1_000_000, 0.5)).toBe(500_000);
+  expect(compactBudget(1_000_000, 600_000)).toBe(600_000);
+  // regrowth's ceiling is the window, not the cap
+  expect(shouldCompact({ contextTokens: 250_000, estimatedBytes: 0, budget: compactBudget(1_000_000), floor: 210_000, window: 1_000_000 })).toBe(false);
+  expect(shouldCompact({ contextTokens: 262_500, estimatedBytes: 0, budget: compactBudget(1_000_000), floor: 210_000, window: 1_000_000 })).toBe(true);
+});
+
 it("rejects invalid window values and ignores invalid provider readings", () => {
   for (const value of [NaN, Infinity, 0, -1]) {
     expect(() => compactBudget(value)).toThrow();

@@ -28,11 +28,12 @@ import { createModelRoutes, ModelRouteRefused, noRouteLeft, readResponsesStream,
 import { appendNative } from "./native.ts"; import { backupNotice, movesToBackup, refusesToolChoice, TurnBackups, type ChatBackup } from "./chat-fallback.ts"; import { modelSwapNotice, namesUnknownModel, unavailableModelMessage } from "./model-intent.ts"; import { fingerprint, MAX_DELIVERED_THREADS, replayDelivered, type DeliveredUserMessage } from "./openai-chat-replay.ts";
 import { classifyError, interruptibleDelay, RETRY_MAX_ATTEMPTS } from "./retry.ts";
 import { carriedSteps, carriedWorkFile, chatLimitFacts, sharedCarriedWork } from "./openai-chat-carry.ts";
-import { CORRECTIVE_ROUND, CORRECTIVE_ROUNDS, announcesAction, ownsFailure, withoutRepeats, claimsUnmadeChange, effectfulCall, leakedReasoning, leakedToolSyntax, LeakHoldback, NUDGE_ANNOUNCED_ACTION, REASONING_AGAIN, NUDGE_CLAIMED_CHANGE, retryDelay, withRetryAfter } from "./openai-chat-habits.ts";
+import { CORRECTIVE_ROUND, CORRECTIVE_ROUNDS, announcesAction, ownsFailure, withoutRepeats, claimsUnmadeChange, effectfulCall, leakedReasoning, leakedToolSyntax, LeakHoldback, NUDGE_ANNOUNCED_ACTION, REASONING_AGAIN, NUDGE_CLAIMED_CHANGE, retryAttempts, retryDelay, withRetryAfter } from "./openai-chat-habits.ts";
 import { plainFailureMessage } from "./engine-errors.ts"; import { toolFailureMessage } from "./tool-failure.ts"; import { chosenEffort, withModelEfforts, type ModelEffort } from "./api-effort.ts";
 import { refusesRequestSize, RequestTooLargeError, sizeChange, smallerResend } from "./chat-size-limit.ts";
-import { requestTooLargeMessage } from "../../shared/request-too-large.ts"; import { thrownCode } from "../../shared/usage-signals.ts"; import { failureCodeOf, inPlainWords, noReplyError, nudgeOnce, unfinishedReply } from "./openai-chat-final.ts";
+import { requestTooLargeMessage } from "../../shared/request-too-large.ts"; import { thrownCode, toolErrorClass } from "../../shared/usage-signals.ts"; import { failureCodeOf, inPlainWords, noReplyError, nudgeOnce, unfinishedReply } from "./openai-chat-final.ts";
 import { toolSchemaProfileFor } from "../tool-schema-profile.ts";
+import { adaptToolWire, answeredWithoutTools, messagesOnWire, refusedToolName, refusesToolSchema, refusesToolsInWords, STRICT_RESEND, ToolSchemaRefusedError, TOOLS_REFUSED, toolsOnWire, toolWiresFor, wantsStrictToolSchemas } from "./chat-tool-wire.ts";
 import { classifyContinuable, writeTurnHandoff } from "../turn-continuation.ts";
 import { repairToolArguments } from "../tool-argument-repair.ts"; import { TurnGates } from "../turn-stop-gates.ts"; import { outboundSendKey } from "../../shared/declined-sends.ts";
 import { KEY_REJECTED_REASON, keyRejected, noteKeyAccepted, noteKeyRejected, rejectsKey } from "../key-rejections.ts";
@@ -63,6 +64,8 @@ export interface Completion {
   protocolReasoningDetails: Record<string, unknown>[];
   /** Every output item of a Responses API reply, encrypted reasoning included, for the next round of this turn only. */
   responseOutput?: ResponseItem[]; images?: string[];
+  /** Answered with no tools sent: the provider said this model takes none. */
+  withoutTools?: true;
 }
 
 
@@ -173,6 +176,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
     ending: boolean;
   }>();
   const reasoningReplayRejected = new Set<string>(), toolChoiceRefused = new Set<string>(), routes = createModelRoutes(options.apiUrl);
+  const wireOf = toolWiresFor(options.apiUrl);
   /** Beside the messages, not on them, so encrypted reasoning never reaches a Chat Completions body, a log or a handoff. */
   const responseOutputs = new WeakMap<OpenAIChatMessage, ResponseItem[]>();
   const assistantReply = (model: string, completion: Completion, content: string | null, toolCalls?: ChatToolCall[]): OpenAIChatMessage => {
@@ -239,13 +243,15 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
         : timeoutController.signal;
 
       const served = options.servedModel ? await options.servedModel(model) : model, effort = chosenEffort(options.effort, model, requestedEffort);
-      const forced = tools.length && toolChoice ? { tool_choice: toolChoice } : {};
+      const sent = toolsOnWire(tools, wireOf(model));
+      messages = messagesOnWire(messages, { google: wantsStrictToolSchemas(options.apiUrl, model), toolsWithheld: !sent.length && tools.some((tool) => tool.function.name !== ASK_USER_TOOL) });
+      const forced = sent.length && toolChoice ? { tool_choice: toolChoice } : {};
       const payload = JSON.stringify(route === "responses"
-        ? { ...responsesRequest({ model: served, messages, tools, replay: (message) => responseOutputs.get(message), summaries: routes.summaries(model), ...(effort ? { effort } : {}) }), ...forced }
+        ? { ...responsesRequest({ model: served, messages, tools: sent, replay: (message) => responseOutputs.get(message), summaries: routes.summaries(model), ...(effort ? { effort } : {}) }), ...forced }
         : { ...forced,
           ...options.requestBody(served, messages, stream),
           ...(route === "chat-reasoning-off" ? { reasoning_effort: "none" } : effort ? { reasoning_effort: effort } : {}),
-          ...(tools.length ? { tools } : {}),
+          ...(sent.length ? { tools: sent } : {}),
         });
       const send = options.timeoutMs > FETCH_LIMIT_MS ? fetchPastLimit : fetch;
       const response = await send(`${options.apiUrl}/${route === "responses" ? "responses" : "chat/completions"}`, {
@@ -257,11 +263,12 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
       });
       const failure = (status: number, body: string): Error => {
         const message = `${options.httpErrorLabel} HTTP ${status}${body ? `: ${httpErrorDetail(body)}` : ""}`;
-        const refused = tools.length ? routeRefusal(route, status, body) : null;
+        const refused = sent.length ? routeRefusal(route, status, body) : null;
         if (refused) return new ModelRouteRefused(refused, message);
         if (rejectsKey(status, body)) noteKeyRejected(options.apiUrl, options.apiKey);
         if (refusesRequestSize(status, body)) return new RequestTooLargeError(message, Buffer.byteLength(payload));
-        if (rejectsToolsParameter(status, body)) return new UnsupportedChatToolsError(message);
+        if (rejectsToolsParameter(status, body) || (sent.length && refusesToolsInWords(status, body))) return new UnsupportedChatToolsError(message);
+        if (sent.length && refusesToolSchema(status, body)) return new ToolSchemaRefusedError(message, refusedToolName(body, sent));
         const refusal = refusedToolCall(status, body);
         if (refusal) return new RejectedToolCallError(message, refusal);
         if (messages.some((entry) => entry.reasoning_content !== undefined) && rejectsReasoningReplay(status, body)) {
@@ -420,14 +427,23 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
     tools: ChatToolDefinition[] = [],
     onUsage?: TextGenerationOptions["onUsage"], effort?: SendTurnInput["effort"], toolChoice?: "required",
   ): Promise<Completion> => {
+    let withoutTools = false, drops = 0;
     for (;;) {
       let replied = false;
       try {
-        return await completeOn(routes.routeFor(model, tools.length > 0), messages, model, stream, signal, onDelta && ((text, kind) => {
+        const completion = await completeOn(routes.routeFor(model, !wireOf(model).none && tools.length > 0), messages, model, stream, signal, onDelta && ((text, kind) => {
           replied = true;
           onDelta(text, kind);
         }), tools, onUsage, effort, toolChoice);
+        return withoutTools ? { ...completion, withoutTools: true } : completion;
       } catch (error) {
+        // a refused tool list ran nothing, so the same request goes again in a form the provider takes
+        const change = tools.length && !replied && !signal?.aborted ? adaptToolWire(error, wireOf(model), messages, drops) : null;
+        if (change) {
+          console.warn(`${options.driverKind}: ${model} ${change}`);
+          if (change === TOOLS_REFUSED) withoutTools = true; else if (change !== STRICT_RESEND) drops++;
+          continue;
+        }
         if (!(error instanceof ModelRouteRefused) || replied || signal?.aborted) throw error;
         if (!routes.advance(model, error.refusal)) throw new ChatProtocolError(noRouteLeft(error.message), "responses_route_unavailable");
         console.warn(`${options.driverKind}: ${model} answered ${error.refusal}; now on ${routes.routeFor(model, true)}`);
@@ -553,6 +569,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
       // a text-only answer after a failed tool that does not say what failed, while rounds to fix it remain: it is not shown; the next answer is
       const correcting = (done: Completion) => toolFailed && !done.toolCalls.length && !denials.length && !turnEntry.ending && correctiveRounds < correctiveMax && !ownsFailure(done.text);
       const denials: string[] = [], failedCalls: string[] = [];
+      let failedChange = false, okCalls = 0;
       const seenCalls = new Set<string>();
       let nudges = 0, effectful = 0, toolsRan = 0, toolFailedEver = false, claimNudged = false, lastReply = "";
       const said: string[] = [];
@@ -571,7 +588,6 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
         noteToolBudget(turn.botId, tools.budget); gates.mount(tools.definitions.map((definition) => definition.function.name), turn.automationRun);
         for (const message of chatToolNotices(tools)) emit({ ...base(turn.threadId, turnId), type: "runtime.notice", message: safeText(message) });
         const questionAllowed = options.tools !== false && allowsTool(scope, { kind: "native", name: ASK_USER_TOOL });
-        let optionalQuestionOnly = questionAllowed && tools.definitions.length === 0;
           // An MCP server squatting ask_user cannot shadow it (dispatch intercepts the name); skip its definition.
         if (questionAllowed && !tools.definitions.some((definition) => definition.function.name === ASK_USER_TOOL)) {
           tools.definitions.push(ASK_USER_TOOL_DEFINITION);
@@ -670,13 +686,6 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
                 }
                 if (!abort.signal.aborted) throw new ChatProtocolError(refusedToolCallFailure(error, seenCalls.size > 0), "tool_call_refused");
               }
-              // A structured parameter rejection executed nothing; never downgrade mounted tools or a handled call.
-              if (optionalQuestionOnly && round === 0 && !streamed && !seenCalls.size && !abort.signal.aborted &&
-                  error instanceof UnsupportedChatToolsError && verdict.reason === "invalid_request") {
-                optionalQuestionOnly = false;
-                tools.definitions.length = 0;
-                continue;
-              }
               // The failed request ran nothing: the calls this turn already handled ride in `messages` and never run again.
               if (options.resolveModel && !carrier && !modelChecked && !streamed && !abort.signal.aborted && !(error instanceof ChatProtocolError) && namesUnknownModel(error)) {
                 modelChecked = true;
@@ -694,12 +703,15 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
               }
               if (delayMs === null) throw serverModels && !carrier ? new ChatProtocolError(unavailableModelMessage(model, serverModels), "model_not_found") : error;
               attempt += 1;
-              emit({ ...base(turn.threadId, turnId), type: "turn.retrying", attempt, delayMs, reason: verdict.reason });
+              emit({ ...base(turn.threadId, turnId), type: "turn.retrying", attempt, delayMs, reason: verdict.reason, maxAttempts: retryAttempts(verdict.reason) });
               await interruptibleDelay(delayMs * (options.retryScale ?? Number(process.env.FAKE_CHAT_RETRY_SCALE ?? "1")), abort.signal).promise;
               abort.signal.throwIfAborted();
             }
           }
           native("in", options.nativeLog.incoming(completion));
+          if (completion.withoutTools && tools.definitions.some((definition) => definition.function.name !== ASK_USER_TOOL)) {
+            emit({ ...base(turn.threadId, turnId), type: "runtime.notice", message: answeredWithoutTools(options.models().options.find((option) => option.id === model)?.label ?? model) });
+          }
           unread = [];
           if (completion.usage) {
             usage.input += completion.usage.input;
@@ -730,7 +742,8 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
                 messages.push(assistantReply(carrier?.model ?? model, completion, reply), { role: "user", content: CORRECTIVE_ROUND });
                 continue;
               }
-              if (denials.length || !ownsFailure(reply)) {
+              const onlyLookupsFailed = !failedChange && okCalls > 0 && !claimsUnmadeChange(reply, effectful);
+              if (denials.length || !(ownsFailure(reply) || onlyLookupsFailed)) {
                 stopReason = "tool_error"; lastReply = reply;
                 throw new ChatProtocolError(toolFailureMessage(failedCalls, denials.filter((name) => name !== ASK_USER_TOOL)));
               }
@@ -766,7 +779,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
           }
           if (seenCalls.size > MAX_TURN_TOOL_CALLS) throw stoppedAfter(`${MAX_TURN_TOOL_CALLS} tool calls`);
           messages.push(assistantReply(carrier?.model ?? model, completion, completion.text || null, completion.toolCalls));
-          if (!denials.length) { toolFailed = false; failedCalls.length = 0; }
+          toolFailed = denials.length > 0; failedCalls.length = 0; failedChange = false;
           const screenshotParts: ChatContentPart[] = [];
           const session = tools;
           const executeCall = async (call: ChatToolCall) => {
@@ -791,7 +804,6 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
                 });
                 started = true;
                 if (!questions) {
-                  denials.push(ASK_USER_TOOL);
                   result = { ok: false, text: "The ask_user arguments are malformed: pass a JSON object with a questions array of one to six questions, each with a question string and at most twelve options carrying a label. Ask again with valid arguments." };
                 } else {
                   const answer = await approval.question(ASK_USER_TOOL, askQuestionSummary(questions), questions);
@@ -853,7 +865,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
             full: () => (turn.approvalModeNow?.() ?? turn.approvalMode) === "full", covered: approval.covered, execute: executeCall })) {
             for (const { call, result, text, title, skipRepeatCount } of results) {
               const repeatNote = skipRepeatCount ? undefined : repeats.noteAfter(call.function.name, call.function.arguments, result), shown = skipRepeatCount ? text : repeats.shown({ id: call.id, name: call.function.name, args: call.function.arguments }, result, text, messages);
-              toolsRan += 1; if (!result.ok) { toolFailed = true; toolFailedEver = true; failedCalls.push(title); } else if (effectfulCall(call.function.name, call.function.arguments)) effectful += 1; gates.ran(call.function.name, call.function.arguments, result.ok, text, title);
+              toolsRan += 1; if (!result.ok && toolErrorClass(text) !== "exit_code") { toolFailed = true; toolFailedEver = true; failedCalls.push(title); failedChange ||= call.function.name === ASK_USER_TOOL || effectfulCall(call.function.name, call.function.arguments); } else { okCalls += 1; if (result.ok && effectfulCall(call.function.name, call.function.arguments)) effectful += 1; } gates.ran(call.function.name, call.function.arguments, result.ok, text, title);
               messages.push({ role: "tool", tool_call_id: call.id, content: repeats.record(call.id, JSON.stringify({ ok: result.ok, result: repeatNote ? `${shown}\n\n${repeatNote}` : shown })) });
               screenshotParts.push(...chatToolImages(call.id, result.images));
             }

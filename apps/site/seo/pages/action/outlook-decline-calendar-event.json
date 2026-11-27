@@ -22,7 +22,7 @@
     "/integrations/outlook/search-calendar-events"
   ],
   "og_line": "choose the invitation and the response first.",
-  "what": "**say no to the meeting you actually mean.** name the date and organiser, especially when the title repeats. the bot finds the occurrence and can include your explanation or a proposed start and end time.\n\nchoose whether outlook should email the organiser; it sends a response by default. a proposed slot still needs a separate availability lookup and the other person's agreement.",
+  "what": "**say no to the meeting you actually mean.** name the date and organiser, especially when the title repeats. the bot finds the occurrence and can include your explanation or a proposed start and end time.\n\nchoose whether outlook should email the organiser; it sends a response by default. a proposed slot still needs a separate availability lookup, such as [find meeting times](/integrations/outlook/find-meeting-times), and the other person's agreement.\n\nthe decline needs the event's own id. the bot gets it by running [search calendar events](/integrations/outlook/search-calendar-events) for the title or organiser first.",
   "uses": [
     "decline a supplier demo you have decided to skip",
     "turn down an optional workshop with your chosen explanation",
@@ -61,7 +61,7 @@
       "a": "**yes, with a start and end time.** look up availability separately. the proposal does not book that slot for everyone."
     }
   ],
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -126,5 +126,9 @@
       "any proposed time has a start, end and separate availability lookup"
     ]
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "two invites called \"weekly sync\" sit on thursday.\none comes from ilse at glenmoor. the other is your own team's.",
+    "after": "declined: thursday 10:00 weekly sync, organiser ilse\ncomment: \"out on a site visit. could we try friday 11:00 to 11:30?\"\nproposed time sent with the decline.\nyour team's sync is untouched."
+  }
 }

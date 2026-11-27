@@ -96,7 +96,10 @@ describe("skills prompt index budget", () => {
         { id: "skills", label: "Skills index", text: skillsSystemPrompt(bot) },
       ]);
       expect(assembled.text).toContain(`- alpha: Résumé 🐈 Read ${JSON.stringify(join(workspaceDir(bot), "skills", ".revisions", revision, "SKILL.md"))}.`);
-      expect(assembled.sections.find((section) => section.id === "skills")?.bytes).toBe(Buffer.byteLength(skillsSystemPrompt(bot), "utf8"));
+      // the section carries the whole index, under the "What you know" heading the first part after the habits gets
+      const section = assembled.sections.find((one) => one.id === "skills")!;
+      expect(section.text).toContain(skillsSystemPrompt(bot).trim());
+      expect(section.bytes).toBe(Buffer.byteLength(section.text, "utf8"));
       expect(assembled.text).not.toContain("omitted");
       expect(warn).not.toHaveBeenCalled();
     } finally { warn.mockRestore(); }

@@ -32,7 +32,10 @@ export const INSTABOX_HOME_VOLUME = "data";
  *  never in a backup, never replaced by a restore */
 export const PLATFORM_ENTRIES = ["home", "tmp", "workspace", "config", "state", "swapfile", "lost+found", ".instabox*", ".omb-restore.*", ".omb-old.*"] as const;
 /** downloads the server fetches again when missing: agent-browser's and the launcher's Chrome for Testing, local voice models */
-const REDOWNLOADED = [".agent-browser/browsers", `${CLOUD_HOME.dataName}/tools/chrome`, ".cache/duskbot"];
+/** Codex's npm copy (some 400 MB with its native build): the home's server installs it again on its first check after
+ *  a restore (server/codex-upkeep.ts). The rest of that npm folder holds engines nothing reinstalls, so it stays. */
+const REDOWNLOADED = [".agent-browser/browsers", `${CLOUD_HOME.dataName}/tools/chrome`, ".cache/duskbot",
+  `${CLOUD_HOME.dataName}/tools/npm/lib/node_modules/@openai/codex`, `${CLOUD_HOME.dataName}/tools/npm/bin/codex`];
 const BROWSER_PROFILE_CACHES = ["Cache", "Code Cache", "GPUCache", "GrShaderCache", "ShaderCache", "GraphiteDawnCache", "DawnGraphiteCache", "DawnWebGPUCache",
   "Service Worker/CacheStorage", "Service Worker/ScriptCache", "component_crx_cache", "optimization_guide_model_store"];
 /** caches under /data that their owner fills again on demand (package managers, the server's scratch, Chromium's caches

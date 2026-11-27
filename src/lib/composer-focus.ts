@@ -85,8 +85,22 @@ export function openOverlays(doc: Document = document, blocking = false): number
   return count;
 }
 
+/** The bot or room panel lies over this element, as it does over the whole chat in a window too narrow to dock it. */
+export function underPanel(element: Element, doc: Document = element.ownerDocument): boolean {
+  if (typeof doc.elementFromPoint !== "function") return false;
+  const box = element.getBoundingClientRect();
+  if (!box.width || !box.height) return false;
+  const hit = doc.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+  return Boolean(hit && !element.contains(hit) && hit.closest("[data-panel-slot], #bot-panel"));
+}
+
+/** The chat box with nothing typed in it: an Escape there has nothing of its own to cancel. */
+export function emptyComposerField(target: EventTarget | null): boolean {
+  return target instanceof HTMLTextAreaElement && target.matches(COMPOSER_FIELD) && !target.value.trim();
+}
+
 export function composerField(doc: Document = document): HTMLTextAreaElement | null {
-  const fields = [...doc.querySelectorAll<HTMLTextAreaElement>(COMPOSER_FIELD)].filter((field) => shown(field) && !field.disabled && !field.readOnly);
+  const fields = [...doc.querySelectorAll<HTMLTextAreaElement>(COMPOSER_FIELD)].filter((field) => shown(field) && !field.disabled && !field.readOnly && !underPanel(field, doc));
   return fields.at(-1) ?? null;
 }
 

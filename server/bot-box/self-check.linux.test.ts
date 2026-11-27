@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { BOX_BRIDGE_SCRIPT, writeSeccompFile } from "./box.ts";
+import { seccompTarget } from "./seccomp.ts";
 import { detectBox } from "./detect.ts";
 import { runBoxSelfCheck } from "./self-check.ts";
 
@@ -15,6 +16,8 @@ const available = detection.box === "bwrap" && detection.tools !== null;
 const root = mkdtempSync(join(tmpdir(), "dusk-box-real-"));
 /** The CPU list is checked only where the host has one to put in the box. */
 const cpuList = existsSync("/sys/devices/system/cpu/possible");
+/** The seccomp filter, and so its keyring check, is loaded where the box knows the architecture's call numbers. */
+const seccomp = seccompTarget() !== null;
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 describe.skipIf(!available)(`the real box (${detection.box === "bwrap" ? "bubblewrap works here" : `skipped: ${detection.reason}`})`, () => {
@@ -27,7 +30,7 @@ describe.skipIf(!available)(`the real box (${detection.box === "bwrap" ? "bubble
     const result = await runBoxSelfCheck(options());
     expect(result.error).toBeUndefined();
     expect(result.failed).toEqual([]);
-    expect(result.total).toBe((process.arch === "x64" ? 31 : 30) + (cpuList ? 1 : 0));
+    expect(result.total).toBe((seccomp ? 31 : 30) + (cpuList ? 1 : 0));
     expect(result.results.map((check) => check.id)).toEqual(expect.arrayContaining([...(cpuList ? ["cpu-list-readable"] : []), "engine-runs", "engine-read-only", "no-provider-key-in-env", "broker-call-works", "broker-wrong-token-refused", "broker-other-grant-refused", "broker-key-not-on-disk", "base-url-is-broker"]));
   }, 120_000);
 
@@ -35,17 +38,20 @@ describe.skipIf(!available)(`the real box (${detection.box === "bwrap" ? "bubble
     const expected: Record<string, string[]> = {
       "bind-data": ["messages-db-hidden", "config-hidden", "data-dir-empty", "other-bot-folder-hidden", "other-task-folder-hidden", "secret-not-on-disk"],
       "share-pid": ["other-pid-hidden", "server-pid-hidden"],
-      "share-net": ["host-loopback-unreachable", "no-direct-internet"],
+      // on the host's network the box reaches the harness port and the egress gate's port as they are, not through its
+      // bridges, so the harness and gate checks fail; the two isolated-network checks are left out (see below)
+      "share-net": ["harness-other-refused", "egress-loopback-refused", "egress-metadata-refused", "egress-private-refused"],
       "env-all": ["secret-not-in-env"],
       "tmp-shared": ["tmp-private"],
       "engines-rw": ["engine-read-only"],
-      ...(process.arch === "x64" ? { "no-seccomp": ["keyring-denied"] } : {}),
+      ...(seccomp ? { "no-seccomp": ["keyring-denied"] } : {}),
     };
     for (const [mutation, checks] of Object.entries(expected)) {
       const result = await runBoxSelfCheck({ ...options(), mutate: new Set([mutation as never]) });
       expect(result.error, mutation).toBeUndefined();
       for (const id of checks) expect(result.failed, `${mutation} should fail ${id}`).toContain(id);
       // share-net drops the two isolated-network checks instead of failing them; everything else holds.
+      if (mutation === "share-net") expect(result.results.map((check) => check.id)).not.toContain("host-loopback-unreachable");
       const other = result.failed.filter((id) => !checks.includes(id));
       expect(other, `${mutation} broke more than it should`).toEqual([]);
     }

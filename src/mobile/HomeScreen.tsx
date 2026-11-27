@@ -1,4 +1,6 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ActiveConnection } from "./connection/active";
+import { PhoneUpdateLine } from "./connection/PhoneUpdateLine";
 import { motion, useTransform, type MotionValue } from "motion/react";
 import { BellDot, Check, ChevronDown, MonitorSmartphone, Pin, PinOff, Plus, RotateCcw, Search, Star, UserRound } from "../icons";
 import { api, retryLoad, useStore, type Bot, type Group } from "@/state/store";
@@ -68,6 +70,7 @@ function lastAt(owner: Bot | Group): number {
 /** Grok's home: a few round buttons floating over the top, the pinned bots big, then every chat as a plain row. */
 export function HomeScreen({ onOpenChat, onOpenSheet }: { onOpenChat: (id: string) => void; onOpenSheet: OpenSheet }) {
   const { state, dispatch } = useStore();
+  const connection = useContext(ActiveConnection);
   const platform = usePlatform();
   const offline = useOffline();
   const live = useLiveConnection();
@@ -211,6 +214,7 @@ export function HomeScreen({ onOpenChat, onOpenSheet }: { onOpenChat: (id: strin
         >
           <div ref={listRef} style={{ paddingTop: listTop }} className="pb-[calc(var(--m-safe-bottom)+24px)]">
             {state.hydrated && <ConnectionProblemCard notice={live.notice} place={live.place} trying={live.trying} onRetry={live.retry} />}
+            {state.hydrated && <PhoneUpdateLine connection={connection} />}
             {!state.hydrated || !listIn ? (state.loadFailed ? (
               <EmptyState tone="error" art="signpost" className="pt-16" title={t("mobile.home.loadFailedTitle")} body={t(offline ? "mobile.home.loadFailedOffline" : "mobile.home.loadFailedBody")}
                 action={{ label: t("mobile.home.retry"), icon: <RotateCcw size={17} aria-hidden />, onClick: retryLoad }} />

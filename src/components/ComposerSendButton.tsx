@@ -1,7 +1,9 @@
-import type { CSSProperties } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import { ArrowUp, ChevronUp, Clock, CornerDownRight, RotateCcw } from "../icons";
 
-import type { FollowUp } from "../../shared/follow-up";
+import type { FollowUp, FollowUpDefault } from "../../shared/follow-up";
+import type { SendKey } from "@/lib/send-key";
+import { followUpHintWords } from "./composer-simple";
 import { cn } from "@/lib/cn";
 import { Icon } from "./Icon";
 import { t } from "@/lib/i18n";
@@ -17,9 +19,13 @@ export interface FollowUpMenu {
   alternateKey: string;
 }
 
+/** How long a press on Send lasts before it does the other follow-up, as a Ctrl/⌘-click does. */
+export const HOLD_ALTERNATE_MS = 450;
+
 /** The composer's round Send button. While a one-to-one bot works, a click does what Enter does and a Ctrl/⌘-click the
- * other one; the chevron beside it lists every way this message can meet the running turn. */
-export function ComposerSendButton({ compact, waits, label, title, look, disabled, onSend, menu, onChoose }: {
+ * other one (a press held on a touch screen, which has no Ctrl/⌘ to hold, does the same); the chevron beside it lists
+ * every way this message can meet the running turn. */
+export function ComposerSendButton({ compact, waits, label, title, look, disabled, onSend, menu, onChoose, holdAlternate = false }: {
   compact: boolean;
   /** The message will wait for the running turn: a clock on a quiet button instead of the bot's colour. */
   waits: boolean;
@@ -30,11 +36,30 @@ export function ComposerSendButton({ compact, waits, label, title, look, disable
   onSend: (alternate: boolean) => void;
   menu?: FollowUpMenu;
   onChoose: (followUp: FollowUp) => void;
+  /** A held touch press sends with the other follow-up. */
+  holdAlternate?: boolean;
 }) {
+  const hold = useRef<{ timer: number; fired: boolean } | null>(null);
+  const endHold = () => { if (hold.current) window.clearTimeout(hold.current.timer); };
+  useEffect(() => endHold, []);
   const alternate = menu?.choices[1] !== "restart" ? menu?.choices[1] : undefined;
   const button = (
     <button
-      onClick={(event) => onSend(event.metaKey || event.ctrlKey)}
+      onClick={(event) => {
+        if (hold.current?.fired) { hold.current = null; return; }
+        onSend(event.metaKey || event.ctrlKey);
+      }}
+      onPointerDown={holdAlternate ? (event) => {
+        endHold();
+        hold.current = null;
+        if (event.pointerType === "mouse" || disabled) return;
+        const press = { timer: 0, fired: false };
+        press.timer = window.setTimeout(() => { press.fired = true; onSend(true); }, HOLD_ALTERNATE_MS);
+        hold.current = press;
+      } : undefined}
+      onPointerUp={holdAlternate ? endHold : undefined}
+      onPointerCancel={holdAlternate ? () => { endHold(); hold.current = null; } : undefined}
+      onContextMenu={holdAlternate ? (event) => event.preventDefault() : undefined}
       disabled={disabled}
       aria-label={label}
       data-composer-send={waits ? "waits" : ""}
@@ -79,5 +104,16 @@ export function ComposerSendButton({ compact, waits, label, title, look, disable
       />
       {button}
     </div>
+  );
+}
+
+/** "↵ Queue · ⌘↵ Steer" beside Send while a one-to-one bot works; the field names it by `id` for screen readers. */
+export function FollowUpKeyHint({ id, enter, sendKey }: { id: string; enter: FollowUpDefault; sendKey: SendKey }) {
+  const hint = followUpHintWords(enter, sendKey);
+  return (
+    <span data-composer-follow-up-hint="" className="pointer-events-none me-0.5 shrink-0 whitespace-nowrap text-[12px] leading-4 text-ink/40 @max-[26rem]/composer:hidden">
+      <span aria-hidden="true">{hint.text}</span>
+      <span id={id} className="sr-only">{hint.aria}</span>
+    </span>
   );
 }

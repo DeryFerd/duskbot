@@ -75,7 +75,8 @@ describe("what a backup leaves out", () => {
     try {
       const p = `data/${CLOUD_HOME.dataName}/agent-browser-profiles/abc`;
       const files = ["data/.npm/_cacache/a", "data/.cache/pip/a", `${p}/Default/Cache/Cache_Data/a`, `${p}/Default/Code Cache/js/a`, `${p}/GrShaderCache/a`,
-        `data/${CLOUD_HOME.dataName}/tmp/a`, `${p}/Default/Cookies`, "data/.cache/ms-playwright/a", `data/${CLOUD_HOME.dataName}/bots.json`, `data/${CLOUD_HOME.dataName}/tools/npm/a`];
+        `data/${CLOUD_HOME.dataName}/tmp/a`, `${p}/Default/Cookies`, "data/.cache/ms-playwright/a", `data/${CLOUD_HOME.dataName}/bots.json`, `data/${CLOUD_HOME.dataName}/tools/npm/a`,
+        `data/${CLOUD_HOME.dataName}/tools/npm/lib/node_modules/@openai/codex/bin/codex.js`, `data/${CLOUD_HOME.dataName}/tools/npm/bin/codex`];
       for (const f of files) { mkdirSync(join(root, f, ".."), { recursive: true }); writeFileSync(join(root, f), "x"); }
       const line = homeControlScript().split("\n").find(l => l.includes("tar -C / --numeric-owner -cf"))!.trim()
         .replace("tar -C / ", `tar -C '${root}' `).replace('"$part"', `'${join(root, "out.tar")}'`).replace(" || code=$?", "");

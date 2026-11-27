@@ -12,6 +12,8 @@ import { burstNote, continuationNote, parseSideDecision, queuedTaskNote, redirec
 export const SIDE_REPLY_TIMEOUT_MS = 12_000;
 /** How long a turn that has said and done nothing yet counts as just started: a message then is part of the same burst. */
 export const BURST_MS = 30_000;
+/** How long a burst waits for a turn the host has begun but the engine has not started yet, before queueing instead. */
+const LAUNCH_WAIT_MS = 15_000;
 const STEP_CHARS = 90;
 const KEPT_STEPS = 12;
 const KEPT_SAID = 4;
@@ -131,6 +133,8 @@ function checklistState(list: Checklist | null): { title?: string; done: number;
 export function createSideReplies<R extends SideRequest>(deps: SideRepliesDeps<R>) {
   const now = deps.now ?? Date.now;
   const progress = new Map<string, Progress>();
+  /** Bursts waiting for their thread's turn to start on its engine. */
+  const launches = new Map<string, Array<(started: boolean) => void>>();
   /** Separate asks queued for a thread's next turn, so a later message's responder knows they are coming. */
   const waiting = new Map<string, string[]>();
   const chains = new Map<string, Promise<unknown>>();
@@ -218,10 +222,28 @@ export function createSideReplies<R extends SideRequest>(deps: SideRepliesDeps<R
     return deps.busy(request.botId, request.threadId) && (!live || (!live.said.length && !live.steps.length && now() - live.startedAt < BURST_MS));
   };
 
+  /** Resolves true once the thread's turn has started on its engine, false when it ends first or `ms` passes. */
+  const engineStarted = (threadId: string, ms: number): Promise<boolean> => new Promise((resolve) => {
+    const done = (started: boolean) => {
+      clearTimeout(timer);
+      const left = (launches.get(threadId) ?? []).filter((one) => one !== done);
+      if (left.length) launches.set(threadId, left); else launches.delete(threadId);
+      resolve(started);
+    };
+    const timer = setTimeout(() => done(false), ms);
+    timer.unref?.();
+    launches.set(threadId, [...(launches.get(threadId) ?? []), done]);
+  });
+
   const fold = async (request: R): Promise<SideOutcome> => {
     const prompt = `${request.prompt}\n\n${burstNote(runningAsk(deps.transcript(request.threadId), request.messageId))}`;
     if (deps.canSteer(request.threadId)) {
-      const outcome = await deps.steer(request, prompt).catch((): SteerOutcome => "indeterminate");
+      let outcome = await deps.steer(request, prompt).catch((): SteerOutcome => "indeterminate");
+      // the host has begun the turn but its engine has not started it yet, so nothing can take the words: wait for it
+      if (outcome === "refused" && !progress.has(request.threadId) && deps.busy(request.botId, request.threadId)
+        && await engineStarted(request.threadId, LAUNCH_WAIT_MS)) {
+        outcome = await deps.steer(request, prompt).catch((): SteerOutcome => "indeterminate");
+      }
       if (outcome !== "refused") return "folded";
     } else if (deps.pause) {
       await deps.pause(request, prompt);
@@ -292,10 +314,12 @@ export function createSideReplies<R extends SideRequest>(deps: SideRepliesDeps<R
       if (event.type === "turn.started") {
         progress.set(threadId, { turnId: event.turnId, startedAt: now(), steps: [], said: [], added: waiting.get(threadId) ?? [] });
         waiting.delete(threadId);
+        for (const done of launches.get(threadId) ?? []) done(true);
         return;
       }
       if (event.type === "turn.completed" || event.type === "session.exited") {
         progress.delete(threadId);
+        for (const done of launches.get(threadId) ?? []) done(false);
         return;
       }
       const live = progress.get(threadId);

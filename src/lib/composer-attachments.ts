@@ -110,6 +110,30 @@ export class AttachmentTooLargeError extends Error {
   }
 }
 
+/** An upload refused before it is sent: the file has no bytes, which the server would refuse on every retry. */
+export class AttachmentEmptyError extends Error {
+  readonly status = 400;
+  readonly fileName: string;
+  constructor(fileName: string) {
+    super(`${fileName} is empty.`);
+    this.fileName = fileName;
+  }
+}
+
+/** A file turned away before it was sent (too large or empty): its own plain sentence says why. */
+/** Statuses the server answers when it refuses these bytes for good (damaged, the wrong type, too large). */
+const TURNED_AWAY = new Set([400, 413, 415, 422]);
+
+/** The upload can never succeed as it is, so its tile goes and the notice says why, rather than a Retry that cannot work. */
+export function uploadTurnedAway(error: unknown): boolean {
+  const status = typeof error === "object" && error !== null && "status" in error ? error.status : undefined;
+  return typeof status === "number" && TURNED_AWAY.has(status);
+}
+
+export function refusedBeforeUpload(error: unknown): error is AttachmentTooLargeError | AttachmentEmptyError {
+  return error instanceof AttachmentTooLargeError || error instanceof AttachmentEmptyError;
+}
+
 export function fileAttachment(name: string, path: string, size: number): FileAttachment {
   return { kind: "file", id: newId(), path, name, size };
 }
@@ -172,9 +196,12 @@ const DOCUMENT_MIMES: Readonly<Record<string, string>> = {
   odt: "application/vnd.oasis.opendocument.text",
   ods: "application/vnd.oasis.opendocument.spreadsheet",
   odp: "application/vnd.oasis.opendocument.presentation",
+  zip: "application/zip",
 };
 
 const ACCEPTED_DOCUMENT_MIMES = new Set(Object.values(DOCUMENT_MIMES));
+/** Windows names a zip this; the server stores it as application/zip. */
+const ZIP_ALIASES = new Set(["application/x-zip-compressed", "application/x-zip"]);
 
 const AUDIO_MIMES_BY_EXTENSION: Readonly<Record<string, string>> = {
   opus: "audio/opus",
@@ -191,9 +218,44 @@ const ACCEPTED_AUDIO_MIMES = new Set([
   "audio/x-m4a", "audio/x-wav", "audio/wave", "audio/x-flac",
 ]);
 
+const VIDEO_MIMES_BY_EXTENSION: Readonly<Record<string, string>> = { mp4: "video/mp4", m4v: "video/mp4", mov: "video/quicktime" };
+const ACCEPTED_VIDEO_MIMES = new Set(["video/mp4", "video/quicktime", "video/webm"]);
+/** iPhone photos; the server turns them into a JPEG for an AI that sees pictures. */
+const HEIC_MIMES_BY_EXTENSION: Readonly<Record<string, string>> = { heic: "image/heic", heif: "image/heif" };
+
+/** Code, config and logs: sent as plain text under their own name. */
+const TEXT_EXTENSIONS: ReadonlySet<string> = new Set([
+  "py", "sh", "bash", "zsh", "fish", "ps1", "js", "mjs", "cjs", "ts", "tsx", "jsx", "rb", "go", "rs", "java", "kt", "swift",
+  "c", "h", "cpp", "cc", "hpp", "cs", "php", "pl", "lua", "r", "sql", "yaml", "yml", "toml", "ini", "log", "xml", "html", "htm",
+  "css", "scss", "less", "vue", "svelte", "conf", "cfg", "properties", "gradle", "proto", "graphql", "gql", "dart", "scala",
+  "tf", "hcl", "ex", "exs", "hs", "zig", "env", "gitignore", "dockerignore", "editorconfig", "diff", "patch", "srt", "vtt",
+]);
+const TEXT_NAMES = /^(?:dockerfile|containerfile|makefile|procfile|gemfile|rakefile|vagrantfile|brewfile|justfile|license|readme|changelog|notice|authors|codeowners)$/i;
+const TEXT_DECLARED = new Set(["application/xml", "application/javascript", "application/x-javascript", "application/x-sh", "application/x-yaml", "application/yaml", "application/toml", "application/sql", "application/x-python-code"]);
+
+/** text/plain for a code, config or log file, by its declared type or its name; null for anything else. */
+export function textFileMime(file: Pick<File, "name" | "type">): string | null {
+  const declared = file.type.split(";", 1)[0]!.trim().toLowerCase();
+  const name = file.name.trim();
+  const dot = name.lastIndexOf(".");
+  const extension = dot >= 0 ? name.slice(dot + 1).toLowerCase() : "";
+  if (declared.startsWith("text/") || TEXT_DECLARED.has(declared) || TEXT_EXTENSIONS.has(extension)) return "text/plain";
+  return dot < 0 && TEXT_NAMES.test(name) ? "text/plain" : null;
+}
+
+/** A video or HEIC photo the composer uploads as a file. */
+function mediaFileMime(file: Pick<File, "name" | "type">): string | null {
+  const declared = file.type.split(";", 1)[0]!.trim().toLowerCase();
+  const extension = file.name.split(".").at(-1)?.toLowerCase() ?? "";
+  if (ACCEPTED_VIDEO_MIMES.has(declared)) return declared;
+  if (declared === "image/heic" || declared === "image/heif") return declared;
+  return VIDEO_MIMES_BY_EXTENSION[extension] ?? HEIC_MIMES_BY_EXTENSION[extension] ?? null;
+}
+
 export function documentMime(file: Pick<File, "name" | "type">): string | null {
   const declared = file.type.split(";", 1)[0]!.trim().toLowerCase();
   if (ACCEPTED_DOCUMENT_MIMES.has(declared)) return declared;
+  if (ZIP_ALIASES.has(declared)) return "application/zip";
   const extension = file.name.split(".").at(-1)?.toLowerCase() ?? "";
   return DOCUMENT_MIMES[extension] ?? null;
 }
@@ -310,6 +372,7 @@ function canonicalImageName(originalName: string, path: string, mime: string): s
 
 export function optimisticImageAttachment(file: File): ImageAttachment | null {
   if (!isImageFile(file)) return null;
+  if (file.size === 0) throw new AttachmentEmptyError(file.name);
   if (file.size > IMAGE_MAX_BYTES) throw new AttachmentTooLargeError(file.name, IMAGE_MAX_BYTES);
   const mime = file.type.split(";", 1)[0]!.trim().toLowerCase();
   const previewUrl = typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : undefined;
@@ -325,6 +388,23 @@ export function optimisticImageAttachment(file: File): ImageAttachment | null {
   };
 }
 
+/** Bytes that claim to be a picture but no browser can draw (cut short, or another file renamed): turned away before
+ * upload, from every way in (picker, paste, drop, a phone's share), so none lands in the chat as an empty block. */
+export async function refuseUndrawableImage(file: Blob): Promise<void> {
+  // the server imports this module without the DOM's types
+  const decode = (globalThis as { createImageBitmap?: (blob: Blob) => Promise<{ width: number; height: number; close?: () => void }> }).createImageBitmap;
+  if (typeof decode !== "function") return;
+  let bitmap: { width: number; height: number; close?: () => void };
+  try {
+    bitmap = await decode(file);
+  } catch {
+    throw Object.assign(new Error("the picture is damaged"), { status: 400 });
+  }
+  const empty = !bitmap.width || !bitmap.height;
+  bitmap.close?.();
+  if (empty) throw Object.assign(new Error("the picture is damaged"), { status: 400 });
+}
+
 export async function imageAttachmentFromFile(
   file: File,
   optimistic?: Pick<ImageAttachment, "id" | "previewUrl">,
@@ -332,6 +412,7 @@ export async function imageAttachmentFromFile(
 ): Promise<ImageAttachment | null> {
   if (!isImageFile(file)) return null;
   if (file.size > IMAGE_MAX_BYTES) throw new AttachmentTooLargeError(file.name, IMAGE_MAX_BYTES);
+  await refuseUndrawableImage(file);
   const bytes = new Uint8Array(await file.arrayBuffer());
   const uploadId = newUploadId();
   const saved = await uploadWithRetry<{ path: string; mime: string; bytes: number; media?: MediaSize }>(
@@ -360,8 +441,9 @@ function uploadableFileMime(file: Pick<File, "name" | "type" | "size">): string 
   const extension = file.name.split(".").at(-1)?.toLowerCase() ?? "";
   const mime = documentMime(file) ??
     (ACCEPTED_AUDIO_MIMES.has(declared) ? declared : AUDIO_MIMES_BY_EXTENSION[extension]) ??
-    (imageSentAsFile(file) ? declared : undefined);
+    (imageSentAsFile(file) ? declared : undefined) ?? mediaFileMime(file) ?? textFileMime(file);
   if (!mime) return null;
+  if (file.size === 0) throw new AttachmentEmptyError(file.name);
   if (file.size > FILE_MAX_BYTES) {
     throw new AttachmentTooLargeError(file.name, FILE_MAX_BYTES);
   }
@@ -375,11 +457,12 @@ export function pendingFileAttachment(file: Pick<File, "name" | "type" | "size">
 }
 
 /** Copied into the private store so the companion route never sees an arbitrary Finder path. */
-export async function fileAttachmentFromFile(file: File, transfer?: UploadTransfer & { id?: string }): Promise<FileAttachment | null> {
+export async function fileAttachmentFromFile(file: File, transfer?: UploadTransfer & { id?: string }): Promise<FileAttachment | ImageAttachment | null> {
   const mime = uploadableFileMime(file);
   if (!mime) return null;
+  if (isImageFile({ type: mime })) await refuseUndrawableImage(file);
   const uploadId = newUploadId();
-  const saved = await uploadWithRetry<{ path: string; name: string; bytes: number }>(
+  const saved = await uploadWithRetry<{ path: string; name: string; bytes: number; mime?: string }>(
     `/api/files?name=${encodeURIComponent(file.name)}&uploadId=${encodeURIComponent(uploadId)}`,
     {
       method: "POST",
@@ -388,6 +471,10 @@ export async function fileAttachmentFromFile(file: File, transfer?: UploadTransf
     },
     transfer,
   );
+  // an iPhone (HEIC) photo the server turned into a JPEG comes back as a picture
+  if (saved.mime && isImageFile({ type: saved.mime }) && !isImageFile({ type: mime })) {
+    return { kind: "image", id: transfer?.id ?? newId(), path: saved.path, name: saved.name || file.name, size: saved.bytes, mime: saved.mime };
+  }
   const attachment = fileAttachment(saved.name || file.name, saved.path, saved.bytes);
   return transfer?.id ? { ...attachment, id: transfer.id } : attachment;
 }
@@ -400,10 +487,17 @@ export function pasteAttachment(text: string): PasteAttachment {
 /** Under the server's 1,000,000-byte JSON body limit for a sent message, counted as the paste is encoded in it. */
 export const PASTE_INLINE_MAX_BYTES = 900_000;
 
+export const PASTED_TEXT_FILE = "pasted-text.txt";
+
 /** The text file a paste too large to send inline is uploaded as; null for a paste that stays inline. */
 export function pastedTextFile(text: string): File | null {
   const inline = byteLength(text) <= PASTE_INLINE_MAX_BYTES && byteLength(JSON.stringify(text)) <= PASTE_INLINE_MAX_BYTES;
-  return inline ? null : new File([text], "pasted-text.txt", { type: "text/plain" });
+  return inline ? null : new File([text], PASTED_TEXT_FILE, { type: "text/plain" });
+}
+
+/** The attachment already holding this pasted text, inline or uploaded as its text file. */
+export function attachedPaste(attachments: readonly Attachment[], pasted: string): Attachment | undefined {
+  return attachments.find((a) => a.kind === "paste" ? a.text === pasted : a.kind === "file" && a.name === PASTED_TEXT_FILE && a.size === byteLength(pasted));
 }
 
 export function appendPastedText(text: string, pasted: string): string {
@@ -469,6 +563,7 @@ export function formatSize(bytes: number): string {
 export function composeMessage(text: string, attachments: Attachment[]): string {
   const parts = [text.trim()];
   attachments.forEach((a, i) => {
+    if (attachmentUnsent(a)) return;
     if (a.kind === "paste") {
       parts.push(`<pasted-text index="${i + 1}">\n${a.text}\n</pasted-text>`);
     } else if (a.kind === "image") {

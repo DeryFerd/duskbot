@@ -278,6 +278,12 @@ describe("container images", () => {
     expect(engines?.args).toContain("${ENGINES_CACHE_TAG");
   });
 
+  it("names the compose server after its domain, so phones and pairing links keep one name across updates", () => {
+    const service = parse(readFileSync(new URL("../deploy/docker-compose.yml", import.meta.url), "utf8")).services.dusk;
+    // without it the name is the container id, which changes on every pull and up
+    expect(service.environment.DUSK_ENVIRONMENT_LABEL).toBe("${DUSK_LABEL:-${DOMAIN}}");
+  });
+
   it("publishes the image compose pulls: the server target, both CPUs, in the namespace the repository's token pushes to", () => {
     const service = parse(readFileSync(new URL("../deploy/docker-compose.yml", import.meta.url), "utf8")).services.dusk;
     expect(service.image).toBe("${DUSK_IMAGE:-ghcr.io/duskbotai/duskbot:latest}");

@@ -103,7 +103,7 @@ await import(${JSON.stringify(pathToFileURL(join(SERVER_DIR, "testing", "fake-cl
 
   const cloudPort = await freePortBlock([0, 1]);
   const cloudBase = `http://127.0.0.1:${cloudPort}`;
-  await start("cloud", { DUSK_CLOUD_ROLE: "home", DUSK_CLOUD_MACHINE_ID: "7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f", DUSK_CLOUD_ADMIN_URL: "https://cloud.example.test",
+  await start("cloud", { DUSK_BOT_BOX: "0", DUSK_CLOUD_ROLE: "home", DUSK_CLOUD_MACHINE_ID: "7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f", DUSK_CLOUD_ADMIN_URL: "https://cloud.example.test",
     DUSK_CLOUD_BOOTSTRAP_SECRET: secret, DUSK_PUBLIC_URL: `https://${CLOUD_HOST}` }, cloudPort);
   const mintCode = async (label: string) => {
     const body = JSON.stringify({ label, ttlSeconds: 300 });

@@ -8,6 +8,7 @@ import { classifyTurn } from "./turn-route.ts";
 import { derivedLabel } from "./harness/derived-status.ts";
 import type { RuntimeEvent } from "./contracts.ts";
 import { redactSecretsInText } from "./redact.ts";
+import { botVoice } from "./character.ts";
 
 export type BeatKind = "ack" | "plan" | "milestone";
 
@@ -21,13 +22,18 @@ export const ACK_IDLE_MS = 4_000;
 export const RETRY_BUSY_MS = 700;
 const BUSY = /\b(?:429|50[234])\b|rate.?limit|too many requests|overloaded|auth_unavailable/i;
 /** The second message is written from here, once a tool has run, and goes out from PLAN_MIN_MS: only a job that runs
- * past half a minute gets one, so a quick task reads as an ack and its result. */
+ * past half a minute gets one, so a quick task reads as an ack and its result. A writer that took longer than that gap
+ * last time (Claude's one-off call starts a whole CLI) is asked sooner, never before PLAN_EARLIEST_WRITE_MS. */
 export const PLAN_WRITE_MS = 26_000;
 export const PLAN_MIN_MS = 30_000;
+export const PLAN_EARLIEST_WRITE_MS = 15_000;
+const WRITE_MARGIN_MS = 2_000;
 /** A milestone after this long without any message from the bot, while tools keep running. */
 export const MILESTONE_QUIET_MS = 150_000;
 export const MAX_MILESTONES = 3;
-const WRITE_TIMEOUT_MS = 12_000;
+/** Room for a writer that starts a process per call (Claude's CLI on a busy Windows PC); a late line still has to pass
+ * every check before it goes out. */
+const WRITE_TIMEOUT_MS = 20_000;
 const TICK_MS = 250;
 const UNSTARTED_MS = 60_000;
 const SOUL_CHARS = 1_200;
@@ -38,6 +44,8 @@ const STEP_CHARS = 90;
 const SAID_CHARS = 300;
 const MAX_SAID_BEFORE_PLAN = 2;
 const MAX_WORDS = { ack: 26, plan: 55, milestone: 45 } as const;
+/** The ack is asked to be just "On it" or "One sec" (or one word in some languages). */
+const MIN_WORDS = { ack: 1, plan: 3, milestone: 3 } as const;
 
 export type BeatWriter = (prompt: string, options: { signal: AbortSignal; timeoutMs: number }) => Promise<string>;
 
@@ -46,7 +54,7 @@ export interface TurnBeatsDeps {
   /** The small one-off text call of the engine running this thread, or null when it has none. */
   writer(botId: string, threadId: string): BeatWriter | null;
   /** `apps`: the connected apps this bot may use, by name; absent when unknown. */
-  bot(botId: string): { name: string; soul?: string; apps?: readonly string[] } | null | undefined;
+  bot(botId: string): { name: string; soul?: string; title?: string; description?: string; apps?: readonly string[] } | null | undefined;
   /** False for an engine that may show no thinking before its first tool: its ack goes out at ACK_IDLE_MS anyway. */
   showsThinking?(threadId: string): boolean;
   /** Whether this turn is still the one the thread runs. */
@@ -125,9 +133,10 @@ export function looksLikeWork(text: string, attachments: number): boolean {
   return classifyTurn({ text, attachments, priorTurnUsedTools: false }) === "complex" || SETUP_ASK.test(text) || MAKE_ASK.test(text) || SETUP_ASK_PT_ES.test(text);
 }
 
-function personaLines(bot: { name: string; soul?: string }): string {
+function personaLines(bot: { name: string; soul?: string; title?: string; description?: string }): string {
   const soul = (bot.soul ?? "").replace(/\s+/g, " ").trim().slice(0, SOUL_CHARS);
-  return soul ? `About ${bot.name}, in its own setup: ${soul}` : `${bot.name} texts like a smart, funny friend: quick, plain words.`;
+  if (soul) return `About ${bot.name}, in its own setup: ${soul}`;
+  return botVoice(bot) === "work" ? `${bot.name} is a work bot and texts like a sharp colleague: quick, exact, plain words.` : `${bot.name} texts like a smart, funny friend: quick, plain words.`;
 }
 
 const SHARED_RULES = (name: string) => [
@@ -140,7 +149,7 @@ const SHARED_RULES = (name: string) => [
   "Reply with the message only.",
 ].join("\n");
 
-export function beatPrompt(kind: BeatKind, input: { name: string; soul?: string; apps?: readonly string[]; ask: string; steps: string[]; said: string[]; minutes?: number }): string {
+export function beatPrompt(kind: BeatKind, input: { name: string; soul?: string; title?: string; description?: string; apps?: readonly string[]; ask: string; steps: string[]; said: string[]; minutes?: number }): string {
   const ask = input.ask.slice(0, ASK_CHARS);
   const steps = input.steps.slice(-10).map((step) => `- ${step}`).join("\n") || "- (none yet)";
   const said = input.said.map((line) => `- ${line}`).join("\n");
@@ -201,7 +210,7 @@ export function cleanBeatLine(kind: BeatKind, reply: string): { text: string; as
   if (!text || /\bSKIP\b/.test(text) || text.includes("```") || text.split("\n").filter((line) => line.trim()).length > 2) return null;
   text = redactSecretsInText(text.replace(/\s+/g, " ")).replace(/\s*!+/g, ".").replace(/\.\.+$/, ".");
   const words = text.split(" ").length;
-  if (words < 3 || words > MAX_WORDS[kind] || /\?\s*$/.test(text) !== asks || ABOUT_ITSELF.test(text)) return null;
+  if (words < MIN_WORDS[kind] || words > MAX_WORDS[kind] || /\?\s*$/.test(text) !== asks || ABOUT_ITSELF.test(text)) return null;
   return { text, asks };
 }
 
@@ -215,10 +224,21 @@ export function createTurnBeats(deps: TurnBeatsDeps) {
   const now = deps.now ?? Date.now;
   const watches = new Map<string, Watch>();
   const notes = new Map<string, string[]>();
+  /** How long each bot's writer took last, so a slow one is asked for the second message sooner. */
+  const writeMs = new Map<string, number>();
+  const planWriteAt = (botId: string) =>
+    Math.max(PLAN_EARLIEST_WRITE_MS, Math.min(PLAN_WRITE_MS, PLAN_MIN_MS - (writeMs.get(botId) ?? 0) - WRITE_MARGIN_MS));
 
   const end = (watch: Watch) => {
     clearInterval(watch.timer);
-    for (const beat of [watch.ack, watch.plan, watch.milestone]) beat.abort?.abort();
+    for (const [kind, beat] of [["ack", watch.ack], ["plan", watch.plan], ["milestone", watch.milestone]] as const) {
+      // the turn got there first: nothing failed, the line is just no longer needed
+      if (beat.phase === "writing" || beat.phase === "ready") {
+        beat.phase = "dropped";
+        deps.log?.(`turn beats: the ${kind} for ${watch.threadId} was let go, the turn ended first`);
+      }
+      beat.abort?.abort();
+    }
     if (watches.get(watch.threadId) === watch) watches.delete(watch.threadId);
     if (watch.posted.length) notes.set(watch.threadId, [...(notes.get(watch.threadId) ?? []), ...watch.posted].slice(-6));
   };
@@ -234,8 +254,9 @@ export function createTurnBeats(deps: TurnBeatsDeps) {
     beat.phase = "writing";
     beat.abort = new AbortController();
     const steps = kind === "milestone" ? watch.steps.slice(watch.stepsAtLastWord) : watch.steps;
-    const prompt = beatPrompt(kind, { name: bot.name, soul: bot.soul, apps: bot.apps, ask: watch.ask, steps, said: watch.said.slice(-4), minutes: Math.round((now() - watch.startedAt) / 60_000) });
+    const prompt = beatPrompt(kind, { name: bot.name, soul: bot.soul, title: bot.title, description: bot.description, apps: bot.apps, ask: watch.ask, steps, said: watch.said.slice(-4), minutes: Math.round((now() - watch.startedAt) / 60_000) });
     const signal = beat.abort.signal;
+    const askedAt = now();
     const once = () => writer(prompt, { signal, timeoutMs: WRITE_TIMEOUT_MS });
     // a busy model answers 429 or a 5xx "overloaded" at the busiest moment, the turn's start: one more try after a short pause
     const written = once().catch(async (error: unknown) => {
@@ -245,6 +266,7 @@ export function createTurnBeats(deps: TurnBeatsDeps) {
       return once();
     });
     void written.then((reply) => {
+      writeMs.set(watch.botId, now() - askedAt);
       if (beat.phase !== "writing") return;
       const line = cleanBeatLine(kind, reply);
       // the writer never sees the chat before this message, so a question back to a go-ahead is always one already answered
@@ -259,6 +281,7 @@ export function createTurnBeats(deps: TurnBeatsDeps) {
       tick(watch);
     }, (error: unknown) => {
       if (beat.phase !== "writing") return;
+      writeMs.set(watch.botId, now() - askedAt);
       beat.phase = "dropped";
       deps.log?.(`turn beats: the ${kind} for ${watch.threadId} was not written (${error instanceof Error ? error.message.slice(0, 160) : "unknown"})`);
     });
@@ -306,7 +329,7 @@ export function createTurnBeats(deps: TurnBeatsDeps) {
     const spokenBefore = watch.posted.length + watch.engineMessages;
     // After an ack, whoever sent it; the writer skips it when what was said already tells them what they will get.
     const planWanted = spokenBefore >= 1 && spokenBefore <= MAX_SAID_BEFORE_PLAN;
-    if (plan.phase === "idle" && elapsed >= PLAN_WRITE_MS && watch.tools > 0 && planWanted && !composing(watch)) write(watch, "plan", plan);
+    if (plan.phase === "idle" && elapsed >= planWriteAt(watch.botId) && watch.tools > 0 && planWanted && !composing(watch)) write(watch, "plan", plan);
     if (plan.phase === "ready") {
       if (!planWanted) plan.phase = "dropped";
       else if (elapsed >= PLAN_MIN_MS && !watch.waiting && !composing(watch)) post(watch, "plan", plan);

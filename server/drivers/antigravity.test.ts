@@ -7,6 +7,7 @@ import * as tar from "tar";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DATA_DIR, ensureDirs } from "../config.ts";
+import { boxEnvironment } from "../bot-box/env.ts";
 import { TurnNotStartedError, type ProviderInstance } from "../contracts.ts";
 import { recordEvents, type EventRecorder } from "../testing/events.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
@@ -37,12 +38,15 @@ import {
   resolveAntigravityReleaseAsset,
   type AntigravityReleaseAsset,
 } from "./antigravity-release.ts";
-import { installAntigravityRuntime, resolveAntigravityRuntime } from "./antigravity-runtime.ts";
+import { installAntigravityRuntime, resolveAntigravityRuntime, setAntigravityVersionProbe } from "./antigravity-runtime.ts";
 import * as antigravityTemp from "./antigravity-temp.ts";
 import { VERIFICATION_TEMP_KEY, antigravityTempDir, sweepAntigravityTemp } from "./antigravity-temp.ts";
 import {
+  ANTIGRAVITY_INELIGIBLE_ACCOUNT,
+  ANTIGRAVITY_INTERNAL_ERROR,
   ANTIGRAVITY_SLASH_COMMANDS,
   AntigravityDriver,
+  antigravityAccountIneligible,
   STATIC_ANTIGRAVITY_MODELS,
   antigravityPermissionMode,
   neutralizeAntigravitySlashCommands,
@@ -589,8 +593,12 @@ describe("official Antigravity runtime", () => {
     const officialExecutable = join(fake.directory, process.platform === "win32" ? "agy.exe" : "antigravity");
     copyFileSync(fake.executable, officialExecutable);
     if (process.platform !== "win32") chmodSync(officialExecutable, 0o755);
-    const runtime = await resolveAntigravityRuntime(legacyPath, { PATH: fake.directory }, fake.directory);
-    expect(runtime).toMatchObject({ executablePath: officialExecutable, source: "path" });
+    // the fake is a node script, which Windows cannot start as agy.exe, so its version is answered there
+    if (process.platform === "win32") setAntigravityVersionProbe(async () => null);
+    try {
+      const runtime = await resolveAntigravityRuntime(legacyPath, { PATH: fake.directory }, fake.directory);
+      expect(runtime).toMatchObject({ executablePath: officialExecutable, source: "path" });
+    } finally { setAntigravityVersionProbe(null); }
   });
 
   it("explains the official setup when a legacy CLI has no replacement installed", async () => {
@@ -773,6 +781,7 @@ describe("official Antigravity runtime", () => {
         ANTIGRAVITY_CONVERSATION_ID: "other-app-conv",
         ANTIGRAVITY_APP_DATA_DIR: "/tmp/other-app",
         AGY_ACCOUNT: "other-account",
+        AGY_CLI_FORCE_FILE_TOKEN_STORAGE: "0",
         JETSKI_PROXY_SOCKET: "/tmp/other-jetski.sock",
       },
     });
@@ -788,6 +797,8 @@ describe("official Antigravity runtime", () => {
     expect(first.environment.AGY_ACCOUNT).toBeUndefined();
     expect(first.environment.JETSKI_PROXY_SOCKET).toBeUndefined();
     expect(first.environment.GEMINI_HOME).toBe(first.directory);
+    expect(first.environment.AGY_CLI_FORCE_FILE_TOKEN_STORAGE).toBe("1");
+    expect(boxEnvironment(first.environment).AGY_CLI_FORCE_FILE_TOKEN_STORAGE).toBe("1");
     expect(first.environment.AGY_CLI_DISABLE_AUTO_UPDATE).toBe("1");
     expect(first.environment.SSH_CONNECTION).toBe("127.0.0.1 0 127.0.0.1 0");
     expect(first.environment.ANTIGRAVITY_HARNESS_PATH).toBeUndefined();
@@ -1012,6 +1023,7 @@ describe("Antigravity driver over shared ACP", () => {
     const dumpState = JSON.parse(readFileSync(dump, "utf8"));
     expect(dumpState.argv).toEqual(antigravityAcpArgs(antigravityProfileDirectory(instanceId)));
     expect(dumpState.env.GEMINI_HOME).toBe(antigravityProfileDirectory(instanceId));
+    expect(dumpState.env.AGY_CLI_FORCE_FILE_TOKEN_STORAGE).toBe("1");
     expect(dumpState.env.AGY_CLI_DISABLE_AUTO_UPDATE).toBe("1");
     expect(dumpState.env.SSH_CONNECTION).toBe("127.0.0.1 0 127.0.0.1 0");
     expect(dumpState.env.GEMINI_API_KEY).toBeUndefined();
@@ -1153,6 +1165,108 @@ describe("Antigravity driver over shared ACP", () => {
       ["model", "gemini-3.8-flash-low"],
       ["mode", "auto_edit"],
     ]);
+  });
+
+  it("tells the person when Google won't let the signed-in account use Antigravity", () => {
+    for (const text of [
+      "Internal error: failed to get user's project: INELIGIBLE_ACCOUNT (session/new)",
+      "Internal error: OnboardUser operation failed: UNSUPPORTED_LOCATION (session/prompt)",
+      "Internal error: RESTRICTED_AGE (session/new)",
+      "Please verify your account in your browser to continue: https://accounts.google.com/x",
+      "[Auth Error] Failed to select license g1-pro (Project: p): denied",
+    ]) expect(antigravityAccountIneligible(text)).toBe(true);
+    for (const text of [
+      "Internal error: failed to get user's project: dial tcp: lookup cloudcode-pa.googleapis.com: no such host (session/new)",
+      "Internal error: model not found (session/prompt)",
+    ]) expect(antigravityAccountIneligible(text)).toBe(false);
+  });
+
+  it("ends a turn on an ineligible Google account with one plain sentence naming the fix", async () => {
+    ensureDirs();
+    const fake = fakeRuntime();
+    const instanceId = "antigravity-ineligible";
+    const tokenDirectory = join(antigravityProfileDirectory(instanceId), "antigravity-acp");
+    mkdirSync(tokenDirectory, { recursive: true });
+    writeFileSync(join(tokenDirectory, "antigravity-oauth-token"), JSON.stringify({ token: { access_token: "ok" } }), { mode: 0o600 });
+    const failure = join(fake.directory, "failure.json");
+    writeFileSync(failure, JSON.stringify({ code: -32603, message: "Internal error", data: { details: "failed to get user's project: INELIGIBLE_ACCOUNT" } }));
+    instance = await AntigravityDriver.create({
+      instanceId,
+      displayName: "Antigravity",
+      environment: { FAKE_ACP_AUTH_METHOD: "oauth-personal", FAKE_ACP_MODES: "default", FAKE_ACP_RPC_FAILURE_FILE: failure },
+      enabled: true,
+      config: { cli: fake.executable, fullAuto: false },
+    });
+    recorder = recordEvents(instance.adapter);
+    const { turnId } = await instance.adapter.sendTurn({ threadId: "thread-ineligible", text: "hello", approvalMode: "ask", cwd: fake.directory });
+    const done = await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId);
+    expect(done).toMatchObject({ ok: false });
+    const error = recorder.events.find((event) => event.type === "runtime.error" && event.turnId === turnId);
+    expect(error).toMatchObject({ message: ANTIGRAVITY_INELIGIBLE_ACCOUNT });
+  });
+
+  describe("an internal error before anything reached the person", () => {
+    const signedIn = (instanceId: string) => {
+      const tokenDirectory = join(antigravityProfileDirectory(instanceId), "antigravity-acp");
+      mkdirSync(tokenDirectory, { recursive: true });
+      writeFileSync(join(tokenDirectory, "antigravity-oauth-token"), JSON.stringify({ token: { access_token: "ok" } }), { mode: 0o600 });
+    };
+    const runTurn = async (instanceId: string, environment: (directory: string) => Record<string, string>) => {
+      ensureDirs();
+      const fake = fakeRuntime();
+      signedIn(instanceId);
+      const requests = join(fake.directory, "requests.jsonl");
+      instance = await AntigravityDriver.create({
+        instanceId,
+        displayName: "Antigravity",
+        environment: { FAKE_ACP_AUTH_METHOD: "oauth-personal", FAKE_ACP_MODES: "default", FAKE_ACP_RPC_APPEND_FILE: requests, ...environment(fake.directory) },
+        enabled: true,
+        config: { cli: fake.executable, fullAuto: false },
+      });
+      recorder = recordEvents(instance.adapter);
+      const { turnId } = await instance.adapter.sendTurn({ threadId: `thread-${instanceId}`, text: "hello", approvalMode: "ask", cwd: fake.directory });
+      const done = await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId);
+      const prompts = readFileSync(requests, "utf8").split("\n").filter((line) => line.includes('"session/prompt"')).length;
+      return { done, prompts, events: recorder.events.filter((event) => event.turnId === turnId) };
+    };
+    const internal = (directory: string) => {
+      const failure = join(directory, "failure.json");
+      writeFileSync(failure, JSON.stringify({ code: -32603, message: "Internal error" }));
+      return failure;
+    };
+
+    it("runs the turn once more, unseen, when Antigravity answers -32603 once", async () => {
+      const { done, prompts, events } = await runTurn("antigravity-internal-once", (directory) => ({
+        FAKE_ACP_RPC_FAILURE_FILE: internal(directory), FAKE_ACP_FAIL_ONCE: join(directory, "failed-once"),
+      }));
+      expect(done).toMatchObject({ ok: true });
+      expect(prompts).toBe(2);
+      expect(events.filter((event) => event.type === "runtime.error")).toEqual([]);
+      expect(events.filter((event) => event.type === "turn.started")).toHaveLength(1);
+    });
+
+    it("runs the turn once more, unseen, when Antigravity ends a prompt with stop reason error and says nothing", async () => {
+      const { done, prompts, events } = await runTurn("antigravity-stop-error-once", (directory) => ({
+        FAKE_ACP_PROMPT_STOP_REASON: "error", FAKE_ACP_FAIL_ONCE: join(directory, "failed-once"),
+      }));
+      expect(done).toMatchObject({ ok: true });
+      expect(prompts).toBe(2);
+      expect(events.filter((event) => event.type === "runtime.error")).toEqual([]);
+    });
+
+    it("tries only once more, then says so in one plain sentence", async () => {
+      const { done, prompts, events } = await runTurn("antigravity-internal-always", (directory) => ({ FAKE_ACP_RPC_FAILURE_FILE: internal(directory) }));
+      expect(done).toMatchObject({ ok: false });
+      expect(prompts).toBe(2);
+      expect(events.filter((event) => event.type === "runtime.error")).toEqual([expect.objectContaining({ message: ANTIGRAVITY_INTERNAL_ERROR })]);
+    });
+
+    it("says the same plain sentence for a stop reason error that keeps coming back", async () => {
+      const { done, prompts, events } = await runTurn("antigravity-stop-error-always", () => ({ FAKE_ACP_PROMPT_STOP_REASON: "error" }));
+      expect(done).toMatchObject({ ok: false });
+      expect(prompts).toBe(2);
+      expect(events.filter((event) => event.type === "runtime.error")).toEqual([expect.objectContaining({ message: ANTIGRAVITY_INTERNAL_ERROR })]);
+    });
   });
 
   it("never starts a session on a model this account has not offered", async () => {
@@ -1429,6 +1543,7 @@ describe("Antigravity driver over shared ACP", () => {
   it("treats a legacy 1.4 acp_token.json without antigravity-oauth-token as signed out and clears it after --login", async () => {
     ensureDirs();
     const fake = fakeRuntime();
+    const dump = join(fake.directory, "dump-login.json");
     const instanceId = "antigravity-legacy-upgrade";
     const tokenDirectory = join(antigravityProfileDirectory(instanceId), "antigravity-acp");
     const legacyToken = join(tokenDirectory, "acp_token.json");
@@ -1438,7 +1553,7 @@ describe("Antigravity driver over shared ACP", () => {
     instance = await AntigravityDriver.create({
       instanceId,
       displayName: "Antigravity Upgrade",
-      environment: { FAKE_ACP_AUTH_METHOD: "oauth-personal", FAKE_ACP_MODELS: "gemini-3.8-flash" },
+      environment: { FAKE_ACP_AUTH_METHOD: "oauth-personal", FAKE_ACP_MODELS: "gemini-3.8-flash", FAKE_ACP_DUMP: dump },
       enabled: true,
       config: { cli: fake.executable, fullAuto: false },
     });
@@ -1449,6 +1564,7 @@ describe("Antigravity driver over shared ACP", () => {
     expect((await instance.snapshot()).authenticated).toBe(true);
     expect(existsSync(cliToken)).toBe(true);
     expect(existsSync(legacyToken)).toBe(false);
+    expect(JSON.parse(readFileSync(dump, "utf8")).env.AGY_CLI_FORCE_FILE_TOKEN_STORAGE).toBe("1");
   });
 
   it("stays in default mode on Antigravity CLI 1.5+ sessions that do not advertise yolo or auto_edit", async () => {
@@ -1750,5 +1866,79 @@ describe("Antigravity driver over shared ACP", () => {
     expect(oneShotPrompt).toContain("For / learn, I wrote learning_proposal.md");
     expect(oneShotPrompt).toContain("Also / custom-workflow and ~/learn");
     expect(oneShotPrompt).not.toContain("For /learn");
+  });
+});
+
+// Recorded from Antigravity CLI 1.5.13 (`agy acp`): the prompt answers end_turn while a timer or a background command it
+// waits on still runs; when that work ends, the agent wakes itself and its reply arrives with no prompt open.
+describe("Antigravity background waits", () => {
+  const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "..", "testing", "fixtures");
+  let instance: ProviderInstance | null = null;
+  let recorder: EventRecorder | null = null;
+
+  afterEach(async () => {
+    recorder?.stop();
+    await instance?.dispose();
+    instance = null;
+  });
+
+  const replay = async (fixture: string, instanceId: string) => {
+    ensureDirs();
+    const fake = fakeRuntime();
+    const dump = join(fake.directory, "dump.json");
+    const tokenDirectory = join(antigravityProfileDirectory(instanceId), "antigravity-acp");
+    mkdirSync(tokenDirectory, { recursive: true });
+    writeFileSync(join(tokenDirectory, "antigravity-oauth-token"), JSON.stringify({ token: { access_token: "ok" } }), { mode: 0o600 });
+    instance = await AntigravityDriver.create({
+      instanceId,
+      displayName: "Antigravity",
+      environment: {
+        FAKE_ACP_AUTH_METHOD: "oauth-personal",
+        FAKE_ACP_MODES: "default,accept-edits,auto,plan",
+        FAKE_ACP_REPLAY: join(FIXTURES, fixture),
+        FAKE_ACP_REPLAY_SPEED: "10",
+        FAKE_ACP_RPC_DUMP: `${dump}.rpc.json`,
+      },
+      enabled: true,
+      config: { cli: fake.executable, fullAuto: false },
+    });
+    recorder = recordEvents(instance.adapter);
+    const threadId = `thread-${instanceId}`;
+    const { turnId } = await instance.adapter.sendTurn({ threadId, text: "wait for it", approvalMode: "ask", cwd: fake.directory });
+    const said = () => recorder!.events
+      .filter((event) => event.turnId === turnId && event.type === "item.completed" && event.itemType === "assistant_text")
+      .map((event) => (event as { text: string }).text.trim());
+    return { turnId, threadId, said, rpc: () => JSON.parse(readFileSync(`${dump}.rpc.json`, "utf8")) as string[] };
+  };
+
+  it.each([
+    ["antigravity-1.5.13-schedule-wake.ndjson", "I have scheduled a one-shot timer for 30 seconds. Waiting for the notification.", "TIMER FIRED."],
+    ["antigravity-1.5.13-command-wake.ndjson", "I have started the background command and will wait for it to finish.", "DONE ready"],
+  ])("keeps the turn working through %s until the wake reply lands", async (fixture, before, after) => {
+    const { turnId, said } = await replay(fixture, fixture.replace(/\W+/gu, "-"));
+    // the first reply lands while the turn goes on waiting
+    await recorder!.until((event) => event.turnId === turnId && event.type === "item.completed" && event.itemType === "assistant_text");
+    expect(said()).toEqual([before]);
+    expect(recorder!.events.some((event) => event.turnId === turnId && event.type === "turn.completed")).toBe(false);
+    // the status line goes back to the work being waited on
+    const replied = recorder!.events.findIndex((event) => event.turnId === turnId && event.type === "item.completed" && event.itemType === "assistant_text");
+    expect(recorder!.events.slice(replied).some((event) => event.type === "turn.progress")).toBe(true);
+    const completed = await recorder!.until((event) => event.turnId === turnId && event.type === "turn.completed", 15_000);
+    expect(completed).toMatchObject({ ok: true, stopReason: null });
+    expect(said()).toEqual([before, after]);
+  });
+
+  it("ends the wait at once when the person stops it, and cancels Antigravity's timer", async () => {
+    const { turnId, threadId, said, rpc } = await replay("antigravity-1.5.13-schedule-cancel.ndjson", "antigravity-wait-stop");
+    await recorder!.until((event) => event.turnId === turnId && event.type === "item.completed" && event.itemType === "assistant_text");
+    expect(recorder!.events.some((event) => event.turnId === turnId && event.type === "turn.completed")).toBe(false);
+    const stoppedAt = Date.now();
+    await instance!.adapter.interruptTurn(threadId);
+    const completed = await recorder!.until((event) => event.turnId === turnId && event.type === "turn.completed", 3_000);
+    expect(Date.now() - stoppedAt).toBeLessThan(2_000);
+    expect(completed).toMatchObject({ ok: true, stopReason: "cancelled" });
+    // the turn ends as session/cancel is sent; the fake writes down what it received when that line reaches it
+    await vi.waitFor(() => expect(rpc()).toContain("session/cancel"), { timeout: 2_000, interval: 25 });
+    expect(said()).toEqual(["I have scheduled a one-shot timer to fire in 45 seconds. Standing by until it wakes me."]);
   });
 });

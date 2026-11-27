@@ -241,16 +241,18 @@ export interface InvoiceView {
 }
 export interface InvoicePage { invoices: InvoiceView[]; nextCursor: string | null }
 
-/** "unused" and "switching" come from the dashboard's cancel flow; the desktop app sends the first six */
-export const CANCEL_ANSWERS = ["feature", "price", "setup", "broken", "later", "other", "unused", "switching"] as const;
+/** the cancel flows ask price, unused, feature, switching, broken (technical problems) or skip (prefer not to say);
+ * setup, later and other come from older desktop apps and older rows */
+export const CANCEL_ANSWERS = ["feature", "price", "setup", "broken", "later", "other", "unused", "switching", "skip"] as const;
 export type CancelAnswer = (typeof CANCEL_ANSWERS)[number];
-/** what the cancel flow put in front of the person for their reason: the stay-on discount, a cheaper plan, ways to fix it, a box to say what's missing, or nothing */
-export const RETENTION_OFFERS = ["discount", "downgrade", "help", "note", "none"] as const;
+/** the one offer the cancel flow put in front of the person for their reason: the stay-on discount, a cheaper plan, ways
+ * to fix it or what their bots did, a box to say what's missing, what they'd lose, or nothing */
+export const RETENTION_OFFERS = ["discount", "downgrade", "help", "note", "losses", "none"] as const;
 export type RetentionOfferShown = (typeof RETENTION_OFFERS)[number];
 /** the desktop app's cancel sheet survey (electron/cloud-account.mjs cancelSurvey), as the dashboard sends it too; `outcome` is set by the service, never sent */
 export interface CancelSurvey { answer: CancelAnswer; expected?: string; improve?: string; offer?: RetentionOfferShown; outcome?: RetentionOutcome }
 
-/** the dashboard's cancel flow: the reason, the help offered for it, then the confirmation */
+/** the cancel flow: the reason, the one offer for it ("help"), then the confirmation */
 export const RETENTION_STEPS = ["reason", "help", "confirm"] as const;
 export type RetentionStep = (typeof RETENTION_STEPS)[number];
 /** what a step ended in: a step shown, a save (discount, a cheaper plan, help taken, kept as is) or the cancel */

@@ -1,7 +1,9 @@
 // Full-app regression through the existing disposable browser harness. No
 // real provider, OAuth account, MCP package, or user data is used.
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { resolveAgentBrowserBinary } from "../../server/browser-engine.ts";
@@ -91,9 +93,10 @@ describe("bot setup and tools in the real renderer", () => {
     expect(await creatingDisabled()).toBe(true);
     await press("Enter");
     expect(await evaluate("window.botCreateRequests")).toBe(1);
+    // Escape waits while the bot is being made; the dialog leaves once it exists, the way it arrived (a 120 ms fade)
     await press("Escape");
-    // dialogs leave the way they arrive, a 120 ms fade
-    await expect.poll(dialogCount, { timeout: 2_000 }).toBe(0);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(await dialogCount()).toBe(1);
     await evaluate("window.releaseBotCreation(); true");
     await expect.poll(async () => (await bots()).length, { timeout: 10_000 }).toBe(original.length + 1);
     expect(await evaluate("window.botCreateRequests")).toBe(1);
@@ -137,8 +140,13 @@ describe("bot setup and tools in the real renderer", () => {
     const textarea = Object.entries(pasted.refs as Record<string, { role: string; name: string }>)
       .find(([, entry]) => entry.role === "textbox" && entry.name === "Server link or setup command");
     expect(textarea).toBeDefined();
+    // the fixture exits at once until a marker file exists, then serves as a real MCP server: switching on tests it first
+    const markerDir = mkdtempSync(join(tmpdir(), "dusk-mcp-fixture-"));
+    const marker = join(markerDir, "ready");
+    const fakeServer = fileURLToPath(new URL("../../server/testing/fake-mcp-server.ts", import.meta.url));
     await ui("type", "--ref", `@${textarea![0]}`, "--text", JSON.stringify({ mcpServers: {
-      fixture: { command: process.execPath, args: ["-e", "process.exit(0)"] },
+      fixture: { command: process.execPath, args: ["--experimental-strip-types", "-e",
+        `require("node:fs").existsSync(${JSON.stringify(marker)}) ? import(${JSON.stringify(new URL(`file://${fakeServer}`).href)}) : process.exit(0)`] },
     } }));
     // the chat's composer has an Add of its own beside the form's
     const add = Object.entries(pasted.refs as Record<string, { role: string; name: string }>)
@@ -152,8 +160,10 @@ describe("bot setup and tools in the real renderer", () => {
     await expect.poll(registry, { timeout: 10_000 }).toMatchObject([{ name: "fixture", enabled: false }]);
     await expect.poll(() => evaluate("document.body.textContent.includes(\"Saved, but off: the test failed.\")"), { timeout: 20_000 }).toBe(true);
     await expect.poll(snapshot, { timeout: 10_000 }).toContain("Turn fixture on");
+    writeFileSync(marker, "");
     await click("Turn fixture on");
-    await expect.poll(registry, { timeout: 10_000 }).toMatchObject([{ name: "fixture", enabled: true }]);
+    await expect.poll(registry, { timeout: 20_000 }).toMatchObject([{ name: "fixture", enabled: true }]);
+    rmSync(markerDir, { recursive: true, force: true });
     // Escape leaves Connect Apps, which the link opened in place of the sheet; the switch it turned on let focus go
     const connectApps = () => evaluate("Boolean(document.querySelector('.ca-scrim'))");
     for (let round = 0; round < 3 && await connectApps(); round++) {

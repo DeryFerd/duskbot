@@ -208,7 +208,7 @@ it("R3 a consultation reaches a teammate without waiting and resumes the asker w
 
 it("R4 a one-way notice opens a notify child in the peer's own chat and never resumes the sender", () => scenario(async (f) => {
   const notice = "R4-NOTICE: own the release QA from here.";
-  f.script(f.owner.id, { key: "O0", match: ["R4-SEND"], gateFile: f.gate("r4-owner"), readyFile: f.ready("r4-owner"), reply: "O0: sent onward." });
+  f.script(f.owner.id, { key: "O0", match: ["R4-SEND"], gateFile: f.gate("r4-owner"), readyFile: f.ready("r4-owner"), reply: "O0: Peer has the notice." });
   f.script(f.peer.id, { key: "P1", match: ["R4-NOTICE"], reply: "R4-DONE: release QA owned." });
   const job = f.owner.activeTaskId;
   await f.say(f.owner.id, job, "R4-SEND: send the release QA to Peer one way.");

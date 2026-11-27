@@ -16,8 +16,9 @@ import { acpModelCatalog } from "./model-catalog.ts";
 import { DeviceAuthController, type DeviceSignIn } from "../device-auth.ts";
 import { deletePromptSplitReceipt, promptHalves, readPromptSplitReceipt, splitSessionPrompt, writePromptSplitReceipt } from "../prompt-split.ts";
 import type { PromptSplitReceipt } from "../prompt-split.ts";
-import { closedOrKilled, describeSpawnFailure, execCli, killCliTree, readOnlyBotFolders, spawnCli } from "../../procs.ts";
+import { closedOrKilled, describeSpawnFailure, killCliTree, readOnlyBotFolders, spawnCli } from "../../procs.ts";
 import { runAcpOneShot } from "./background-text.ts";
+import { observeBackground, waitForWake } from "./background-wait.ts";
 import { sanitizeAcpToolMessage } from "./tool-log.ts";
 import { createSystemHarnessStreamFilter, stripLeakedSystemHarnessMessages } from "../../../shared/system-message-guard.ts";
 import {
@@ -27,9 +28,9 @@ import {
 import { readSessionReport } from "./session-reports.ts";
 import { pickSessionModel, SessionModelControls, type AcpModelSelection } from "./session-model-controls.ts";
 import { acpVariantOption } from "./config-options.ts";
-import { advertisedVariant, coolFreeRung, FREE_POOL_LIMIT, FREE_PROBE_MS, FREE_PROBE_PROMPT, freeFailure, freeLadder, freeOneShot, probeFreeLadder, warmFreeModel, warmFreeRung, type FreeFailure, type FreeRung } from "./free-ladder.ts";
+import { advertisedVariant, coolFreeRung, FREE_POOL_LIMIT, FREE_PROBE_MS, FREE_PROBE_PROMPT, freeFailure, freeLadder, freeOneShot, freeRungLimited, nextFreeRung, probeFreeLadder, warmFreeModel, warmFreeRung, type FreeFailure, type FreeRung } from "./free-ladder.ts";
 import { trail } from "../../trail.ts";
-import { versionFromProbe } from "./version-probe.ts"; import { engineHomes } from "../../engine-homes/engine-homes.ts";
+import { probeCliVersion } from "./version-probe.ts"; import { QuietRetries, untouchedTurn } from "./quiet-retry.ts"; import { engineHomes } from "../../engine-homes/engine-homes.ts";
 
 import type {
   DriverCreateInput,
@@ -46,7 +47,6 @@ import type {
   ProviderErrorCode,
   RequestOutcome,
   TextGenerationOptions,
-  TurnImageInput,
 } from "../../contracts.ts";
 import { newEventId, newId, TurnNotStartedError } from "../../contracts.ts";
 import { conversationLanguage, serverLine } from "../../server-lines.ts";
@@ -61,7 +61,7 @@ import { commandSummary, toolDetailPreview } from "../../tool-summary.ts";
 import { acpToolEndEvents } from "./tool-items.ts";
 import { AcpHost } from "./host.ts";
 import { exitDetail } from "./exit-report.ts";
-import { availableCommandNames, endTurn, isAccountError, lookupResultArrived, skipSubscriptionAuthForLocalInject, trackRunningTool, type AccountErrorCode, type AcpAskFinish, type AcpConfig, type AcpSession, type AcpTurn } from "./turn-state.ts";
+import { availableCommandNames, endTurn, isAccountError, isHermesReasoningReplay, readAcpImageBlocks, lookupResultArrived, skipSubscriptionAuthForLocalInject, trackRunningTool, type AccountErrorCode, type AcpAskFinish, type AcpConfig, type AcpSession, type AcpTurn } from "./turn-state.ts";
 export { skipSubscriptionAuthForLocalInject, type AccountErrorCode, type AcpConfig };
 import { recoveryPromptFor } from "../../resume-recovery.ts";
 import { engineIdleMs, keepWarm, sessionIdlePolicy, stopIdleClose } from "../session-idle.ts";
@@ -139,6 +139,12 @@ export interface AcpSupport {
   /** The approval mode is applied per turn by configureSession, which must throw unless the runtime
    * confirms it; an approval change never respawns the process. */
   sessionScopedApproval?: boolean;
+  /** The prompt can end while work the agent waits on runs, the agent then waking itself (Antigravity 1.5): the turn waits. */
+  backgroundWakes?: boolean;
+  /** A turn the engine fails with JSON-RPC -32603 or a non-standard failing stop reason before any reply, step, tool
+   * or question reached the person runs once more on a new process, unseen; a second failure shows as usual. */
+  retryUntouchedFailureOnce?: boolean;
+  /** Plain words for a failure the shared engine wording does not know; undefined keeps the engine's text. */ describeFailure?(message: string): string | undefined;
   /** False when this engine cannot run memory upkeep's one-shot text call cleanly; oneShotFolder holds a one-shot's folder. */
   backgroundText?: false; oneShotFolder?(): Promise<string>;
   /** Mutate the child env in place. `instanceEnvironment` tells a key put there on purpose from one
@@ -264,12 +270,6 @@ const SHARED_SESSIONS_MAX = 6, SHARED_SESSIONS_LIFETIME = 12;
 const HEALTHY_CLOSE = new Set(["idle", "reset", "contract", "remount", "stop", "stopAll", "dispose", "approval-unconfirmed"]);
 /** ACP agents may compact their history silently; re-send the full prompt after this many bare turns. */
 const ACP_PROMPT_RE_ANCHOR_TURNS = 8;
-function isHermesReasoningReplay(chunk: string, streamed: string): boolean {
-  const reply = streamed.trim();
-  const replay = chunk.trim();
-  return reply !== "" && /^(?:> |-# )?💭/.test(replay) && replay.endsWith(reply)
-    && /\n\n[ \t]*$/.test(replay.slice(0, -reply.length));
-}
 
 let unkeyedToolSeq = 0;
 /** A synthetic id for a `tool_call` without `toolCallId`, paired FIFO with the first terminal update. */
@@ -279,14 +279,6 @@ function nextUnkeyedToolId(current: AcpTurn): string {
   return id;
 }
 const CLIENT_FILE_MAX_BYTES = 8 * 1024 * 1024;
-
-async function readAcpImageBlocks(images: readonly TurnImageInput[]) {
-  return Promise.all(images.map(async (image) => ({
-    type: "image" as const,
-    data: (await readFile(image.path)).toString("base64"),
-    mimeType: image.mime,
-  })));
-}
 
 function decodeAcpConfig(defaultCli: string) {
   return (raw: unknown): AcpConfig => {
@@ -375,6 +367,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
       }
       const active = new Map<string, Turn>();
       const sessions = new Map<string, AcpSession>();
+      const quietRetries = new QuietRetries();
       let lastCliVersion: string | undefined;
     // Retain every closing Qwen child until its tree is gone: closing drops the pool entry, not its native writer lease.
       const retiring = new Map<string, Set<ReturnType<typeof spawnCli>>>();
@@ -600,6 +593,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         current.state.settled = true;
         current.acknowledge();
         current.stopQuietWatch?.();
+        current.backgroundWait?.stop();
         if (current.interruptTimer) clearTimeout(current.interruptTimer);
         for (const finish of current.asks.values()) finish("cancel", "system");
         session.acp.failAll(new Error("turn settled"));
@@ -963,7 +957,9 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             }
           }
           // A call still running (its kind, file and diff so far) feeds the chat's status line.
-          for (const live of [acpToolProgress(u), acpToolOutput(u)]) if (live) emit({ ...base(threadId, current.turnId), ...live });
+          const progress = acpToolProgress(u);
+          for (const live of [progress, acpToolOutput(u)]) if (live) emit({ ...base(threadId, current.turnId), ...live });
+          if (support.backgroundWakes) observeBackground(current, u, progress);
         };
 
         const session: AcpSession = {
@@ -1027,7 +1023,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
       };
 
       // `freeTried`: the free models this turn already gave up on; `freeBy`: when the turn's free models together run out
-      // of time; `freeRungs`: the ladder the turn steps through
+      // of time, counted from the first prompt so a slow engine start never uses it up; `freeRungs`: the turn's ladder
       const sendTurn = async (turn: SendTurnInput, retryOf?: string, freeTried: readonly string[] = [], freeBy?: number, freeRungs?: readonly FreeRung[]) => {
         requireRunning();
         if (startupModelRefresh) await startupModelRefresh;
@@ -1217,6 +1213,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           lookupTools: new Set(),
           interruptTimer: null,
           stopQuietWatch: null,
+          backgroundCalls: new Map(), backgroundProgress: new Map(), backgroundWait: null,
           pushAssistantDelta: (delta) => harnessFilter.push(delta),
           flushAssistantText,
           receiveModelVariants,
@@ -1226,6 +1223,8 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           state.stopped = true;
           if (session.sessionId) {
             session.acp.send({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId: session.sessionId } });
+            // with no prompt open, Antigravity 1.5.13 still stops the timer or task the turn waits on
+            if (current.backgroundWait) return void settle(threadId, session, true, "cancelled");
             if (current.interruptTimer) clearTimeout(current.interruptTimer);
             current.interruptTimer = setTimeout(() => {
               state.cancelling = true;
@@ -1236,7 +1235,10 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             closeSession(threadId, "stop");
           }
         };
-        active.set(threadId, { stop: () => { state.stopped = true; closeSession(threadId, "stop"); }, interrupt, turnId, asks });
+        active.set(threadId, { stop: () => {
+          const waiting = current.backgroundWait;
+          state.stopped = true; closeSession(threadId, "stop"); if (waiting) settle(threadId, session, true, "cancelled");
+        }, interrupt, turnId, asks });
         if (retryOf === undefined) emit({ ...base(threadId, turnId), type: "turn.started" });
         session.current = current;
 
@@ -1245,15 +1247,26 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         const ladder = freeOrder
           ? freeRungs ?? freeLadder({ model: freeModel, ...(turn.variant ? { variant: turn.variant } : {}) }, freeOrder, catalog.models)
           : null;
-        // counted from the turn's start, engine start included: what the person waits for is the whole turn
-        const freeDeadline = freeBy ?? Date.now() + freeTurnMs();
-        const freeStartedAt = freeDeadline - freeTurnMs();
+        let freeDeadline = freeBy ?? Number.POSITIVE_INFINITY;
+        const freeStartedAt = freeBy === undefined ? Date.now() : freeBy - freeTurnMs();
         let freeAnsweredOnce = false;
         const freeAnswered = () => {
           if (!ladder || freeAnsweredOnce) return;
           freeAnsweredOnce = true;
           warmFreeRung({ model: freeModel, ...(variant ? { variant } : {}) });
           trail("free_model.answered", { model: freeModel, variant: variant ?? null, rung: freeTried.length + 1, ms: Date.now() - freeStartedAt });
+        };
+        const retriedQuietly = (why: string): boolean => {
+          if (!support.retryUntouchedFailureOnce || !untouchedTurn(current, asks, session.closing) || !quietRetries.take(turnId)) return false;
+          state.settled = true; session.current = null; active.delete(threadId); current.stopQuietWatch?.();
+          if (current.interruptTimer) clearTimeout(current.interruptTimer);
+          if (session.sessionId) session.acp.send({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId: session.sessionId } });
+          closeSession(threadId, "quiet-retry"); acknowledge(); trail("engine.quiet_retry", { engine: DRIVER_KIND, why });
+          void sendTurn({ ...turn, startupRecovery: undefined, sessionReset: undefined }, turnId, freeTried, freeBy, freeRungs).catch((error) => {
+            emit({ ...base(threadId, turnId), type: "runtime.error", message: error instanceof Error ? error.message : String(error) });
+            emit({ ...base(threadId, turnId), type: "turn.completed", ok: false, stopReason: "rpc_error", cost: null });
+          });
+          return true;
         };
         (async () => {
           let pendingSplitReceipt: { key: string; receipt: PromptSplitReceipt; previous: PromptSplitReceipt | null } | null = null;
@@ -1516,6 +1529,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             const promptIdleMs = promptIdleTimeoutMs();
             const quiet = startQuietWatch(threadId, session, current);
             const promptAt = Date.now();
+            if (!Number.isFinite(freeDeadline)) freeDeadline = promptAt + freeTurnMs();
             // one model never waits past the turn's free deadline, so a turn no free model answers ends inside it
             const replyMs = Math.max(0, Math.min(firstReplyMs(), freeDeadline - promptAt));
             // a free model that hangs before its first word, or whose request fails in OpenCode's log (busy, rate limited,
@@ -1601,8 +1615,10 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
               const said = typeof result?.error === "string" ? result.error : typeof result?.message === "string" ? result.message : String(reason ?? "");
               throw Object.assign(new Error(`${support.displayName}'s free model ${freeModel} stopped: ${said}`), { acpFirstReplyStall: true, acpFreeFailure: freeFailure(said) });
             }
-            if (reason === "end_turn") settle(threadId, session, true, null);
+            const settleEnded = () => settle(threadId, session, true, null);
+            if (reason === "end_turn") { if (!support.backgroundWakes || state.stopped || !waitForWake(current, (live) => emit({ ...base(threadId, turnId), ...live }), settleEnded)) settleEnded(); }
             else if (reason === "cancelled" || state.stopped) settle(threadId, session, true, "cancelled");
+            else if (reason !== "max_tokens" && reason !== "max_turn_requests" && reason !== "refusal" && retriedQuietly(`stop_${String(reason ?? "none").slice(0, 30)}`)) return;
             else {
               const errorMessage = typeof result?.error === "string" && result.error
                 ? result.error
@@ -1612,7 +1628,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
               emit({
                 ...base(threadId, turnId),
                 type: "runtime.error",
-                message: engineFailureMessage(support.displayName, errorMessage) ?? errorMessage,
+                message: engineFailureMessage(support.displayName, errorMessage) ?? support.describeFailure?.(errorMessage) ?? errorMessage,
               });
               settle(threadId, session, false, reason ?? "failed");
             }
@@ -1632,19 +1648,21 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
               closeSession(threadId, "prompt-stall");
               const tried = [...freeTried, freeModel];
               const failure: FreeFailure = (e as any)?.acpFreeFailure ?? freeFailure(freeError, { empty: (e as any)?.acpEmptyReply === true });
-              const limited = (e as any)?.acpFreeLimit === true || failure === "pool_limit";
-              coolFreeRung(freeModel, failure);
-              const next = !limited && tried.length < FREE_MODEL_ATTEMPTS && Date.now() < freeDeadline
-                ? ladder.find((rung) => !tried.includes(rung.model)) : undefined;
+              coolFreeRung(freeModel, (e as any)?.acpFreeLimit === true ? "pool_limit" : failure);
+              const limited = tried.some((model) => freeRungLimited(model));
+              const next = tried.length < FREE_MODEL_ATTEMPTS && Date.now() < freeDeadline ? nextFreeRung(ladder, tried) : undefined;
               const language = conversationLanguage(threadId);
               trail(next ? "free_model.switch" : "free_model.exhausted", {
                 from: freeModel, ...(next ? { to: next.model, variant: next.variant ?? null } : { tried }),
                 reason: failure, rung: tried.length, ms: Date.now() - freeStartedAt,
               });
               if (next) {
-                emit({ ...base(threadId, turnId), type: "runtime.notice", message: (e as any)?.acpEmptyReply === true
-                  ? serverLine(language, "server.freeModel.emptyNext")
-                  : serverLine(language, "server.freeModel.tryingNext", { seconds: Math.round(firstReplyMs() / 1000) }) });
+                // a refusal is over in a moment, so only a wait the person sat through gets a line
+                if (failure === "timeout" || failure === "empty") {
+                  emit({ ...base(threadId, turnId), type: "runtime.notice", message: (e as any)?.acpEmptyReply === true
+                    ? serverLine(language, "server.freeModel.emptyNext")
+                    : serverLine(language, "server.freeModel.tryingNext", { seconds: Math.round(firstReplyMs() / 1000) }) });
+                }
                 try {
                   await sendTurn({ ...turn, model: next.model, variant: next.variant, startupRecovery: undefined, sessionReset: undefined }, turnId, tried, freeDeadline, ladder);
                   return;
@@ -1696,10 +1714,11 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                   stopReason: state.stopped ? "cancelled" : "rpc_error", cost: null });
                 return;
               }
+              if ((e as any)?.code === -32603 && !needsAuth && !accountError && !denied && !approvalUnconfirmed && retriedQuietly("rpc_32603")) return;
               // After the person's Stop, a request the stop cut short is not an error.
               if (!state.stopped) emit({
                 ...base(threadId, turnId), type: "runtime.error",
-                message: (accountError ? support.describeAccountError?.(code, cliTurn.model) : undefined) ?? engineFailureMessage(support.displayName, message) ?? message,
+                message: (accountError ? support.describeAccountError?.(code, cliTurn.model) : undefined) ?? engineFailureMessage(support.displayName, message) ?? support.describeFailure?.(message) ?? message,
                 ...((failureCode(code ?? (e as any)?.data?.errorName) ?? rpcCode((e as any)?.code)) ? { errorCode: failureCode(code ?? (e as any)?.data?.errorName) ?? rpcCode((e as any)?.code) } : {}),
                 ...(needsAuth ? { setup: true } : {}), ...((e as any)?.acpPromptStall === true ? { stalled: true } : {}),
                 ...((e as any)?.acpUsageLimit === true || (code === "quota_or_region_restriction" && LIMIT_WORDS.test(message)) ? { limit: "engine" as const } : {}), // waited out, or the engine gave up: another AI can carry on
@@ -1729,26 +1748,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
       const probeSnapshot = async (): Promise<ProviderSnapshot> => {
         const env = childEnv();
         if (support.snapshot) return support.snapshot(env, config, instanceId);
-        const probe = await new Promise<{ version?: string; reason?: string }>((resolve) => {
-          const timeout = support.versionProbeTimeoutMs ?? 8000;
-          execCli(config.cli, ["--version"], { timeout, env }, (err, stdout, stderr) => {
-            if (err) {
-              const failure = err as NodeJS.ErrnoException & { killed?: boolean };
-              const reason = failure.code === "ENOENT"
-                ? `\`${config.cli}\` isn't installed, or isn't on this app's PATH. Install it for the user running dusk bot or use Set CLI, then check again.`
-                : failure.code === "EACCES" || failure.code === "EPERM"
-                  ? `\`${config.cli}\` isn't executable. Check its file permissions, then check again.`
-                  : failure.killed && failure.code == null
-                    ? `\`${config.cli}\` version check timed out after ${Math.round(timeout / 1000)} seconds. Try again in a moment.`
-                    : `\`${config.cli}\` version check failed. Run it with --version on the server to diagnose the installation, then check again.`;
-              // Do not echo arbitrary CLI output or its environment into Settings.
-              resolve({ reason });
-              return;
-            }
-            const version = versionFromProbe(stdout, stderr);
-            resolve(version ? { version } : { reason: `\`${config.cli}\` returned no version. Check the configured executable with --version, then try again.` });
-          });
-        });
+        const probe = await probeCliVersion(config.cli, env, support.versionProbeTimeoutMs ?? 8000);
         if (!probe.version) return { state: "unavailable", reason: probe.reason };
         return { state: "available", version: probe.version, authenticated: await support.isAuthenticated(env, config, instanceId) };
       };

@@ -834,6 +834,22 @@ describe("Chat MCP tool limit", () => {
     } finally { warn.mockRestore(); }
   });
 
+  it("keeps the shell and the whole browser on a Mac turn where this computer's driver would fill the limit", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const { session, names } = await mount({
+        localComputer: catalog(syntheticToolNames("screen", 56)),
+        browser: catalog(syntheticToolNames("agent_browser", 25)),
+        agents: catalog(syntheticToolNames("agent", 63)),
+        shell: catalog(["run_command", "find_files"]),
+      });
+      expect(names).toEqual(expect.arrayContaining(["shell_run_command", "shell_find_files"]));
+      expect(names.filter((name) => name.startsWith("browser_"))).toHaveLength(25);
+      expect(names).toEqual(expect.arrayContaining(syntheticToolNames("agents_agent", 63)));
+      expect(session.trimmed).toEqual([{ server: "computer", listed: 37, of: 56 }]);
+    } finally { warn.mockRestore(); }
+  });
+
   it("gives the agents server its whole list before a computer mounted ahead of it", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
@@ -1248,5 +1264,47 @@ describe("Chat MCP schema validation", () => {
     const long = await mountChatTools({ custom: { audit: f.server } }, f.controller.signal, false, undefined, 5_000);
     sessions.push(long);
     await expect(long.execute("audit_write", { value: "y" }, f.controller.signal)).resolves.toMatchObject({ ok: true, text: "recorded:y" });
+  });
+});
+
+describe("vm_exec on a turn with no Local VM or VPS desktop", () => {
+  const command = { type: "object", properties: { command: { type: "string" }, timeout_seconds: { type: "integer" } }, required: ["command"], additionalProperties: false };
+  const agentsBody = `if (message.method === "tools/list") { reply(message, {tools:[
+      {name:"vm_exec",inputSchema:${JSON.stringify(command)}},
+      {name:"use_tool",inputSchema:{type:"object",properties:{name:{type:"string"},arguments:{type:"object"}},required:["name"]}}]}); return; }
+    if (message.method === "tools/call") { reply(message, {content:[{type:"text",text:"You have no Local VM or VPS desktop in this turn."}],isError:true}); return; }`;
+  const shellBody = `if (message.method === "tools/list") { reply(message, {tools:[{name:"run_command",inputSchema:${JSON.stringify(command)}}]}); return; }
+    if (message.method === "tools/call") { reply(message, {content:[{type:"text",text:"exit code 0\\n--- stdout ---\\nran:" + message.params.arguments.command + ":" + (message.params.arguments.timeout_seconds ?? "default")}]}); return; }`;
+  const calls = (f: ReturnType<typeof fixture>) => f.read().calls.filter((call) => call.method === "tools/call");
+
+  it("runs the command on this computer's shell, under the shell's own approval, both as a direct and a use_tool call", async () => {
+    const agents = fixture(agentsBody); const shell = fixture(shellBody);
+    const session = await mountChatTools({ agents: agents.server, shell: { ...shell.server, insteadOfVm: true } }, agents.controller.signal);
+    sessions.push(session);
+    const direct = { command: "ls ~/Downloads", timeout_seconds: 120 };
+    const searched = { name: "vm_exec", arguments: { command: "git status" } };
+    session.validate("agents_vm_exec", direct);
+    session.validate("agents_use_tool", searched);
+    expect(session.view("agents_vm_exec", direct)).toMatchObject({ title: "shell_run_command", input: direct, ask: true });
+    expect(session.view("agents_use_tool", searched)).toMatchObject({ title: "shell_run_command", input: { command: "git status" }, ask: true });
+    const ran = await session.execute("agents_vm_exec", direct, new AbortController().signal);
+    expect(ran.ok).toBe(true);
+    expect(ran.text).toContain("ran:ls ~/Downloads:120");
+    expect(ran.text).toMatch(/^exit code 0\n[^]*\(No Local VM or VPS desktop in this turn, so this ran with shell_run_command/);
+    expect((await session.execute("agents_use_tool", searched, new AbortController().signal)).text).toContain("ran:git status:default");
+    expect(calls(shell).map((call) => call.params?.name)).toEqual(["run_command", "run_command"]);
+    expect(calls(agents)).toEqual([]);
+  });
+
+  it("leaves vm_exec to the agents server on a turn with a computer, and other use_tool calls alone", async () => {
+    const agents = fixture(agentsBody); const shell = fixture(shellBody);
+    const session = await mountChatTools({ agents: agents.server, shell: shell.server }, agents.controller.signal);
+    sessions.push(session);
+    expect(session.view("agents_vm_exec", { command: "ls" })).toMatchObject({ title: "agents_vm_exec", ask: false });
+    expect((await session.execute("agents_vm_exec", { command: "ls" }, new AbortController().signal)).ok).toBe(false);
+    const both = await mountChatTools({ agents: agents.server, shell: { ...shell.server, insteadOfVm: true } }, agents.controller.signal);
+    sessions.push(both);
+    expect(both.view("agents_use_tool", { name: "list_bots", arguments: {} })).toMatchObject({ title: "agents_use_tool", ask: false });
+    expect(calls(shell)).toEqual([]);
   });
 });

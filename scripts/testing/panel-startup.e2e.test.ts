@@ -6,7 +6,11 @@ import { closeBrowserSession } from "../../server/browser-engine.ts";
 import { agentBrowser, ensureUiBrowser, sessionEnv } from "./control-dusk-ui.ts";
 import { mountPreview } from "./preview-fixture.ts";
 
-it("paints the saved panel mascot with the first chat while engine and computer status remain pending", async () => {
+// a real Chrome needs the sandbox the renderer smoke job sets up (Ubuntu 24.04 blocks it elsewhere), so it runs there
+const enabled = process.env.DUSK_UI_E2E === "1";
+if (!enabled) console.log("skipping panel startup: set DUSK_UI_E2E=1 to run it in an isolated browser");
+
+it.skipIf(!enabled)("paints the saved panel mascot with the first chat while engine and computer status remain pending", async () => {
   const tools = await ensureUiBrowser();
   const fixture = await launchVerificationServer({}, undefined, undefined, { binaryPath: tools.binary, executablePath: tools.chrome ?? "" });
   const held = new Set<ServerResponse>();

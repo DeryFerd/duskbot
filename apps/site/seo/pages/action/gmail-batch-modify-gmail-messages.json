@@ -22,7 +22,7 @@
     "/integrations/gmail/fetch-emails"
   ],
   "og_line": "file the notices. keep the customer replies.",
-  "what": "**turn a pile of delivery notices into a clear inbox.** removing inbox archives a message. removing unread marks it read. work on individual messages, so a customer reply in the same conversation stays put.\n\nthe bot searches first and looks up custom labels by name. gmail's success response means it accepted the request. have the bot read back the saved labels to see which changes stuck.",
+  "what": "**turn a pile of delivery notices into a clear inbox.** removing inbox archives a message. removing unread marks it read. work on individual messages, so a customer reply in the same conversation stays put.\n\nthe bot searches first and looks up custom labels by name. gmail's success response means it accepted the request. have the bot read back the saved labels to see which changes stuck.\n\n**find the messages first.** this change needs message ids, so the bot runs a [search of your mail](/integrations/gmail/fetch-emails) before touching labels. one request covers up to 1,000 messages. for a single stray email, [moving it to trash](/integrations/gmail/move-to-trash) is the simpler tool.",
   "uses": [
     "archive delivery notices after the parcels arrive",
     "mark a chosen group of newsletters read",
@@ -60,7 +60,7 @@
       "a": "**tell it to ask before filing.** sending settings do not cover labels. read only blocks filing entirely."
     }
   ],
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -125,5 +125,9 @@
       "the saved labels show the filing worked"
     ]
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "140 messages from cedarline freight:\n139 delivery notices\n1 reply from bram about a damaged box",
+    "after": "139 notices archived and marked read.\nbram's reply left in the inbox, still unread.\nlabels read back afterwards to confirm the change."
+  }
 }

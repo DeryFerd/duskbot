@@ -12,7 +12,7 @@
     "ai compare busy calendars"
   ],
   "answer": "**find a room without reading everyone's meeting titles.** name the calendars, dates and time zone. the bot returns busy intervals, which you can compare before booking. use **find free slots** for calculated openings.\n\ndusk classes this query as a write. allow this action alone, or use **find free slots** to keep the bot read only.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,7 +45,7 @@
     "toolkit": "googlecalendar",
     "slug": "GOOGLECALENDAR_FREE_BUSY_QUERY"
   },
-  "what": "**busy times can answer the question without exposing the meeting.** this reads accessible calendars or groups within an exact window. it returns busy stretches and any access errors. it doesn't name appointments or calculate openings.\n\nname the calendars or let the bot list them first. it needs at least free-busy access to each one. ask it to explain the intervals here; use **find free slots** for calculated openings.",
+  "what": "**busy times can answer the question without exposing the meeting.** this reads accessible calendars or groups within an exact window. it returns busy stretches and any access errors. it doesn't name appointments or calculate openings.\n\nname the calendars or let the bot list them first. it needs at least free-busy access to each one. ask it to explain the intervals here; use **find free slots** for calculated openings.\n\npicked a slot? [create event](/integrations/google-calendar/create-event) books it. need titles as well? [list events from all calendars](/integrations/google-calendar/list-events-from-all-calendars) shows the meetings themselves.",
   "uses": [
     "**choose between workshop rooms.** compare two calendars without collecting their meeting subjects.",
     "**find an interview window.** compare the busy periods for the colleagues you name.",
@@ -112,6 +112,10 @@
       "fix": "state it in the request. the response otherwise uses utc."
     }
   ],
+  "worked": {
+    "before": "room a and room b calendars.\nthursday 08:00 to 18:00, berlin time.",
+    "after": "room a busy 09:00 to 12:30 and 14:00 to 15:00\nroom b busy 10:00 to 17:30\nno titles returned\nno errors, so both answers are complete"
+  },
   "checklist": {
     "h": "before you offer a time",
     "items": [

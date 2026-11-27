@@ -177,7 +177,7 @@ same rules hold on the desktop, a server and Cloud:
   again (and leave its `.config` file behind). On Linux the process table is
   read from `/proc`, so an image without `ps` works the same.
 - **Unused browsers close.** A browser nothing has used for
-  `browserEngine.idleTimeoutMinutes` in `config.json` (1 to 60; 10 when
+  `browserEngine.idleTimeoutMinutes` in `config.json` (1 to 60; 40 when
   unset, 3 on a dusk cloud home, whose 4 GB fits few browsers) is closed: no bot call (a tool listing counts, and so do a call
   waiting behind another, its page-health reads and recorded step, and
   fill_login's typing; a preview frame only holds off a close while it is

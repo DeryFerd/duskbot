@@ -1,6 +1,6 @@
 // builds the dusk.bot pages: wraps each page body in the shared layout, turns the legal pages (Markdown in the Dusk Bot
 // repo's docs/legal) into terms/, privacy/, cookies/, refunds/, acceptable-use/, subprocessors/, license/ and security/, the docs (pages/docs/*.md, see build-docs.mjs) into
-// docs/, pages/changelog.md into changelog/, and writes the sitemap, robots.txt, the manifest and the redirects. zero deps.
+// docs/, releases/changelog.json into changelog/, and writes the sitemap, robots.txt, the manifest and the redirects. zero deps.
 //   node apps/site/build-pages.mjs [path to the dusk bot checkout, default: this repo]
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import { DuskPixel, CROWD, COLOURS, bodyName, colourName } from './mascot-src/pixel/crowd.js';
 import { buildDocs } from './build-docs.mjs';
 import { buildSeo, seoFooter } from './seo/build-seo.mjs';
-import { writeSitemaps, robotsTxt } from './seo/sitemaps.mjs';
+import { writeSitemaps, robotsTxt, llmsTxt } from './seo/sitemaps.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const site = path.join(here, 'public', 'landing');
@@ -42,7 +42,7 @@ function inline(text) {
 
 export const slug = (text) => text.toLowerCase().replace(/<[^>]+>|&\w+;|`/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-// markdown for the legal drafts, the docs and the changelog. besides the usual: a fenced block becomes a copyable command,
+// markdown for the legal drafts and the docs. besides the usual: a fenced block becomes a copyable command,
 // a line that starts with < or {{ passes through as html (so a page can drop in a piece of the app or a macro), and
 // "> note:" / "> careful:" quotes become callouts
 export function markdown(md) {
@@ -129,11 +129,12 @@ const withChips = (html) => html.replace(/\{\{logo (\w+)( eager)?\}\}/g, (_, nam
 const withParts = (html) => html.replace(/\{\{include ([\w-]+)\}\}/g, (_, name) => {
   const file = path.join(here, 'pages', 'partials', `${name}.html`);
   if (!fs.existsSync(file)) return '';
-  // the live demo's script runs right after its markup, so the demo answers clicks the moment it shows, not after the page's
-  // other scripts (safari holds async scripts until deferred ones finish, so this one is a plain script)
+  // the live demo's script is deferred, so it never holds up the rest of the home page; it sits before the page's other
+  // deferred scripts, so it is still the first to run once the page is read (never async: safari holds async scripts
+  // until deferred ones finish)
   // {{stamp file}} in a partial is that file's stamped address
   const part = fs.readFileSync(file, 'utf8').replace(/\{\{stamp ([\w./-]+)\}\}/g, (_, f) => stamped(f));
-  return part + (name === 'home-window' && has('home-window.js') ? `<script src="${stamped('home-window.js')}"></script>` : '');
+  return part + (name === 'home-window' && has('home-window.js') ? `<script src="${stamped('home-window.js')}" defer></script>` : '');
 });
 const has = (file) => fs.existsSync(path.join(site, file));
 // the first-party analytics tracker (apps/dashboard/tracker/dusk.js in the Dusk Bot repo), served as /a.js; its beacons go to
@@ -208,7 +209,7 @@ const withLinks = (html) => html.replace(/\{\{app( \/[\w/?=&-]*)?\}\}/g, (_, res
 // what can be downloaded today. releases.json names the files; a release is out once publish-downloads.sh has put
 // releases/latest.json on the site (or releases.json says "released": true). DUSK_RELEASED=1 or 0 forces either state,
 // to look at the page both ways. {{#released}}…{{/released}} and {{^released}}…{{/released}} keep one of two pieces,
-// {{dl key}} is a file's address (a full https address in files is used as is, for a build that is a release ahead), {{size key}} is its size from releases.json's sizes, {{version}} and {{released-on}} describe the release
+// {{dl key}} is a file's address (a full https address in files is used as is, for a build that is a release ahead), {{size key}} is its size from releases.json's sizes, {{version}} and {{released-on}} describe the release, {{android-version}} is " · x.y.z" of the apk when latest.json names it
 const rel = JSON.parse(fs.readFileSync(path.join(here, 'releases.json'), 'utf8'));
 const latestFile = path.join(site, 'releases', 'latest.json');
 let latest = {};
@@ -220,13 +221,15 @@ export const release = {
   version: latest.version || rel.version || '',
   date: rel.date || '',
 };
+// the android app has its own version, which latest.json names once a release carries the apk
+release.androidVersion = /^\d+(\.\d+){1,3}$/.test(latest.android?.version || '') ? latest.android.version : '';
 release.sums = release.version && fs.existsSync(path.join(site, 'releases', release.version, 'SHA256SUMS')) ? `/releases/${release.version}/SHA256SUMS` : `${rel.base}${rel.checksums}`;
 const withRelease = (html) => {
   // pieces can sit inside each other, so this runs until nothing is left to decide
   for (let before; before !== html;) { before = html; html = html.replace(/\{\{([#^])([\w]+)\}\}((?:(?!\{\{[#^])[\s\S])*?)\{\{\/\2\}\}/g, (_, mark, key, inner) => (Boolean(release[key]) === (mark === '#') ? inner : '')); }
   return html.replace(/\{\{dl ([\w-]+)\}\}/g, (_, key) => { if (!rel.files[key]) throw new Error(`releases.json has no file ${key}`); return rel.files[key].startsWith('https://') ? rel.files[key] : rel.base + rel.files[key]; })
     .replace(/\{\{file ([\w-]+)\}\}/g, (_, key) => rel.files[key].split('/').pop()).replace(/\{\{(ios|android)-link\}\}/g, (_, key) => rel[key])
-    .replace(/\{\{size ([\w-]+)\}\}/g, (_, key) => (rel.sizes?.[key] ? `${Math.round(rel.sizes[key] / 1e6)} mb` : '')).replace(/\{\{version\}\}/g, release.version).replace(/\{\{released-on\}\}/g, release.date).replace(/\{\{sums\}\}/g, release.sums);
+    .replace(/\{\{size ([\w-]+)\}\}/g, (_, key) => (rel.sizes?.[key] ? `${Math.round(rel.sizes[key] / 1e6)} mb` : '')).replace(/\{\{android-version\}\}/g, release.androidVersion ? ` · ${release.androidVersion}` : '').replace(/\{\{version\}\}/g, release.version).replace(/\{\{released-on\}\}/g, release.date).replace(/\{\{sums\}\}/g, release.sums);
 };
 // {{crew}} on the brand page is the twenty pixel bots, kit first, each in its own colour with its name and a link to its svg
 const CREW = [...CROWD.filter(([name]) => name === 'kit'), ...CROWD.filter(([name]) => name !== 'kit')].map(([name, colour]) => [name, colour]);
@@ -279,7 +282,7 @@ export function layout({ title, description, body, page, at, section = page, og 
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(description)}">
-<meta name="theme-color" content="#ffffff">${noindex ? '\n<meta name="robots" content="noindex">' : `\n<link rel="canonical" href="${SITE_URL}${address === '/' ? '/' : address}">`}
+<meta name="theme-color" content="#ffffff">${noindex ? '\n<meta name="robots" content="noindex">' : `\n<meta name="robots" content="max-image-preview:large">\n<link rel="canonical" href="${SITE_URL}${address === '/' ? '/' : address}">`}
 <meta property="og:site_name" content="dusk bot">
 <meta property="og:type" content="${ogType}">
 <meta property="og:url" content="${SITE_URL}${address}">
@@ -336,10 +339,15 @@ const faqLd = (html) => {
   const qs = [...html.matchAll(/<details[^>]*><summary>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/g)].map((m) => ({ '@type': 'Question', name: text(m[1]), acceptedAnswer: { '@type': 'Answer', text: text(m[2]) } }));
   return qs.length ? [{ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: qs }] : [];
 };
-// who makes the site, on the home and about pages; sameAs lists only profiles the site itself links to
-const orgLd = { '@context': 'https://schema.org', '@type': 'Organization', name: 'dusk bot', url: `${SITE_URL}/`, logo: `${SITE_URL}/art/icon-512.png`, email: 'hello@dusk.bot' };
+// who makes the site, on the home and about pages, and the app itself on the home page. "dusk" alone is several other
+// brands, so both carry the exact name, its other spellings and the profiles that are dusk bot's own (sameAs: the code,
+// the x account, the product hunt listing); seo pages point at the same @id
+export const SAME_AS = ['https://github.com/DuskBotAI/duskbot', 'https://x.com/duskbot_hq', 'https://www.producthunt.com/products/dusk-bot'];
+export const ORG_ID = `${SITE_URL}/#organization`;
+const orgLd = { '@context': 'https://schema.org', '@type': 'Organization', '@id': ORG_ID, name: 'dusk bot', alternateName: ['duskbot', 'dusk.bot'], url: `${SITE_URL}/`, logo: `${SITE_URL}/art/icon-512.png`, email: 'hello@dusk.bot', sameAs: SAME_AS };
 const appLd = {
-  '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'dusk bot', url: `${SITE_URL}/`, image: `${SITE_URL}/art/og.jpg`,
+  '@context': 'https://schema.org', '@type': 'SoftwareApplication', '@id': `${SITE_URL}/#app`, name: 'dusk bot', alternateName: ['duskbot', 'dusk.bot'], url: `${SITE_URL}/`, image: `${SITE_URL}/art/og.jpg`,
+  publisher: { '@id': ORG_ID }, sameAs: SAME_AS, downloadUrl: `${SITE_URL}/download`,
   applicationCategory: 'ProductivityApplication', operatingSystem: 'macOS, Windows, Linux',
   description: 'A desktop app where you run a team of AI bots and message them like teammates. It runs on your computer, your own server or a dusk cloud computer, on the AI accounts you already have.',
   offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
@@ -361,6 +369,8 @@ for (const page of pages) {
   }
   const at = page.name === 'home' ? '/' : page.name === '404' ? '/404.html' : `/${page.name}`;
   const jsonld = page.name === 'home' ? [appLd, orgLd, ...faqLd(macros(body))] : page.name === 'about' ? [orgLd, ...faqLd(macros(body))] : faqLd(macros(body));
+  // once downloads are open the waitlist is gone and its address goes to /download
+  if (release.released && page.name === 'waitlist') { fs.rmSync(path.join(site, 'waitlist'), { recursive: true, force: true }); continue; }
   // the waitlist never carries the site's bar or footer, wherever it is served
   // the phone app's link pages (/m/...) are for one person's phone, never for search
   const noindex = page.noindex === true || page.name === '404';
@@ -368,17 +378,31 @@ for (const page of pages) {
   write(at, page.name === 'waitlist' ? soloWaitlist(html) : html, { index: !noindex });
 }
 
-// the changelog is one markdown file: a "## version · date" heading per release, newest first, then a list
+// the changelog is releases/changelog.json (written at release time, newest first): per release its version, date, an
+// optional title, and its items grouped by where they apply. a missing or empty file shows the empty state
 {
-  const md = fs.readFileSync(path.join(here, 'pages', 'changelog.md'), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
-  const entries = md.split(/^## /m).slice(1).map((chunk) => {
-    const [head, ...rest] = chunk.split('\n');
-    const [version, date = ''] = head.split('·').map((s) => s.trim());
-    return `<article class="rel" id="v${slug(version)}"><header><h2>${esc(version)}</h2>${date ? `<time datetime="${esc(date)}">${esc(new Date(`${date}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).toLowerCase())}</time>` : ''}</header><div class="prose">${markdown(rest.join('\n').replace(/^### /gm, '#### '))}</div></article>`;
+  let log = {};
+  try { log = JSON.parse(fs.readFileSync(path.join(site, 'releases', 'changelog.json'), 'utf8')); } catch {}
+  const AREAS = [['all', 'everywhere'], ['desktop', 'desktop app'], ['phone', 'phone app'], ['server', 'your own server'], ['cli', 'command line']];
+  const GH = 'https://github.com/DuskBotAI/duskbot';
+  const num = (n) => Number.isInteger(n) && n > 0;
+  const day = (date) => { const d = new Date(`${date}T12:00:00Z`); return /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).toLowerCase() : ''; };
+  const releases = (Array.isArray(log.releases) ? log.releases : []).filter((r) => typeof r?.version === 'string' && /^[\w.-]+$/.test(r.version));
+  const entries = releases.map((r, i) => {
+    const items = (Array.isArray(r.items) ? r.items : []).filter((it) => typeof it?.text === 'string' && it.text.trim());
+    const groups = AREAS.map(([area, label]) => [label, items.filter((it) => (AREAS.some(([a]) => a === it.area) ? it.area : 'all') === area)]).filter(([, list]) => list.length);
+    const refs = (it) => [num(it.issue) && `<a href="${GH}/issues/${it.issue}">#${it.issue}</a>`, num(it.pr) && `<a href="${GH}/pull/${it.pr}">#${it.pr}</a>`].filter(Boolean).join(' ');
+    const lists = groups.map(([label, list]) => `<h4>${label}</h4><ul>${list.map((it) => `<li>${esc(it.text.trim())}${refs(it) ? ` ${refs(it)}` : ''}</li>`).join('')}</ul>`).join('');
+    const date = typeof r.date === 'string' ? day(r.date) : '';
+    // only the newest is what the download page hands out
+    const get = `<p class="rel-get">get it: ${i === 0 ? '<a href="/download">download page</a> · ' : ''}<a href="${GH}/releases/tag/v${esc(r.version)}">github release</a></p>`;
+    return `<article class="rel" id="v${slug(r.version)}"><header><h2>${esc(r.version)}</h2>${date ? `<time datetime="${esc(r.date)}">${date}</time>` : ''}</header><div class="prose">${typeof r.title === 'string' && r.title.trim() ? `<p class="rel-title">${esc(r.title.trim())}</p>` : ''}${lists}${get}</div></article>`;
   });
   const shell = withStrips(fs.readFileSync(path.join(here, 'pages', 'partials', 'changelog-shell.html'), 'utf8'));
   const body = shell.replace('{{entries}}', entries.join('\n')).replace(/\{\{([#^])entries\}\}([\s\S]*?)\{\{\/entries\}\}/g, (_, mark, inner) => ((entries.length > 0) === (mark === '#') ? inner : ''));
-  write('/changelog', layout({ title: "what's new / dusk bot", description: 'Every dusk bot release, newest first: what changed and what got fixed.', page: 'changelog', kind: 'p-changelog', body }));
+  // with no release yet the page is only its empty state, which search engines file as a soft 404
+  const listed = entries.length > 0;
+  write('/changelog', layout({ title: "what's new / dusk bot", description: 'Every dusk bot release, newest first: what changed and what got fixed.', page: 'changelog', kind: 'p-changelog', body, noindex: !listed }), { index: listed });
 }
 
 // the legal pages, each with a list of its sections beside it
@@ -393,8 +417,10 @@ const LEGAL_ABOUT = {
   'acceptable-use': 'What you may not use dusk bot, its bots or dusk cloud desktops for, and what happens when someone does.',
   subprocessors: 'The outside services that process data for dusk bot, what each one does, and where.',
   license: 'The dusk bot license: free for personal use, what needs a work license, and the notices that come with the code.',
-  security: 'How to report a security problem in dusk bot, what is in scope, and what to expect from us.',
+  security: 'Found a security issue in dusk bot? Email security@dusk.bot. What is in scope, what to include, when we reply (3 business days) and whether there is a bug bounty.',
 };
+// a search title where people look for the page by its task rather than its name
+const LEGAL_TITLE = { security: 'report a security vulnerability in dusk bot / security policy' };
 const licenseSummary = `<section class="lic-sum" aria-label="the license in short">
 <p class="lic-lead">dusk bot's code is free for personal, non-commercial use. commercial use is not allowed without a separate written license from us.</p>
 <dl>
@@ -415,7 +441,7 @@ for (const [name, title] of legal) {
   if (name === 'license') html = licenseSummary + html + licenseText(own(fs.readFileSync(path.join(repo, 'LICENSE'), 'utf8')));
   const toc = [...html.matchAll(/<h2 id="([^"]+)">([\s\S]*?)<\/h2>/g)].map((m) => `<li><a href="#${m[1]}">${m[2]}</a></li>`).join('');
   const others = legal.map(([n, , s]) => `<a href="/${n}"${n === name ? ' aria-current="page"' : ''}>${s}</a>`).join('');
-  write(`/${name}`, layout({ title: `${title.toLowerCase()} / dusk bot`, description: LEGAL_ABOUT[name], page: name, section: 'legal', og: 'legal', kind: 'p-legal',
+  write(`/${name}`, layout({ title: LEGAL_TITLE[name] || `${title.toLowerCase()} / dusk bot`, description: LEGAL_ABOUT[name], page: name, section: 'legal', og: 'legal', kind: 'p-legal',
     body: `<header class="phead wrap"><h1>${title.toLowerCase()}</h1></header>
 ${strip('layers', 'circle blue, hex orange', 'short')}
 <div class="legal-wrap wrap">
@@ -433,12 +459,18 @@ for (const [name, colour] of CREW) fs.writeFileSync(path.join(bots_, `${name}.sv
 fs.writeFileSync(path.join(bots_, 'kit-white.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="400" height="400" shape-rendering="crispEdges">${pixelBot('kit').replace('fill="#fff" d', 'fill="#212121" d').replace('currentColor', '#fff')}</svg>\n`);
 
 const docs = buildDocs({ here, site, markdown, layout, macros, strip, slug, text, write, esc, icon });
-const seo = buildSeo({ site, markdown, layout, macros, text, write, esc, icon, bot, SITE_URL, release, waitlistHome: WAITLIST_HOME });
+const seo = buildSeo({ site, markdown, layout, macros, text, write, esc, icon, bot, SITE_URL, release, waitlistHome: WAITLIST_HOME, sameAs: SAME_AS });
 
 // the rest of what a site answers: where robots may go, every page, the installable-app manifest, and the short addresses
 fs.writeFileSync(path.join(site, 'robots.txt'), robotsTxt(SITE_URL));
 // the sitemap index, one sitemap for the core pages, one for the hubs and one per seo cohort, each with real lastmod dates
 writeSitemaps({ site, SITE_URL, built, cohorts: seo.cohorts, persist: !WAITLIST_HOME });
+// the main pages, docs and guides for ai assistants, with each page's own title and description
+const unesc = (s) => s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+fs.writeFileSync(path.join(site, 'llms.txt'), llmsTxt(SITE_URL, built.filter((b) => b.index && (b.group === 'core' || b.group === 'hubs')).map((b) => {
+  const html = fs.readFileSync(b.address === '/' ? path.join(site, 'index.html') : path.join(site, b.address, 'index.html'), 'utf8');
+  return { ...b, title: unesc(/<title>([^<]*)<\/title>/.exec(html)?.[1] || b.address), description: unesc(/<meta name="description" content="([^"]*)"/.exec(html)?.[1] || '') };
+})));
 // the indexnow key, at the site root where search engines look for it (seo/jobs/indexnow.mjs uses it)
 const indexNowKey = fs.readFileSync(path.join(here, 'seo', 'indexnow-key.txt'), 'utf8').trim();
 for (const f of fs.readdirSync(site)) if (/^[0-9a-f]{32}\.txt$/.test(f) && f !== `${indexNowKey}.txt`) fs.rmSync(path.join(site, f));
@@ -452,6 +484,7 @@ fs.writeFileSync(path.join(site, 'site.webmanifest'), JSON.stringify({
 // server.js reads this: short and old addresses, each sent on to the page that answers it
 const redirects = { ...JSON.parse(fs.readFileSync(path.join(here, 'redirects.json'), 'utf8')), ...seo.redirects };
 // with the waitlist at home, its own address and everything that pointed at it go home
+if (release.released && !WAITLIST_HOME) redirects['/waitlist'] = '/download';
 if (WAITLIST_HOME) { fs.rmSync(path.join(site, 'waitlist'), { recursive: true, force: true }); for (const [k, v] of Object.entries(redirects)) if (v.split('#')[0] === '/waitlist') redirects[k] = '/'; redirects['/waitlist'] = '/'; }
 for (const [from, to] of Object.entries(redirects)) {
   const target = to.split('#')[0];

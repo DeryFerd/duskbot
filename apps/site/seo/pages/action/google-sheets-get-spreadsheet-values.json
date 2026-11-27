@@ -12,7 +12,7 @@
     "claude retrieve spreadsheet values"
   ],
   "answer": "**get the figures for your decision without digging through the workbook.** name the file, tab and cells. the bot can read displayed figures, raw calculated values or formulas from that range. dusk labels this lookup as a write, so allow read and write and limit the bot to this retrieval action.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,11 +45,12 @@
     "toolkit": "googlesheets",
     "slug": "GOOGLESHEETS_VALUES_GET"
   },
-  "what": "**get the number, or find out how the sheet got it.** choose what your question needs. paste the sheet link and name the tab and cells, such as 'cost review, a1 to d12'.\n\n- displayed values are the default, including currency and date formatting\n- raw calculated values suit arithmetic\n- formulas show how the sheet gets its answer\n\nfor dates, choose readable dates or raw numbers.",
+  "what": "**get the number, or find out how the sheet got it.** choose what your question needs. paste the sheet link and name the tab and cells, such as 'cost review, a1 to d12'.\n\n- displayed values are the default, including currency and date formatting\n- raw calculated values suit arithmetic\n- formulas show how the sheet gets its answer\n\nfor dates, choose readable dates or raw numbers.\n\nlost the link? [search spreadsheets](/integrations/google-sheets/search-spreadsheets) finds the file. spotted a wrong figure? [update spreadsheet values](/integrations/google-sheets/update-spreadsheet-values) fixes it as its own change.",
   "uses": [
     "read a quoted price table without editing its source",
     "explain formulas in a small costing range",
-    "compare a monthly summary without bringing in the whole workbook"
+    "compare a monthly summary without bringing in the whole workbook",
+    "read a long sign-up tab in row chunks when one request would be too large"
   ],
   "routine": {
     "message": "every tuesday at 14:05, read a1:d12 on the cost review tab in the linked lunecrest print sheet. use raw calculated values to compare paper and binding costs. name the range beside the result here. show blanks separately from zero. never update cells or reorder rows. ask before reading beyond that range.",
@@ -109,8 +110,16 @@
     {
       "mistake": "doing arithmetic on displayed currency text",
       "fix": "ask for raw calculated values first."
+    },
+    {
+      "mistake": "reading a huge tab in one go",
+      "fix": "ask for rows in chunks, such as 1 to 500 then 501 to 1000. one giant read can fail."
     }
   ],
+  "worked": {
+    "before": "cost review!b2:b6 shows \"£1,200\" as formatted text.\nyou want a total.",
+    "after": "raw values: 1200, 450, blank, 980, 310\nthe blank listed on its own\ntotal of the four filled cells: 2940"
+  },
   "tip": {
     "text": "include the column headings. 180 means little until you know what it pays for."
   },

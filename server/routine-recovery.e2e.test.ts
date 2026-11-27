@@ -12,7 +12,6 @@ import { readHandoffs } from "./testing/handoff-rows.ts";
 import { hostTimeout } from "./testing/host-timeout.ts";
 import { openSse, type SseRecorder } from "./testing/sse.ts";
 
-const STALLED = "No activity for 20 minutes: the routine was stopped";
 const SIGN_IN = "This bot's AI is signed out. Sign in again in Settings → Models.";
 const ROUTINE_HEADER = '[Routine "Inbox brief", do this now:]';
 
@@ -79,7 +78,7 @@ async function server(env: NodeJS.ProcessEnv = {}) {
   return { url, dataDir, logPath, api, bot, engine, dump, engineHas, engineAnnounced, routine, runs, run, runNow, notified, prompts };
 }
 
-it("never starts a routine again that the turn watchdog stopped as stalled: it fails at once, and its owner hears once", async () => {
+it("starts a routine the turn watchdog stopped as stalled once more, quietly, and it completes", async () => {
   const s = await server({ DUSK_TEST_STALL_CLOCK: "1" });
   s.engine("hang");
   const { id } = await s.runNow((await s.routine()).id);
@@ -89,14 +88,12 @@ it("never starts a routine again that the turn watchdog stopped as stalled: it f
   await s.engineAnnounced(threadId, 1);
   writeFileSync(join(s.dataDir, "stall-turns"), "");
 
-  await expect.poll(async () => (await s.run(id))?.status, { timeout: hostTimeout(30_000) }).toBe("failed");
-  const failed = await s.run(id);
-  expect(failed).toMatchObject({ error: STALLED });
-  expect(failed.retried).toBeUndefined();
-  await expect.poll(() => s.notified().filter((notification) => notification.kind === "routine-failed"), { timeout: hostTimeout(15_000) })
-    .toEqual([expect.objectContaining({ title: "Inbox bot's routine failed", body: `Inbox brief: ${STALLED}` })]);
-  expect((await s.prompts(threadId)).filter((text) => text.includes(ROUTINE_HEADER))).toHaveLength(1);
-}, hostTimeout(120_000));
+  await expect.poll(async () => (await s.run(id))?.retried, { timeout: hostTimeout(30_000) }).toBe("stalled");
+  s.engine("happy");
+  await expect.poll(async () => (await s.run(id))?.status, { timeout: hostTimeout(60_000) }).toBe("completed");
+  expect(s.notified().filter((notification) => notification.kind === "routine-failed")).toEqual([]);
+  expect((await s.prompts(threadId)).filter((text) => text.includes(ROUTINE_HEADER))).toHaveLength(2);
+}, hostTimeout(150_000));
 
 it("fails a routine that crashed before doing anything at once, says so once, and never starts it again on the same AI", async () => {
   const s = await server();

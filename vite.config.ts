@@ -77,6 +77,8 @@ const include = [
   "apps/dashboard/server/**/*.test.ts",
   "apps/dashboard/tracker/**/*.test.ts",
   "apps/dashboard/src/admin/**/*.test.ts",
+  // the dashboard's pages and pieces in a happy-dom page
+  "apps/dashboard/src/**/*.dom.test.ts",
   "apps/cloud-service/**/*.test.ts",
   "server/**/*.test.ts",
   "electron/**/*.test.mjs",

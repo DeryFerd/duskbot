@@ -12,9 +12,16 @@
 
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { isAbsolute } from "node:path";
+import { isAbsolute, posix } from "node:path";
 
 export const SETUP_COMMAND = "sudo duskbot browser setup";
+
+/** sudo runs with its own secure_path, which seldom holds a user's duskbot (~/.local/bin, npx, nvm): name node and the CLI by
+ * their paths so the command works as printed. */
+export function sudoCommand(args: string, execPath = process.execPath, script: string | undefined = process.argv[1]): string {
+  const word = (value: string) => /^[\w@%+=:,./-]+$/u.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
+  return script ? `sudo ${word(execPath)} ${word(posix.resolve(script))} ${args}` : `sudo duskbot ${args}`;
+}
 
 /** What Chrome prints before aborting when it cannot sandbox itself. */
 export const NO_SANDBOX_SIGNATURE = "No usable sandbox";
@@ -121,6 +128,8 @@ export interface HostSetupDeps {
   loadProfile(path: string): Promise<void>;
   log(line: string): void;
   error(line: string): void;
+  /** How this command is run again as root, when `duskbot` is not on sudo's PATH. */
+  setupCommand?: string;
 }
 
 /** `sudo duskbot browser setup`: what the host needs for the browser, the command the browser's own errors name. */
@@ -129,8 +138,9 @@ export async function setUpBrowserHost(deps: HostSetupDeps): Promise<number> {
     deps.log("nothing to set up on this host; run `duskbot browser install` to get the browser");
     return 0;
   }
+  const setup = deps.setupCommand ?? SETUP_COMMAND;
   if (!deps.isRoot()) {
-    deps.error(`this installs system libraries and an AppArmor profile, so it needs root: run \`${SETUP_COMMAND}\``);
+    deps.error(`this installs system libraries and an AppArmor profile, so it needs root: run \`${setup}\``);
     return 1;
   }
   const installed = await deps.installLibraries();
@@ -140,7 +150,7 @@ export async function setUpBrowserHost(deps: HostSetupDeps): Promise<number> {
     return 0;
   }
   if (!deps.exists(SYSTEM_CHROME)) {
-    deps.error(`this host (Ubuntu 23.10+) only lets a browser sandbox itself with an AppArmor profile, and that profile can only name Google Chrome at ${SYSTEM_CHROME}. Install Google Chrome's .deb, then run \`${SETUP_COMMAND}\` again.`);
+    deps.error(`this host (Ubuntu 23.10+) only lets a browser sandbox itself with an AppArmor profile, and that profile can only name Google Chrome at ${SYSTEM_CHROME}. Install Google Chrome's .deb, then run \`${setup}\` again.`);
     return 1;
   }
   try {
@@ -155,7 +165,7 @@ export async function setUpBrowserHost(deps: HostSetupDeps): Promise<number> {
 }
 
 /** `duskbot browser setup` on this machine: its real root check, files and apparmor_parser. */
-export function setUpThisHost(installLibraries: () => Promise<number>, io: Pick<HostSetupDeps, "log" | "error">): Promise<number> {
+export function setUpThisHost(installLibraries: () => Promise<number>, io: Pick<HostSetupDeps, "log" | "error" | "setupCommand">): Promise<number> {
   return setUpBrowserHost({
     platform: process.platform,
     isRoot: () => process.getuid?.() === 0,
@@ -168,5 +178,6 @@ export function setUpThisHost(installLibraries: () => Promise<number>, io: Pick<
     }),
     log: io.log,
     error: io.error,
+    ...(io.setupCommand ? { setupCommand: io.setupCommand } : {}),
   });
 }

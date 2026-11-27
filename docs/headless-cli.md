@@ -8,7 +8,7 @@ agents: every command can print one JSON document, and the exit code says how
 things went.
 
 ```sh
-npm install -g duskbot            # or use npx duskbot …
+npm install --global --prefix "$HOME/.local" https://github.com/DuskBotAI/duskbot-releases/releases/latest/download/duskbot.tgz   # not on the npm registry
 duskbot serve --no-pair &         # a workspace with no screen (or use your desktop app)
 duskbot engine set claude --key-env ANTHROPIC_API_KEY
 duskbot team apply launch-room.yaml
@@ -83,6 +83,7 @@ one of its conversations.
 | `connect [URL]` | Gets a token for a workspace elsewhere. |
 | `new-bot`, `new-channel`, `set-model`, `edit` | Make a bot or a room, change a bot's model, rewrite an earlier message. |
 | `mcp` | The dusk bot MCP server on stdin and stdout ([docs/mcp-server.md](mcp-server.md)). |
+| `update [--check] [--yes]`, `version [--check]` | Whether a newer dusk bot is out, what changed for the server, and how to update this install ([Updating](self-hosting.md#updating)). `--check` exits 0 when up to date and 10 when an update is available. |
 
 The message for `send` and `run` can be the next word, `--text TEXT`,
 `--message-file FILE`, or `-` to read it from stdin.
@@ -404,7 +405,7 @@ an engine that can limit built-in tools.
 
 ```yaml
 # .github/workflows/rehearse.yml (a sketch)
-- run: npm install -g duskbot @anthropic-ai/claude-code
+- run: npm install -g https://github.com/DuskBotAI/duskbot-releases/releases/latest/download/duskbot.tgz @anthropic-ai/claude-code
 - run: duskbot serve --no-pair --data-dir "$RUNNER_TEMP/omb" &
   env: { DUSK_ANTHROPIC_API_KEY: "${{ secrets.ANTHROPIC_API_KEY }}" }   # the workspace's Claude key from the start
 - run: duskbot doctor --wait 2m          # the server answers and an engine is ready

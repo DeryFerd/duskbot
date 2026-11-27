@@ -1,4 +1,22 @@
 import type { InstanceInfo } from "@/state/store";
+import { phoneApp } from "./store-app";
+
+const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+
+/** Whether this screen runs on the machine its server does: a ChatGPT plan sign-in opens a browser there and waits for it
+ * on that machine's loopback, so a phone, a desktop connected to a server or a page from another host never completes one. */
+function onServerMachine(): boolean {
+  if (phoneApp() || globalThis.window?.duskDesktop?.remoteClient?.active === true) return false;
+  const host = globalThis.location?.hostname;
+  return !host || LOOPBACK.has(host);
+}
+
+/** A ChatGPT plan account that is not signed in and cannot be signed in from here: offered nowhere, since it would only
+ * refuse. Signed in, it works from anywhere and stays. */
+export function signInRefusedHere(instance: Pick<InstanceInfo, "snapshot">, here = onServerMachine()): boolean {
+  if (instance.snapshot.chatgptPlan !== true || instance.snapshot.authenticated === true) return false;
+  return Boolean(instance.snapshot.authenticationUnavailableReason) || !here;
+}
 
 export function configuredModelInstances(instances: readonly InstanceInfo[], selectedInstanceId?: string): InstanceInfo[] {
   return instances.filter((instance) =>

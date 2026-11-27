@@ -14,7 +14,7 @@ import { requireUserPresence } from "@/lib/user-presence";
 import { api, ApiError } from "@/state/store";
 import { lastSeen, minutesLeft } from "../lib/pairing-time";
 import { haptic } from "../mobile/haptics";
-import { Card as RowsCard, ItemRow, reducedMotion, WIPE_MS } from "./ListRows";
+import { Card as RowsCard, ItemRow, NoteRow, reducedMotion, WIPE_MS } from "./ListRows";
 import { PlaceArt, type PlaceArtName } from "./ui/PlaceArt";
 import { StoreMark } from "./ui/StoreMarks";
 import { PRIMARY, QUIET, TILE } from "./onboarding/FunnelSteps";
@@ -22,7 +22,7 @@ import type { PairedDevice } from "./ServerPairingCard";
 import { friendlyError } from "@/lib/plain-error";
 import { ANDROID_APP_URL, storeUrl } from "../mobile/connection/phone-update";
 
-const PHONE_ACCESS_COMMAND = "npx duskbot setup";
+const PHONE_ACCESS_COMMAND = "duskbot setup";
 
 export function platformLabelKey(platform: string) {
   return platform === "ios" ? "settings.mobile.ios" : platform === "android" ? "settings.mobile.android" : "settings.mobile.phone";
@@ -48,13 +48,13 @@ export interface PhoneParts {
   /** the link screen is up: the caller keeps its own extras out of the way */
   stepping: boolean;
   phones: ReactNode;
+  version?: number;
+  onSessionChanged?: () => void;
 }
 
 type Flow = "loading" | "home" | "platform" | "link";
 export type PhoneKind = "ios" | "android";
 
-/** the Android app is out as a signed APK on dusk.bot (not Google Play): its card is pickable */
-export const ANDROID_APP_OUT = true;
 
 /** a live code is swapped for a new one this long before it ends, so the screen never shows a dead code */
 export const RENEW_BEFORE_MS = 60_000;
@@ -143,6 +143,7 @@ export function MobilePairingCard({ remote, cloudHome = false, email, direct, ch
   const [hidden, setHidden] = useState(false);
   const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
   const [flow, setFlow] = useState<Flow>("loading");
   const [kind, setKind] = useState<PhoneKind>("ios");
   const linking = useRef(false);
@@ -314,7 +315,11 @@ export function MobilePairingCard({ remote, cloudHome = false, email, direct, ch
         approval.current = "approved";
         approvedAt.current = Date.now();
         firstGrant.current = grant;
-      } else if ((!codesInCloud && !(await requireUserPresence())) || generation.current !== epoch) return;
+      } else if (!codesInCloud && !(await requireUserPresence())) {
+        // a check that did not pass (cancelled, failed or timed out) says so with another try, never a placeholder that waits
+        if (generation.current === epoch) setError(t("settings.phone.notConfirmed"));
+        return;
+      } else if (generation.current !== epoch) return;
       const body = await mintWithRetries(epoch);
       if (!body || generation.current !== epoch) return;
       if (!codesInCloud) baseline.current = (devices ?? []).map((device) => device.id);
@@ -388,7 +393,6 @@ export function MobilePairingCard({ remote, cloudHome = false, email, direct, ch
   }
 
   function pick(next: PhoneKind) {
-    if (next === "android" && !ANDROID_APP_OUT) return;
     haptic("pick");
     setKind(next);
     // signed out, the phone's card opens the app's own sign-in and goes on to its link page once that is done
@@ -412,20 +416,35 @@ export function MobilePairingCard({ remote, cloudHome = false, email, direct, ch
     setFlow(to);
   }
 
+  const onSessionChanged = useCallback(() => {
+    const epoch = generation.current;
+    void loadDevices(epoch);
+    if (cloudHome) void loadCloudSignIns(epoch);
+  }, [cloudHome, loadDevices, loadCloudSignIns]);
+
   async function remove(id: string) {
     const epoch = generation.current;
     setRemoving(id);
     setError(null);
+    let gone = false;
     try {
       await api(`/api/mobile/devices/${encodeURIComponent(id)}`, { method: "DELETE" });
-      if (generation.current === epoch) await loadDevices(epoch);
+      gone = true;
     } catch (cause) {
-      if (generation.current === epoch) {
+      if (cause instanceof ApiError && cause.status === 404) {
+        gone = true;
+      } else if (generation.current === epoch) {
         setError(friendlyError(cause, t("settings.mobile.error")));
         haptic("error");
       }
     } finally {
-      if (generation.current === epoch) setRemoving(null);
+      if (generation.current === epoch) {
+        if (gone) {
+          await loadDevices(epoch);
+          setVersion((n) => n + 1);
+        }
+        setRemoving(null);
+      }
     }
   }
 
@@ -459,9 +478,9 @@ export function MobilePairingCard({ remote, cloudHome = false, email, direct, ch
   // the qr's white tile, the same size whatever it holds, so nothing jumps while a code is made or renewed. level L: a
   // screen does not smudge, and the long link gets bigger modules that a camera reads from further away
   const qrTile = (value: string | null, label: string) => (
-    <div role="img" aria-label={label} aria-busy={!value} data-phone-qr={value ?? ""} className="flex size-[200px] shrink-0 items-center justify-center rounded-[16px] bg-white p-3">
-      {value ? <PairingQr value={value} size={176} level="L" includeMargin={false} bgColor="#ffffff" fgColor="#1b1b1f" aria-hidden="true" />
-        : <span className="size-[176px] animate-pulse rounded-[8px] bg-[#1b1b1f]/[0.06] motion-reduce:animate-none" />}
+    <div role="img" aria-label={label} aria-busy={!value} data-phone-qr={value ?? ""} className="flex size-[256px] shrink-0 items-center justify-center rounded-[16px] bg-white p-4">
+      {value ? <PairingQr value={value} size={224} level="L" includeMargin={false} bgColor="#ffffff" fgColor="#000000" shapeRendering="crispEdges" aria-hidden="true" />
+        : <span className="size-[224px] animate-pulse rounded-[8px] bg-[#1b1b1f]/[0.06] motion-reduce:animate-none" />}
     </div>
   );
 
@@ -497,16 +516,13 @@ export function MobilePairingCard({ remote, cloudHome = false, email, direct, ch
 
   const phoneCard = (option: PhoneKind) => {
     const apple = option === "ios";
-    const off = !apple && !ANDROID_APP_OUT;
     return (
-      <button type="button" data-phone-platform={option} aria-disabled={off || undefined} onClick={() => pick(option)}
-        className={cn(off ? "cursor-default rounded-2xl bg-ink/[0.025] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" : TILE,
-          "flex min-h-[176px] min-w-0 flex-col items-start justify-between gap-6 p-5 text-start")}>
+      <button type="button" data-phone-platform={option} onClick={() => pick(option)}
+        className={cn(TILE, "flex min-h-[176px] min-w-0 flex-col items-start justify-between gap-6 p-5 text-start")}>
         <span className="flex w-full items-start justify-between gap-2">
-          <span className={cn("flex size-14 items-center justify-center", off && "opacity-50 grayscale")}><StoreMark name={apple ? "apple" : "android"} scale={2} /></span>
-          {off && <span className={pill}>{t("settings.phone.androidTag")}</span>}
+          <span className="flex size-14 items-center justify-center"><StoreMark name={apple ? "apple" : "android"} scale={2} /></span>
         </span>
-        <span className={cn("flex flex-col gap-0.5", off && "opacity-60")}>
+        <span className="flex flex-col gap-0.5">
           <span className="text-[16px] font-medium leading-6 text-ink">{t(apple ? "settings.phone.iphone" : "settings.phone.android")}</span>
           <span className="text-[13px] leading-[18px] text-ink-secondary">{t(apple ? "settings.phone.iphoneSub" : "settings.phone.androidSub")}</span>
         </span>
@@ -697,7 +713,9 @@ export function MobilePairingCard({ remote, cloudHome = false, email, direct, ch
 
   const phones = view === "home" && !cloudHome ? (
     <RowsCard label={t("settings.phone.linkedTitle")} action={<LinkAnother onClick={() => go(start())} />}>
-      {(devices ?? []).map((device) => (
+      {(devices ?? []).length === 0 ? (
+        <NoteRow>{t("remote.serverPairing.noDevices")}</NoteRow>
+      ) : (devices ?? []).map((device) => (
         <ItemRow key={device.id} pixel="phone" title={device.name} hint={t("settings.mobile.seen", { when: lastSeen(device.lastSeenAt, now) })}>
           <span className={pill}>{t(platformLabelKey(device.platform))}</span>
           {device.relay && <span className={pill}>{t("settings.mobile.relay")}</span>}
@@ -753,7 +771,7 @@ export function MobilePairingCard({ remote, cloudHome = false, email, direct, ch
     );
   };
 
-  const parts: PhoneParts = { top, stepping: view !== "home", phones };
+  const parts: PhoneParts = { top, stepping: view !== "home", phones, version, onSessionChanged };
   if (direct) return <>{styles}{directView()}</>;
   return (
     <>

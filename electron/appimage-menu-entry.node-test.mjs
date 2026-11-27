@@ -46,7 +46,7 @@ test("the first AppImage launch adds the entry and icon, and later ones leave th
   assert.ok(text.includes(`Exec="/home/me/Apps/Dusk Bot.AppImage" %U`));
   assert.ok(text.includes(`Icon=${w.paths.icon}`));
   assert.equal(readFileSync(w.paths.icon, "utf8"), "<svg/>");
-  assert.equal(statSync(w.paths.entry).mode & 0o777, 0o644);
+  if (process.platform !== "win32") assert.equal(statSync(w.paths.entry).mode & 0o777, 0o644);
   assert.equal(w.entry.on(), true);
   assert.equal(w.entry.sync(), "current");
   done(w);

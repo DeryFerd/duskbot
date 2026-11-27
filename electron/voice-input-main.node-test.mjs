@@ -305,3 +305,19 @@ test("ElevenLabs realtime: an auth error from the socket ends as bad-key; a refu
   await settle();
   assert.equal(errors[1].reason, "bad-key");
 });
+
+test("ElevenLabs realtime: a refused token says why in the log, never on the card, and a key ElevenLabs refuses with 400 reads as the key", async () => {
+  const errors = [];
+  const refuse = (status, body) => async () => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  createRealtimeSession({ key: "k", model: "m", onText() {}, onError: e => errors.push(e), WebSocket: FakeSocket,
+    fetch: refuse(400, { detail: { status: "missing_permissions", message: "The API key you used is missing the permission speech_to_text to execute this operation." } }) });
+  createRealtimeSession({ key: "k", model: "m", onText() {}, onError: e => errors.push(e), WebSocket: FakeSocket,
+    fetch: refuse(400, { detail: { status: "invalid_model", message: "scribe_v9 is not a model" } }) });
+  await settle();
+  assert.equal(errors[0].reason, "bad-key");
+  assert.match(errors[0].detail, /missing_permissions.*speech_to_text/);
+  assert.doesNotMatch(errors[0].message, /400|permission/);
+  assert.equal(errors[1].reason, "service");
+  assert.match(errors[1].detail, /400 invalid_model/);
+  assert.doesNotMatch(errors[1].message, /400/);
+});

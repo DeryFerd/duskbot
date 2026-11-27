@@ -36,6 +36,17 @@ describe("typed pairing", () => {
     expect((parseTypedPairing(" https://workspace.test:8443 ABCD1234EFGH ") as MobilePairingPayload)?.origin).toBe("https://workspace.test:8443");
   });
 
+  it("reads a server's own browser sign-in QR (https://host/pair#code=), which the phone redeems with that server", () => {
+    const browserQr = { v: 1, transport: "https", origin: "https://dusk.example.test", credential: "", code: "ABCDEFGHJKLM" };
+    expect(parseTypedPairing("https://dusk.example.test/pair#code=ABCD-EFGH-JKLM")).toEqual(browserQr);
+    expect(readScanned(" https://dusk.example.test:8443/pair#code=abcdefghjklm ")).toEqual({ kind: "pair", payload: { ...browserQr, origin: "https://dusk.example.test:8443" } });
+  });
+
+  it.each(["http://dusk.example.test/pair#code=ABCD-EFGH-JKLM", "https://person:secret@dusk.example.test/pair#code=ABCD-EFGH-JKLM", "https://dusk.example.test/elsewhere#code=ABCD-EFGH-JKLM",
+    "https://dusk.example.test/pair?next=1#code=ABCD-EFGH-JKLM", "https://dusk.example.test/pair#code=ABCD", "https://dusk.example.test/pair#token=ABCD-EFGH-JKLM"])("rejects the browser QR look-alike %s", (input) => {
+    expect(parseTypedPairing(input)).toBeNull();
+  });
+
   it.each(["workspace.test 123456", "http://workspace.test ABCD1234EFGH", "https://person:secret@workspace.test ABCD1234EFGH", "https://workspace.test/path ABCD1234EFGH", "https://workspace.test?query ABCD1234EFGH", "https://workspace.test#fragment ABCD1234EFGH", "https://workspace.test\\elsewhere ABCD1234EFGH", "duskbot://pair?address=workspace.test", "unrelated text"])("rejects %s", (input) => {
     expect(parseTypedPairing(input)).toBeNull();
   });

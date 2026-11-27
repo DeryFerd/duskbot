@@ -22,7 +22,7 @@
     "/integrations/gmail/search-people"
   ],
   "og_line": "the message behind the detail you remember.",
-  "what": "**start with the clue you still have.** “the hotel confirmation before the conference” gives the bot somewhere to look. it returns subjects, senders and dates you can recognise.\n\nlabels narrow the search. ask for two labels and the email must have both.\n\na quick search gives basic details. for a booking reference or promise, ask it to open the full email. the subject alone cannot answer that.",
+  "what": "**start with the clue you still have.** “the hotel confirmation before the conference” gives the bot somewhere to look. it returns subjects, senders and dates you can recognise.\n\nlabels narrow the search. ask for two labels and the email must have both.\n\na quick search gives basic details. for a booking reference or promise, ask it to open the full email. the subject alone cannot answer that.\n\n**the search feeds the next step.** once it finds the email, the bot can [download its attachment](/integrations/gmail/get-gmail-attachment) or [reply in the same thread](/integrations/gmail/reply-to-email-thread).",
   "uses": [
     "**find the tracking reference.** recover a delivery confirmation before calling the courier.",
     "**rebuild the conversation.** gather a venue’s emails from the month you booked.",
@@ -61,7 +61,7 @@
       "a": "**the quick search returns basic details.** ask it to open the full email before answering questions about the contents."
     }
   ],
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -118,5 +118,9 @@
   "tip": {
     "text": "“include spam and trash” is worth trying before you ask someone to resend."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "you: find my elmfield hotel booking from march.\nquery: from:elmfield after:2026/03/01 before:2026/04/01\nthe list says 9 messages.",
+    "after": "8 shown with subject, sender and date.\n1 failed to load and is named as missing.\nbooking reference from the opened confirmation: el-4471."
+  }
 }

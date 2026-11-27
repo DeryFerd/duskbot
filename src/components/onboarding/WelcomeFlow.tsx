@@ -6,8 +6,9 @@ import { completionPatch, computerAiIds, firstRunPatch, markWelcomeFinished, res
 import { clearWelcomeDraft, readWelcomeDraft, saveWelcomeDraft } from "@/lib/welcome-draft";
 import { looksLikeNotes } from "@/lib/assistant-notes";
 import { greetingName } from "../../../shared/greeting-name";
+import { freeFallback } from "../../../shared/ai-ranking";
 import { usePlaceSetupOpen } from "@/lib/place-setup";
-import { api, useStore, type ModelSelection } from "@/state/store";
+import { api, useStore } from "@/state/store";
 import { engineReady } from "@/components/EngineLibrary";
 import { trapTab } from "./trap-tab";
 import { useNotesIntake } from "../NotesWaiting";
@@ -17,7 +18,7 @@ import { AiStep } from "./AiStep";
 import { BringStatus } from "./BringStep";
 import { CheckoutStep } from "./CheckoutStep";
 import { CloudBringStep, useCloudBringOffered } from "./CloudBringStep";
-import { cloudOwned, foundPicks, freeModel, funnelSteps, nextStep, previousStep, type FunnelPath, type FunnelStep } from "./funnel";
+import { accountDue, autoConnects, cloudOwned, funnelSteps, nextStep, previousStep, type FunnelPath, type FunnelStep } from "./funnel";
 import { useFreeWarmup } from "./free-warmup";
 import { funnelAccount, type FunnelAccountState } from "./funnel-account";
 import { FunnelBar, WelcomeStep } from "./FunnelSteps";
@@ -46,10 +47,12 @@ async function nameFromComputer(config: Config, done: (config: NonNullable<Confi
 
 export { cloudBought } from "./funnel";
 
-/** The first run, two calm screens: the hello (the free model gets ready meanwhile), then one choice, free models or a
- * plan the person already has. It ends in Dusk's chat (Dusk made the Chief of Staff where no other bot is one), where Dusk
- * speaks first with three first jobs, and raises anything else (an account, dusk cloud, the phone, the Mac's
- * permissions, apps) when a job needs it. A run already on its way to dusk cloud keeps the browser checkout, the AI while
+/** The first run, three calm screens: the hello (the free model gets ready meanwhile), signing in (gone for someone
+ * already signed in; Continue without an account where the install works without one, and the chat asks again later),
+ * then connecting an AI: whatever this computer is already signed in to connects by itself, any other in one tap, and
+ * Continue goes on with it, or on the free model. It ends in Dusk's chat (Dusk made the Chief of Staff
+ * where no other bot is one), where Dusk speaks first with three first jobs, and raises anything else (dusk cloud, the
+ * phone, the Mac's permissions, apps) when a job needs it. A run already on its way to dusk cloud keeps the browser checkout, the AI while
  * the Cloud is made, then the Cloud, ending in that Cloud's chat. */
 export function WelcomeFlow({
   onDone,
@@ -70,21 +73,22 @@ export function WelcomeFlow({
   const keepsDraft = !replay && !embedded;
   const root = useRef<HTMLDivElement>(null);
   const finishing = useRef(false);
-  // "Use free models" is the person's own pick: Dusk and new bots stay on it even once another AI is ready
-  const freePick = useRef<ModelSelection | null>(null);
   const record = useRef(state.config?.onboarding);
   record.current = state.config?.onboarding;
 
   // the account: asked once where this window can sign in; a step only for someone not signed in yet
   const account = useMemo(() => (embedded ? null : funnelAccount()), [embedded]);
   const [known, setKnown] = useState<FunnelAccountState | null>(null);
+  // what decides the sign-in step: read again while the hello shows (a handoff from the website can land then), then
+  // held, so signing in on the step doesn't take it out from under the person
   const firstKnown = useRef<FunnelAccountState | null>(null);
+  const atNow = useRef<FunnelStep>("welcome");
   useEffect(() => {
     if (!account) return;
     let alive = true;
     const read = () => void account.state().then((next) => {
       if (!alive) return;
-      firstKnown.current ??= next;
+      if (!firstKnown.current || atNow.current === "welcome") firstKnown.current = next;
       setKnown(next);
     }, () => {});
     read();
@@ -106,12 +110,24 @@ export function WelcomeFlow({
   const [notesLine, setNotesLine] = useState<string | null>(null);
 
   const saved = initialBeat ?? draft?.beat;
-  // the account is a step only where the install requires one; otherwise the chat asks once something needs it
-  const accountStep = Boolean(account) && firstKnown.current?.required === true && !firstKnown.current.signedIn;
+  // signing in comes right after Get started for anyone not signed in yet; skipped, the chat asks once something needs it
+  const accountStep = accountDue({ canSignIn: Boolean(account), signedIn: firstKnown.current?.signedIn, replay });
+  // an AI of the person's own signed in here (the best one by the shared ranking, unless its test went unanswered): the
+  // run goes from the sign-in straight to the chat on it. Read while the hello and the sign-in show, then held
+  const tested = useWelcomeAi(state.instances);
+  const aiFound = useRef(false);
+  // a run resumed past the sign-in keeps the screens it had
+  const resumedPast = useRef(Boolean(saved && saved !== "welcome" && saved !== "account"));
+  if (!resumedPast.current && (atNow.current === "welcome" || atNow.current === "account")) aiFound.current = Boolean(tested && tested.state !== "failed") && !replay;
   const steps = funnelSteps({ account: accountStep, desktop, path, paid,
-    hello: window.duskDesktop?.remoteClient?.active !== true, cloudBring, aiAsked: cloudHome && !replay });
+    hello: window.duskDesktop?.remoteClient?.active !== true, cloudBring, aiAsked: cloudHome && !replay, aiFound: aiFound.current });
 
   const [at, setAt] = useState<FunnelStep>(() => resumeBeat(steps, saved));
+  atNow.current = at;
+  // a run resumed on the sign-in by someone signed in since goes on to what comes after it
+  useLayoutEffect(() => {
+    if (at === "account" && !steps.includes("account")) setAt(resumeBeat(steps, "account"));
+  }, [at, steps]);
   // the second click of a double click lands on the step it opened: it must not choose there
   const stepShownAt = useRef(0);
   useEffect(() => { stepShownAt.current = Date.now(); }, [at]);
@@ -121,7 +137,6 @@ export function WelcomeFlow({
     event.stopPropagation();
   };
   const [from, setFrom] = useState<"next" | "back">("next");
-  const tested = useWelcomeAi(state.instances);
 
   // each screen shown, with the path and how long the screen before it took: drop-off per step on the admin page
   const shownAt = useRef<number | null>(null);
@@ -159,8 +174,7 @@ export function WelcomeFlow({
       onDone(botId);
       try {
         const run = replay ? completionPatch() : cloudOpenedHere(firstRunPatch(record.current, new Date(), { cloudHome }), path === "cloud", record.current?.hintsSeen ?? []);
-        const patch = freePick.current ? { ...run, defaultModelSelection: freePick.current } : run;
-        const config = await api("/api/config", { method: "PUT", body: JSON.stringify(patch), signal: AbortSignal.timeout(10_000) });
+        const config = await api("/api/config", { method: "PUT", body: JSON.stringify(run), signal: AbortSignal.timeout(10_000) });
         dispatch({ type: "configStatus", config });
       } catch {
       }
@@ -173,17 +187,29 @@ export function WelcomeFlow({
     if (finishing.current) return;
     const chief = Boolean(maus && chiefStepFits(state.bots, maus));
     if (chief && maus) dispatch({ type: "updateBot", botId: maus.id, patch: createChiefPatch(maus, chiefFor(state.bots, maus)) });
-    if (maus && freePick.current) dispatch({ type: "updateBot", botId: maus.id, patch: { modelSelection: freePick.current } });
+    // Dusk's first chat runs on the AI found here, where it would otherwise start on the free model
+    const own = tested && tested.state !== "failed" ? tested.instance : null;
+    const onFree = !maus?.modelSelection.instanceId || state.instances.some((instance) => instance.instanceId === maus.modelSelection.instanceId && freeFallback(instance));
+    if (maus && own && onFree && !replay && path !== "cloud") dispatch({ type: "updateBot", botId: maus.id, patch: { modelSelection: { instanceId: own.instanceId, model: own.models.default } } });
     const botId = chief ? maus!.id : null;
     if (botId && !replay) stageIntro(botId);
     void finish(botId ? "completed" : "skipped", botId);
-  }, [maus, state.bots, dispatch, finish, replay]);
+  }, [maus, state.bots, state.instances, tested, path, dispatch, finish, replay]);
+
+  // the AIs found here are marked as the person's own before the chat opens (in the background when the AI step was
+  // skipped), so the first send has an AI
+  const markFound = useCallback(async () => {
+    const picks = autoConnects(state.instances, engineReady, tested?.state === "failed" ? [tested.instance.instanceId] : []);
+    if (!picks.length) return;
+    await Promise.allSettled(picks.map((instance) => api(`/api/instances/${encodeURIComponent(instance.instanceId)}`, { method: "PATCH", body: JSON.stringify({ chosen: true }), signal: AbortSignal.timeout(10_000) })));
+    await refreshInstances().catch(() => {});
+  }, [state.instances, tested, refreshInstances]);
 
   const go = useCallback((step: FunnelStep | null, direction: "next" | "back") => {
-    if (!step) { if (direction === "next") toChat(); return; }
+    if (!step) { if (direction === "next") void markFound().finally(toChat); return; }
     setFrom(direction);
     setAt(step);
-  }, [toChat]);
+  }, [toChat, markFound]);
   const next = useCallback(() => go(nextStep(steps, at), "next"), [go, steps, at]);
   const back = previousStep(steps, at, { paid });
 
@@ -229,7 +255,9 @@ export function WelcomeFlow({
   const signedOutSeen = useRef(false);
   const websiteSeen = useRef(false);
   useEffect(() => {
-    if (at !== "account" || !known) return;
+    // a sign-in seen after the step was left (the code's own Continue went on first) is not one to go on from again
+    if (at !== "account") { signedOutSeen.current = false; return; }
+    if (!known) return;
     if (!known.signedIn) { signedOutSeen.current = true; return; }
     if (known.website === "open") { websiteSeen.current = true; return; }
     if (!signedOutSeen.current && !websiteSeen.current) return;
@@ -288,13 +316,7 @@ export function WelcomeFlow({
     case "ai":
       body = <AiStep tested={tested} cloud={cloud} computerAis={cloudHome ? computerAiIds(state.config?.onboarding) : []} onNext={(how) => {
         track("onboarding_ai", { action: how });
-        const free = how === "free" && !cloud ? freeModel(state.instances, engineReady) : undefined;
-        freePick.current = free ? { instanceId: free.instanceId, model: free.models.default } : null;
-        const picks = foundPicks(how, tested?.instance, state.instances, engineReady);
-        if (!picks.length) { next(); return; }
-        void Promise.allSettled(picks.map((instance) => api(`/api/instances/${encodeURIComponent(instance.instanceId)}`, { method: "PATCH", body: JSON.stringify({ chosen: true }), signal: AbortSignal.timeout(10_000) })))
-          .then(() => refreshInstances().catch(() => {}))
-          .finally(next);
+        next();
       }} />;
       break;
     case "bring":

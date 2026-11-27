@@ -70,7 +70,8 @@ const THEMES: Array<{ key: string; label: string; pattern: RegExp; pain?: true }
   { key: "failures", label: "things failing", pattern: /\b(?:fail|error|broke|crash|doesn't work|didn't work|not working)/, pain: true },
   { key: "connecting", label: "connecting apps and signing in", pattern: /\b(?:connect(?:ing|ed)? (?:an? |the )?\w+|sign(?:ing|ed)? ?in|log(?:ging|ged)? ?in|re-?auth|permission)/, pain: true },
   { key: "retries", label: "needing several tries", pattern: /\b(?:\d+|several|many|few) (?:tries|attempts|retries)|\bretr(?:y|ied)|tried again/, pain: true },
-  { key: "confusing", label: "confusing setup", pattern: /\b(?:confus|unclear|hard to (?:set|find|understand)|setup|set up)/, pain: true },
+  // only setup said to hurt: "set up a routine" is what people do, not a complaint
+  { key: "confusing", label: "confusing setup", pattern: /\b(?:confus\w*|hard to (?:set up|find|understand))|\b(?:unclear|repeated|painful|stall\w*|friction|confus\w*)\b[^.]{0,40}\bset ?up\b|\bset ?up\b[^.]{0,40}\b(?:unclear|stall\w*|friction|pain\w*|confus\w*)/, pain: true },
   { key: "memory", label: "forgetting context", pattern: /\b(?:forg[eo]t|lost (?:track|context)|remember)/, pain: true },
   { key: "wants", label: "asks for more", pattern: /\b(?:wants?|wish|would like|hope|next|more)\b/ },
 ];

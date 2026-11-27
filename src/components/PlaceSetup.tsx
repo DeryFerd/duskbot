@@ -330,7 +330,7 @@ function AddressSetup({ way, title, onBack, onClose }: { way: Extract<Way, { key
     event.preventDefault();
     if (busy) return;
     const made = pairingLink(address, linked ? "" : code);
-    if ("error" in made) { setError({ field: made.error, text: t(made.error === "code" ? "placeSetup.badCode" : "placeSetup.badAddress") }); return; }
+    if ("error" in made) { setError({ field: made.error === "code" ? "code" : "address", text: t(made.error === "code" ? "placeSetup.badCode" : made.error === "serverLocal" ? "placeSetup.serverLocal" : "placeSetup.badAddress") }); return; }
     setBusy(true);
     setError(null);
     try {

@@ -274,7 +274,7 @@ curl -fsSL https://dusk.bot/s/<code>/tailscale | sh    # your tailnet
 curl -fsSL https://dusk.bot/s/<code>/ssh | sh          # over your SSH port
 ```
 
-It installs dusk bot as `duskbot.service`, links it to your app and sets up the way you picked. The line works once and expires after 30 minutes, and puts `duskbot` on the server's PATH for every login: `duskbot pair --label desktop` there links another computer. By hand: `npx duskbot serve` on any machine with Node 24+, then `npx duskbot pair`. Docker Compose lives in [deploy/](deploy/). Never expose port 8799 directly; read [self-hosting](docs/self-hosting.md) first.
+It installs dusk bot as `duskbot.service`, links it to your app and sets up the way you picked. The line works once and expires after 30 minutes, and puts `duskbot` on the server's PATH for every login: `duskbot pair --label desktop` there links another computer. By hand, on any machine with Node 24+: `npm install --global --prefix "$HOME/.local" https://github.com/DuskBotAI/duskbot-releases/releases/latest/download/duskbot.tgz`, then `duskbot serve` and `duskbot pair` (the package is on GitHub releases, not the npm registry). Docker Compose lives in [deploy/](deploy/). Never expose port 8799 directly; read [self-hosting](docs/self-hosting.md) first.
 
 ## Configuration
 

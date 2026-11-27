@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { cancelFlowSummary } from "./cancel-flow.ts";
+import { cancelFlowSummary, cancelSaves } from "./cancel-flow.ts";
 
 it("counts cancel flow starts, saves and cancels per reason inside the window, most cancels first", () => {
   const at = 1000;
@@ -18,4 +18,27 @@ it("counts cancel flow starts, saves and cancels per reason inside the window, m
     { reason: "switching", started: 0, saved: 0, cancelled: 1 },
     { reason: "price", started: 1, saved: 1, cancelled: 0 },
   ] });
+});
+
+it("save rate: saved flows over saved and cancelled flows that ended in the window, a flow saved unless its last answer was a cancel", () => {
+  const h = 3_600_000, row = (subscriptionId: string, step: "reason" | "help" | "confirm", outcome: "shown" | "discount" | "downgrade" | "helped" | "kept" | "cancelled", at: number) => ({ subscriptionId, step, outcome, at });
+  const entries = [
+    // saved with the discount
+    row("a", "reason", "shown", 10 * h), row("a", "help", "discount", 10 * h + 1),
+    // helped, then cancelled anyway: one cancelled flow
+    row("b", "reason", "shown", 10 * h), row("b", "help", "helped", 10 * h + 1), row("b", "confirm", "cancelled", 10 * h + 2),
+    // kept once, came back a day later and cancelled: one saved and one cancelled
+    row("c", "reason", "shown", 10 * h), row("c", "confirm", "kept", 10 * h + 1), row("c", "reason", "shown", 40 * h), row("c", "confirm", "cancelled", 40 * h + 1),
+    // looked and closed it: not a cancel
+    row("d", "reason", "shown", 11 * h),
+    // a desktop cancel with no steps before it
+    row("e", "confirm", "cancelled", 12 * h),
+    // cancelled, then restarted from the done step: a save
+    row("g", "reason", "shown", 20 * h), row("g", "confirm", "cancelled", 20 * h + 1), row("g", "confirm", "kept", 20 * h + 2),
+    // ended before the window
+    row("f", "reason", "shown", 0), row("f", "confirm", "cancelled", 1),
+  ];
+  expect(cancelSaves(entries, 5 * h, 50 * h)).toEqual({ saved: 4, cancelled: 3, rate: 4 / 7 });
+  expect(cancelSaves(entries, 0, 5 * h)).toEqual({ saved: 0, cancelled: 1, rate: 0 });
+  expect(cancelSaves([], 0, 1)).toEqual({ saved: 0, cancelled: 0, rate: null });
 });

@@ -10,6 +10,7 @@ describe("what the pair page says about why it was shown", () => {
   it("stays quiet for the ordinary no-session case and repeats anything else", () => {
     expect(reasonWorthShowing("forbidden: this request came through a proxy (pair this device to use the server remotely)")).toBeNull();
     expect(reasonWorthShowing("forbidden: loopback host required (pair this device to use the server remotely)")).toBeNull();
+    expect(reasonWorthShowing("unauthorized: this browser is not signed in. Open the sign-in link that duskbot serve or duskbot pair prints on this computer, or pair it with a code from Settings → Remote access")).toBeNull();
     expect(reasonWorthShowing("403")).toBeNull();
     expect(reasonWorthShowing(undefined)).toBeNull();
     expect(reasonWorthShowing("unauthorized: this session has expired or was revoked; pair this device again")).toMatch(/expired or was revoked/);

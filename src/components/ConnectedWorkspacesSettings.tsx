@@ -8,7 +8,7 @@ import { cloudColor } from "@/lib/cloud-look";
 import { askConfirm } from "./ConfirmDialog";
 import { textFieldCls } from "./ui/GrokDialog";
 import { PixelIcon } from "./ui/PixelIcon";
-import { openPlaceSetup, pastedPairingLink } from "@/lib/place-setup";
+import { onlyServerLocalLink, openPlaceSetup, pastedPairingLink } from "@/lib/place-setup";
 import { vpsLinkAvailable } from "@/lib/vps-link";
 
 type SavedWorkspaces = Awaited<ReturnType<NonNullable<NonNullable<Window["duskDesktop"]>["environments"]>["state"]>>;
@@ -99,7 +99,7 @@ export function ConnectedWorkspacesSettings() {
     </RowsCard>
     <AnimatePresence>{adding && <FormDialog key="connect-server" data-panel-modal="connect-server" title={t("settings.s2.servers.connect")} description={t("settings.s2.servers.commandNote")}
       saveLabel={t("settings.s2.servers.connectAction")} canSave={Boolean(address.trim())} busy={busy} error={error || undefined}
-      onSave={() => perform(async () => { const done = await bridge.addFromLink(pastedPairingLink(address) ?? address.trim(), name.trim()); setAdding(false); return done; })}
+      onSave={() => perform(async () => { if (onlyServerLocalLink(address)) throw new Error(t("placeSetup.serverLocal")); const done = await bridge.addFromLink(pastedPairingLink(address) ?? address.trim(), name.trim()); setAdding(false); return done; })}
       onClose={() => setAdding(false)}>
       <FormField label={t("settings.s2.servers.address")}>
         <input required value={address} disabled={busy} onChange={(event) => setAddress(event.target.value)}

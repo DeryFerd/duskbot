@@ -64,8 +64,8 @@ export function NotesAskCard({ onDone }: { onDone: (yes: boolean) => void }) {
             style={{ gridTemplateRows: example ? "1fr" : "0fr", opacity: example ? 1 : 0 }} aria-hidden={!example} inert={!example || undefined}>
             <div className="min-h-0 overflow-hidden">
               <div className="mt-2 rounded-[12px] bg-ink/[0.045] px-3.5 py-3 text-start">
-                <p className="m-0 text-[12.5px] font-medium leading-[17px] text-ink">{t("notesAsk.exampleHead")}</p>
-                <p className="m-0 text-[12.5px] leading-[17px] text-ink-secondary">{t("notesAsk.exampleNote")}</p>
+                <p className="m-0 text-[13px] font-medium leading-[17px] text-ink">{t("notesAsk.exampleHead")}</p>
+                <p className="m-0 text-[13px] leading-[17px] text-ink-secondary">{t("notesAsk.exampleNote")}</p>
               </div>
             </div>
           </div>

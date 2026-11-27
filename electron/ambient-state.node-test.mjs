@@ -66,9 +66,9 @@ test("both surfaces start on only on macOS, and a change keeps to the known choi
   assert.deepEqual([parsePrefs({ island: true, dock: true }, "linux").island, parsePrefs({ island: true, dock: true }, "linux").dock], [false, true]);
   assert.equal(parsePrefs({ island: false }, "darwin").island, false);
   const prefs = parsePrefs(null, "darwin");
-  const changed = applyPrefsChange(prefs, { size: "large", display: "built-in", island: false, order: ["b", "a", "b", "../x"], evil: 1, seen: ["x:done:1"] });
+  const changed = applyPrefsChange(prefs, { size: "large", display: "built-in", island: false, order: ["b", "a", "b", "../x"], evil: 1, seen: ["x:done:1"] }, "darwin");
   assert.deepEqual(changed, { island: false, dock: true, size: "large", display: "built-in", order: ["b", "a"], seen: [] });
-  assert.deepEqual(applyPrefsChange(prefs, { size: "giant", display: "left" }), prefs);
+  assert.deepEqual(applyPrefsChange(prefs, { size: "giant", display: "left" }, "darwin"), prefs);
 });
 
 test("seen replies and failures are kept by key, newest last, capped, and nothing else gets in", () => {

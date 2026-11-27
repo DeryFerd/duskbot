@@ -141,6 +141,8 @@ let frames: FrameRequestCallback[];
 let keyListeners: Set<(event: Partial<KeyboardEvent>) => void>;
 let intersectionCallbacks: Array<(entries: Array<{ isIntersecting: boolean }>) => void>;
 let observers: number;
+let resized: Array<() => void>;
+let clip: { style: { transform: string } };
 let dispatched: unknown[];
 
 function mount(initial: Partial<Props> = {}) {
@@ -152,8 +154,9 @@ function mount(initial: Partial<Props> = {}) {
   // React's commit before layout effects; a browser clamps scrollTop when content gets shorter.
   const commit = () => {
     result.scrollRef.current = scroller as unknown as HTMLDivElement;
-    result.transcriptRef.current = {} as HTMLDivElement;
+    result.transcriptRef.current = { querySelectorAll: () => [] } as unknown as HTMLDivElement;
     result.topSentinelRef.current = {} as HTMLDivElement;
+    result.clipRef.current = clip as unknown as HTMLDivElement;
     const drawn = props.isVisible ? result.windowedMessages.filter(props.isVisible) : result.windowedMessages;
     scroller.rows = drawn.length;
     scroller.ids = drawn.map((row) => row.id);
@@ -188,6 +191,8 @@ beforeEach(() => {
   keyListeners = new Set();
   intersectionCallbacks = [];
   observers = 0;
+  resized = [];
+  clip = { style: { transform: "" } };
   dispatched = [];
   store.state.focusMessage = null;
   store.state.loadingOlder = {};
@@ -198,8 +203,9 @@ beforeEach(() => {
   });
   vi.stubGlobal("requestAnimationFrame", (frame: FrameRequestCallback) => frames.push(frame));
   vi.stubGlobal("ResizeObserver", class {
-    constructor() {
+    constructor(callback: () => void) {
       observers++;
+      resized.push(callback);
     }
     observe() {}
     disconnect() {}
@@ -451,6 +457,90 @@ describe("transcript viewport", () => {
     view.rerender({ messages: [...rows(50, 50), ...rows(50, 100)] });
     expect(view.current.olderPending).toBe(false);
     expect(scroller.scrollTop).toBe(300 + 50 * ROW);
+  });
+
+  it("keeps the row on screen in place when the reader scrolls on while an older page loads", () => {
+    const view = mount({ messages: rows(50, 100) });
+    scroller.scrollTop = 300;
+    view.act(() => view.current.loadOlder());
+    store.state.loadingOlder = { thread: true };
+    view.rerender({});
+    // a fling carries on up while the page is on its way
+    scroller.scrollTop = 100;
+    view.current.scrollHandlers.onScroll();
+
+    store.state.loadingOlder = {};
+    view.rerender({ messages: [...rows(50, 50), ...rows(50, 100)] });
+    expect(scroller.scrollTop).toBe(100 + 50 * ROW);
+  });
+
+  it("holds the reader's row while rows above it finish laying out after an older page lands", () => {
+    const view = mount({ messages: rows(50, 100) });
+    scroller.scrollTop = 300;
+    view.act(() => view.current.loadOlder());
+    view.rerender({ messages: [...rows(50, 50), ...rows(50, 100)] });
+    expect(scroller.scrollTop).toBe(300 + 50 * ROW);
+    // a picture in an older row loads and the row grows by 200
+    scroller.heights = new Map([["m60", ROW + 200]]);
+    for (const callback of resized) callback();
+    expect(scroller.scrollTop).toBe(300 + 50 * ROW + 200);
+    // growth below the row on screen leaves it where it is
+    scroller.heights = new Map([["m60", ROW + 200], ["m140", ROW + 300]]);
+    for (const callback of resized) callback();
+    expect(scroller.scrollTop).toBe(300 + 50 * ROW + 200);
+  });
+
+  it("lets go of the held row once the reader is back at the latest", () => {
+    const view = mount({ messages: rows(50, 100) });
+    scroller.scrollTop = 300;
+    view.act(() => view.current.loadOlder());
+    view.rerender({ messages: [...rows(50, 50), ...rows(50, 100)] });
+    view.act(() => view.current.jumpToLatest());
+    expect(view.current.following).toBe(true);
+    scroller.heights = new Map([["m60", ROW + 200]]);
+    for (const callback of resized) callback();
+    expect(scroller.scrollTop).toBe(scroller.bottom);
+    expect(clip.style.transform).toBe("");
+  });
+
+  describe("on an iPhone, where WebKit drops a scroll written mid-fling", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.stubGlobal("document", { documentElement: { dataset: { mobileApp: "ios" } } });
+      return () => vi.useRealTimers();
+    });
+
+    // a phone mounts 60 rows, so 30 of the 50 that land are drawn above the reader
+    it("draws an older page in place during the fling and moves the scroll once it stops", () => {
+      const view = mount({ messages: rows(50, 100) });
+      scroller.scrollTop = 300;
+      view.current.scrollHandlers.onTouchStart({ touches: [{ clientY: 100 }] } as never);
+      view.act(() => view.current.loadOlder());
+      view.current.scrollHandlers.onTouchEnd();
+      scroller.scrollTop = 200;
+      view.current.scrollHandlers.onScroll();
+
+      view.rerender({ messages: [...rows(50, 50), ...rows(50, 100)] });
+      expect(scroller.scrollTop).toBe(200);
+      expect(clip.style.transform).toBe(`translateY(${-30 * ROW}px)`);
+
+      scroller.scrollTop = 150;
+      view.current.scrollHandlers.onScroll();
+      expect(clip.style.transform).toBe(`translateY(${-30 * ROW}px)`);
+      vi.advanceTimersByTime(500);
+      expect(clip.style.transform).toBe("");
+      expect(scroller.scrollTop).toBe(150 + 30 * ROW);
+    });
+
+    it("moves the scroll straight away when nothing is scrolling", () => {
+      const view = mount({ messages: rows(50, 100) });
+      scroller.scrollTop = 300;
+      view.act(() => view.current.loadOlder());
+      vi.advanceTimersByTime(500);
+      view.rerender({ messages: [...rows(50, 50), ...rows(50, 100)] });
+      expect(scroller.scrollTop).toBe(300 + 30 * ROW);
+      expect(clip.style.transform).toBe("");
+    });
   });
 
   it("drops a height capture taken in the thread the reader left", () => {

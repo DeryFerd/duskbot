@@ -312,6 +312,9 @@ final class Heard {
   }
 }
 
+// SpeechAnalyzer needs the macOS 26 SDK (Xcode 26, Swift 6.2); an older SDK builds the recognizer-only helper.
+// release.yml selects Xcode 26 so a shipped helper always has it.
+#if compiler(>=6.2)
 // macOS 26+: SpeechAnalyzer runs fully on device with the system's own models. It needs no Siri, no Dictation and
 // no speech-recognition permission (only the microphone), so it works on Macs where SFSpeechRecognizer reports no
 // available recognizer. Returns false when no language here is supported, so the older recognizer can try.
@@ -429,6 +432,8 @@ func listenWithAnalyzer() async throws -> Bool {
   return true
 }
 
+#endif
+
 /// The microphone first: a refusal is reported plainly instead of as silence. Asking happens only when macOS has
 /// never been asked, and only because the person pressed the mic.
 func withMicrophone(_ then: @escaping () -> Void) {
@@ -445,15 +450,18 @@ func withMicrophone(_ then: @escaping () -> Void) {
 if let filePath {
   // a recording instead of the microphone: for tests, never asks for anything
   Task {
+    #if compiler(>=6.2)
     if #available(macOS 26.0, *) {
       do {
         if try await transcribeFile(filePath) { exit(0) }
       } catch { fail("recognition-error") }
     }
+    #endif
     fail("recognizer-unavailable")
   }
 } else {
   withMicrophone {
+    #if compiler(>=6.2)
     if #available(macOS 26.0, *) {
       Task {
         do {
@@ -463,9 +471,10 @@ if let filePath {
         }
         DispatchQueue.main.async { runRecognizer() }
       }
-    } else {
-      runRecognizer()
+      return
     }
+    #endif
+    runRecognizer()
   }
 }
 

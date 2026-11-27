@@ -283,6 +283,23 @@ it("renewing before the end of retention brings the home back without losing any
   expect(f.api.deletes()).toHaveLength(0);
 });
 
+it("a home brought back from its archive skips the setup package, which its newer omb-home refuses as older", async () => {
+  const f = await homeFixture();
+  const { c, sub } = await f.paid();
+  sub.status = "ended"; sub.currentPeriodEnd = f.now(); sub.lastEventAt = f.now();
+  await f.settle(c, x => x.managed!.archive?.serverId === null, 40, 15_000);
+  const ran = c.managed!.update?.guard.current?.sha256 ?? null;
+  f.api.onExec(({ cmd }) => cmd.includes("omb-home install") ? { exitCode: 2, stdout: "older package\n" } : null);
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  sub.status = "active"; sub.currentPeriodEnd = f.now() + 30 * DAY_MS;
+  await f.settle(c, x => x.status === "running", 20, 1_000);
+  warn.mockRestore();
+  expect(f.audit.entries(c.id).map(e => e.action)).toContain("restore_archive");
+  expect(c).toMatchObject({ setupStep: null, error: null });
+  expect(c.managed!.installed).toBe(ran);
+  expect(c.managed!.restoreSnapshot).toBeNull();
+});
+
 it("a new subscription within retention revives the paused home with its data; once retention is over it cannot", async () => {
   const f = await homeFixture();
   const { c, sub } = await f.paid();
@@ -713,7 +730,8 @@ it("still fails a wake whose home does not answer when the clock was right", asy
   expect(f.audit.entries(c.id).filter(e => e.action === "clock_set")).toHaveLength(0);
 });
 
-it("the clock check script sets the clock only when it is more than 30 s off", () => {
+// the clock check runs on a Linux Cloud server, here under bash with a Linux PATH
+it.skipIf(process.platform === "win32")("the clock check script sets the clock only when it is more than 30 s off", () => {
   const dir = mkdtempSync(join(tmpdir(), "dusk-clock-"));
   try {
     const fake = join(dir, "date");

@@ -3,7 +3,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/places", async (original) => ({ ...await original<typeof import("@/lib/places")>(), usePlaces: () => ({ beside: true, places: [] }) }));
 const { AccountsSheet, useAccounts } = await import("./AccountMenu");
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

@@ -12,7 +12,7 @@
     "claude search excel files onedrive"
   ],
   "answer": "**get the right workbook without opening every file named final.** give the bot a name fragment or project phrase. it searches onedrive, including shared files if you ask, and lists matching excel files. pick the copy you want, then ask it to read the cells. the search itself opens and changes nothing.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -44,11 +44,12 @@
     "toolkit": "excel",
     "slug": "EXCEL_SEARCH_FILES"
   },
-  "what": "**you remember the project. the bot finds the file.** a search can match names, file details or content. name another drive if your default isn't the right one.\n\n- include shared files, or search only your own folders\n- ask for xlsx and xlsm if other files clutter the results\n- choose a workbook before asking a separate excel action to read its cells",
+  "what": "**you remember the project. the bot finds the file.** a search can match names, file details or content. name another drive if your default isn't the right one.\n\n- include shared files, or search only your own folders\n- ask for xlsx and xlsm if other files clutter the results\n- choose a workbook before asking a separate excel action to read its cells\n\nfound the right workbook? [add table](/integrations/excel/add-table) can turn its raw cells into a proper table.",
   "uses": [
     "find an old installation budget when only the project name rings a bell",
     "track down a shared costing workbook outside your own folders",
-    "compare matching xlsx and xlsm files before choosing the report source"
+    "compare matching xlsx and xlsm files before choosing the report source",
+    "find a staff roster by a name inside it, since search reads file content as well as titles"
   ],
   "routine": {
     "message": "on the first of each month at 9, search my onedrive for excel files with \"timesheet\" in the name. include files shared with me. keep going until onedrive has no more results. list names and available file details here. flag files for the current month and any unclear matches. never open or change workbooks.",
@@ -105,10 +106,18 @@
     {
       "mistake": "calling an empty result the end",
       "fix": "ask it to keep going until onedrive has no further results, even after an empty batch."
+    },
+    {
+      "mistake": "reading a short batch as \"that's all\"",
+      "fix": "the file type filter runs on each batch, so a batch can come back short. keep going to the end."
     }
   ],
   "tip": {
     "text": "final-final.xlsx still needs a project and a month. filenames get optimistic."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "halden asks for \"the roof budget\".\nthree files match: roof-budget.xlsx, roof-budget-old.xlsm and a pdf quote.",
+    "after": "filtered to xlsx and xlsm: two workbooks\nboth shown with their folders\nthe pdf quote left out\nhalden picks roof-budget.xlsx before any figures are read."
+  }
 }

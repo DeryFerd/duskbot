@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 
 import { PINNED_RELEASE_KEYS, signRelease } from "../apps/cloud-service/src/release-signing.ts";
 import { releaseManifest, sha256sums } from "../scripts/release-manifest.ts";
-import { createUpdateChecker, DESKTOP_DOWNLOAD_URL, DESKTOP_MANIFEST_URL, DESKTOP_RELEASE_KEYS, installKind, LATEST_RELEASE_URL, newerVersion,
+import { createChangelogReader, createUpdateChecker, DESKTOP_DOWNLOAD_URL, DESKTOP_MANIFEST_URL, DESKTOP_RELEASE_KEYS, installKind, LATEST_RELEASE_URL, newerVersion,
   resetDesktopUpdateCacheForTests, verifiedDesktopVersion, type InstallKind } from "./update-check.ts";
 
 afterEach(() => { vi.unstubAllGlobals(); resetDesktopUpdateCacheForTests(); });
@@ -43,7 +43,7 @@ describe("server update check", () => {
       tag_name: "v999.0.0", html_url: "https://github.com/DuskBotAI/duskbot/releases/tag/v999.0.0",
     })));
     vi.stubGlobal("fetch", fetchRelease);
-    const installs: InstallKind[] = ["managed", "docker", "podman", "npm", "git", "unknown"];
+    const installs: InstallKind[] = ["managed", "docker", "podman", "git", "unknown"];
     for (const install of installs) {
       const check = createUpdateChecker({ current: "0.1.141", install });
       expect(await check()).toEqual({ current: "0.1.141", install, available: false });
@@ -129,6 +129,23 @@ describe("desktop update check", () => {
     await expect(createUpdateChecker({ current: "0.1.141", install: "desktop", fetch: async () => new Response("", { status: 502 }) })()).rejects.toThrow("502");
   });
 
+  it("tells an npm install the signed release and that duskbot update installs it", async () => {
+    const fetchManifest = vi.fn(async () => new Response(JSON.stringify(sign("0.2.33"))));
+    expect(await createUpdateChecker({ current: "0.2.31", install: "npm", fetch: fetchManifest, keys: [testKey] })()).toEqual({
+      current: "0.2.31", install: "npm", latest: "0.2.33", available: true,
+      releaseUrl: "https://github.com/DuskBotAI/duskbot/releases/tag/v0.2.33", command: "duskbot update", restart: true,
+    });
+    expect(fetchManifest).toHaveBeenCalledWith(DESKTOP_MANIFEST_URL, expect.objectContaining({ redirect: "error" }));
+    // a linked server installs it itself, with its own restart
+    expect(await createUpdateChecker({ current: "0.2.31", install: "npm", fetch: fetchManifest, keys: [testKey], linked: true })())
+      .toMatchObject({ available: true, command: "duskbot update", restart: false });
+    expect(await createUpdateChecker({ current: "0.2.33", install: "npm", fetch: fetchManifest, keys: [testKey] })())
+      .toEqual({ current: "0.2.33", install: "npm", latest: "0.2.33", available: false });
+    resetDesktopUpdateCacheForTests();
+    const forged = async () => new Response(JSON.stringify({ v: 1, version: "9.9.9", signature: sign("9.9.9").signature.replace("r1.rel-test.", "r1.rel-other.") }));
+    expect(await createUpdateChecker({ current: "0.2.31", install: "npm", fetch: forged, keys: [testKey] })()).toEqual({ current: "0.2.31", install: "npm", available: false });
+  });
+
   it("compares plain versions only", () => {
     expect(newerVersion("0.2.0", "0.1.999")).toBe(true);
     expect(newerVersion("0.1.10", "0.1.9")).toBe(true);
@@ -151,5 +168,34 @@ describe("desktop update check", () => {
     vi.unstubAllEnvs();
     expect(verifiedDesktopVersion(manifest, [testKey])).toBe("0.1.150");
     expect(() => releaseManifest(sums, "0.1.150", signingKey)).toThrow();
+  });
+});
+
+describe("changelog reader", () => {
+  const answer = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  const list = { v: 1, releases: [{ version: "0.2.32", items: [{ text: "Check for updates on the phone", area: "phone" }] }] };
+
+  it("reads the changelog once an hour, and a missing one is no releases", async () => {
+    let at = 0;
+    const fetchImpl = vi.fn(async (_url: string) => answer(404, { error: "not found" }));
+    const read = createChangelogReader({ fetch: fetchImpl as unknown as typeof fetch, now: () => at });
+    expect(await read()).toEqual([]);
+    expect(await read()).toEqual([]);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl.mock.calls[0]![0]).toBe("https://dusk.bot/releases/changelog.json");
+    at = 61 * 60_000;
+    fetchImpl.mockImplementation(async (_url: string) => answer(200, list));
+    expect((await read()).map((release) => release.version)).toEqual(["0.2.32"]);
+  });
+
+  it("keeps the last good list when a read fails, and never throws", async () => {
+    let at = 0, fail = false;
+    const fetchImpl = async () => { if (fail) throw new Error("offline"); return answer(200, list); };
+    const read = createChangelogReader({ fetch: fetchImpl as unknown as typeof fetch, now: () => at });
+    expect(await read()).toHaveLength(1);
+    fail = true; at = 2 * 60 * 60_000;
+    expect(await read()).toHaveLength(1);
+    const fresh = createChangelogReader({ fetch: (async () => answer(500, {})) as unknown as typeof fetch });
+    expect(await fresh()).toEqual([]);
   });
 });

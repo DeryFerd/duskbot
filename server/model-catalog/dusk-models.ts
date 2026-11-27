@@ -101,10 +101,10 @@ export function prettyModelLabel(label: string, id: string): string {
 /**
  * The engine's list with our names, plus the curated models marked `add` that it leaves out and its account hasn't
  * refused, each placed before the next curated model the engine lists. The engine's order, default and per-row details
- * stay; custom rows are untouched.
+ * stay; custom rows are untouched. `additions` false: names only, for an engine whose account refuses what its list leaves out.
  */
-export function curateModelCatalog(catalog: ModelCatalog, curated: CuratedEngine | undefined, refused: readonly string[] = []): ModelCatalog {
-  if (!curated || !catalog.options.length && !curated.models.some((model) => model.add)) return catalog;
+export function curateModelCatalog(catalog: ModelCatalog, curated: CuratedEngine | undefined, refused: readonly string[] = [], additions = true): ModelCatalog {
+  if (!curated || !catalog.options.length && !(additions && curated.models.some((model) => model.add))) return catalog;
   const byId = new Map(curated.models.map((model) => [model.id, model]));
   const options: ModelCatalog["options"] = catalog.options.map((option) => {
     if (option.custom) return option;
@@ -118,7 +118,7 @@ export function curateModelCatalog(catalog: ModelCatalog, curated: CuratedEngine
   });
   const listed = new Set(options.map((option) => option.id));
   curated.models.forEach((model, index) => {
-    if (!model.add || listed.has(model.id) || refused.includes(model.id)) return;
+    if (!additions || !model.add || listed.has(model.id) || refused.includes(model.id)) return;
     const next = curated.models.slice(index + 1).find((later) => listed.has(later.id));
     const firstCustom = options.findIndex((option) => option.custom);
     const at = next ? options.findIndex((option) => option.id === next.id) : firstCustom === -1 ? options.length : firstCustom;
@@ -200,12 +200,12 @@ export class DuskModelCatalog {
   }
 
   /** The engine's list merged with ours; the same object back for the same list, so a getter can call it on every read. */
-  curate(key: string, catalog: ModelCatalog, refused: readonly string[] = []): ModelCatalog {
+  curate(key: string, catalog: ModelCatalog, refused: readonly string[] = [], additions = true): ModelCatalog {
     const doc = this.get();
     const held = this.curatedMemo.get(catalog);
-    const refusedKey = refused.join("\n");
+    const refusedKey = `${additions ? "+" : "-"}${refused.join("\n")}`;
     if (held && held.doc === doc && held.key === key && held.refused === refusedKey) return held.out;
-    const out = curateModelCatalog(catalog, doc.engines[key], refused);
+    const out = curateModelCatalog(catalog, doc.engines[key], refused, additions);
     this.curatedMemo.set(catalog, { doc, key, refused: refusedKey, out });
     return out;
   }

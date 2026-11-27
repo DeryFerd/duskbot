@@ -8,8 +8,8 @@ import { join } from "node:path";
 import { writeFileAtomic } from "./atomic.ts";
 import { isToolFailureStop } from "./drivers/tool-failure.ts";
 import {
-  MAX_REPORT_FRUSTRATIONS, MAX_REPORT_RUNS, cleanUsageDigest, MAX_REPORT_SESSIONS, SESSION_NOTE_MAX, DIGEST_CHATS, DIGEST_LINES, cleanUsageSession, MAX_REPORT_SIGNALS, MAX_REPORT_TURNS, categorize, cleanUsageFrustration, cleanUsageRun, cleanUsageSnapshot, cleanUsageTurn, engineFamily, failureOf, failureReason, opencodeProvider, toolErrorClass, toolFailures,
-  appAction, modelFamily, runTrigger, scrubSummary, toolSignals, type RunEvery, type UsageSignal,
+  EXPECTED_TOOL_ERRORS, MAX_REPORT_FRUSTRATIONS, MAX_REPORT_RUNS, cleanUsageDigest, MAX_REPORT_SESSIONS, SESSION_NOTE_MAX, DIGEST_CHATS, DIGEST_LINES, cleanUsageSession, MAX_REPORT_SIGNALS, MAX_REPORT_TURNS, categorize, cleanUsageFrustration, cleanUsageRun, cleanUsageSnapshot, cleanUsageTurn, engineFamily, failureOf, failureReason, opencodeProvider, toolErrorClass, toolFailures,
+  appAction, modelFamily, runOutcome, runTrigger, scrubSummary, toolSignals, type RoutineFailedFor, type RunEvery, type UsageSignal,
   type FrustrationSignal, type UsageFrom, type UsageFrustration, type UsageOutcome, type UsagePlace, type UsageReport, type UsageRun, type UsageSnapshot, type UsageTurn, type UsageDigest, type UsageSession,
 } from "../shared/usage-signals.ts";
 
@@ -52,8 +52,8 @@ export function turnRecord(facts: TurnFacts, place: UsagePlace, now: number): Us
   const from: UsageFrom = facts.trigger.kind === "routine" ? "routine" : facts.trigger.kind === "bot" ? "bot" : facts.trigger.kind === "helper" || facts.trigger.kind === "upkeep" ? "helper"
     : facts.trigger.kind === "user" ? "remote" : "app";
   const end = facts.endedAt ?? now, start = facts.startedAt ?? end;
-  // a call the model sent bad arguments for is the model's mistake, not the tool breaking
-  const failed = toolSignals(facts.failedCalls ? facts.failedCalls.filter((call) => toolErrorClass(call.error) !== "schema_invalid").map((call) => call.name) : facts.failedNames ?? []);
+  // bad arguments are the model's mistake and a non-zero exit the command's own answer, not the tool breaking
+  const failed = toolSignals(facts.failedCalls ? facts.failedCalls.filter((call) => !EXPECTED_TOOL_ERRORS.has(toolErrorClass(call.error))).map((call) => call.name) : facts.failedNames ?? []);
   const failures = toolFailures(facts.failedCalls ?? []);
   const actions = [...new Set(facts.toolNames.map(appAction).filter((action): action is string => !!action))];
   const ms = Math.max(0, Math.min(7 * 86_400_000 - 1, Math.round(end - start)));
@@ -96,13 +96,13 @@ export function createUsageOutbox(options: { now?: () => number; snapshot?: () =
   return {
     turn(record: UsageTurn | null) { if (record && on()) turns = cap([...turns, record], OUTBOX_TURNS); },
     /** a routine run once it ends; each run counts once */
-    run(run: { id: string; status: string; triggerSource?: string; eventSource?: string; manual?: boolean; startedAt?: number; finishedAt?: number; error?: string }, about: { every?: RunEvery; routine?: string } = {}) {
+    run(run: { id: string; status: string; triggerSource?: string; eventSource?: string; manual?: boolean; startedAt?: number; finishedAt?: number; error?: string; failedFor?: RoutineFailedFor }, about: { every?: RunEvery; routine?: string } = {}) {
       if (!on() || !["completed", "failed", "cancelled", "missed"].includes(run.status) || seenRuns.has(run.id)) return;
       seenRuns.add(run.id);
       if (seenRuns.size > 5000) seenRuns.delete(seenRuns.values().next().value!);
-      const outcome: UsageOutcome = run.status === "completed" ? "ok" : run.status === "cancelled" ? "cancelled" : "failed";
+      const { outcome, reason } = runOutcome(run);
       const ms = run.startedAt && run.finishedAt && run.finishedAt >= run.startedAt ? Math.round(run.finishedAt - run.startedAt) : undefined;
-      const record = cleanUsageRun({ id: newId(), at: run.finishedAt ?? now(), trigger: runTrigger(run), outcome, ...(outcome === "failed" ? { reason: run.status === "missed" ? "timeout" : failureReason(run.error) } : {}),
+      const record = cleanUsageRun({ id: newId(), at: run.finishedAt ?? now(), trigger: runTrigger(run), outcome, ...(reason && outcome !== "ok" ? { reason } : {}),
         ...(ms !== undefined ? { ms } : {}), ...about }, now());
       if (record) runs = cap([...runs, record], OUTBOX_RUNS);
     },

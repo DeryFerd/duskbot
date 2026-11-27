@@ -14,6 +14,27 @@
     @slot;
   }
 }
+/* Small controls keep their look on a touch screen but take a press 44px across around their centre (WCAG 2.5.5): the
+   composer's round buttons, an attachment's remove and retry, and the copy and full-screen keys on code and tables.
+   Only a control not placed by a utility is made `relative`; base is the lowest layer, so `absolute` still wins. */
+@layer base {
+  @media (hover: none), (pointer: coarse) {
+    :is([data-composer-actions] button, button[data-composer-plus], button:has(> [data-composer-plus]), [data-composer-attachment] button, [data-code-plate] button, [data-table-card] button) {
+      position: relative;
+    }
+  }
+}
+@media (hover: none), (pointer: coarse) {
+  :is([data-composer-actions] button, button[data-composer-plus], button:has(> [data-composer-plus]), [data-composer-attachment] button, [data-code-plate] button, [data-table-card] button)::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    translate: -50% -50%;
+  }
+}
 /* the phone app answers a press with its own scale or ripple (src/mobile/press.ts), never a pressed fill */
 @custom-variant active (&:active:where(:not(html[data-mobile-app] *)));
 
@@ -74,6 +95,10 @@ a.link-pill:focus-visible {
   white-space: pre-wrap;
   overflow-wrap: break-word;
   color: var(--color-ink);
+  /* the field's computed size it copies already carries the page's -webkit-text-size-adjust zoom; WebKit and Chromium
+     would apply that zoom a second time to the copy */
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
 }
 .mention-editor textarea {
   position: relative;

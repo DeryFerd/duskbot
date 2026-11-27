@@ -170,7 +170,7 @@ export interface CloudRow {
   id: string; name: string; accountId: string; owner: string | null; kind: string; plan: string; placement: string; region: string; regionLabel: string; status: string;
   setupStep: string | null; backend: string | null; origin: string | null; spec: { vcpu: number; ramGb: number; diskGb: number }; createdAt: number; provisionedAt: number | null;
   powerSince: number; lastReportAt: number | null; suspended: boolean; ended: boolean; destroyAt: number | null; error: string | null;
-  subscription: { status: string; periodEnd: number | null } | null; actions: { pause: boolean; resume: boolean; delete: boolean; endTrial?: boolean };
+  subscription: { status: string; periodEnd: number | null } | null; actions: { pause: boolean; resume: boolean; delete: boolean; endTrial?: boolean; retrySetup?: boolean };
   /** internet upload this month and what the egress guard did (managed clouds) */
   egress: { bytes: number; state: "ok" | "slowed" | "paused" } | null;
 }

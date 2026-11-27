@@ -37,6 +37,8 @@ services:
       DUSK_WEBHOOK_PUBLIC_URL: https://${DOMAIN}
       # pairing links for remote clients point here (docs/self-hosting.md)
       DUSK_PUBLIC_URL: https://${DOMAIN}
+      # the server's name on phones and in pairing links; the container id would change on every update
+      DUSK_ENVIRONMENT_LABEL: ${DUSK_LABEL:-${DOMAIN}}
       # Who may sign in with an emailed code at /pair (docs/self-hosting.md,
       # "Sign in with your email"). Empty means pairing codes only.
       DUSK_SIGNIN_EMAILS: ${DUSK_SIGNIN_EMAILS:-}

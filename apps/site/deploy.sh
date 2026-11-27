@@ -6,6 +6,7 @@
 #   apps/site/deploy.sh landing    # dusk-landing, reached through dusk.bot
 #   apps/site/deploy.sh preview    # dusk-preview, reached through preview.dusk.bot: the full site, never indexed
 #   apps/site/deploy.sh [all]      # both
+# a landing deploy then pings indexnow with the pages that changed (seo/jobs/indexnow.mjs)
 # launched 2026-11-16: landing deploys ship the full site; DUSK_WAITLIST_HOME=1 brings back the waitlist-only stage, which
 # keeps only the waitlist at /, its files, the privacy, terms and cookies pages (sign-in links to them), help and
 # account deletion (the app stores link to them), the download page (unlisted, handed to invited people), the license
@@ -46,6 +47,8 @@ for row in "${SITES[@]}"; do
   DUSK_WAITLIST_HOME="$waitlist" node "$HERE/build-pages.mjs" "$DUSK_REPO"
   # no deploy with a link, picture or anchor that leads nowhere
   node "$HERE/check-links.mjs"
+  # no deploy with a sitemap address google would not index (a redirect, noindex, a thin or empty page)
+  [ "$waitlist" = 1 ] || node "$HERE/check-index.mjs"
   dir="$stage/$name"
   mkdir -p "$dir/public"
   cp "$HERE/server.js" "$HERE/release-mirror.js" "$HERE/waitlist-store.js" "$HERE/waitlist-mongo.js" "$HERE/unsubscribe.js" "$HERE/package.json" "$HERE/package-lock.json" "$dir/"
@@ -60,7 +63,7 @@ for row in "${SITES[@]}"; do
     # sends any page that is not here to /
     pub="$dir/public/landing"
     find "$pub" -name '*.html' ! -path "$pub/index.html" ! -path "$pub/privacy/index.html" ! -path "$pub/terms/index.html" ! -path "$pub/cookies/index.html" ! -path "$pub/license/index.html" ! -path "$pub/docs/your-own-server/index.html" ! -path "$pub/contact/index.html" ! -path "$pub/delete-account/index.html" ! -path "$pub/download/index.html" -delete
-    rm -rf "$pub/sitemaps" "$pub/docs/search.json" "$pub/_redirects.json" "$pub/_gone.json"
+    rm -rf "$pub/sitemaps" "$pub/docs/search.json" "$pub/_redirects.json" "$pub/_gone.json" "$pub/llms.txt"
     find "$pub" -maxdepth 1 -regex '.*/[0-9a-f]\{32\}\.txt' -delete
     find "$pub" -type d -empty -delete
     printf 'User-agent: *\nAllow: /\n\nSitemap: https://dusk.bot/sitemap.xml\n' > "$pub/robots.txt"
@@ -83,5 +86,11 @@ for row in "${SITES[@]}"; do
   "$DEPLOY" "$dir" --name "$name" --domain "$domain" --install "npm install --omit=dev --no-audit --no-fund" ${envargs[@]+"${envargs[@]}"} \
     --cmd "set -a; [ -f ./.env ] && . ./.env; set +a; exec env $vars node server.js landing"
   ran=1
+  # tell indexnow (bing, yandex, seznam, naver, yep) which pages are new, changed or gone, once dusk.bot serves them.
+  # seo/indexnow-sent.json then holds what was sent: commit it. a failed ping never fails the deploy. DUSK_INDEXNOW=0 skips
+  if [ "$which" = landing ] && [ "$waitlist" = 0 ] && [ "${DUSK_INDEXNOW:-1}" = 1 ]; then
+    sleep "${DUSK_INDEXNOW_WAIT:-20}"
+    node "$HERE/seo/jobs/indexnow.mjs" --send || echo "warning: the indexnow ping failed (see above); rerun: node apps/site/seo/jobs/indexnow.mjs --send" >&2
+  fi
 done
 [ "$ran" = 1 ] || { echo "usage: $0 [all|landing|preview]" >&2; exit 2; }

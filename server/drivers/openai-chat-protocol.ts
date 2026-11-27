@@ -3,6 +3,9 @@ export interface ChatToolCall {
   id: string;
   type: "function";
   function: { name: string; arguments: string };
+  /** Gemini 3's OpenAI-compatible endpoint puts each call's `google.thought_signature` here and refuses (HTTP 400,
+   * "Function call is missing a thought_signature") a later request that replays the call without it. */
+  extra_content?: Record<string, unknown>;
 }
 
 /** Calls one model reply may carry (its index bound). */
@@ -70,6 +73,8 @@ export class ChatToolCalls {
           if (field === "arguments") this.argumentChars += fn[field].length;
         }
       }
+      const extra = object(delta.extra_content);
+      if (extra) call.extra_content = { ...call.extra_content, ...extra };
       if (call.function.name.length > 64 || this.argumentChars > MAX_ARGUMENT_CHARS) {
         throw new ChatProtocolError("provider tool calls exceeded the size limit");
       }

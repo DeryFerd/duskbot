@@ -29,6 +29,16 @@ its window has focus; the dock, island and unread dots carry the rest.
 The code is in `server/mobile/presence.ts` (where each phone is), `server/mobile/link.ts` (the grace and wiring) and
 `server/mobile/push.ts` (sending).
 
+## Checking it end to end
+
+`duskbot push` lists the paired phones and whether each gave the server a push token; `duskbot push test` sends each
+one a test notification right away (`POST /api/mobile/push/test`, no grace or retries) and prints what APNs, FCM or the
+relay answered: sent, not registered, a dead token (dropped), not deliverable, or failed. The phone app has the same
+check in Settings (**Send a test notification**), for that phone alone. A phone that only signed in with a code, not
+paired, is not a paired phone and gets no pushes; the app says so in Settings and offers **Pair this phone**
+(`POST /api/mobile/device`, its own native session only, never a browser's cookie, a person's email sign-in or a team
+member's).
+
 ## Where pushes leave from
 
 APNs and FCM accept pushes only from whoever holds the app's keys. A workspace sends a push:

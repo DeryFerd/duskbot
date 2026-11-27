@@ -66,36 +66,22 @@ const localOrigin = currentLocalOrigin ? (() => {
 })() : process.argv.find((arg) => arg.startsWith("--dusk-local-origin="))?.slice("--dusk-local-origin=".length) ?? null;
 const isLocalPage = (!currentLocalOrigin && !localOrigin) || (localOrigin !== null && location.origin === localOrigin);
 
-// The window's own rail of places stands at its left edge (electron/chrome-rail.mjs): main says how wide, and every page
-// beside it, whatever server it comes from, moves over by that much, at any zoom (a zoom change resizes the page). The
-// page reads how far in `--rail-beside`, which changes with the move itself.
-let railBeside = 0, railRoom = null;
-function leaveRailRoom() {
-  if (typeof document === "undefined" || !document.documentElement) return;
-  const zoom = Number(webFrame?.getZoomFactor?.()) || 1;
-  if (!railBeside) { railRoom?.remove(); railRoom = null; return; }
-  railRoom ??= document.createElement("style");
-  const room = `${Math.round((railBeside / zoom) * 100) / 100}px`;
-  railRoom.textContent = `html { box-sizing: border-box !important; padding-left: ${room} !important; --rail-beside: ${room}; }`;
-  if (!railRoom.isConnected) (document.head ?? document.documentElement).append(railRoom);
-}
-const railState = (state) => ({ available: state?.available === true, hidden: state?.hidden === true });
-ipcRenderer.on("rail:beside", (_event, width) => { railBeside = Math.max(0, Math.min(200, Number(width) || 0)); leaveRailRoom(); });
-// The rail's own page keeps its size whatever the zoom of this app's page: Chromium gives every page of a host the same
-// zoom, the rail's included, so the rail takes it back out and stays as wide as its strip.
+// The sheet's page (/rail) keeps its size whatever the zoom of this app's page: Chromium gives every page of a host the
+// same zoom, so it takes it back out.
 function railKeepsItsSize() {
   if (!isLocalPage || location.pathname !== "/rail" || typeof document === "undefined" || !document.documentElement) return;
   const zoom = Number(webFrame?.getZoomFactor?.()) || 1;
   document.documentElement.style.zoom = zoom === 1 ? "" : String(Math.round((1 / zoom) * 10000) / 10000);
 }
 if (typeof window !== "undefined") {
-  for (const type of ["resize", "DOMContentLoaded"]) window.addEventListener(type, () => { leaveRailRoom(); railKeepsItsSize(); });
+  for (const type of ["resize", "DOMContentLoaded"]) window.addEventListener(type, railKeepsItsSize);
 }
 const REMOTE_SAFE = new Set(["platform", "cloudMac", "app", "getCapabilities", "onCapabilitiesChanged", "applySkin", "setUnreadCount", "permStatus", "workspaces", "rail", "cloudAdd", "cloudPlan", "cloudSendPage", "accountSheet", "desktopNotices", "desktopNotifications", "desktopAnalytics", "desktopLanguage", "windowControls", "onOpenAppSettings", "windowFrame", "sealTrust", "linkDirect", "onSlackOAuth", "ambient", "desktopBots", "requireUserPresence", "vpsCloudMove", "trail"]);
 /** My Cloud's own page once it is the person's home (main checks the sender again): it is this app's page then. */
 const HOME_PAGE = ["home", "appUpdate", "onChatLink", "onPackageInstall", "exportDiagnostics", "openLogsFolder", "openAtLogin", "productEvents"];
-/** Any place the person chose, open as this window's server (home too): its calls listen through this computer's speech. */
-const PLACE_PAGE = ["callActive", "speechStart", "speechStop", "speechFinish", "onSpeechTranscript", "onSpeechEnd", "onSpeechLevel"];
+/** Any place the person chose, open as this window's server (home too): its calls listen through this computer's speech,
+ * and its Settings shows this app's own update beside the server's. */
+const PLACE_PAGE = ["appUpdate", "callActive", "speechStart", "speechStop", "speechFinish", "onSpeechTranscript", "onSpeechEnd", "onSpeechLevel"];
 function homePage() {
   try { return ipcRenderer.sendSync("home:page") === true; } catch { return false; }
 }
@@ -207,20 +193,16 @@ const bridge = {
     takeLook: () => { try { return ipcRenderer.sendSync("workspaces:switch-look-take") ?? null; } catch { return null; } },
     arrived: () => { try { return ipcRenderer.sendSync("workspaces:switch-arrived") === true; } catch { return false; } },
   },
-  // The window's own rail (this app's page at /rail, beside every place's page): while a sheet of its own is open it
-  // covers the window; the skin of the page beside it comes from main, and whether that page draws the window's frame.
-  // The page beside it, from whichever server, offers the button that hides and shows it, and learns only whether there
-  // is one to hide, never its places; it says when it draws the frame, so main puts the traffic lights in its top bar.
+  // The page in the window says whether it draws the window's frame, so main puts the traffic lights in its top bar. The
+  // sheet's page (this app's /rail, over the window while the accounts sheet is open) asks for the keyboard and hears the
+  // skin of the page under it.
+  // `state`, `setHidden`, `onState` and `onFramed` are stubs for pages of older releases (bridge-contract.json): there is
+  // never a rail to hide.
   rail: {
-    state: () => ipcRenderer.invoke("rail:offer").then(railState),
+    state: () => Promise.resolve({ available: false, hidden: false }),
     drawsFrame: (drawn) => ipcRenderer.invoke("rail:draws-frame", drawn !== false),
-    setHidden: (hidden) => isLocalPage || navigator.userActivation?.isActive === true
-      ? ipcRenderer.invoke("rail:hide", hidden === true).then(railState) : Promise.reject(new Error("Choose to hide or show your computers.")),
-    onState: (cb) => {
-      const handler = (_event, state) => cb(railState(state));
-      ipcRenderer.on("rail:state", handler);
-      return () => ipcRenderer.removeListener("rail:state", handler);
-    },
+    setHidden: () => Promise.resolve({ available: false, hidden: false }),
+    onState: () => () => {},
     ...(isLocalPage ? {
       expand: (on) => ipcRenderer.invoke("rail:expand", on === true),
       onSkin: (cb) => {
@@ -228,11 +210,7 @@ const bridge = {
         ipcRenderer.on("rail:skin", handler);
         return () => ipcRenderer.removeListener("rail:skin", handler);
       },
-      onFramed: (cb) => {
-        const handler = (_event, framed) => cb(framed === true);
-        ipcRenderer.on("rail:framed", handler);
-        return () => ipcRenderer.removeListener("rail:framed", handler);
-      },
+      onFramed: () => () => {},
     } : {}),
   },
   // The notch island and the bot dock (electron/ambient-main.mjs): whichever place the window shows sums up its bots for
@@ -620,6 +598,7 @@ const bridge = {
     // Cancel trial / Cancel plan and Keep my plan: the survey's words only; main names the Cloud from the verified session.
     cancelPlan: survey => ipcRenderer.invoke("cloud-account:cancelPlan", survey ?? null),
     keepPlan: () => ipcRenderer.invoke("cloud-account:keepPlan"),
+    retention: step => ipcRenderer.invoke("cloud-account:retention", step ?? null),
     holdSignIns: () => ipcRenderer.invoke("cloud-account:holdSignIns"),
     carriedAis: () => ipcRenderer.invoke("cloud-account:carriedAis"),
     onState: cb => {
@@ -707,7 +686,7 @@ const bridge = {
       return () => ipcRenderer.removeListener("vps-cloud-move:changed", handler);
     },
   },
-  // This computer's page and My Cloud's once it is home: this app's own update (electron/app-update.mjs).
+  // This computer's page, My Cloud's once it is home, and a place the person chose: this app's own update (electron/app-update.mjs).
   appUpdate: {
     state: () => ipcRenderer.invoke("app-update:state"),
     restart: () => ipcRenderer.invoke("app-update:restart"),
@@ -852,6 +831,8 @@ const bridge = {
       ? ipcRenderer.invoke("cloud-plan:cancel", survey ?? null) : Promise.reject(new Error("Choose Cancel to cancel your plan.")),
     keep: () => isLocalPage || navigator.userActivation?.isActive === true
       ? ipcRenderer.invoke("cloud-plan:keep") : Promise.reject(new Error("Choose Keep my plan to keep it.")),
+    retention: step => isLocalPage || navigator.userActivation?.isActive === true
+      ? ipcRenderer.invoke("cloud-plan:retention", step ?? null) : Promise.resolve(false),
     // The room card's Not now, and Restart now after its upgrade: only from the person's click.
     roomNotNow: id => navigator.userActivation?.isActive === true
       ? ipcRenderer.invoke("cloud-plan:room-not-now", String(id)) : Promise.reject(new Error("Choose Not now.")),

@@ -44,7 +44,8 @@ if (!enabled) console.info("skipping computer panel focus UI e2e: set DUSK_UI_E2
       await expect.poll(() => evaluate("document.querySelector('[data-inline-computer]')?.dataset.stage ?? null"), { timeout: 15_000 }).not.toBe(null);
     };
     const after = async () => {
-      await expect.poll(() => evaluate(`document.querySelector(${JSON.stringify(screen)})?.getAttribute('aria-busy') ?? 'settled'`), { timeout: 15_000 }).toBe("settled");
+      // settled means the screen's button is back and not busy; a button that is gone while the tab redraws is not settled
+      await expect.poll(() => evaluate(`((button) => !button ? 'missing' : button.getAttribute('aria-busy') === 'true' ? 'busy' : 'settled')(document.querySelector(${JSON.stringify(screen)}))`), { timeout: 15_000 }).toBe("settled");
       return evaluate(`(() => {
         const button = document.querySelector(${JSON.stringify(screen)});
         return {

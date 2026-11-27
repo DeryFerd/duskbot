@@ -141,7 +141,7 @@ it("marks a line another app relays for a person as information only, now and wh
   expect(toolSteps(now)).toEqual([]);
   const stored = (await lines(ben, support.threadId)).find((m) => m.text === "yes, send it")!;
   expect(stored.relayed).toBe(true);
-  expect(stored.sender).toEqual({ name: "Ben" });
+  expect(stored.sender).toEqual({ name: "Ben", member: true });
 
   await say(olive, support, support.threadId, "Did you send it?", "Nothing was sent.");
   const asked = (await lines(olive, support.threadId)).find((m) => m.text === "Did you send it?")!;

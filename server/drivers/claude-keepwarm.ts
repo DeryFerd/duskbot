@@ -15,7 +15,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { CacheWarmPingResult } from "../contracts.ts";
-import { killCliTree, spawnCli } from "../procs.ts";
+import { spawnCli } from "../procs.ts";
+import { killClaudeTree } from "./claude-stored-login.ts";
 import { USAGE_LIMIT } from "./retry.ts";
 
 export const KEEP_WARM_PROMPT = "Reply with the single word: warm";
@@ -192,11 +193,11 @@ export function runForkedPrompt<T>(opts: {
       resolve(result);
     };
     const onAbort = () => {
-      void killCliTree(child);
+      void killClaudeTree(child, env);
       finish(opts.failed(`the ${what} was interrupted`));
     };
     const timer = setTimeout(() => {
-      void killCliTree(child);
+      void killClaudeTree(child, env);
       finish(opts.failed(`the ${what} timed out`));
     }, opts.timeoutMs);
     timer.unref?.();
@@ -205,7 +206,7 @@ export function runForkedPrompt<T>(opts: {
     child.stdout.on("data", (chunk: string) => {
       stdout += chunk;
       if (stdout.length > 1_000_000) {
-        void killCliTree(child);
+        void killClaudeTree(child, env);
         finish(opts.failed(`the ${what}'s output exceeded 1 MB`));
       }
     });

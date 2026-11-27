@@ -146,18 +146,24 @@ export function addressProblem(raw: string, place: Place): string | null {
   return null;
 }
 
-/** The local servers this machine runs (a 2xx or a key refusal from GET /models both mean something is there). */
+/** The address a local server answers on: its usual 127.0.0.1 one, else the same port on ::1 (a server bound to the IPv6
+ * loopback alone never answers on 127.0.0.1). A 2xx or a key refusal from GET /models both mean something is there. */
+export async function localBaseUrl(def: ModelProviderDef, place: Place, fetchImpl: typeof fetch = fetch): Promise<string | null> {
+  if (place === "cloud" || !def.local) return null;
+  for (const base of [def.baseUrl, def.baseUrl.replace("//127.0.0.1:", "//[::1]:")].filter((value, index, all) => all.indexOf(value) === index)) {
+    try {
+      const response = await fetchImpl(`${base}/models`, { redirect: "error", signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+      void response.body?.cancel().catch(() => {});
+      if (response.ok || response.status === 401 || response.status === 403) return base;
+    } catch { /* not on this address */ }
+  }
+  return null;
+}
+
+/** The local servers this machine runs. */
 export async function probeLocalProviders(place: Place, fetchImpl: typeof fetch = fetch): Promise<Set<string>> {
   if (place === "cloud") return new Set();
-  const found = await Promise.all(MODEL_PROVIDERS.filter((def) => def.local).map(async (def) => {
-    try {
-      const response = await fetchImpl(`${def.baseUrl}/models`, { redirect: "error", signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
-      void response.body?.cancel().catch(() => {});
-      return response.ok || response.status === 401 || response.status === 403 ? def.id : null;
-    } catch {
-      return null;
-    }
-  }));
+  const found = await Promise.all(MODEL_PROVIDERS.filter((def) => def.local).map(async (def) => (await localBaseUrl(def, place, fetchImpl)) ? def.id : null));
   return new Set(found.filter((id): id is string => id !== null));
 }
 

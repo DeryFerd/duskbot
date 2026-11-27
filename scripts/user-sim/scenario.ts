@@ -47,6 +47,10 @@ export type Check = { label: string; recall?: boolean } & (
   | { memory: { match?: string; not?: string; bot?: string } }
   /** a file in the person's home folder */
   | { file: { path: string; match?: string } }
+  /** the bot's tool calls in one chat step (by label), or anywhere: `match` against the tool's name and input */
+  | { tool: { step?: string; match: string }; min?: number; max?: number }
+  /** a file or folder in the person's home folder that must be gone */
+  | { gone: { path: string } }
 );
 
 export interface Scenario {
@@ -54,12 +58,21 @@ export interface Scenario {
   title: string;
   world: string;
   tags: string[];
-  /** more bots besides the main one, by name, with optional standing instructions */
-  bots?: Array<{ name: string; soul?: string }>;
+  /** more bots besides the main one, by name, with optional standing instructions, role title and description */
+  bots?: Array<{ name: string; soul?: string; title?: string; description?: string }>;
   /** merged into the world: arrays append, objects merge */
   seed?: Record<string, unknown>;
   /** overrides the world's start, e.g. "tue 08:40" */
   start?: string;
+  /** the connected apps for this scenario, replacing the world's list */
+  apps?: string[];
+  /** command line tools the person has signed in on their computer, served from the same app state ("gh") */
+  cli?: Array<"gh">;
+  /** the bot works on the computer it runs on (shell, files) and has its own browser, as a new bot does in the app;
+   * left out, the bot has neither */
+  computer?: boolean;
+  /** the bot's AI is at its usage limit from the start until `until` (relative, "@+1d 02:00"), refusing with `message` */
+  limit?: { until: string; message: string };
   steps: Step[];
   checks: Check[];
   /** what a great outcome looks like, for the judge */
@@ -79,6 +92,8 @@ export function validate(s: Scenario): string[] {
   if (!s.title) bad("no title");
   if (!worldIds().includes(s.world)) { bad(`unknown world ${s.world}`); return out; }
   const world = loadWorld(s.world);
+  for (const app of s.apps ?? []) if (!(APPS as readonly string[]).includes(app)) bad(`unknown app ${app}`);
+  for (const tool of s.cli ?? []) if (tool !== "gh") bad(`unknown cli ${tool}`);
   for (const app of world.apps) if (!(APPS as readonly string[]).includes(app)) bad(`world ${s.world} has unknown app ${app}`);
   if (!Array.isArray(s.tags) || !s.tags.length) bad("no tags");
   if (!s.judge) bad("no judge text");
@@ -101,7 +116,7 @@ export function validate(s: Scenario): string[] {
   for (const c of s.checks ?? []) {
     if (!c.label) bad("a check has no label");
     const k = kinds(c);
-    if (k.length !== 1 || !["app", "routine", "said", "proactive", "memory", "file"].includes(k[0]!)) { bad(`check "${c.label}" must have exactly one kind`); continue; }
+    if (k.length !== 1 || !["app", "routine", "said", "proactive", "memory", "file", "tool", "gone"].includes(k[0]!)) { bad(`check "${c.label}" must have exactly one kind`); continue; }
     const regexes: Array<string | undefined> = [];
     if ("app" in c) regexes.push(...Object.values(c.where ?? {}));
     if ("routine" in c) regexes.push(...Object.values(c.routine.where ?? {}));
@@ -109,6 +124,7 @@ export function validate(s: Scenario): string[] {
     if ("proactive" in c) { regexes.push(c.proactive.match); if (c.proactive.after && !labels.has(c.proactive.after)) bad(`check "${c.label}" names unknown step ${c.proactive.after}`); }
     if ("memory" in c) regexes.push(c.memory.match, c.memory.not);
     if ("file" in c) regexes.push(c.file.match);
+    if ("tool" in c) { regexes.push(c.tool.match); if (c.tool.step && !labels.has(c.tool.step)) bad(`check "${c.label}" names unknown step ${c.tool.step}`); }
     for (const r of regexes) if (r) try { new RegExp(r, "i"); } catch { bad(`check "${c.label}" has a bad regex ${r}`); }
   }
   if (!s.checks?.length) bad("no checks");

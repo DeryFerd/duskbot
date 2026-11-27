@@ -5,6 +5,7 @@ import { PDF_TEXT_LIMITS, type PdfTextReply } from "./pdf-text-contract.ts";
 
 const parser = await import("pdfjs-dist/legacy/build/pdf.mjs");
 Object.assign(globalThis, { pdfjsWorker: await import("pdfjs-dist/legacy/build/pdf.worker.mjs") });
+parentPort!.postMessage({ ready: true } satisfies PdfTextReply);
 const bundledAssets = new URL("./pdf-assets/", import.meta.url);
 const assets = existsSync(bundledAssets) ? bundledAssets : new URL("../node_modules/pdfjs-dist/", import.meta.url);
 // pdf.js wants these folders to end in "/", and a Windows path ends in a backslash (fs reads either separator)

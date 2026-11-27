@@ -31,6 +31,11 @@ gh run download "$run" --repo "$SOURCE" --name dusk-site --dir "$work/site"
 (cd "$work/assets" && shasum -a 256 -c "$work/site/SHA256SUMS")
 node -e 'const m=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if (m.version!==process.argv[2]) { console.error(`latest.json is for ${m.version}`); process.exit(1); }' "$work/site/latest.json" "$VERSION"
 
+# the phone app and the server/CLI package ride in every release (scripts/release-assets.ts), so self-hosters find them
+for need in DuskBot.apk duskbot.tgz "duskbot-$VERSION.tgz"; do
+  [ -s "$work/assets/$need" ] || { echo "$TAG has no $need: add it with scripts/release-assets.ts $VERSION --dir <folder> --pack-cli --carry-apk" >&2; exit 1; }
+done
+
 if [ "${DRY_RUN:-}" = 1 ]; then echo "dry run: verified $TAG (run $run); nothing uploaded"; exit 0; fi
 
 gh repo view "$DOWNLOADS" --json visibility --jq .visibility | grep -qx PUBLIC || { echo "$DOWNLOADS must exist and be public" >&2; exit 1; }
@@ -39,7 +44,7 @@ gh release view "$TAG" --repo "$DOWNLOADS" >/dev/null 2>&1 || gh release create 
 # browser parts the apps fetch by version, the checksums, and the signed latest.json (the apps' fallback when dusk.bot
 # does not answer, at /releases/latest/download/latest.json); the versioned copies of the installers stay on the source release
 shopt -s nullglob
-keep=("$work"/assets/DuskBot{.dmg,-intel.dmg,-setup.exe,-amd64.deb,.AppImage} "$work"/assets/DuskBot-"$VERSION"-{arm64,x64}.zip "$work"/assets/DuskBot-"$VERSION"-browser-darwin-*.zip)
+keep=("$work"/assets/DuskBot{.dmg,-intel.dmg,-setup.exe,-amd64.deb,.AppImage,-windows.zip,.apk} "$work"/assets/DuskBot-"$VERSION"-{arm64,x64}.zip "$work"/assets/DuskBot-"$VERSION"-browser-darwin-*.zip "$work"/assets/duskbot{,-"$VERSION"}.tgz)
 shopt -u nullglob
 [ "${#keep[@]}" -ge 7 ] || { echo "missing installers in $TAG: ${keep[*]##*/}" >&2; exit 1; }
 gh release upload "$TAG" --repo "$DOWNLOADS" --clobber "${keep[@]}" "$work/site/SHA256SUMS" "$work/site/latest.json"

@@ -16,6 +16,7 @@ import {
   MOBILE_GRANT_TTL_MS,
   MOBILE_LINK_VERSION,
   MOBILE_PLATFORMS,
+  NOT_PAIRED,
   PUSH_SERVICES,
   cleanPairSignIn,
   mobileLinkUrl,
@@ -26,6 +27,7 @@ import {
   type MobileRedeemResponse,
   type MobileRoutesResponse,
   type MobileTransport,
+  type PushTestResponse,
 } from "../../shared/mobile-link.ts";
 import type { CompanionEndpoint } from "../../shared/pairing-link.ts";
 import type { NotificationLogEntry } from "../../shared/notification.ts";
@@ -310,6 +312,25 @@ export function createMobileLink(deps: MobileLinkDeps) {
     } catch { return false; }
   }
 
+  /** an origin the caller names goes in a code only when it serves this very workspace, so a typo or someone else's
+   * server never gets a phone's pairing secret */
+  async function servesThisWorkspace(value: unknown): Promise<string | null> {
+    if (typeof value !== "string" || value.length > 2048) return null;
+    let origin: string;
+    try {
+      const url = new URL(value.trim());
+      if (url.protocol !== "https:" || url.username || url.password || (url.pathname !== "/" && url.pathname !== "") || url.search || url.hash) return null;
+      origin = url.origin;
+    } catch { return null; }
+    const own = deps.workspace().environmentId;
+    if (!own) return null;
+    try {
+      const response = await (deps.fetch ?? fetch)(`${origin}/.well-known/duskbot/environment`, { redirect: "error", signal: AbortSignal.timeout(ORIGIN_CHECK_MS) });
+      const descriptor = await response.json().catch(() => null) as { environmentId?: unknown } | null;
+      return response.ok && descriptor?.environmentId === own ? origin : null;
+    } catch { return null; }
+  }
+
   async function routes(device: DeviceRecord | null): Promise<MobileRoutesResponse> {
     const companion = deps.companion ? await deps.companion().catch(() => null) : null;
     const isHttps = (route: MobileTransport): route is MobileRoutesResponse["https"][number] => route.kind === "https";
@@ -354,6 +375,8 @@ export function createMobileLink(deps: MobileLinkDeps) {
     const label = typeof body.label === "string" && body.label.trim() ? body.label.trim().slice(0, 60) : "Phone";
     const companion = Array.isArray(body.companion) ? body.companion.slice(0, 16).map((one) => ({ ...(one as object), kind: "companion", net: (one as { kind?: unknown })?.kind })) : [];
     const signIn = cleanPairSignIn(body.signIn);
+    const named = body.origin === undefined ? null : await servesThisWorkspace(body.origin);
+    if (body.origin !== undefined && !named) return { status: 409, body: { error: "That address does not answer as this workspace over HTTPS, so a phone could not use it.", code: "origin_unverified" } };
 
     const opened = deps.sessions.openPairing({ scopes, label, ttlMs: MOBILE_GRANT_TTL_MS });
     const relay = agentLive();
@@ -369,7 +392,7 @@ export function createMobileLink(deps: MobileLinkDeps) {
       else log("mobile: the link agent did not open the pairing's relay channel in time");
     }
     const silent = relayTransport && relay?.origin && agentOrigin && !await agentOrigin ? relay.origin : null;
-    const via = mobileTransports([...httpsRoutes().filter((route) => route.kind !== "https" || route.url !== silent), ...(relayTransport ? [relayTransport] : []), ...companion]);
+    const via = mobileTransports([...(named ? [{ kind: "https", url: named }] : []), ...httpsRoutes().filter((route) => route.kind !== "https" || route.url !== silent), ...(relayTransport ? [relayTransport] : []), ...companion]);
     if (!via.length) {
       grants.delete(opened.id);
       return { status: 409, body: { error: "A phone cannot reach this workspace yet: turn on phone access or give it a public address first.", code: "unreachable" } };
@@ -468,6 +491,48 @@ export function createMobileLink(deps: MobileLinkDeps) {
     return { status: 200, body: { rev, channels: channels() } };
   }
 
+  /** A session signed in with a link (the old `duskbot pair` invite, a dusk cloud's sign-in) is not a phone yet, so it
+   * could never get a push. It may make itself one: only its own native bearer session, never a browser's cookie, a
+   * person's email sign-in, a team member's or a move-in's, whose notifications are not the workspace's to fan out. */
+  function adoptSelf(auth: RequestAuth, body: Record<string, unknown>): { status: number; body: unknown } {
+    const own = deviceOf(auth);
+    if (own) return { status: 200, body: { device: publicDevice(own) } };
+    if (auth.kind !== "session" || auth.via !== "bearer") return { status: 403, body: { error: "Only the phone app's own sign-in can become a paired phone.", code: "not_adoptable" } };
+    const session = auth.session;
+    if (!deps.adoptSessions && (deps.refusal() || session.email || session.owner || session.membershipAuthority || session.cookieOnly || session.moveIn)) {
+      return { status: 403, body: { error: "This sign-in cannot become a paired phone. Pair the phone from the computer instead.", code: "not_adoptable" } };
+    }
+    prune();
+    if (devices.length >= MAX_DEVICES) return { status: 409, body: { error: `This workspace already has ${MAX_DEVICES} phones. Remove one first.` } };
+    const name = typeof body.name === "string" && body.name.trim() ? body.name.trim().slice(0, 80) : session.label.slice(0, 80);
+    const platform = MOBILE_PLATFORMS.find((one) => one === body.platform) ?? "other";
+    const app = typeof body.app === "string" ? body.app.replace(/[^\w .+-]/g, "").slice(0, 40) : undefined;
+    const install = typeof body.install === "string" && INSTALL_ID.test(body.install) ? body.install : undefined;
+    const record: DeviceRecord = { id: randomUUID(), sessionId: session.id, name, platform, ...(app ? { app } : {}), ...(install ? { install } : {}), createdAt: now(), relay: null, push: null };
+    devices.push(record);
+    deps.sessions.holdForPairedDevice(session.id);
+    if (install) for (const replaced of devices.filter((one) => one !== record && one.install === install)) revoke(replaced.id);
+    persist();
+    bump();
+    log(`mobile: a signed-in phone (${platform}) became a paired phone`);
+    return { status: 200, body: { device: publicDevice(record) } };
+  }
+
+  /** one push to each phone asked for, sent now (no grace, no retries) so the answer says what the push service did */
+  async function testPush(targets: DeviceRecord[]): Promise<PushTestResponse> {
+    const status = await push.status?.().catch(() => null);
+    const results = await Promise.all(targets.map(async (device) => {
+      const registration = device.push;
+      const base = { id: device.id, name: device.name, platform: device.platform, service: registration?.service ?? null };
+      if (!registration) return { ...base, outcome: "unregistered" as const };
+      const message: PushMessage = { id: `push-test-${randomUUID()}`, kind: "test", title: "Test notification", botId: "dusk", botName: "dusk bot", threadId: "push-test" };
+      const outcome = await push.send({ service: registration.service, token: registration.token, ...(registration.environment ? { environment: registration.environment } : {}) }, message).catch(() => "failed" as const);
+      if (outcome === "gone" && device.push === registration) { device.push = null; persist(); }
+      return { ...base, outcome };
+    }));
+    return { relay: status?.relay ?? null, results };
+  }
+
   async function notify(notification: NotificationLogEntry, options: { adminOnly?: boolean; person?: string } = {}) {
     if (options.person || notification.forPerson || pushed.has(notification.id)) return;
     pushed.add(notification.id);
@@ -553,12 +618,29 @@ export function createMobileLink(deps: MobileLinkDeps) {
       }
       if (path === "/api/mobile/device" && method === "GET") {
         const device = deviceOf(auth);
-        json(res, device ? 200 : 404, device ? { device: publicDevice(device) } : { error: "this session is not a paired phone" });
+        // `delivering`: whether a push for its registration can leave this server at all (its own keys, or a push relay)
+        json(res, device ? 200 : 404, device ? { device: publicDevice(device), delivering: device.push ? push.delivers?.(device.push.service) ?? push.configured.includes(device.push.service) : null } : { error: "this session is not a paired phone", code: NOT_PAIRED });
+        return true;
+      }
+      if (path === "/api/mobile/device" && method === "POST") { const answer = adoptSelf(auth, await body()); json(res, answer.status, answer.body); return true; }
+      if (path === "/api/mobile/push/test" && method === "POST") {
+        const own = deviceOf(auth);
+        if (!own && !ownerOrAdmin(auth)) { json(res, 404, { error: "this session is not a paired phone", code: NOT_PAIRED }); return true; }
+        prune();
+        const asked = (await body()).deviceId;
+        const targets = own && !ownerOrAdmin(auth) ? [own] : typeof asked === "string" ? devices.filter((one) => one.id === asked) : own ? [own] : [...devices];
+        if (typeof asked === "string" && !targets.length) { json(res, 404, { error: "no such phone" }); return true; }
+        json(res, 200, await testPush(targets));
+        return true;
+      }
+      if (path === "/api/mobile/push" && method === "GET") {
+        if (!ownerOrAdmin(auth)) { json(res, 403, { error: "Only the owner or an admin can see where pushes go." }); return true; }
+        json(res, 200, await push.status?.() ?? { own: [...push.configured], relay: null, relayServices: null });
         return true;
       }
       if (path === "/api/mobile/push" && (method === "PUT" || method === "DELETE")) {
         const device = deviceOf(auth);
-        if (!device) { json(res, 403, { error: "only a paired phone registers for push" }); return true; }
+        if (!device) { json(res, 403, { error: "only a paired phone registers for push", code: NOT_PAIRED }); return true; }
         if (method === "DELETE") { device.push = null; persist(); json(res, 200, { ok: true }); return true; }
         const value = await body();
         const service = PUSH_SERVICES.find((one) => one === value.service);
@@ -568,7 +650,9 @@ export function createMobileLink(deps: MobileLinkDeps) {
         device.push = { service, token, ...(environment ? { environment } : {}), updatedAt: now() };
         for (const replaced of devices.filter((one) => one !== device && one.push?.service === service && one.push.token === token)) revoke(replaced.id);
         persist();
-        json(res, 200, { ok: true, delivering: push.delivers?.(service) ?? push.configured.includes(service) });
+        const delivering = push.delivers?.(service) ?? push.configured.includes(service);
+        if (!delivering) log(`mobile push: a phone registered for ${service}, but this server has no way to send ${service} pushes (no keys of its own and no push relay); run duskbot push to see why (docs/phone-push.md)`);
+        json(res, 200, { ok: true, delivering });
         return true;
       }
       if ((path === "/api/mobile/activity" || path === "/api/mobile/activity-start") && (method === "PUT" || method === "DELETE")) {

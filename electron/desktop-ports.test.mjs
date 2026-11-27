@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { companionFolder, companionLaunchPorts, companionPorts, DESKTOP_PORTS } from "./desktop-ports.mjs";
@@ -40,7 +41,7 @@ describe("the ports a companion launches on", () => {
 
 describe("the phone companion's folder", () => {
   it("is the usual one for the packaged app and its own per port for a dev app", () => {
-    expect(companionFolder({ home: "/Users/me", harnessPort: 18799, packaged: true })).toBe("/Users/me/.duskbot-companion");
-    expect(companionFolder({ home: "/Users/me", harnessPort: 8811, packaged: false })).toBe("/Users/me/.duskbot-companion/dev-8811");
+    expect(companionFolder({ home: "/Users/me", harnessPort: 18799, packaged: true })).toBe(join("/Users/me", ".duskbot-companion"));
+    expect(companionFolder({ home: "/Users/me", harnessPort: 8811, packaged: false })).toBe(join("/Users/me", ".duskbot-companion", "dev-8811"));
   });
 });

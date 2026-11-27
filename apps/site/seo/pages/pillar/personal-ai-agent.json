@@ -1,19 +1,21 @@
 {
   "path": "/personal-ai-agent",
   "type": "pillar",
-  "title": "Personal AI agents: how to choose one that fits",
+  "title": "Personal AI agent apps: how to pick one that fits your day",
   "nav": "personal ai agent",
   "h1": "a personal ai agent that fits your actual day",
-  "description": "Compare personal AI agent types by where you talk, where they run and what you pay for. See where dusk bot fits, its phone limits and a small trial to try.",
+  "description": "What a personal AI agent app does, four kinds worth comparing, where each one runs and the full bill, plus a small first job to try before you commit.",
   "keyword": "personal ai agent",
   "keywords": [
     "personal ai agent app",
     "personal ai agent free",
     "best ai agents for personal use",
-    "ai personal assistant app"
+    "ai personal assistant app",
+    "what is a personal ai agent",
+    "best personal ai agent"
   ],
-  "answer": "**stop reintroducing the same project every time you need a hand.** a personal agent can keep an ongoing job; dusk gives its bots separate chats and memory. choose where you want to talk, what it may reach and whether it must work with your laptop off. a texting service, cloud task agent or workflow builder may fit your day better.",
-  "updated": "2026-11-20",
+  "answer": "**a personal ai agent is an assistant that keeps an ongoing job for you, with memory, app access and repeat work.** stop reintroducing the same project every time you need a hand. choose where you talk, what it may reach and whether it must work with your laptop off. dusk gives each bot its own chats and memory. a texting service, cloud task agent or workflow builder may fit better.",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent: read against seo/facts, automated gate, independent fact-check pass",
@@ -98,8 +100,12 @@
       "md": "**give it the annoying job you already understand.** choose material you can hand over and an answer you can judge:\n\n- compare two documents\n- prepare questions before an appointment\n- review notes for a small project\n\nthen ask what would make the next attempt easier: memory, app access, repetition or work while you are away. a single question may need no ongoing agent.\n\ntry the same task across products. compare what each missed and how much context you had to repeat. your real mess tells you more than a polished demo."
     },
     {
+      "h": "what makes it an agent, not a chatbot",
+      "md": "**an agent keeps the job between conversations.** a chatbot answers the question in front of it. a personal agent carries on:\n\n- **memory:** it keeps what you tell it and facts it notices in your messages.[^7]\n- **app access:** it reads and drafts in apps you connect, and asks before sending unless you set a daily amount.[^8]\n- **repeat work:** it runs a routine on a schedule or when an app event arrives.[^13]\n- **a computer of its own:** some get a browser and desktop separate from yours.[^14]\n\nyou may not need all four. a weekly summary needs repeat work and app access, not a computer."
+    },
+    {
       "h": "choose a conversation you will return to",
-      "md": "**pick somewhere you will remember to text it.** [poke](/alternatives/poke) supports apple messages, telegram, whatsapp and rcs. it fits if your existing chat app is where you want the helper.[^3]\n\ndusk has desktop chats and phone pairing. get the iphone app from the app store for reply notifications. android uses the paired browser until the google play app arrives.[^6]\n\npairing to your computer needs it awake with dusk running. pairing to dusk cloud works with your computer off. try [phone access](/claude-code-from-your-phone) under the conditions you expect to use."
+      "md": "**pick somewhere you will remember to text it.** [poke](/alternatives/poke) supports apple messages, telegram, whatsapp and rcs. it fits if your existing chat app is where you want the helper.[^3]\n\ndusk has desktop chats and its own phone app. on iphone, get it from the app store; on android, download the .apk from dusk.bot/download until it reaches google play. the app tells you when a reply, question or approval arrives.[^6]\n\npairing to your computer needs it awake with dusk running. pairing to dusk cloud works with your computer off. try [phone access](/claude-code-from-your-phone) under the conditions you expect to use."
     },
     {
       "h": "tell it once, then keep the memory useful",
@@ -111,7 +117,11 @@
     },
     {
       "h": "where dusk earns its place",
-      "md": "**pick dusk when you want a helper whose work stays together.** give bots distinct jobs and memory. change a bot’s model without losing its chats, files or notes.\n\nmainly need research or a presentation? try [manus](/alternatives/manus) on that task. enjoy mapping and maintaining a visual process? look at [n8n](/alternatives/n8n).\n\nif you need alerts on android, dusk's browser version is a poor fit. its code is source-available under polyform noncommercial, not open source. personal and work use have different terms.[^12]"
+      "md": "**pick dusk when you want a helper whose work stays together.** give bots distinct jobs and memory. change a bot’s model without losing its chats, files or notes.\n\nmainly need research or a presentation? try [manus](/alternatives/manus) on that task. enjoy mapping and maintaining a visual process? look at [n8n](/alternatives/n8n). want the helper inside whatsapp or imessage? poke lives there; dusk bots live in dusk's own apps.[^3][^6]\n\nits code is source-available under polyform noncommercial, not open source. personal and work use have different terms.[^12]"
+    },
+    {
+      "h": "keep the first week supervised",
+      "md": "**give a new agent less power than you think it needs.** keep a new dusk bot on **ask for approval** for a few days, then loosen up.[^15] emails, messages and posts wait for your allow unless you set a daily amount.[^8]\n\ncareful with **Full access**: a bot there with no sending rule can send up to 25 a day without asking. give it **Ask every time**.\n\ndon't hand it your bank yet. let it earn trust on a job where a mistake costs you a minute, not money."
     },
     {
       "h": "try one helper before making a team",
@@ -120,16 +130,20 @@
   ],
   "faq": [
     {
-      "q": "what personal jobs should i try first?",
-      "a": "**try the preparation you keep postponing.** ask for questions from a document, a review of your notes or a small recurring report. start with material you know well enough to judge."
+      "q": "what is a personal ai agent?",
+      "a": "**an assistant that keeps working on your jobs, not just answering one question.** it remembers what you tell it, works in apps you connect and can repeat a task on a schedule. some also get a browser and desktop of their own. you talk to it in an app or a chat channel.[^7][^8][^13][^14]"
     },
     {
-      "q": "can a personal agent be free?",
-      "a": "**dusk’s desktop app is free for personal use.** your ai provider bills usage, and cloud hosting is separate. compare competitor allowances with your actual job."
+      "q": "can a personal ai agent be free?",
+      "a": "**dusk’s desktop app is free for personal use, with every feature.** your ai provider bills usage, and cloud hosting is separate. as of 12 november 2026, poke lists a free tier and pro at $19 a month; manus lists free and pro at $20 a month. compare allowances with your actual job.[^9][^10][^11]"
+    },
+    {
+      "q": "what is the best personal ai agent app?",
+      "a": "**the one that fits where you already talk and what you need done.** poke suits texting in apple messages, telegram or whatsapp. manus suits finished cloud tasks. n8n suits people who build workflows. dusk suits separate named bots with their own memory, on your computer, a cloud or your server.[^1][^3][^4][^5]"
     },
     {
       "q": "how do i use dusk from a phone?",
-      "a": "**pair to the machine holding your bots.** the iphone app notifies you of replies. on android, open the browser to read them. pairing to dusk cloud lets you text with your own computer off."
+      "a": "**get the app and pair it to the machine holding your bots.** iphone uses the app store; android uses the .apk from dusk.bot/download, as it is not on google play yet. paired with your computer, that computer must be on. paired with dusk cloud, it works with your computer off.[^6]"
     },
     {
       "q": "must a personal agent run in the cloud?",
@@ -189,6 +203,18 @@
     {
       "label": "dusk bot docs: license and moving bots",
       "url": "/docs/faq"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: a bot's computer and approvals",
+      "url": "/docs/computer"
+    },
+    {
+      "label": "dusk bot docs: tips",
+      "url": "/docs/tips"
     }
   ],
   "quick": {

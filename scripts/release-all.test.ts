@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { signPolicy, verifyPolicy } from "../apps/cloud-service/src/update-policy.ts";
 import type { FleetAnswer } from "../apps/dashboard/server/admin/ops/fleet.ts";
 import { configOf, createRelease, judge, nextPolicy, release, rolloutSteps } from "./release-all.ts";
+import { releaseAssets } from "./release-assets.ts";
 
 const { privateKey } = generateKeyPairSync("ed25519");
 const signing = `test-rel:${privateKey.export({ format: "der", type: "pkcs8" }).toString("base64url")}`;
@@ -88,6 +89,7 @@ describe("a release run", () => {
       ran.push(line);
       if (cmd === "git" && args[0] === "rev-parse") return "c".repeat(40);
       if (cmd === "git" && args[0] === "status") return "";
+      if (cmd === "gh" && args[0] === "release") return JSON.stringify({ assets: releaseAssets("0.2.26").map(a => ({ name: a.name })) });
       if (cmd === "ssh" && input !== undefined) {
         const to = /mv -f '[^']+' '([^']+)'/.exec(args.at(-1)!)![1]!;
         placed.push({ to, text: input });
@@ -95,7 +97,9 @@ describe("a release run", () => {
       }
       return "";
     };
-    const r = createRelease({ cfg: configOf({}), env, dryRun: false, fetchImpl, sh, now: () => (clock += MIN), sleep: async () => {}, log: () => {}, stateDir, siteDir: stateDir });
+    const changelogFile = join(stateDir, "changelog.json");
+    writeFileSync(changelogFile, JSON.stringify({ v: 1, releases: [{ version: "0.2.26", date: "2026-11-21", items: [] }] }));
+    const r = createRelease({ cfg: configOf({}), env, dryRun: false, fetchImpl, sh, now: () => (clock += MIN), sleep: async () => {}, log: () => {}, stateDir, siteDir: stateDir, changelogFile });
     return { r, ran, placed, stateDir, policy: () => verifyPolicy(JSON.parse(policyDoc!), [{ kid: "test-rel", x: publicKeys.split(":")[1]! }]) };
   }
   const options = { version: "0.2.26", now: false, canary: ["c1"], steps: [10, 100], watchMs: 5 * MIN, maxWaitMs: 20 * MIN, skipBuild: true, dryRun: false, pollMs: 0 };
@@ -135,7 +139,7 @@ describe("a release run", () => {
       expect(w.policy().rollout).toBeUndefined();
       expect(w.policy().serial).toBe(5);
       const state = JSON.parse(readFileSync(w.r.stateFile("0.2.26"), "utf8"));
-      expect(Object.keys(state.done)).toEqual(["preflight", "desktop-rollout", "desktop", "cloud-package", "canary", "cloud-widen", "desktop-100"]);
+      expect(Object.keys(state.done)).toEqual(["preflight", "github-files", "desktop-rollout", "desktop", "cloud-package", "canary", "cloud-widen", "desktop-100"]);
       const before = w.ran.length;
       await expect(release(w.r, options)).rejects.toThrow();
       expect(w.ran.slice(before).some(line => line.includes("build-home-package"))).toBe(false);
@@ -157,5 +161,24 @@ describe("a release run", () => {
     await release(dry, { ...options, now: true, steps: [100], dryRun: true });
     expect(lines).toContain("  (dry run) there is no tag v0.2.26");
     expect(lines).toContain("- desktop");
+  });
+
+  it("refuses a release whose changelog entry or GitHub files are missing, and a dry run lists every file it lacks", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "dusk-release-all-")); dirs.push(stateDir);
+    const changelogFile = join(stateDir, "changelog.json");
+    writeFileSync(changelogFile, JSON.stringify({ v: 1, releases: [{ version: "0.2.25", date: "x", items: [] }] }));
+    const desktopOnly = releaseAssets("0.2.26").filter(a => a.kind !== "cli" && a.kind !== "android").map(a => ({ name: a.name }));
+    const sh = (cmd: string, args: string[]) => cmd === "gh" ? JSON.stringify({ assets: desktopOnly }) : cmd === "git" && args[0] === "rev-parse" ? "c".repeat(40) : "";
+    const fetchImpl = (async () => new Response("{}", { status: 404 })) as unknown as typeof fetch;
+    const env = { DUSK_RELEASE_SIGNING_KEY: signing, DUSK_RELEASE_PUBLIC_KEYS: publicKeys };
+    const real = createRelease({ cfg: configOf({}), env, dryRun: false, fetchImpl, sh, log: () => {}, stateDir, changelogFile });
+    await expect(release(real, options)).rejects.toThrow(/changelog\.json has no 0\.2\.26 entry/);
+    writeFileSync(changelogFile, JSON.stringify({ v: 1, releases: [{ version: "0.2.26", date: "x", items: [] }] }));
+    await expect(release(real, options)).rejects.toThrow(/lacks DuskBot\.apk, duskbot\.tgz, duskbot-0\.2\.26\.tgz/);
+    const lines: string[] = [];
+    rmSync(real.stateFile("0.2.26"), { force: true });
+    const dry = createRelease({ cfg: configOf({}), env: {}, dryRun: true, fetchImpl, sh, log: line => lines.push(line), stateDir, changelogFile });
+    await release(dry, { ...options, now: true, steps: [100], dryRun: true });
+    expect(lines.filter(l => l.includes("MISSING")).map(l => l.trim().split(/\s+/)[1])).toEqual(["DuskBot.apk", "duskbot.tgz", "duskbot-0.2.26.tgz"]);
   });
 });

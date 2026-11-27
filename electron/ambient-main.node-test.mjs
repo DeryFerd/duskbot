@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import test from "node:test";
-import { installAmbient, isAmbientWindow } from "./ambient-main.mjs";
+import { DISPLAY_SETTLE_MS, FOLLOW_MS, installAmbient, isAmbientWindow } from "./ambient-main.mjs";
 import { SETTLE_WAIT_MS } from "./ambient-window.mjs";
 
-function fakes({ prefs = { island: true, dock: true }, activity = null, platform = "darwin", seed = true, trace = null } = {}) {
+function fakes({ prefs = { island: true, dock: true }, activity = null, platform = "darwin", seed = true, trace = null, displays = null, log = undefined } = {}) {
   const windows = [];
   class BrowserWindow {
     constructor(options) {
@@ -33,13 +33,15 @@ function fakes({ prefs = { island: true, dock: true }, activity = null, platform
   const ipcMain = { handle: (channel, fn) => handlers.set(channel, fn), on: (channel, fn) => listeners.set(channel, fn) };
   const appPage = Object.assign(new EventEmitter(), { sent: [], throttling: [], send(channel, payload) { this.sent.push([channel, payload]); }, isDestroyed: () => false, getURL: () => "http://127.0.0.1:5199/", setBackgroundThrottling(on) { this.throttling.push(on); } });
   const builtIn = { id: 1, internal: true, label: "Built-in Liquid Retina XDR Display", bounds: { x: 0, y: 0, width: 1512, height: 982 }, workArea: { x: 0, y: 37, width: 1512, height: 945 } };
-  const screen = Object.assign(new EventEmitter(), { getAllDisplays: () => [builtIn], getPrimaryDisplay: () => builtIn, getCursorScreenPoint: () => ({ x: 10, y: 10 }) });
+  // `displays`: { list, primary, cursor }, each changeable by a test (a display plugged in, the lid closed, the pointer moved)
+  const desk = displays ?? { list: [builtIn], primary: builtIn, cursor: { x: 10, y: 10 } };
+  const screen = Object.assign(new EventEmitter(), { desk, getAllDisplays: () => desk.list, getPrimaryDisplay: () => desk.primary, getCursorScreenPoint: () => desk.cursor });
   let saved = prefs;
   const opened = [], revealed = [];
   const ambient = installAmbient({
     ipcMain, BrowserWindow, platform, page: () => appPage, origin: () => "http://127.0.0.1:5199",
     file: { read: () => saved, write: (value) => { saved = value; } },
-    openChat: (botId, threadId, origin) => opened.push(origin === undefined ? [botId, threadId] : [botId, threadId, origin]), reveal: () => revealed.push(true), activity, trace,
+    openChat: (botId, threadId, origin) => opened.push(origin === undefined ? [botId, threadId] : [botId, threadId, origin]), reveal: () => revealed.push(true), activity, trace, ...(log ? { log } : {}),
   });
   // the surfaces wait for the app's page to say who is there: by default it says one bot as they start
   const publish = (bots) => listeners.get("ambient:publish")({ sender: appPage }, { bots, labels: {}, lang: "en" });
@@ -357,5 +359,129 @@ test("a surface showing a bot's chat asks the app's page for a long stretch of i
   // both surfaces off: the page may rest again
   handlers.get("ambient:set")({ sender: appPage }, { island: false, dock: false });
   assert.deepEqual(appPage.throttling, [false, true]);
+  ambient.close();
+});
+
+// two displays as a MacBook on a desk has them: the built-in one, an external monitor to its right and a little higher
+const twoDisplays = ({ primary = "built-in", cursor = { x: 100, y: 100 } } = {}) => {
+  const builtIn = { id: 1, internal: true, label: "Built-in Liquid Retina XDR Display", bounds: { x: 0, y: 0, width: 1512, height: 982 }, workArea: { x: 0, y: 37, width: 1512, height: 945 } };
+  const external = { id: 2, internal: false, label: "LG HDR 4K", bounds: { x: 1512, y: -200, width: 2560, height: 1440 }, workArea: { x: 1512, y: -175, width: 2560, height: 1415 } };
+  return { builtIn, external, desk: { list: [builtIn, external], primary: primary === "built-in" ? builtIn : external, cursor } };
+};
+const overlap = (a, b) => Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
+/** Which displays a window shows on: every one its bounds reach into, by even a single point. */
+const shownOn = (win, list) => list.filter((entry) => overlap(win.bounds, entry.bounds) > 0).map((entry) => entry.id);
+
+test("with a built-in and an external display, both surfaces show on the chosen one only, for every choice", async () => {
+  const cases = [
+    { display: "built-in", primary: "external", cursor: { x: 2000, y: 100 }, on: 1 },
+    { display: "built-in", primary: "built-in", cursor: { x: 2000, y: 100 }, on: 1 },
+    { display: "main", primary: "external", cursor: { x: 100, y: 100 }, on: 2 },
+    { display: "main", primary: "built-in", cursor: { x: 2000, y: 100 }, on: 1 },
+    { display: "active", primary: "built-in", cursor: { x: 2000, y: 100 }, on: 2 },
+    { display: "active", primary: "external", cursor: { x: 100, y: 100 }, on: 1 },
+  ];
+  for (const { display, primary, cursor, on } of cases) {
+    const { desk } = twoDisplays({ primary, cursor });
+    const { windows, screen, ambient } = fakes({ prefs: { island: true, dock: true, display }, displays: desk });
+    ambient.start(screen);
+    await tick();
+    for (const name of ["island", "dock"]) {
+      assert.deepEqual(shownOn(surface(windows, name), desk.list), [on], `${name} with "${display}", main ${primary}, pointer at ${cursor.x}`);
+    }
+    ambient.close();
+  }
+});
+
+test("changing the choice in Settings moves both surfaces at once, and nothing of them stays on the other display", async () => {
+  const { desk } = twoDisplays({ cursor: { x: 2000, y: 100 } });
+  const { windows, screen, ambient, handlers, appPage } = fakes({ prefs: { island: true, dock: true, display: "active" }, displays: desk });
+  ambient.start(screen);
+  await tick();
+  assert.deepEqual(shownOn(surface(windows, "island"), desk.list), [2]);
+  const view = handlers.get("ambient:set")({ sender: appPage }, { display: "built-in" });
+  assert.equal(view.display, "built-in");
+  assert.deepEqual(view.displays.map((entry) => entry.id), [1, 2]);
+  for (const name of ["island", "dock"]) assert.deepEqual(shownOn(surface(windows, name), desk.list), [1], name);
+  // the dock against an edge another display touches: no overhang onto it, and its page is told so
+  const dock = surface(windows, "dock");
+  assert.equal(dock.bounds.x + dock.bounds.width, 1512);
+  const layout = dock.sent.filter(([channel]) => channel === "ambient:layout").at(-1)[1];
+  assert.equal(layout.dock.overhang, 0);
+  assert.equal(layout.width, dock.bounds.width);
+  handlers.get("ambient:set")({ sender: appPage }, { display: "main" });
+  for (const name of ["island", "dock"]) assert.deepEqual(shownOn(surface(windows, name), desk.list), [1], name);
+  ambient.close();
+});
+
+test("the lid closing, the lid opening and the main display changing keep the surfaces on the chosen display", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "setInterval"] });
+  const { builtIn, external, desk } = twoDisplays();
+  const { windows, screen, ambient } = fakes({ prefs: { island: true, dock: true, display: "built-in" }, displays: desk });
+  ambient.start(screen);
+  await tick();
+  const on = () => ["island", "dock"].map((name) => shownOn(surface(windows, name), desk.list));
+  assert.deepEqual(on(), [[1], [1]]);
+  // lid closed: the built-in display is gone, the external one becomes main and the surfaces wait there
+  const shifted = { ...external, bounds: { ...external.bounds, x: 0, y: 0 }, workArea: { ...external.workArea, x: 0, y: 25 } };
+  desk.list = [shifted]; desk.primary = shifted;
+  screen.emit("display-removed", {}, builtIn);
+  assert.deepEqual(on(), [[2], [2]]);
+  // lid opened: back on the built-in one, with the external one still main (so the built-in sits left of it, below)
+  const back = { ...builtIn, bounds: { ...builtIn.bounds, x: -1512, y: 200 }, workArea: { ...builtIn.workArea, x: -1512, y: 237 } };
+  desk.list = [shifted, back];
+  screen.emit("display-added", {}, back);
+  assert.deepEqual(on(), [[1], [1]]);
+  // macOS, still sorting the displays out, drops the island on the main display a moment later: it is put back once
+  // the change has settled
+  surface(windows, "island").bounds = { ...surface(windows, "island").bounds, x: 1000, y: 0 };
+  t.mock.timers.tick(DISPLAY_SETTLE_MS);
+  assert.deepEqual(on(), [[1], [1]]);
+  // the built-in display made main: every place moves, and the surfaces go with their display
+  const main = { ...back, bounds: { ...back.bounds, x: 0, y: 0 }, workArea: { ...back.workArea, x: 0, y: 37 } };
+  const right = { ...shifted, bounds: { ...shifted.bounds, x: 1512, y: -200 }, workArea: { ...shifted.workArea, x: 1512, y: -175 } };
+  desk.list = [main, right]; desk.primary = main;
+  screen.emit("display-metrics-changed", {}, main, ["bounds"]);
+  assert.deepEqual(on(), [[1], [1]]);
+  assert.equal(surface(windows, "island").bounds.y, 0);
+  ambient.close();
+});
+
+test("a surface the system moved onto another display is put back within a second, and left alone if the system keeps at it", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "setInterval"] });
+  const { desk } = twoDisplays();
+  const lines = [];
+  const { windows, screen, ambient } = fakes({ prefs: { island: true, dock: true, display: "built-in" }, displays: desk, log: (line) => lines.push(line) });
+  ambient.start(screen);
+  await tick();
+  const island = surface(windows, "island"), dock = surface(windows, "dock");
+  const home = { ...dock.bounds };
+  dock.bounds = { ...home, x: 3000 };
+  t.mock.timers.tick(FOLLOW_MS);
+  assert.deepEqual(dock.bounds, home);
+  // in use, it stays wherever it is until it has settled
+  island.webContents.emit("ipc-message", {}, "ambient:pointer", true);
+  const held = { ...island.bounds, x: 2600 };
+  island.bounds = held;
+  t.mock.timers.tick(FOLLOW_MS);
+  assert.deepEqual(island.bounds, held);
+  island.webContents.emit("ipc-message", {}, "ambient:pointer", false);
+  island.webContents.emit("ipc-message", {}, "ambient:settled");
+  t.mock.timers.tick(FOLLOW_MS);
+  assert.deepEqual(shownOn(island, desk.list), [1]);
+  // a window the system refuses to let go of: a few tries, one line in the log, then no more
+  dock.setBounds = () => {};
+  dock.bounds = { ...home, x: 3000 };
+  for (let index = 0; index < 20; index++) t.mock.timers.tick(FOLLOW_MS);
+  assert.equal(lines.filter((line) => line.includes("keeps moving the dock")).length, 1);
+  ambient.close();
+});
+
+test("alone on its display the dock keeps its overhang past the screen's edge", async () => {
+  const { windows, screen, ambient } = fakes({ prefs: { island: true, dock: true, display: "built-in" } });
+  ambient.start(screen);
+  await tick();
+  const dock = surface(windows, "dock");
+  assert.equal(dock.bounds.x + dock.bounds.width, 1512 + 4);
   ambient.close();
 });

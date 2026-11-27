@@ -12,7 +12,7 @@
     "claude rewrite notion page with backup"
   ],
   "answer": "**see the whole rewrite before the old checklist goes.** this action replaces a notion page's child blocks and offers a dry run first. it can also make a backup. some blocks and nested content stay out of that backup, and a staged replacement can fail halfway. use the preview to decide whether a full rewrite is worth it.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,7 +45,7 @@
     "toolkit": "notion",
     "slug": "NOTION_REPLACE_PAGE_CONTENT"
   },
-  "what": "**use replacement when the old body really should go.** give the bot the page and new text. a dry run shows what it would remove and add without doing it.\n\nit normally archives the old children, then adds the new ones in batches. an optional backup isn't a complete copy of every page structure. inspect complex pages before trusting this route.",
+  "what": "**use replacement when the old body really should go.** give the bot the page and new text. a dry run shows what it would remove and add without doing it.\n\nit normally archives the old children, then adds the new ones in batches. an optional backup isn't a complete copy of every page structure. inspect complex pages before trusting this route.\n\nread the current text with [get page markdown](/integrations/notion/get-page-markdown) first. only adding a section? [add content blocks](/integrations/notion/add-multiple-content-blocks) keeps the old body.",
   "uses": [
     "**equipment checks:** replace a flat checklist with the new version you approved.",
     "**event instructions:** update a simple page after the venue agrees to the procedure.",
@@ -121,5 +121,9 @@
       "partial failure means stop and inspect"
     ]
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "sunniva approves a new loading dock checklist.\nthe page has 12 old items and a nested table.",
+    "after": "dry run: 12 items and 1 table would go, 15 items would arrive.\nbackup page made first.\nthe nested table missing from the backup: flagged before the write."
+  }
 }

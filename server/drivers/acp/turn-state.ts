@@ -1,9 +1,12 @@
 // What the ACP driver keeps for each thread: its session on an agent process (alone or shared with other threads'
 // sessions) and the turn running in it.
-import type { ProviderErrorCode, RequestOutcome, SendTurnInput } from "../../contracts.ts";
+import { readFile } from "node:fs/promises";
+import type { ProviderErrorCode, RequestOutcome, SendTurnInput, TurnImageInput } from "../../contracts.ts";
 import type { spawnCli } from "../../procs.ts";
 import { errorReplyFailure, type ErrorReplyFailure } from "../engine-errors.ts";
 import { decodeInjectId } from "../local-inject.ts";
+import type { TurnProgressFields } from "../../../shared/turn-progress.ts";
+import type { BackgroundCall } from "./background-wait.ts";
 import type { AcpHost, AcpLink } from "./host.ts";
 
 /** Failures fixed on the provider account, not by retrying; the reporting process stays pooled. */
@@ -57,6 +60,12 @@ export interface AcpTurn {
   lookupTools: Set<string>;
   interruptTimer: ReturnType<typeof setTimeout> | null;
   stopQuietWatch: (() => void) | null;
+  /** Calls seen this turn, by what their end means once the prompt has answered (supports with backgroundWakes). */
+  backgroundCalls: Map<string, BackgroundCall>;
+  /** Each such call's last progress report, said again while the turn waits on it. */
+  backgroundProgress: Map<string, TurnProgressFields>;
+  /** Set while the prompt has answered and the turn waits on background work to wake the agent. */
+  backgroundWait: { observe: (kind: unknown) => void; stop: () => void } | null;
   pushAssistantDelta: (delta: string) => string;
   flushAssistantText: () => void;
   receiveModelVariants: (result: any) => void;
@@ -146,4 +155,20 @@ export function endTurn(current: AcpTurn, ok: boolean, stopReason: string | null
   }
   if (ended && !current.state.producedItem) return { ok: false, stopReason: "empty_turn", error: { message: `${ai} finished without replying.` } };
   return { ok, stopReason };
+}
+
+/** Hermes resends its reasoning, the reply so far at its end, as one more chunk of the same message. */
+export function isHermesReasoningReplay(chunk: string, streamed: string): boolean {
+  const reply = streamed.trim();
+  const replay = chunk.trim();
+  return reply !== "" && /^(?:> |-# )?💭/.test(replay) && replay.endsWith(reply)
+    && /\n\n[ \t]*$/.test(replay.slice(0, -reply.length));
+}
+
+export async function readAcpImageBlocks(images: readonly TurnImageInput[]) {
+  return Promise.all(images.map(async (image) => ({
+    type: "image" as const,
+    data: (await readFile(image.path)).toString("base64"),
+    mimeType: image.mime,
+  })));
 }

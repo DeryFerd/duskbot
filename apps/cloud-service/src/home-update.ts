@@ -113,7 +113,9 @@ export function createHomeUpdates(deps: HomeUpdateDeps) {
     return u;
   }
 
-  async function rollback(c: StoredCloud, x: HomeUpdateContext, u: HomeUpdateState, verdict: Extract<Verdict, { action: "rollback" }>) {
+  /** `computerDownAt`: the rollback is for a computer found down right after the install; when the version before does
+   *  not bring it back either, the release did not cause it and is offered again once the computer answers */
+  async function rollback(c: StoredCloud, x: HomeUpdateContext, u: HomeUpdateState, verdict: Extract<Verdict, { action: "rollback" }>, computerDownAt?: number) {
     const from = u.guard.current?.version ?? null;
     const done = await deps.provider.run(c.serverId!, deps.image.rollbackCommand, 300);
     if (!done.ok || !done.stdout.includes("rolled back")) {
@@ -129,7 +131,12 @@ export function createHomeUpdates(deps: HomeUpdateDeps) {
     if (relayExits(verdict.to.version)) await asideRelay(c);
     const started = await deps.provider.run(c.serverId!, deps.image.startCommand(x.origin, x.upstream), 120);
     if (!started.ok) throw new RetryableCloudError("Cloud home did not start after a rollback.");
-    await deps.computer?.check(c, "after_rollback", deps.now(), true);
+    const after = await deps.computer?.check(c, "after_rollback", computerDownAt === undefined ? deps.now() : Math.max(deps.now(), computerDownAt + 1), true);
+    if (computerDownAt !== undefined && after?.health === "down" && from && forgive(u.guard, from)) {
+      u.refused = null;
+      log(c, "update_forgiven", "computer_down", { versions: from });
+      deps.save(c);
+    }
   }
 
   /** a runs_failed rollback the computer caused gives its version back once: inside MISBLAMED, or when a check from the
@@ -218,7 +225,9 @@ export function createHomeUpdates(deps: HomeUpdateDeps) {
     if (!idleForUpdate(x.busy) || (u.retryAt !== null && u.retryAt > now)) return false;
     if (x.nextDueAt != null && Math.abs(x.nextDueAt - now) < DUE_RUN_GUARD_MS) return false;
     // a home whose computer is down is repaired first: a trial there would blame the release for it
-    if (deps.computer?.downRecently(c) || (await deps.computer?.check(c, "before_update", now - 2 * 60_000, true))?.health === "down") return false;
+    if (deps.computer?.downRecently(c)) return false;
+    const before = await deps.computer?.check(c, "before_update", now - 2 * 60_000, true);
+    if (before?.health === "down") return false;
     if (pkg.file) await deps.provider.upload(c.serverId, deps.image.packagePath, readFileSync(pkg.file));
     const floor = pkg.signature ? u.guard.policy.floor : null;
     const done = await deps.provider.run(c.serverId, deps.image.installCommand(pkg.sha256, pkg.url, pkg.signature, floor), 600);
@@ -239,7 +248,14 @@ export function createHomeUpdates(deps: HomeUpdateDeps) {
       return true;
     }
     // an omb-home from before 2026-11-19 leaves the gate on the older package's code
-    await deps.computer?.check(c, "after_update", deps.now(), true);
+    const after = await deps.computer?.check(c, "after_update", Math.max(deps.now(), (before?.at ?? 0) + 1), true);
+    // the package carries the gate: a computer that answered before the install and stays down after it, its gate and
+    // docker restarted, was taken down by the release. Its trial runs would all be excused as the computer's
+    if (after?.health === "down" && (before?.health === "ok" || before?.health === "healed")) {
+      log(c, "update_computer_down", "after_update", { version: offer!.version, what: after.down });
+      const failed = selfTested(u.guard, false, deps.now());
+      if (failed.action === "rollback") await rollback(c, x, u, failed, after.at);
+    }
     return true;
   }
 

@@ -4,8 +4,11 @@ export function createServerSupervisor({
   stop,
   onReady,
   onUnavailable,
-  /** a ready server exited on its own, while recovery was not paused */
+  /** a ready server exited on its own with a failure code, while recovery was not paused */
   onCrash = () => {},
+  /** a ready server exited on its own with code 0 (its own graceful shutdown, or on Windows a kill, which ends it with
+   * 0): not a crash, though it is still started again */
+  onStopped = () => {},
   onExhausted,
   log = () => {},
   retryDelaysMs = [1_000, 2_000, 4_000],
@@ -59,7 +62,7 @@ export function createServerSupervisor({
   function watch(proc) {
     if (stopped || current) throw new Error("Cannot replace an owned server child");
     current = proc;
-    proc.once("exit", () => {
+    proc.once("exit", (code) => {
       // Late exits from a failed boot must not clear a replacement's state.
       if (current !== proc) return;
       const wasReady = readySince !== null;
@@ -67,7 +70,7 @@ export function createServerSupervisor({
       current = null;
       readySince = null;
       onUnavailable();
-      if (wasReady && !paused) { try { onCrash(); } catch {} }
+      if (wasReady && !paused) { try { if (code === 0) onStopped(code); else onCrash(code); } catch {} }
       if (wasReady) schedule();
     });
   }

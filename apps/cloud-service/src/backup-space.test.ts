@@ -32,9 +32,9 @@ describe("what this service leaves out of a home's tar", () => {
   const skip = skippedPath(STREAM_SKIPPED);
 
   it("names regenerable downloads and caches, never a person's data or logins", () => {
-    for (const p of ["data/.npm/_cacache/x", "data/.agent-browser/browsers/chrome-157/chrome", `data/${D}/tools/chrome/131/linux64/chrome`, "data/.cache/duskbot/voice/m.bin",
+    for (const p of ["data/.npm/_cacache/x", `data/${D}/tools/npm/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/codex`, `data/${D}/tools/npm/bin/codex`, "data/.agent-browser/browsers/chrome-157/chrome", `data/${D}/tools/chrome/131/linux64/chrome`, "data/.cache/duskbot/voice/m.bin",
       `data/${D}/agent-browser-profiles/p1/Default/Cache/Cache_Data/f`, `data/${D}/cache/x`, "./data/.cache/pip/x", "data/.npm"]) expect(skip(p), p).toBe(true);
-    for (const p of ["data/.npmrc", "data/.agent-browser/sessions/s.json", `data/${D}/tools/npm/bin/claude`, `data/${D}/tools/agent-browser/bin`, `data/${D}/bots/b/SOUL.md`,
+    for (const p of ["data/.npmrc", "data/.agent-browser/sessions/s.json", `data/${D}/tools/npm/bin/claude`, `data/${D}/tools/npm/bin/codex-helper`, `data/${D}/tools/npm/lib/node_modules/@openai/codex-other/x`, `data/${D}/tools/npm/lib/node_modules/@github/copilot/x`, `data/${D}/tools/agent-browser/bin`, `data/${D}/bots/b/SOUL.md`,
       `data/${D}/agent-browser-profiles/p1/Default/Cookies`, `data/${D}/messages.db`, `data/${D}/workspaces/w/notes.md`, "data/.claude/.credentials.json",
       "data/.local/share/pnpm/store/v3/x", "data/.cache/ms-playwright/x"]) expect(skip(p), p).toBe(false);
   });

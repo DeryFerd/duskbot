@@ -12,7 +12,7 @@
     "ai outlook email reply with attachment"
   ],
   "answer": "**answer the delivery question with the certificate already attached.** the bot replies to a specific outlook email with text you approve, files and optional cc or bcc. name the mailbox and original message so it lands in the right conversation. this action sends; ask for text here first if you still want to edit.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,7 +45,7 @@
     "toolkit": "outlook",
     "slug": "OUTLOOK_REPLY_EMAIL"
   },
-  "what": "**keep the answer attached to the email that prompted it.** the bot finds and reads the exact message first. name the connected mailbox too, so a personal reply leaves from personal mail.\n\nyou can use plain text or html, attach files and name extra cc or bcc recipients. enable the html option for styled replies, or the recipient sees formatting tags as text.",
+  "what": "**keep the answer attached to the email that prompted it.** the bot finds and reads the exact message first. name the connected mailbox too, so a personal reply leaves from personal mail.\n\nyou can use plain text or html, attach files and name extra cc or bcc recipients. enable the html option for styled replies, or the recipient sees formatting tags as text.\n\nthe reply needs the message's id, not an address. the bot gets it from [query emails](/integrations/outlook/query-emails). starting a fresh conversation instead? use [send email](/integrations/outlook/send-email).",
   "uses": [
     "answer a supplier’s delivery question with the confirmed address",
     "attach an approved certificate to the customer email that requested it",
@@ -119,5 +119,9 @@
   "tip": {
     "text": "work or personal? choose the mailbox before writing the first line."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "fiona at ironbark asks if the certificate covers both sites.\nyou confirm it does and name the pdf in your files folder.",
+    "after": "reply in her original thread:\n\"yes, it covers both sites. certificate attached.\"\nattached: the pdf you named\nsent after your ok, since sending asks every time."
+  }
 }

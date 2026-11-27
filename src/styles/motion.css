@@ -108,6 +108,15 @@
 [data-mood="error"] .working-mascot-bob { animation: mood-flinch 320ms step-end, mood-lean 3.2s step-end 320ms infinite; }
 [data-mood="done"] .working-mascot-bob { animation: mood-hop 300ms step-end forwards; }
 [data-mood="done"] .working-mascot-blink { animation: none; }
+/* the glance working mascot (GlanceMascot): a breath on the body, the eyes darting to each new look, a lift and a sink
+   gliding; everything else changes on the step's own timers */
+@keyframes glance-breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(0.981, 1.032); } }
+.glance-breathe { transform-origin: 50% 100%; animation: glance-breathe 3.8s ease-in-out infinite; }
+.glance-eyes { transition: transform 110ms var(--dusk-ease-out); }
+.glance-rise { transition: transform 200ms var(--dusk-ease-out); }
+.glance-sink { transform-origin: 50% 100%; transition: transform 500ms var(--dusk-ease-out); }
+:root[data-reduced-motion="true"] .glance-breathe { animation: none; }
+:root[data-reduced-motion="true"] :is(.glance-eyes, .glance-rise, .glance-sink) { transition: none; }
 :root[data-reduced-motion="true"] :is(.working-mascot-bob, .working-mascot-glance) { animation: none; }
 :root[data-reduced-motion="true"] .working-mascot-blink { animation-name: working-mascot-blink-still; }
 
@@ -148,4 +157,6 @@
   [data-working-mascot] :is(.working-mascot-bob, .working-mascot-glance) { animation: none; }
   [data-working-mascot] .working-mascot-blink { animation: working-mascot-blink-still 3.8s ease-in-out infinite; }
   [data-mood="done"] .working-mascot-blink { animation: none; }
+  .glance-breathe { animation: none; }
+  :is(.glance-eyes, .glance-rise, .glance-sink) { transition: none; }
 }

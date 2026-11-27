@@ -11,6 +11,10 @@ type Flow = {
   busy: boolean;
   starting: boolean;
   revoked: boolean;
+  /** Its own person stopped it before the provider gave a link: nothing about it is told. */
+  abandoned?: boolean;
+  /** Settles once the provider start under way has ended, so a start right after an abandoned one waits for it. */
+  pending?: Promise<void>;
   /** Signed in already when this flow began: a signed-in status then proves nothing about this sign-in. */
   wasSignedIn: boolean;
   expiry?: ReturnType<typeof setTimeout>;
@@ -25,6 +29,8 @@ export class ProviderAuthSessions {
   /** How a sign-in went, for usage signals; `error` is read only to pick a reason code. */
   private readonly outcome: (instanceId: string, outcome: "started" | "succeeded" | "failed" | "expired" | "cancelled", error?: unknown) => void;
   private readonly told = new Set<string>();
+  /** An instance and owner whose last flow the app stopped to try another way: the next start is the same attempt. */
+  private readonly retrying = new Set<string>();
   /** Whether this AI reads as signed in right now, from its last status. */
   private readonly signedInNow: (instanceId: string) => boolean;
 
@@ -71,6 +77,10 @@ export class ProviderAuthSessions {
   async start(instance: LoginInstance, owner: string, options?: ProviderAuthenticationOptions): Promise<ProviderAuthenticationStart> {
     if (!instance.startAuthentication) throw failure("Account setup is unavailable for this provider.", 404);
     const existing = this.flows.get(instance.instanceId);
+    if (existing?.abandoned && existing.owner === owner && existing.pending) {
+      await existing.pending;
+      return this.start(instance, owner, options);
+    }
     if (existing && (existing.busy || (existing.owner !== owner && existing.expiresAt > Date.now()))) {
       throw failure("A sign-in is already in progress. Finish or cancel it in the browser that started it, or wait for it to expire.", 409);
     }
@@ -79,6 +89,8 @@ export class ProviderAuthSessions {
       wasSignedIn: (() => { try { return this.signedInNow(instance.instanceId); } catch { return false; } })() };
     flow.busy = true;
     flow.starting = true;
+    let settle!: () => void;
+    flow.pending = new Promise<void>((resolve) => { settle = resolve; });
     this.flows.set(instance.instanceId, flow);
     try {
       const result = await instance.startAuthentication(options);
@@ -89,7 +101,8 @@ export class ProviderAuthSessions {
       flow.flowId = result.flowId;
       const expiry = Date.parse(result.expiresAt ?? "");
       if (Number.isFinite(expiry)) flow.expiresAt = expiry;
-      if (!resuming) this.tell(instance.instanceId, result.flowId, "started");
+      const retryKey = `${instance.instanceId}|${owner}`;
+      if (!resuming && !this.retrying.delete(retryKey)) this.tell(instance.instanceId, result.flowId, "started");
       if (result.phase === "waiting") this.expireLater(flow);
       if (result.phase === "succeeded") {
         this.flows.delete(instance.instanceId);
@@ -99,7 +112,7 @@ export class ProviderAuthSessions {
       return result;
     } catch (error) {
       if ((!resuming || flow.revoked) && this.flows.get(instance.instanceId) === flow) this.flows.delete(instance.instanceId);
-      this.tell(instance.instanceId, null, "failed", error);
+      if (!flow.abandoned) this.tell(instance.instanceId, null, "failed", error);
       if (error instanceof BoxFenceError) {
         console.warn(`provider sign-in: the bot box refused ${error.path} for ${instance.instanceId}`);
         throw failure("This AI's sign-in could not start on this server: its bot box would not let the AI use its own folder. Update dusk bot on this server, then try again.", 500);
@@ -108,6 +121,8 @@ export class ProviderAuthSessions {
     } finally {
       flow.busy = false;
       flow.starting = false;
+      flow.pending = undefined;
+      settle();
     }
   }
 
@@ -149,11 +164,35 @@ export class ProviderAuthSessions {
     } finally { flow.busy = false; }
   }
 
-  async cancel(instanceId: string, owner: string, flowId: string) {
+  /** `why`: the person stopped it, the app lost track of it (a dropped connection, a computer that slept), its wait ran
+   * out, or the app stopped it to try another way at once (that next start is the same attempt). */
+  async cancel(instanceId: string, owner: string, flowId: string, why: "person" | "lost" | "timeout" | "retry" = "person") {
     const flow = this.owned(instanceId, owner, flowId);
     flow.busy = true;
     try { await flow.instance.cancelAuthentication?.(); }
-    finally { flow.busy = false; flow.expiresAt = 0; this.tell(instanceId, flowId, "cancelled"); }
+    finally {
+      flow.busy = false;
+      flow.expiresAt = 0;
+      if (why === "retry") {
+        this.told.add(`${instanceId}|${flowId}|end`);
+        this.retrying.add(`${instanceId}|${owner}`);
+      } else if (why === "lost") this.tell(instanceId, flowId, "failed", "network: the app lost the connection to this sign-in");
+      else if (why === "timeout") this.tell(instanceId, flowId, "expired", "sign-in timed out");
+      else this.tell(instanceId, flowId, "cancelled");
+    }
+  }
+
+  /** The person stopped a sign-in before its link reached the app: the provider's start is stopped when it returns,
+   * and one that already returned is cancelled. */
+  async abandon(instanceId: string, owner: string): Promise<void> {
+    const flow = this.flows.get(instanceId);
+    if (!flow || flow.owner !== owner || flow.revoked) return;
+    if (flow.starting) {
+      flow.revoked = true;
+      flow.abandoned = true;
+      return;
+    }
+    if (flow.flowId && flow.expiresAt > Date.now() && !flow.busy) await this.cancel(instanceId, owner, flow.flowId);
   }
 
   /** Never pulls a login another admin is completing, and no one may start one while the credential is being removed. */

@@ -22,8 +22,8 @@ describe("self-hosted update row", () => {
       label: "Version 0.1.93 available (release notes)",
       subtitle: "Update with: docker compose pull dusk && docker compose up -d",
     });
-    const npm = check({ install: "npm", available: true, latest: "0.1.93", command: "npm install -g duskbot@latest", restart: true });
-    expect(serverUpdateRow("available", npm).subtitle).toBe("Update with: npm install -g duskbot@latest, then restart the app");
+    const npm = check({ install: "npm", available: true, latest: "0.1.93", command: "duskbot update", restart: true });
+    expect(serverUpdateRow("available", npm).subtitle).toBe("Update with: duskbot update, then restart the app");
     // an install it cannot recognise still learns there is a new version
     expect(serverUpdateRow("available", check({ install: "unknown", available: true, latest: "0.1.93" }))).toEqual({
       label: "Version 0.1.93 available (release notes)",
@@ -77,12 +77,12 @@ describe("self-hosted update row", () => {
 });
 
 describe("the update row for another server the app shows", () => {
-  const npm = check({ current: "0.1.116", install: "npm", available: true, latest: "0.1.127", command: "npm install -g duskbot@latest", restart: true });
+  const npm = check({ current: "0.1.116", install: "npm", available: true, latest: "0.1.127", command: "duskbot update", restart: true });
 
   it("says whose update it is, and that whoever runs that server installs it", () => {
     expect(serverUpdateRow("available", npm, "0.1.116", "Office Mac")).toEqual({
       label: "Office Mac can update to 0.1.127",
-      subtitle: "Whoever runs that server updates it with: npm install -g duskbot@latest, then restarts it",
+      subtitle: "Whoever runs that server updates it with: duskbot update, then restarts it",
     });
     const docker = check({ available: true, latest: "0.1.127", command: "docker compose pull dusk && docker compose up -d", restart: false });
     expect(serverUpdateRow("available", docker, "0.1.116", "Office Mac").subtitle).toBe(
@@ -107,10 +107,19 @@ describe("the update row for another server the app shows", () => {
     try {
       expect(serverUpdateRow("available", npm, "0.1.116", "Office Mac")).toEqual({
         label: "Office Mac kann auf 0.1.127 aktualisiert werden",
-        subtitle: "Wer diesen Server betreibt, aktualisiert ihn mit: npm install -g duskbot@latest und startet ihn danach neu",
+        subtitle: "Wer diesen Server betreibt, aktualisiert ihn mit: duskbot update und startet ihn danach neu",
       });
     } finally {
       setLocale("en");
     }
   });
 });
+
+describe("inside the desktop app", () => {
+  it("never asks for a reload that brings back the same build: the app's own update is what helps", () => {
+    const newer = { current: "0.2.28", install: "npm" as const, available: false };
+    expect(serverCheckPhase(newer, "0.2.26", "0.2.26")).toBe("up-to-date");
+    expect(serverCheckPhase(newer, "0.2.26", null)).toBe("reload");
+  });
+});
+

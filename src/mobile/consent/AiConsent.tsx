@@ -14,7 +14,7 @@ import { usePlatform } from "../platform";
 import { Sheet } from "../Sheet";
 import { aiProviders, consentCovers, consentKey, createConsentStore, type AiConsent } from "./ai-consent";
 
-type ConsentContext = { consent: AiConsent | null; covered: boolean; open(): void };
+type ConsentContext = { consent: AiConsent | null; covered: boolean; asking: boolean; open(): void };
 const Context = createContext<ConsentContext | null>(null);
 export const useAiConsent = () => useContext(Context);
 const SheetSlot = createContext<ReactNode>(null);
@@ -67,7 +67,7 @@ export function AiConsentProvider({ children }: { children: ReactNode }) {
     await store.decline();
     close();
   };
-  const value = useMemo<ConsentContext>(() => ({ consent, covered, open: () => setOpen(true) }), [consent, covered]);
+  const value = useMemo<ConsentContext>(() => ({ consent, covered, asking: open, open: () => setOpen(true) }), [consent, covered, open]);
 
   return (
     <Context value={value}>

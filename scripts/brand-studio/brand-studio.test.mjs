@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { existsSync } from "node:fs";
-import { basename } from "node:path";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { changedRect, encodeGif } from "./gif.mjs";
@@ -275,7 +275,7 @@ describe("the naming convention", () => {
     expect(job("stop.before.png")).toMatchObject({ crops: [null], labels: [] });
     expect(job("stop.before.png")).not.toHaveProperty("arrange");
     const [closer] = planReframe("/a", names, { "stop.closer.png": { shots: names, crop: "5,5,50,50", labels: ["before", "after"] } }).slice(-1);
-    expect(closer).toMatchObject({ kind: "still", out: "/a/stop.closer.png", shots: ["/a/stop.before.raw.png", "/a/stop.after.raw.png"], labels: ["before", "after"] });
+    expect(closer).toMatchObject({ kind: "still", out: join("/a", "stop.closer.png"), shots: [join("/a", "stop.before.raw.png"), join("/a", "stop.after.raw.png")], labels: ["before", "after"] });
     expect(() => planReframe("/a", names, { "stop.closer.png": { shots: ["gone.raw.png"] } })).toThrow(/has no gone\.raw\.png/);
     expect(() => planReframe("/a", names, { "stop.after.png": { shots: names } })).toThrow(/takes no shots/);
     expect(() => planReframe("/a", names, { "stop.gif": {} })).toThrow(/does not yield: stop\.gif/);
@@ -289,7 +289,7 @@ describe("the naming convention", () => {
     const names = ["tab.f01-search.raw.png", "tab.f02-new-bot.raw.png", "tab.f03-pepper.raw.png", "tab.after.raw.png"];
     const gif = (options) => planReframe("/a", names, { "tab.gif": options }).find((job) => job.kind === "animation");
     expect(gif({ frames: ["tab.f03-pepper.raw.png", "tab.f01-search.raw.png"], hold: 900, fade: 0, crop: "0,0,300,200" })).toMatchObject({
-      shots: ["/a/tab.f03-pepper.raw.png", "/a/tab.f01-search.raw.png"], labels: ["pepper", "search"], holdMs: 900, fadeMs: 0,
+      shots: [join("/a", "tab.f03-pepper.raw.png"), join("/a", "tab.f01-search.raw.png")], labels: ["pepper", "search"], holdMs: 900, fadeMs: 0,
       crops: [{ x: 0, y: 0, width: 300, height: 200 }, { x: 0, y: 0, width: 300, height: 200 }],
     });
     const whole = gif({});

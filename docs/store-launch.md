@@ -40,9 +40,11 @@ Google (play.google.com/console). State on 2026-11-25:
 
 - Developer account **Dusk Bot** (personal), ID `4895116571946777115`, under siddz.dev@gmail.com. Identity verified
   2026-11-10. **Blocked:** "Verify your phone numbers" is still open, and Play disables Create app until it is done.
-- Signed bundle ready: versionName 1.2.10, versionCode 11 (the sideloaded APK on GitHub releases is 1.2.9, code 10),
-  built from dev with `DUSK_ANDROID_VERSION_CODE=11 DUSK_ANDROID_VERSION_NAME=1.2.10
-  apps/mobile/scripts/build-android-release.sh`. Not uploaded yet: there is no app record to upload to.
+- Signed bundle built earlier: versionName 1.2.10, versionCode 11, from dev with `DUSK_ANDROID_VERSION_CODE=11
+  DUSK_ANDROID_VERSION_NAME=1.2.10 apps/mobile/scripts/build-android-release.sh`. Not uploaded yet: there is no app
+  record to upload to. The sideloaded APK has moved past it (every release carries the newest one; `android` in
+  https://dusk.bot/releases/latest.json names its version, 1.2.12 code 13 as of 0.2.31), so rebuild the bundle with a
+  versionCode above the APK's before the first Play upload.
 - Push uses the "Messages" notification channel (id `messages`, high importance): made at app start, the manifest's
   FCM default, and named in every FCM message.
 

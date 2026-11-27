@@ -12,7 +12,7 @@
     "ai search meeting by name"
   ],
   "answer": "**the meeting is next week. the title has completely left your head.** give the bot a topic, person or date range and it finds candidates in one google calendar. descriptions and attendee details can match too. ask for dates beside the results so you can spot the appointment without opening every day yourself.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -43,12 +43,13 @@
     "toolkit": "googlecalendar",
     "slug": "GOOGLECALENDAR_FIND_EVENT"
   },
-  "what": "**a topic and a date window beat scrolling through a busy month.** the search covers titles, descriptions, locations and people. name the calendar as well as the clue. broad words bring back more candidates.\n\nneed every training date? ask for each occurrence of repeating meetings within that window. the bot must follow further results even after an empty batch.",
+  "what": "**a topic and a date window beat scrolling through a busy month.** the search covers titles, descriptions, locations and people. name the calendar as well as the clue. broad words bring back more candidates.\n\nneed every training date? ask for each occurrence of repeating meetings within that window. the bot must follow further results even after an empty batch.\n\nfound the right one? hand it to [patch event](/integrations/google-calendar/patch-event) for a change, or [delete event](/integrations/google-calendar/delete-event) to cancel it. for every date of a series, use [get event instances](/integrations/google-calendar/get-event-instances).",
   "uses": [
     "**find a guest’s workshop.** their name may appear only in the description.",
     "**recover an old discussion.** search last quarter by the office-move venue.",
     "**plan around an absence.** find out-of-office entries before arranging customer time.",
-    "**list training dates.** request each occurrence of a repeating course."
+    "**list training dates.** request each occurrence of a repeating course.",
+    "**trace what moved.** list events changed since monday after a messy week of rescheduling."
   ],
   "routine": {
     "message": "every other wednesday at 2, search my work google calendar for events mentioning sablewing in the next fortnight.\n\n- include individual dates of recurring meetings\n- show the calendar, title, date and start time here\n- finish reading all result batches\n\nleave unrelated matches as candidates for me to choose. never move appointments or contact attendees.",
@@ -107,8 +108,16 @@
     {
       "mistake": "getting one result for a repeating meeting",
       "fix": "ask for individual occurrences within your chosen dates."
+    },
+    {
+      "mistake": "giving the calendar by its display name",
+      "fix": "the search needs the calendar id. let the bot look it up from your calendar list first."
     }
   ],
+  "worked": {
+    "before": "\"when did we meet rhea from larkmoor studio?\"\nher studio appears only in the description.",
+    "after": "search: \"larkmoor\" on primary, september to november\nmatches: 12 september and 3 october\nthe bot followed every page, including an empty one"
+  },
   "tip": {
     "text": "a strange title can still be the right meeting. ask why the search matched it."
   },

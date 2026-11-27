@@ -41,9 +41,24 @@ export function writeSitemaps({ site, SITE_URL, built, cohorts, today = localDay
   return files.map(([name]) => name);
 }
 
-// search engines and the ai search and answer crawlers are all welcome; the app demo and the design boards are not pages
-export const SEARCH_BOTS = ['Googlebot', 'Bingbot', 'OAI-SearchBot', 'ChatGPT-User', 'PerplexityBot', 'Perplexity-User', 'Claude-SearchBot', 'Claude-User'];
+// search engines, the ai search and answer crawlers and the ai model crawlers are all welcome; the app demo and the
+// design boards are not pages
+export const SEARCH_BOTS = ['Googlebot', 'Bingbot', 'YandexBot', 'DuckDuckBot', 'Applebot', 'OAI-SearchBot', 'ChatGPT-User', 'PerplexityBot', 'Perplexity-User', 'Claude-SearchBot', 'Claude-User',
+  'GPTBot', 'ClaudeBot', 'Google-Extended', 'Applebot-Extended'];
 export function robotsTxt(SITE_URL) {
   const keepOut = 'Disallow: /explore/\nDisallow: /api/\n';
   return `${SEARCH_BOTS.map((b) => `User-agent: ${b}\nAllow: /\n${keepOut}`).join('\n')}\nUser-agent: *\nAllow: /\n${keepOut}\nSitemap: ${SITE_URL}/sitemap.xml\n`;
+}
+
+// /llms.txt (llmstxt.org): what dusk bot is and its main pages, docs and guides, for ai assistants reading the site.
+// pages are { address, title, description, group }; the seo cohort pages stay in the sitemaps only
+export function llmsTxt(SITE_URL, pages) {
+  const line = (p) => `- [${p.title}](${SITE_URL}${p.address === '/' ? '/' : p.address})${p.description ? `: ${p.description}` : ''}`;
+  const by = (f) => pages.filter(f).sort((a, b) => a.address.localeCompare(b.address)).map(line);
+  const sections = [
+    ['pages', by((p) => p.group === 'core' && !p.address.startsWith('/docs'))],
+    ['docs', by((p) => p.group === 'core' && p.address.startsWith('/docs'))],
+    ['guides', by((p) => p.group === 'hubs')],
+  ].filter(([, l]) => l.length);
+  return `# dusk bot\n\n> Your own team of AI bots, in a chat app, on the AI accounts you already have. Free on your computer for personal use, and on dusk cloud they keep working with your laptop off.\n\n${sections.map(([h, l]) => `## ${h}\n\n${l.join('\n')}\n`).join('\n')}`;
 }

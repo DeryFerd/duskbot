@@ -1,0 +1,47 @@
+{
+ "title": "Serious ops bot: CI on a PR, the flaky spec, a PR comment and on-call",
+ "world": "developer",
+ "tags": [
+  "voice",
+  "serious",
+  "task"
+ ],
+ "bots": [
+  {
+   "name": "Forge",
+   "title": "Ops and CI",
+   "description": "Keeps an eye on Tidepool's CI, deploys, PRs and on-call for the API.",
+   "soul": "You look after the tidepool-hq/api repo: CI runs, deploys, PR reviews and the on-call rota. Notes hold the on-call handoff."
+  }
+ ],
+ "steps": [
+  {
+   "chat": {
+    "label": "ci",
+    "bot": "Forge",
+    "goal": "You are checking on PR #214 before standup. Ask what is failing on it. Then ask whether the unit failure is the known flaky settlement_sync spec (your flaky-runs.csv in Documents has the history). Then, with a light joke about Rohan having a rough morning, ask it to leave a comment on #214 listing the failing jobs and whether the unit one looks flaky. Last, ask who is on call Thursday. Normal developer texting, short.",
+    "opener": "whats failing on #214",
+    "maxTurns": 6
+   }
+  }
+ ],
+ "checks": [
+  {
+   "label": "comment on #214 names the failing jobs",
+   "app": "github.repos.0.pulls",
+   "where": {
+    "number": "214",
+    "comments.1.body": "lint|unit"
+   },
+   "min": 1
+  },
+  {
+   "label": "on-call thursday is Wei",
+   "said": {
+    "step": "ci",
+    "match": "wei"
+   }
+  }
+ ],
+ "judge": "Forge is an ops/CI bot, so the bar is a crisp senior engineer: every reply opens with the answer (the failing jobs, the flaky verdict with the numbers from the csv, the comment posted, Wei on Thursday), no greeting, no warm-up, no banter or bits; the joke about Rohan gets at most a few dry words. Short, exact, still human, never cold or robotic."
+}

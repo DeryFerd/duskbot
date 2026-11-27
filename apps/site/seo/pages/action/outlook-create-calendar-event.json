@@ -12,7 +12,7 @@
     "ai schedule outlook calendar event"
   ],
   "answer": "**put the agreed visit in outlook while the details are still fresh.** give a bot the subject, start, end and time zone. it can add a location, guests or repeating dates. leave the calendar unnamed and it uses your main one. creation counts as a change, so ask to review the entry first; sending approval won't pause it.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -50,7 +50,9 @@
     "**keep personal plans in the right place.** name the calendar before creating the appointment.",
     "**make a site visit easy to find.** include the street address and travel notes.",
     "**reserve agreed office hours.** give the repeating pattern an end.",
-    "**create the meeting people expect.** request the teams online-meeting option."
+    "**create the meeting people expect.** request the teams online-meeting option.",
+    "**book the slot the group agreed on.** take one option from [find meeting times](/integrations/outlook/find-meeting-times) and create it with the same start, end and time zone.",
+    "**avoid a second copy.** have the bot run [search calendar events](/integrations/outlook/search-calendar-events) for the title before a monthly routine adds another."
   ],
   "routine": {
     "message": "on the last tuesday of each month at 16:40, look in my outlook calendar named field visits for next month's stockroom inspection. propose it on the first thursday, 15:00 to 15:30, europe/paris, at the east stockroom. skip creation if it already exists. never fall back to my main calendar. show the title, full dates, location and empty guest list here. ask me before creating anything. after approval, create it and return the saved details. never add attendees.",
@@ -128,5 +130,9 @@
       "guests, location and repeat pattern match the plan"
     ]
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "gideon agrees a tuesday site visit with kestrel joinery by email.\nhe writes: \"14:00, an hour, london time, at the yard.\"",
+    "after": "event: kestrel joinery site visit\ntuesday 14:00 to 15:00, europe/london\nlocation: the yard address from his email\nshown as busy, on the main calendar, since no other calendar was named."
+  }
 }

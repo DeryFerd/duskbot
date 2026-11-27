@@ -13,7 +13,7 @@ import { IslandIntroHost } from "@/components/onboarding/IslandIntroHost";
 import { NotesAskHost } from "@/components/onboarding/NotesAskHost";
 import { CloudTimeZoneSync } from "@/components/CloudTimeZone";
 import { useWarmChatImages } from "@/components/use-warm-chat-images";
-import { cloudSignInDue, type WelcomeViewer } from "@/lib/onboarding";
+import { cloudSignInDue, useBehindWelcome, type WelcomeViewer } from "@/lib/onboarding";
 import { LiveCallHost } from "@/components/LiveCallHost";
 import { liveCallEnabled } from "@/lib/feature-flags";
 import { AmbientPublisher } from "@/ambient/AmbientPublisher";
@@ -54,9 +54,8 @@ import { useTeamChats } from "@/state/team-chats";
 import { needsYouVersion, useTeamPeopleLoader } from "@/state/team-people";
 import { inboxVersion, useInboxLoader, useInboxPanel, useInboxReady, useInboxSupport } from "@/state/inbox";
 import { InboxColumn } from "@/components/inbox/InboxColumn";
-import { PlacesRail } from "@/components/PlacesRail";
 import { CloudHowTo } from "@/components/CloudHowTo";
-import { DesktopCapabilitiesProvider, useCaptionChrome, useDesktopCapabilities, windowFramed } from "@/components/DesktopCapabilities";
+import { DesktopCapabilitiesProvider, useCaptionChrome, narrowPastLights, useDesktopCapabilities, windowFramed } from "@/components/DesktopCapabilities";
 import { WindowCaptionButtons } from "@/components/WindowCaptionButtons";
 import { WindowFrameBar } from "@/components/WindowFrameBar";
 import { cn } from "@/lib/cn";
@@ -198,6 +197,7 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
   const welcomeOnScreen = cloudWelcomeVisible({ viewer, connected: state.connected, enginesKnown: state.instances.length > 0, onboarding: state.config?.onboarding }, welcome)
     && state.activeView === "chat";
   const welcomeIncoming = useWelcomeIncoming(viewer);
+  const behindWelcome = useBehindWelcome();
   const firstRun = cloudFirstRun({ welcome: welcomeOnScreen, intent: cloudAsk, signIn: cloudSignIn || cloudJobWaiting });
   useAmbientAway("cloud-first-run", Boolean(firstRun));
 
@@ -311,6 +311,7 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
   // a reload with the panel open keeps its column from the first frame, not only once the bots arrive
   const panelLoading = state.settingsOpen && !bot && !group && state.hydrated !== true && !remoteClient && !settingsOverlay;
   const framed = windowFramed(capabilities);
+  const pastLights = narrowPastLights(capabilities);
   const strips = <>
     <CloudAsleepStrip />
     <LiveConnectionStrip connected={state.connected} hydrated={state.hydrated === true} />
@@ -322,26 +323,25 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
     <EgressFallbackNotice />
   </>;
   return (
-    <div className={cn("flex h-full flex-col", framed && "bg-frame")}>
+    <div className={cn("flex h-full flex-col", framed && "bg-frame")} style={pastLights}>
       <WindowFrameBar />
       <BotLimitPopup />
-      {!framed && strips}
+      {!framed && <div data-notices-behind-welcome className="contents" {...behindWelcome}>{strips}</div>}
       <div className="relative flex min-h-0 flex-1">
       <button
         type="button"
-        ref={menuButtonRef}
+        ref={menuButtonRef} {...behindWelcome}
         aria-label={t("app.openBotList")}
         aria-expanded={drawerOpen}
         onClick={() => setDrawerOpen(true)}
-        className="absolute left-3 top-3 z-30 rounded-md p-1.5 text-ink-secondary hover:bg-raised hover:text-ink max-md:top-2.5 max-md:flex max-md:size-10 max-md:items-center max-md:justify-center max-md:rounded-full max-md:border max-md:border-transparent max-md:bg-card max-md:p-0 max-md:text-ink md:hidden"
+        className="absolute left-3 top-3 z-30 max-md:left-[var(--narrow-button-x,0.75rem)] rounded-md p-1.5 text-ink-secondary hover:bg-raised hover:text-ink max-md:top-2.5 max-md:flex max-md:size-10 max-md:items-center max-md:justify-center max-md:rounded-full max-md:border max-md:border-transparent max-md:bg-card max-md:p-0 max-md:text-ink md:hidden"
       >
         <Menu size={18} className="max-md:hidden" />
         <ChevronLeft size={20} aria-hidden="true" className="hidden max-md:block" />
       </button>
-      <PlacesRail />
-      {/* A framed window shows the app, its sidebar and the chat or page, as one square pane under the top bar and beside
-          the window's rail, running to the window's right and bottom edges. */}
-      <div data-window-card={framed ? "" : undefined}
+      {/* A framed window shows the app, its sidebar and the chat or page, as one square pane under the top bar, running to
+          the window's right and bottom edges. */}
+      <div data-window-card={framed ? "" : undefined} {...behindWelcome}
         className={framed ? "relative flex min-w-0 flex-1 flex-col overflow-hidden bg-app" : "contents"}>
       {framed && strips}
       <div className={framed ? "relative flex min-h-0 flex-1" : "contents"}>

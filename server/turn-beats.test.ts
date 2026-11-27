@@ -17,28 +17,35 @@ const toolStart = (title: string, input: unknown, id = title) =>
 const toolDone = (id: string) => event({ type: "item.completed", itemType: "tool", itemId: id, ok: true });
 const said = (text: string) => event({ type: "item.completed", itemType: "assistant_text", text });
 
-function setup(options: { replies?: Partial<Record<BeatKind, string>>; enabled?: boolean; writerMs?: number; soul?: string; showsThinking?: boolean; fails?: string[] } = {}) {
+function setup(options: { replies?: Partial<Record<BeatKind, string>>; enabled?: boolean; writerMs?: number | Partial<Record<BeatKind, number>>; soul?: string; showsThinking?: boolean; fails?: string[] } = {}) {
   vi.useFakeTimers();
   const prompts: Array<{ kind: BeatKind; prompt: string }> = [];
+  const logs: string[] = [];
   const posts: Array<{ kind: BeatKind; text: string; turnId: string }> = [];
   let live = true;
   const replies = { ack: "On it, comparing budget keyboards now.", plan: "You'll get a short list of three picks with prices. I'll check the prices are current before sending.", milestone: "Seven review sites read so far; now checking prices.", ...options.replies };
   const beats = createTurnBeats({
     enabled: () => options.enabled !== false,
-    writer: () => (prompt) => {
+    // like the engines' one-off calls, an aborted write rejects
+    writer: () => (prompt, { signal }) => {
       const kind: BeatKind = prompt.includes("Write the acknowledgement") ? "ack" : prompt.includes("Write the second message") ? "plan" : "milestone";
       prompts.push({ kind, prompt });
       const failure = options.fails?.shift();
       if (failure) return Promise.reject(new Error(failure));
-      return new Promise((resolve) => setTimeout(() => resolve(replies[kind]), options.writerMs ?? 2_000));
+      const ms = typeof options.writerMs === "number" ? options.writerMs : options.writerMs?.[kind] ?? 2_000;
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => resolve(replies[kind]), ms);
+        signal.addEventListener("abort", () => { clearTimeout(timer); reject(new Error("Claude review aborted")); }, { once: true });
+      });
     },
+    log: (line) => logs.push(line),
     bot: () => ({ name: "Nova", soul: options.soul ?? "You are Nova, a market researcher." }),
     ...(options.showsThinking === undefined ? {} : { showsThinking: () => options.showsThinking! }),
     live: (_threadId, turnId) => live && turnId === TURN,
     post: ({ kind, text, turnId }) => posts.push({ kind, text, turnId }),
   });
   const send = (e: RuntimeEvent) => beats.onEvent(e);
-  return { beats, prompts, posts, send, stop: () => { live = false; } };
+  return { beats, prompts, posts, logs, send, stop: () => { live = false; } };
 }
 
 describe("turn beats", () => {
@@ -302,11 +309,59 @@ describe("turn beats", () => {
   });
 });
 
+describe("turn beats on a slow writer", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("sends the short ack the writer is asked for", async () => {
+    for (const ack of ["On it", "One sec", "Looking now", "En ello", "Un segundo"]) {
+      const { beats, posts, send } = setup({ replies: { ack } });
+      beats.start({ botId: "b", threadId: THREAD, text: "Research the best budget mechanical keyboards in India", attachments: 0, unattended: false });
+      send(event({ type: "turn.started" }));
+      send(toolStart("WebSearch", { query: "budget mechanical keyboards India" }, "s1"));
+      await vi.advanceTimersByTimeAsync(2_500);
+      expect(posts).toEqual([{ kind: "ack", text: ack, turnId: TURN }]);
+      send(event({ type: "turn.completed", ok: true }));
+      vi.useRealTimers();
+    }
+  });
+
+  it("writes the second message early enough for a slow writer to have it out by half a minute", async () => {
+    const { beats, posts, logs, send } = setup({ writerMs: 9_000 });
+    beats.start({ botId: "b", threadId: THREAD, text: "Research the best budget mechanical keyboards in India", attachments: 0, unattended: false });
+    send(event({ type: "turn.started" }));
+    send(toolStart("WebSearch", { query: "budget mechanical keyboards India" }, "s1"));
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(posts.map((p) => p.kind)).toEqual(["ack"]);
+    send(toolDone("s1"));
+    send(toolStart("WebFetch", { url: "https://www.rtings.com/keyboard" }, "f1"));
+    await vi.advanceTimersByTimeAsync(PLAN_MIN_MS - 10_000 + 500);
+    expect(posts.map((p) => p.kind)).toEqual(["ack", "plan"]);
+    send(said("My pick is the Keychron K2."));
+    send(event({ type: "turn.completed", ok: true }));
+    expect(logs.filter((line) => /not written/.test(line))).toEqual([]);
+  });
+
+  it("lets go of a beat still being written when the turn ends, without calling it a failure", async () => {
+    const { beats, posts, logs, send } = setup({ writerMs: { ack: 2_000, plan: 20_000 } });
+    beats.start({ botId: "b", threadId: THREAD, text: "Research the best budget mechanical keyboards in India", attachments: 0, unattended: false });
+    send(event({ type: "turn.started" }));
+    send(toolStart("WebSearch", { query: "budget mechanical keyboards India" }, "s1"));
+    await vi.advanceTimersByTimeAsync(PLAN_WRITE_MS + 1_000);
+    send(said("My pick is the Keychron K2."));
+    send(event({ type: "turn.completed", ok: true }));
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(posts.map((p) => p.kind)).toEqual(["ack"]);
+    expect(logs.join("\n")).not.toMatch(/aborted|not written/);
+  });
+});
+
 describe("beat text", () => {
   it("keeps one short plain line and refuses the rest", () => {
     expect(cleanBeat("ack", "\"On it, checking the fares now!\"")).toBe("On it, checking the fares now.");
     expect(cleanBeat("ack", "Message: Got it, pulling the reviews.")).toBe("Got it, pulling the reviews.");
     expect(cleanBeat("ack", "SKIP")).toBeNull();
+    expect(cleanBeat("ack", "On it")).toBe("On it");
+    expect(cleanBeat("ack", "\"Looking now.\"")).toBe("Looking now.");
     expect(cleanBeat("ack", "Want me to check prices too?")).toBeNull();
     expect(cleanBeat("ack", "ASK: Which area are you near?")).toBe("Which area are you near?");
     expect(cleanBeat("ack", "ASK: Looking for the closest pharmacy now.")).toBeNull();

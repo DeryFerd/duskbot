@@ -12,7 +12,7 @@
     "ai google sheets range to pdf"
   ],
   "answer": "**get a printable roster without exporting the budget beside it.** a bot can export one google sheets tab or rectangle as a pdf. give the original sheet link and tab name, then choose portrait, gridlines or fit to width. dusk counts export as a change, so it needs read and write access. your source cells stay untouched.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -43,7 +43,7 @@
     "toolkit": "googlesheets",
     "slug": "GOOGLESHEETS_EXPORT_SHEET_AS_PDF"
   },
-  "what": "**get the right rows onto readable pages.** paste the normal sheet link and name the tab or rectangle. the export works on that selection rather than guessing which workbook content you want.\n\nchoose orientation, margins, sheet names and repeated frozen rows. google leaves some print settings, including margins, unclear. fit to width can still leave tiny text. open the pdf at normal size.",
+  "what": "**get the right rows onto readable pages.** paste the normal sheet link and name the tab or rectangle. the export works on that selection rather than guessing which workbook content you want.\n\nchoose orientation, margins, sheet names and repeated frozen rows. google leaves some print settings, including margins, unclear. fit to width can still leave tiny text. open the pdf at normal size.\n\nthe pdf shows the tab as it stands. put rows in order with [sort range](/integrations/google-sheets/sort-range) first if the order matters.",
   "uses": [
     "**print the duty roster alone.** keep budget tabs out of the export.",
     "**show only the quote that matters.** choose its approved rectangle for review.",
@@ -110,6 +110,10 @@
       "fix": "open the pdf at normal size. fitting everything can make it unreadable."
     }
   ],
+  "worked": {
+    "before": "duty roster tab, the gid in its link is 418.\nwide table, eight columns.",
+    "after": "landscape pdf, gridlines off\nsheet name printed on top\nfrozen header row repeated on each page\nbudget tabs left out"
+  },
   "tip": {
     "text": "repeat frozen rows when the reader needs column headings on every printed page."
   },

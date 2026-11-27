@@ -17,7 +17,7 @@ import { installTalk, isTalkPanel } from "./talk-main.mjs";
 import { installVoiceInput } from "./voice-input-main.mjs";
 import { installAmbient, isAmbientWindow } from "./ambient-main.mjs";
 import { openBlankTerminal } from "./terminal-launch.mjs";
-import { linuxDisablesGpu } from "./linux-gpu.mjs";
+import { linuxDisablesGpu } from "./linux-gpu.mjs"; import { installGpuCrashFallback } from "./gpu-crash-fallback.mjs";
 import { pasteMenuItem } from "./paste-menu-item.mjs";
 import {
   appendDesktopCrashRecord,
@@ -97,7 +97,7 @@ import {
 import capabilitiesModule from "./capabilities.cjs";
 import environmentsModule from "./environments.cjs";
 import localOriginModule from "./local-origin.cjs";
-import { aboutPanelOptions, buildApplicationMenu } from "./menu.mjs"; import { installDesktopBots } from "./desktop-bots.mjs"; import { installReloadKeys } from "./reload-keys.mjs"; import { startDesktopErrorReporting } from "./desktop-errors.mjs"; import { createUpdateNotice } from "./update-notice.mjs"; import { createAppUpdater, developerIdSigned, quietNow, squirrelInstaller, justUpdated, updatePlace, setupIn, setupSources, DOWNLOAD_PAGE } from "./app-update.mjs"; import { nsisInstaller, windowsPlace, TRIED } from "./app-update-windows.mjs"; import { appImageUpdates, swappedVersion } from "./app-update-linux.mjs"; import { createAppImageMenuEntry, installAppImageMenuEntry } from "./appimage-menu-entry.mjs"; import { quietSignals } from "./update-when-quiet-main.mjs"; import { createDemoUpdater, demoUpdateFlag } from "./app-update-demo.mjs";
+import { aboutPanelOptions, buildApplicationMenu } from "./menu.mjs"; import { installDesktopBots } from "./desktop-bots.mjs"; import { installReloadKeys } from "./reload-keys.mjs"; import { startDesktopErrorReporting } from "./desktop-errors.mjs"; import { createUpdateNotice } from "./update-notice.mjs"; import { createAppUpdater, developerIdSigned, macBundleId, quietNow, squirrelBytes, squirrelInstaller, justUpdated, updatePlace, setupIn, setupSources, DOWNLOAD_PAGE } from "./app-update.mjs"; import { nsisInstaller, windowsPlace, TRIED } from "./app-update-windows.mjs"; import { appImageUpdates, swappedVersion } from "./app-update-linux.mjs"; import { createAppImageMenuEntry, installAppImageMenuEntry } from "./appimage-menu-entry.mjs"; import { quietSignals } from "./update-when-quiet-main.mjs"; import { createDemoUpdater, demoUpdateFlag } from "./app-update-demo.mjs";
 import { acquireDataDirLease } from "./data-dir-lease.mjs";
 import { offerMoveToApplications } from "./move-to-applications.mjs";
 import { switchLocalEnvironment } from "./environment-switch.mjs";
@@ -124,7 +124,7 @@ import { createHomeWindow, HOME_SCREEN_PATH, installHomeWindowIpc, WELCOMED_ROUT
 import { localPageStep, settledActive } from "./workspace-choice.mjs"; import { createWorkspaceReconnect, installWorkspaceReconnectIpc, proxyAnswersForDownServer, RECONNECT_PATH } from "./workspace-reconnect.mjs";
 import { createTeamProfileSeeds } from "./team-profile-seed.mjs";
 import { createWorkspaceSwitch, installWorkspaceSwitchIpc } from "./workspace-switch.mjs";
-import { createHomePlaces } from "./home-places.mjs"; import { createDesktopRing, installAccounts } from "./accounts-main.mjs"; import { createAddedCloudNotice, installCloudRail, railPlaces } from "./cloud-rail.mjs"; import { createPlaceInboxWatch } from "./place-inbox-watch.mjs"; import { homeLook, otherOwnClouds, withoutOldCloudHome } from "./cloud-list.mjs"; import { installPlaceLook } from "./place-look.mjs"; import { CHROME_RAIL_PATH, createChromeRail } from "./chrome-rail.mjs";
+import { createHomePlaces } from "./home-places.mjs"; import { createDesktopRing, installAccounts } from "./accounts-main.mjs"; import { createAddedCloudNotice, installCloudRail, railPlaces } from "./cloud-rail.mjs";  import { homeLook, otherOwnClouds, withoutOldCloudHome } from "./cloud-list.mjs"; import { installPlaceLook } from "./place-look.mjs"; import { CHROME_RAIL_PATH, createChromeRail } from "./chrome-rail.mjs";
 import { createWindowStateFile } from "./window-state-file.mjs";
 import { bundleSource, createLocalUi, devSource, originOf, servedOrigins } from "./local-ui.mjs";
 import { accountSetupStore, localAccountSetupStore, remoteAccountSetupStore } from "./account-setup-store.mjs"; import { CLOUD_HOME_ID, installBotsElsewhere, placesChosenStore, placesElsewhere, readBotCounts } from "./bots-elsewhere.mjs";
@@ -220,7 +220,7 @@ if (process.platform === "linux") {
   app.setDesktopName("bot.dusk.app.desktop");
 }
 
-unlimitTunnelConnections(app);
+unlimitTunnelConnections(app); installGpuCrashFallback({ app, file: path.join(app.getPath("userData"), "gpu-crashes.json"), ending: () => appEnding(), log: line => slog(line) });
 
 // macOS dev app: its own keychain key. electron names the key "<app.name> Safe Storage" once this file has run
 // (electron_browser_main_parts.cc PostCreateMainMessageLoop), and the packaged app is "duskbot" too, so a key the dev
@@ -451,7 +451,7 @@ const serverSupervisor = createServerSupervisor({
       });
     }
   },
-  onCrash() { const exit = lastServerExit, props = crashProps("server", "crashed", { ending: appEnding(), exitCode: exit?.code }); if (props) productEvents.action("crash", props); if (!appEnding()) accountErrors.capture(new Error(`server process stopped (exit ${exitCodeText(exit?.code)})${exit?.problem ? `: ${exit.problem}` : ""}`)); },
+  onStopped() { slog("server process stopped by itself (exit 0); starting it again"); }, onCrash() { const exit = lastServerExit, props = crashProps("server", "crashed", { ending: appEnding(), exitCode: exit?.code }); if (props) productEvents.action("crash", props); if (!appEnding()) accountErrors.capture(new Error(`server process stopped (exit ${exitCodeText(exit?.code)})${exit?.problem ? `: ${exit.problem}` : ""}`)); },
   onUnavailable() {
     serverReady = false;
     serverProc = null;
@@ -537,7 +537,7 @@ import {
   stopCompanion,
 } from "./companion.mjs";
 import { autoStartCompanion } from "./companion-autostart.mjs";
-import { createRoutineWakeHold, rememberRoutineWake, routineWakePatch, routineWakeSettings } from "./routine-wake.mjs";
+import { createRoutineWakeHold, rememberRoutineWake, routineWakePatch, routineWakeSettings } from "./routine-wake.mjs"; import { createSystemAwake } from "./system-awake.mjs";
 import { CREDENTIAL_PATCH, credentialSaveError } from "./credential-patch.mjs";
 import { createCappedLog } from "./capped-log.mjs";
 import { TRAIL_CAP_BYTES, configureTrail, createTrailWriter, trail } from "./trail.mjs";
@@ -592,7 +592,7 @@ const routineWake = createRoutineWakeHold({
   blocker: powerSaveBlocker,
   settings: () => routineWakeSettings(app.getPath("userData")),
   log: (line) => slog(line),
-  powerMonitor, isOnline: () => net.isOnline(),
+  powerMonitor, isOnline: () => net.isOnline(), systemAwake: createSystemAwake({ log: (line) => slog(line) }),
   notify: (event) => localServerRequest("/api/routines/wake", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ event }) }).then((response) => { if (!response.ok) throw new Error(`HTTP ${response.status}`); }),
 });
 
@@ -2928,6 +2928,7 @@ ipcMain.handle("cloud-account:openTeam", localWorkspaceOnly("cloud-account:openT
 // Cancel trial / Cancel plan and Keep my plan: the page sends the survey's words only; the Cloud is the verified session's own.
 ipcMain.handle("cloud-account:cancelPlan", localWorkspaceOnly("cloud-account:cancelPlan", (_event, survey) => ensureCloudAccount().cancelPlan(survey)));
 ipcMain.handle("cloud-account:keepPlan", localWorkspaceOnly("cloud-account:keepPlan", () => ensureCloudAccount().keepPlan()));
+ipcMain.handle("cloud-account:retention", localWorkspaceOnly("cloud-account:retention", (_event, step) => ensureCloudAccount().retention(step)));
 // this computer's CLI logins kept in a file, for the account's own Cloud being made; keychain logins (Claude Code among them) stay here
 ipcMain.handle("cloud-account:holdSignIns", localWorkspaceOnly("cloud-account:holdSignIns", async () => ensureCloudAccount().holdSignIns(await localAiSignIns())));
 ipcMain.handle("cloud-account:carriedAis", localWorkspaceOnly("cloud-account:carriedAis", async () => {
@@ -3091,14 +3092,13 @@ function showHome(options) {
   return options?.place ? workspaceSwitch.around(shown) : shown();
 }
 const openOwnCloud = id => showHome({ place: { cloud: id, name: environmentsState.environments.find(entry => entry.cloud?.id === id)?.name } });
-const placeInbox = createPlaceInboxWatch({ places: () => [{ id: LOCAL_ID, local: true }, ...cloudGone.keep(environmentsState.environments.filter(entry => entry.kind !== "local" && entry.origin))], activeId: () => environmentsState.activeId, local: localServerRequest, cloudFetch: cloudFetch, asleep: origin => homeWindow.asleepAt(origin), shown: () => !desktopRemoteAccess && serverReady && Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()), changed: () => railChanged() });
 /** A server of the person's own this app linked, which can move to dusk cloud from here now. */
 const serverCanMove = id => Boolean(!desktopRemoteAccess && vpsCloudMove && !vpsCloudMove.away() && vpsLink.servers().some(server => server.id === id));
-const railList = () => { ownHome?.refresh(); return railPlaces({ saved: environmentsState, waiting: placeInbox.waiting, home: homeWindow.cloudOrigin() ?? ownHome?.origin() ?? null, mine: myCloud(), state: desktopRemoteAccess ? null : cloudAccount?.state(), offers: entry => !desktopRemoteAccess && ownHome?.offers(entry) === true, cloudMoves: entry => serverCanMove(entry.id), accounts: accountRing.waiting() }); };
-// The rail as the window's own chrome (chrome-rail.mjs): this app's page beside every place's page, the one that lists.
-const chromeRail = createChromeRail({ createView: options => new WebContentsView(options), preload: path.join(__dirname, "preload.cjs"), log: slog, prefs: () => desktopPrefs, changed: () => rail.changed(),
+const railList = () => { ownHome?.refresh(); return railPlaces({ saved: environmentsState, home: homeWindow.cloudOrigin() ?? ownHome?.origin() ?? null, mine: myCloud(), state: desktopRemoteAccess ? null : cloudAccount?.state(), offers: entry => !desktopRemoteAccess && ownHome?.offers(entry) === true, cloudMoves: entry => serverCanMove(entry.id), accounts: accountRing.waiting() }); };
+// The accounts sheet's page over the window, and the frame's traffic lights (chrome-rail.mjs).
+const chromeRail = createChromeRail({ createView: options => new WebContentsView(options), preload: path.join(__dirname, "preload.cjs"), log: slog, prefs: () => desktopPrefs,
   args: () => [...desktopCompanionRendererArguments(rendererOrigin(), desktopRemoteAccess), "--dusk-current-local-origin=1", ...(accountApp() ? ["--dusk-company-desktop=1"] : []), ...(accountApp() || accountGateNeeded() ? ["--dusk-account-gate=1"] : []), `--dusk-app-version=${app.getVersion()}`],
-  url: () => `${rendererOrigin()}${CHROME_RAIL_PATH}`, wanted: () => false });
+  url: () => `${rendererOrigin()}${CHROME_RAIL_PATH}` });
 chromeRail.install(ipcMain);
 function railChanged() { chromeRail.refresh(); rail.changed(); void localUi?.refresh(); }
 const accountPages = [() => (mainWindow && !mainWindow.isDestroyed() && senderIsLocal({ sender: mainWindow.webContents }) ? mainWindow.webContents : null), () => ({ send: channel => chromeRail.send(channel) })];
@@ -3137,9 +3137,9 @@ ipcMain.handle("start-fresh:retry", startFreshPage("start-fresh:retry", () => st
 ipcMain.handle("start-fresh:finish", startFreshPage("start-fresh:finish", () => startFresh.finish()));
 const rail = installCloudRail({ ipcMain, clipboard, openCloud: openOwnCloud, switchAccount: id => accountRing().switchTo(id), account: () => (accountApp() ? cloudAccount : null),
   guard: handler => (event, ...args) => (chromeRail.owns(event) ? handler(event, ...args) : workspaceOnly(handler)(event, ...args)),
-  lists: event => chromeRail.owns(event), trusted: event => chromeRail.owns(event) || senderIsLocal(event), beside: () => chromeRail.shown(),
+  lists: event => chromeRail.owns(event), trusted: event => chromeRail.owns(event) || senderIsLocal(event),
   targets: () => [mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null, { send: channel => chromeRail.send(channel), isDestroyed: () => false }],
-  places: railList, open: id => workspaceMenuAction(() => switchEnvironment(id)), makeHome: id => ownHome.start(id), cloudMove: id => askServerCloudMove(id), forget: id => forgetEnvironment(id, false, true),
+  places: railList, open: id => (id === LOCAL_ID && (homeWindow.cloudOrigin() ?? ownHome?.origin()) ? openThisComputer() : workspaceMenuAction(() => switchEnvironment(id))), makeHome: id => ownHome.start(id), cloudMove: id => askServerCloudMove(id), forget: id => forgetEnvironment(id, false, true),
   add: { choices: () => ({ cloud: cloudOffersAllowed(), link: !desktopRemoteAccess, address: !desktopRemoteAccess && !homeWindow.cloudOrigin(), account: !desktopRemoteAccess && Boolean(accounts.view().active) }),
     run: (choice, link) => (choice === "link" ? (link ? connectHostedWorkspace(link) : addServerFromClipboard()) : choice === "address" ? openWorkspaceSettings() : homeWindow.cloudOrigin() ? undefined : openCloudAdd("app_menu")) } });
 const announceAddedCloud = createAddedCloudNotice({ Notification, focused: () => Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()), sheetOpen: rail.sheetOpen,
@@ -3206,7 +3206,9 @@ function cleanLine() {
   if (typeof place === "string" && place) return { kind: "clean", place };
   return { kind: "clean", ...(accountRing.waiting().some(row => row.id === oneHome.journal()?.cloud?.account) ? { saved: true } : {}) };
 }
-let workspaceMenuOpen = false;
+let workspaceMenuOpen = false; function localShown() { return Boolean(mainWindow && !mainWindow.isDestroyed() && senderIsLocal({ sender: mainWindow.webContents })); }
+// with My Cloud home, this computer stays one tap away in the Server menu: once its bots moved it opens fresh, never the frozen copy that refuses every send
+function openThisComputer() { return workspaceMenuAction(() => (oneHome.offer()?.stay(), cleanWorkspace.marker().frozen ? workspaceSwitch.around(() => homeWindow.openHere()) : activeEnvironment(environmentsState) ? switchEnvironment(LOCAL_ID) : workspaceSwitch.around(() => (homePlaces.remember(null), persistEnvironments(withActive(environmentsState, LOCAL_ID), "chosen"), navigateMainWindow(rendererOrigin()))))); }
 ipcMain.handle("workspaces:menu", workspaceOnly(async (_event, from) => {
   if (workspaceMenuOpen) return;
   workspaceMenuOpen = true;
@@ -3219,9 +3221,7 @@ ipcMain.handle("workspaces:menu", workspaceOnly(async (_event, from) => {
       ...(serverCanMove(environmentsState.activeId) ? { onCloudMove: (id) => void askServerCloudMove(id).catch(error => slog(`cloud move menu: ${error?.message ?? error}`)) } : {}),
       ...cloudMenuOptions(from === "howto" ? "app_howto" : "app_menu"),
       kindIcon: placeKindIcon,
-      // with My Cloud home, this computer stays one tap away: once its bots moved it opens fresh (its own first bot), never the frozen copy that refuses every send
-      onLocal: () => void workspaceMenuAction(() => (oneHome.offer()?.stay(), cleanWorkspace.marker().frozen ? workspaceSwitch.around(() => homeWindow.openHere()) : activeEnvironment(environmentsState) ? switchEnvironment(LOCAL_ID) : workspaceSwitch.around(() => (homePlaces.remember(null), persistEnvironments(withActive(environmentsState, LOCAL_ID), "chosen"), navigateMainWindow(rendererOrigin()))))),
-      localShown: Boolean(mainWindow && !mainWindow.isDestroyed() && senderIsLocal({ sender: mainWindow.webContents })),
+      onLocal: () => void openThisComputer(), localShown: localShown(),
       ...(await placesMenuOptions({ homeOrigin: homeWindow.cloudOrigin(), cloud: cloudHomeEntry(), home: oneHome.away() || ownHome?.away() === true, platform: process.platform, port: SERVER_PORT })),
     });
     if (!template.length) return;
@@ -3691,7 +3691,7 @@ process.once("SIGTERM", requestSignalQuit);
 // release is out
 let appUpdater = null, appUpdatedTo = null, appUpdateMode = app.isPackaged ? "notice" : "dev", windowsInstaller = null, windowsSessionEnding = false;
 const appUpdateState = () => ({ ...(appUpdater?.state() ?? { ready: null, available: null, progress: null }), mode: appUpdateMode, updated: appUpdatedTo });
-const tellAppUpdate = () => { const page = mainWindow && !mainWindow.isDestroyed() ? { sender: mainWindow.webContents, senderFrame: mainWindow.webContents.mainFrame } : null; if (page && (senderIsLocal(page) || homeWindow.homePage(page))) page.sender.send("app-update:changed", appUpdateState()); };
+const appUpdatePage = event => homeWindow.homePage(event) || Boolean(activePageOrigin(event)), localOrAppPage = (channel, handler) => (event, ...args) => (appUpdatePage(event) ? handler : localOnly(channel, handler))(event, ...args); /* the app's own update: its page, My Cloud's home, a place the person chose */ const tellAppUpdate = () => { const page = mainWindow && !mainWindow.isDestroyed() ? { sender: mainWindow.webContents, senderFrame: mainWindow.webContents.mainFrame } : null; if (page && (senderIsLocal(page) || appUpdatePage(page))) page.sender.send("app-update:changed", appUpdateState()); };
 function startDemoUpdates() {
   const flag = demoUpdateFlag(app.getPath("userData"));
   if (!fs.existsSync(flag)) return;
@@ -3723,20 +3723,20 @@ function startAppUpdates(notice) {
     appUpdater.start();
     return;
   }
-  const bundle = path.resolve(path.dirname(app.getPath("exe")), "..", "..");
+  const bundle = path.resolve(path.dirname(app.getPath("exe")), "..", ".."), bundleId = macBundleId(bundle);
   appUpdateMode = "self";
   appUpdater = createAppUpdater({ current: app.getVersion(), arch: process.arch, dir: updateDir, signed: () => developerIdSigned(bundle), blocked: async () => updatePlace(bundle),
-    installer: squirrelInstaller({ autoUpdater }), quiet: () => quietNow(signals), fallback: notice, log: slog, onState: tellAppUpdate, onFailed, serverRuns: () => { try { return vpsLink.view().compat?.server ?? null; } catch { return null; } } });
+    installer: squirrelInstaller({ autoUpdater, unpacked: since => squirrelBytes(os.tmpdir(), bundleId, since) }), awake: () => { const id = powerSaveBlocker.start("prevent-app-suspension"); return () => { if (powerSaveBlocker.isStarted(id)) powerSaveBlocker.stop(id); }; }, quiet: () => quietNow(signals), fallback: notice, log: slog, onState: tellAppUpdate, onFailed, serverRuns: () => { try { return vpsLink.view().compat?.server ?? null; } catch { return null; } } });
   appUpdater.start();
   powerMonitor.on("resume", () => appUpdater?.soon?.());
 }
-ipcMain.handle("app-update:state", localOrHome("app-update:state", appUpdateState));
-ipcMain.handle("app-update:restart", localOrHome("app-update:restart", () => appUpdater?.restart() ?? false));
-ipcMain.handle("app-update:download", localOrHome("app-update:download", () => appUpdater?.check({ again: true }) ?? null));
+ipcMain.handle("app-update:state", localOrAppPage("app-update:state", appUpdateState));
+ipcMain.handle("app-update:restart", localOrAppPage("app-update:restart", () => appUpdater?.restart() ?? false));
+ipcMain.handle("app-update:download", localOrAppPage("app-update:download", () => appUpdater?.check({ again: true }) ?? null));
 // only the link main found for this release (an installer on dusk.bot or the downloads repo), or the download page
-ipcMain.handle("app-update:open", localOrHome("app-update:open", () => { const url = appUpdater?.state().manual?.url; void shell.openExternal(typeof url === "string" && /^https:\/\/(dusk\.bot|github\.com)\//.test(url) ? url : DOWNLOAD_PAGE); return true; }));
-ipcMain.handle("app-update:move", localOrHome("app-update:move", () => { try { return app.moveToApplicationsFolder(); } catch (error) { slog(`app update: could not move to Applications (${error instanceof Error ? error.message : String(error)})`); void shell.openExternal(DOWNLOAD_PAGE); return false; } }));
-ipcMain.handle("app-update:seen", localOrHome("app-update:seen", () => { if (appUpdatedTo) { appUpdatedTo = null; tellAppUpdate(); } }));
+ipcMain.handle("app-update:open", localOrAppPage("app-update:open", () => { const url = appUpdater?.state().manual?.url; void shell.openExternal(typeof url === "string" && /^https:\/\/(dusk\.bot|github\.com)\//.test(url) ? url : DOWNLOAD_PAGE); return true; }));
+ipcMain.handle("app-update:move", localOrAppPage("app-update:move", () => { try { return app.moveToApplicationsFolder(); } catch (error) { slog(`app update: could not move to Applications (${error instanceof Error ? error.message : String(error)})`); void shell.openExternal(DOWNLOAD_PAGE); return false; } }));
+ipcMain.handle("app-update:seen", localOrAppPage("app-update:seen", () => { if (appUpdatedTo) { appUpdatedTo = null; tellAppUpdate(); } }));
 
 // powerMonitor is usable only once the app is ready.
 void app.whenReady().then(() => installSessionEndFlush({ app, windows: () => BrowserWindow.getAllWindows(), powerMonitor, flusher: browsersFlush, quit: () => app.quit(), log: slog, onSessionEnd: () => { windowsSessionEnding = true; } }));

@@ -62,7 +62,7 @@ export interface ChatToolSession {
 
 /** `box`: the paths it writes (and the bot whose folder it may use) where the bot box is on. */
 type Server = { command: string; args: string[]; env: Record<string, string>; box?: { rw: string[]; botId?: string } };
-type RegisteredTool = { client: McpPeer; server: string; launch: string; builtInBrowser: boolean; agents: boolean; computer: boolean; hostComputer: boolean; name: string; schema: ValidateFunction; searched: boolean; parallel: boolean };
+type RegisteredTool = { client: McpPeer; server: string; launch: string; builtInBrowser: boolean; agents: boolean; hostShell: boolean; computer: boolean; hostComputer: boolean; name: string; schema: ValidateFunction; searched: boolean; parallel: boolean };
 function chatToolName(server: string, tool: string): string {
   return `${server}_${tool}`.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64) || "mcp_tool";
 }
@@ -509,6 +509,17 @@ export function directServers(servers: ReadonlyArray<{ name: string; tools: numb
   return direct;
 }
 
+/** The order built-in servers take their share of the tool limit; configured servers fit in what is left. The agents
+ * server keeps its whole list, then the shell and the browser theirs (short lists a turn cannot do without), then this
+ * computer's screen driver, the longest list and in its own order main tools first, before connected apps. */
+export function builtInShareRank(origin: { server: string; agents?: boolean }): number {
+  if (origin.agents) return 0;
+  if (origin.server === HOST_SHELL_SERVER) return 1;
+  if (origin.server === "browser") return 2;
+  if (origin.server === "computer") return 3;
+  return 4;
+}
+
 /** Under `schemaProfile` the model reads each tool's schema fitted to its provider; calls are still checked against the full one.
  * A tool result over 50KB is saved whole in `resultFolder`, the bot's working folder, after `scrub` masks secrets (see savedOrBounded). */
 export async function mountChatTools(integrations: SendTurnInput["integrations"], signal: AbortSignal, computerUse = false, toolScope?: ToolScope, callTimeoutMs: number = DEFAULT_CALL_MS,
@@ -619,7 +630,7 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
       // hashes the descriptor (no credential kept); machine bridges mint a bearer per turn, so theirs last a turn.
       const launch = createHash("sha256").update(JSON.stringify(descriptor)).digest("hex");
       const origin: ToolOrigin = { client, server: name, launch, builtInBrowser: descriptor === integrations?.browser, agents: descriptor === agentsServer,
-        computer: descriptor === integrations?.localComputer,
+        hostShell: descriptor === integrations?.shell, computer: descriptor === integrations?.localComputer,
         hostComputer: descriptor === integrations?.localComputer && integrations?.localComputer?.scope === "local-computer", searched: searchable.has(name) };
       return { origin, tools };
     }));
@@ -647,9 +658,8 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
       searchOnly: catalogExceedsSize(tools.map(({ tool }) => tool)) }));
     const appTools = configuredCatalogs.reduce((sum, server) => sum + server.tools, 0);
     const searchRoom = appTools > 0 && (wanted > MCP_TOOL_COUNT || appTools > APP_TOOLS_LISTED_MAX || configuredCatalogs.some(server => server.searchOnly)) ? DIRECTORY_TOOL_COUNT : 0;
-    // The agents server keeps its whole list first; configured servers fit in what the built-ins leave.
-    const shares = shareToolBudget(offered.map(({ origin, tools }, index) => ({ name: String(index), tools: tools.length, agents: origin.agents }))
-      .sort((a, b) => Number(b.agents) - Number(a.agents)), MCP_TOOL_COUNT - searchRoom);
+    const shares = shareToolBudget(offered.map(({ origin, tools }, index) => ({ name: String(index), tools: tools.length, rank: builtInShareRank(origin) }))
+      .sort((a, b) => a.rank - b.rank), MCP_TOOL_COUNT - searchRoom);
     for (const [index, { origin, tools: listed }] of offered.entries()) {
       const tools = capToolList(listed, shares.get(String(index)));
       if (tools.length < listed.length) {
@@ -706,8 +716,25 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
     const call = directory && object(args) ? directory.call(args) : undefined;
     return call && !("answer" in call) ? { tool: catalog.get(call.name)!, args: call.arguments } : undefined;
   };
-  const validate = (name: string, args: unknown) => {
+  // a model that asks for vm_exec on a turn with no Local VM or VPS desktop wants a shell: this computer's lent one answers,
+  // through its own approval and safety floor, instead of a refusal
+  const shellCommand = integrations?.shell?.insteadOfVm
+    ? [...registered].find(([, tool]) => tool.hostShell && tool.name === "run_command")?.[0] : undefined;
+  const vmExecCommand = (name: string, args: unknown): Record<string, unknown> | undefined => {
+    const tool = shellCommand ? registered.get(name) : undefined;
+    if (!tool?.agents || !object(args)) return undefined;
+    const inner = tool.name === "vm_exec" ? args : bridgedCallTarget(tool.name, args) === "vm_exec" ? args.arguments : undefined;
+    if (!object(inner)) return undefined;
+    return { command: inner.command, ...(inner.timeout_seconds !== undefined ? { timeout_seconds: inner.timeout_seconds } : {}) };
+  };
+  const onShell = (name: string, args: Record<string, unknown>): { name: string; args: Record<string, unknown> } => {
+    const command = vmExecCommand(name, args);
+    return command ? { name: shellCommand!, args: command } : { name, args };
+  };
+  const validate = (calledName: string, calledArgs: unknown) => {
     if (closed || signal.aborted) throw new ChatToolSessionError("MCP session closed");
+    const command = vmExecCommand(calledName, calledArgs);
+    const [name, args] = command ? [shellCommand!, command] : [calledName, calledArgs];
     const listedAs = directoryNames.get(name);
     if (listedAs) {
       const call = listedAs === CALL_TOOL ? searchedCall(args) : undefined;
@@ -729,7 +756,8 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
     if (!tool.searched || tool.name !== CALL_TOOL) return { title, input: args, ask: true, ...(grant ? { grant } : {}) };
     return { title: chatToolName(tool.server, runs), input: object(args.arguments) ? args.arguments : {}, ask: true, ...(grant ? { grant } : {}) };
   };
-  const view = (name: string, args: Record<string, unknown>): ChatToolCallView => {
+  const view = (calledName: string, calledArgs: Record<string, unknown>): ChatToolCallView => {
+    const { name, args } = onShell(calledName, calledArgs);
     if (directoryNames.has(name)) {
       const call = directoryNames.get(name) === CALL_TOOL ? searchedCall(args) : undefined;
       return call ? viewOf(call.tool, call.args, chatToolName(call.tool.server, call.tool.name)) : { title: name, input: args, ask: false };
@@ -773,7 +801,8 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
   const answer = (result: DirectoryResult): ChatToolResult => ({ text: boundedText(result.content.map((part) => part.text).join("\n")), ok: result.isError !== true });
   return {
     definitions, skipped, trimmed, budget, validate, view, close,
-    parallel(name, args) {
+    parallel(calledName, calledArgs) {
+      const { name, args } = onShell(calledName, calledArgs);
       const listedAs = directoryNames.get(name);
       // Search and describe only read the catalog in memory; a call is as parallel as the tool it runs.
       if (listedAs && listedAs !== CALL_TOOL) return true;
@@ -784,9 +813,15 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
       const tool = registered.get(name);
       return tool?.parallel === true && !selectionExcludes(tool, args);
     },
-    async execute(name, args, callSignal) {
-      validate(name, args);
+    async execute(calledName, calledArgs, callSignal) {
+      validate(calledName, calledArgs);
       if (callSignal.aborted) { await close(); throw aborted(); }
+      const { name, args } = onShell(calledName, calledArgs);
+      if (name !== calledName) {
+        const result = await run(registered.get(name)!, args, callSignal);
+        // after the result, so its first line stays the command's exit code
+        return { ...result, text: `${result.text}\n(No Local VM or VPS desktop in this turn, so this ran with ${name} on this computer, in your working folder. Use ${name} for commands here.)` };
+      }
       const listedAs = directoryNames.get(name);
       if (!listedAs) return run(registered.get(name)!, args, callSignal);
       if (listedAs === SEARCH_TOOL) return answer(await directory!.search(args));

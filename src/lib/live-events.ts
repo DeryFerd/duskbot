@@ -466,6 +466,10 @@ export function openLiveEvents(
     else recover();
   };
 
+  // a page frozen in the back/forward cache keeps its open stream, one of the browser's six connections to this host
+  const onPageHide = () => { clearRetry(); closeSource(); };
+  const onPageShow = () => recover();
+
   const onScreenWish = () => queueMicrotask(() => {
     if (source && cursor && !pendingSnapshot && screensWanted() !== sourceScreens) reconnectNow(false);
   });
@@ -494,6 +498,8 @@ export function openLiveEvents(
   }, CLOUD_AWAKE_CHECK_MS);
   platform.windowTarget?.addEventListener("online", onOnline);
   platform.windowTarget?.addEventListener("focus", onFocus);
+  platform.windowTarget?.addEventListener("pagehide", onPageHide);
+  platform.windowTarget?.addEventListener("pageshow", onPageShow);
   platform.documentTarget?.addEventListener("visibilitychange", onVisibilityChange);
 
   return () => {
@@ -509,6 +515,8 @@ export function openLiveEvents(
     closeSource();
     platform.windowTarget?.removeEventListener("online", onOnline);
     platform.windowTarget?.removeEventListener("focus", onFocus);
+    platform.windowTarget?.removeEventListener("pagehide", onPageHide);
+    platform.windowTarget?.removeEventListener("pageshow", onPageShow);
     platform.documentTarget?.removeEventListener("visibilitychange", onVisibilityChange);
   };
 }

@@ -151,8 +151,8 @@ export function parsePrefs(raw, platform = process.platform) {
 }
 
 /** A change from Settings or the dock, applied over the saved choices; unknown fields and bad values are ignored. */
-export function applyPrefsChange(prefs, change) {
+export function applyPrefsChange(prefs, change, platform = process.platform) {
   if (!change || typeof change !== "object") return prefs;
   // what was seen comes from the surfaces themselves (ambient-main.mjs), never from Settings
-  return parsePrefs({ ...prefs, ...Object.fromEntries(Object.entries(change).filter(([key]) => key in AMBIENT_DEFAULTS && key !== "seen")) });
+  return parsePrefs({ ...prefs, ...Object.fromEntries(Object.entries(change).filter(([key]) => key in AMBIENT_DEFAULTS && key !== "seen")) }, platform);
 }

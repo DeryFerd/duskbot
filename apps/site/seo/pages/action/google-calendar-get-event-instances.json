@@ -12,7 +12,7 @@
     "ai find recurring meeting occurrences"
   ],
   "answer": "**hand the trainer real dates instead of saying every tuesday.** the bot finds your recurring google calendar event and lists its occurrences within a chosen window. include cancellations so nobody travels for a skipped session. this only lists dates, but dusk classes the action as a write. give it read and write access limited to this job.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,11 +45,12 @@
     "toolkit": "googlecalendar",
     "slug": "GOOGLECALENDAR_EVENTS_INSTANCES"
   },
-  "what": "**get the next four weeks laid out in order.** name the repeating event and its calendar; your main calendar works too. the bot finds the series first.\n\nname the time zone and ask for cancellations beside the scheduled dates. a long series can fill several batches, so tell it to keep going until it has the whole window.",
+  "what": "**get the next four weeks laid out in order.** name the repeating event and its calendar; your main calendar works too. the bot finds the series first.\n\nname the time zone and ask for cancellations beside the scheduled dates. a long series can fill several batches, so tell it to keep going until it has the whole window.\n\nthe series id comes from [find event](/integrations/google-calendar/find-event) first. to move one date, pass it to [patch event](/integrations/google-calendar/patch-event).",
   "uses": [
     "give a visiting trainer the dated sessions in a recurring course",
     "spot a cancelled holiday-week session before anyone travels",
-    "list upcoming dates in your own recurring treatment series"
+    "list upcoming dates in your own recurring treatment series",
+    "hand a cover teacher every saturday class date until the end of term"
   ],
   "routine": {
     "message": "on the second tuesday of each month at 12:30, find the recurring kiln safety course on my training calendar. list the next four weeks in india time here for nikhil. keep going until all dates in that window are listed. mark cancellations and never count them as sessions to attend. never edit the series.",
@@ -107,8 +108,16 @@
     {
       "mistake": "using it as a complete guest list",
       "fix": "get attendance separately. the returned details can omit people."
+    },
+    {
+      "mistake": "asking with no date window",
+      "fix": "give a start and an end. an open window can return a huge list and hit google rate limits."
     }
   ],
+  "worked": {
+    "before": "monday physio series, from 4 november.\nnext four weeks, london time.",
+    "after": "4 november, 10:00: scheduled\n11 november, 10:00: cancelled\n18 november, 10:00: scheduled\n25 november, 10:00: scheduled"
+  },
   "tip": {
     "text": "say the time zone in the request. a familiar meeting name is not enough."
   },

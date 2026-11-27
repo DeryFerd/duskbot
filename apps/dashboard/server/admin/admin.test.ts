@@ -114,7 +114,7 @@ describe("admin panel api", () => {
         expect((await refused.json() as { code: string }).code).toBe("not_admin");
         expect((await call(path, { cookie: admin })).status, path).toBe(200);
       }
-      for (const action of ["pause", "resume", "delete", "end-trial"]) {
+      for (const action of ["pause", "resume", "delete", "end-trial", "retry-setup"]) {
         const path = `/v1/admin/clouds/${cloudId}/${action}`;
         expect((await call(path, { body: { confirm: cloudId } })).status, path).toBe(401);
         expect((await call(path, { body: { confirm: cloudId }, cookie: other })).status, path).toBe(403);
@@ -129,6 +129,10 @@ describe("admin panel api", () => {
       const refusedTrial = await call(`/v1/admin/clouds/${cloudId}/end-trial`, { body: { confirm: cloudId }, cookie: admin });
       expect(refusedTrial.status).toBe(409);
       expect((await refusedTrial.json() as { code: string }).code).toBe("not_available");
+      // retrying setup needs a managed cloud whose first setup is in its error state; this one runs on the fake pool
+      const refusedRetry = await call(`/v1/admin/clouds/${cloudId}/retry-setup`, { body: { confirm: cloudId }, cookie: admin });
+      expect(refusedRetry.status).toBe(409);
+      expect((await refusedRetry.json() as { code: string }).code).toBe("not_available");
     });
 
     it("needs the CSRF header and the app's own origin on changes", async () => {
@@ -416,12 +420,12 @@ describe("admin panel api", () => {
       expect(sink.all.some(event => event.accountId === id)).toBe(true);
       expect((await call("/v1/account/analytics", { method: "PUT", body: { optOut: true }, cookie, csrf: false })).status).toBe(403);
       const out = await call("/v1/account/analytics", { method: "PUT", body: { optOut: true }, cookie });
-      expect(await out.json()).toEqual({ optOut: true });
+      expect(await out.json()).toEqual({ optOut: true, notes: false, askUsage: false });
       expect(sink.all.some(event => event.accountId === id)).toBe(false);
       await call("/v1/events", { cookie, body: { events: [{ name: "onboarding_done" }] } });
       await settle();
       expect(sink.all.some(event => event.accountId === id)).toBe(false);
-      expect(await (await call("/v1/account/analytics", { cookie })).json()).toEqual({ optOut: true });
+      expect(await (await call("/v1/account/analytics", { cookie })).json()).toEqual({ optOut: true, notes: false, askUsage: false });
       await call("/v1/account/analytics", { method: "PUT", body: { optOut: false }, cookie });
       await call("/v1/events", { cookie, body: { events: [{ name: "onboarding_done" }] } });
       await settle();

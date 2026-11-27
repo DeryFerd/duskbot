@@ -16,6 +16,7 @@ vi.mock("./data/DataChart", () => ({
     createElement("div", { "data-testid": "data-chart", "data-card": props.cardId, "data-inline": String(props.inline), "data-spec": JSON.stringify(props.spec) }),
 }));
 import { DataResultChip } from "./DataResultChip";
+import { SIMPLE_BUBBLE_MAX } from "./chat-bubble";
 
 const message: Message = { id: "receipt", at: 1, role: "bot", kind: "activity", tool: { name: "data_show", ok: true },
   dataResult: { botId: "bot", cardId: "c_1", title: "Revenue", kind: "chart" } };
@@ -55,6 +56,16 @@ describe("a chart result in the chat", () => {
       expect(container.querySelector("pre code")!.textContent).toBe(sql);
       expect(container.querySelector("[data-testid=data-chart]")).not.toBeNull();
       expect(dispatch).not.toHaveBeenCalled();
+    } finally { unmount(); }
+  });
+
+  it("stops where a message bubble does, not at the wider prose width (#340)", () => {
+    store.state.bots = [{ id: "wide" }];
+    store.state.dataSheets = { wide: sheet("wide", [chartCard("c_w")]) };
+    const { container, unmount } = mount(receipt("wide", "c_w"));
+    try {
+      const classes = container.querySelector("[data-data-result]")!.className.split(/\s+/);
+      expect(classes.filter((name) => /^(pointer-coarse:)?max-w-/.test(name))).toEqual(SIMPLE_BUBBLE_MAX.split(" "));
     } finally { unmount(); }
   });
 

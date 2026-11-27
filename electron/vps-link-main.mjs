@@ -2,8 +2,7 @@
 // only, a pinned tls key for a server reached directly, and this mac's own ai sign-ins read or made locally.
 import { spawn } from "node:child_process";
 import { X509Certificate, createHash } from "node:crypto";
-import { createReadStream, createWriteStream, promises as fsp, readFileSync, statSync } from "node:fs";
-import { homedir } from "node:os";
+import { createReadStream, createWriteStream, promises as fsp, statSync } from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -150,6 +149,16 @@ export function homeEgressEndpoint(tunnel, awake = null) {
   return createEgressEndpoint({ ...tunnel, dialer: createEgressDialer(), ...(awake ? { onUse: awake.touch } : {}) });
 }
 
+/** the chosen server of the person's own follows its new address or record. the file is only written once a server is
+ * chosen, so a missing or unreadable one is no choice, never a failed link (own-home-main.mjs reads it the same way) */
+export function ownHomeChoiceMoves(choice) {
+  const chosen = () => { try { return choice.read(); } catch { return null; } };
+  return {
+    retarget(from, to) { const was = chosen(); if (was?.origin === from) choice.write({ ...was, origin: to }); },
+    rehome(from, to) { const was = chosen(); if (was?.id === from) choice.write({ ...was, id: to.id, origin: to.origin }); },
+  };
+}
+
 export function installVpsLink(deps) {
   const { ipcMain, guard, userData, session, shell, encryption, jsonFile, log } = deps;
   const pins = createPins();
@@ -158,6 +167,7 @@ export function installVpsLink(deps) {
   const protect = async (text) => ((await encryption.available()) ? `e:${(await encryption.encrypt(text)).toString("base64")}` : `p:${text}`);
   const unprotect = unprotectWith(encryption);
   const ownHomeFiles = ["own-home.json", "own-home-choice.json", "own-home-send.json"].map((name) => jsonFile(path.join(userData, name)));
+  const choiceMoves = ownHomeChoiceMoves(ownHomeFiles[1]);
 
   const base = (deps.base || process.env.DUSK_LINK_BASE || DEFAULT_LINK_BASE).replace(/\/+$/, "");
   // the link service tells this computer the public address it connects from, so its home router stays out of reach
@@ -197,13 +207,9 @@ export function installVpsLink(deps) {
     retarget(from, to) {
       const state = deps.environments();
       deps.persist({ ...state, environments: state.environments.map((entry) => (entry.origin === from ? { ...entry, origin: to } : entry)) });
-      const choice = ownHomeFiles[1], chosen = choice.read();
-      if (chosen?.origin === from) choice.write({ ...chosen, origin: to });
+      choiceMoves.retarget(from, to);
     },
-    rehome(from, to) {
-      const choice = ownHomeFiles[1], chosen = choice.read();
-      if (chosen?.id === from) choice.write({ ...chosen, id: to.id, origin: to.origin });
-    },
+    rehome: (from, to) => choiceMoves.rehome(from, to),
     switchTo: deps.switchTo,
     pin(host, spki) {
       pins.add(host, spki);
@@ -228,10 +234,6 @@ export function installVpsLink(deps) {
       },
     },
     localCredentials: {
-      async codexAuth() {
-        const file = path.join(process.env.CODEX_HOME || path.join(homedir(), ".codex"), "auth.json");
-        try { const text = readFileSync(file, "utf8"); JSON.parse(text); return text; } catch { return null; }
-      },
       async claudeCli() {
         const response = await deps.localRequest("/api/cli-candidates?name=claude");
         const body = await response.json().catch(() => ({}));

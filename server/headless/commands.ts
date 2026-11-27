@@ -60,6 +60,7 @@ async function doctorOnce(ctx: VerbContext): Promise<VerbOutcome> {
   }
   const browser = config?.browserEngine ?? null;
   if (browser && browser.kind !== "engine") warnings.push(`bots have no built-in browser here: ${browser.reason ?? "not installed"}${browser.installable ? " (install it with `duskbot browser install`)" : ""}`);
+  if (browser?.kind === "engine" && browser.noBrowser === true) warnings.push("bots have no built-in browser here: the engine is installed, but there is no Chrome or Chromium for it to start (install one with `duskbot browser install` as the user running serve)");
   const ok = isDusk && !tooOld && availableEngines.length > 0;
   const who = !session ? "unknown" : session.kind === "loopback"
     ? `this computer${session.trust === "service" ? " (as a local service, not the owner)" : " (the owner)"}`
@@ -77,7 +78,7 @@ async function doctorOnce(ctx: VerbContext): Promise<VerbOutcome> {
       `${server ? `dusk bot ${server.version} ("${server.label}")` : "dusk bot"} at ${client.baseUrl}: ${ok ? "ready" : "not ready"}`,
       `You are: ${who}`,
       `Engines available: ${availableEngines.length ? availableEngines.join(", ") : "none"}`,
-      ...(browser ? [`Bots' browser: ${browser.kind === "engine" ? `installed${browser.version ? ` (${browser.version})` : ""}` : "not available"}`] : []),
+      ...(browser ? [`Bots' browser: ${browser.kind === "engine" && browser.noBrowser !== true ? `installed${browser.version ? ` (${browser.version})` : ""}` : "not available"}`] : []),
       ...problems.map((line) => `problem: ${line}`),
       ...warnings.map((line) => `warning: ${line}`),
     ],

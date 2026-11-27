@@ -7,7 +7,7 @@ import { useStore, type Bot } from "@/state/store";
 import { useBotSettingsDerived } from "./bot-settings/useBotSettingsDerived";
 import { BotPanel } from "./bot-panel/PanelShell";
 import { BOT_PANEL_ID, sidePanelCls } from "./bot-panel/side-panel";
-import { escapeIsUnclaimed } from "@/lib/composer-focus";
+import { emptyComposerField, escapeIsUnclaimed, underPanel } from "@/lib/composer-focus";
 import { phoneApp } from "@/lib/store-app";
 
 /** What the panel that just unmounted would have handed focus back to, taken by the next bot's panel when it mounts. */
@@ -47,7 +47,9 @@ export function BotSettingsDialog({ bot, overlay = false, slideIn = true }: {
       // conversation or a plain button still closes the panel
       if (dialog && event.target instanceof Node && !dialog.contains(event.target)) {
         const page = event.target === document.body || event.target === document.documentElement;
-        if (event.key !== "Escape" || !escapeIsUnclaimed(event.target as Element, page)) return;
+        // the chat box under a panel that covers the whole chat (a narrow window), or an empty one, has no use for it
+        const covered = event.target instanceof Element && !page && (underPanel(event.target) || emptyComposerField(event.target));
+        if (event.key !== "Escape" || !(covered || escapeIsUnclaimed(event.target as Element, page))) return;
       }
       // A popover or field inside that already handled this Escape keeps the panel open.
       if (event.key === "Escape" && !event.defaultPrevented) {

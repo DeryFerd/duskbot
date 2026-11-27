@@ -499,7 +499,7 @@
     },
     {
       "name": "vm_exec",
-      "description": "Run a shell command on your own computer, your Local VM or your VPS desktop (as its desktop user, starting in /home/cua/workspace), and get its exit code, stdout and stderr back as text. Use this for all command-line work there: downloading with curl, calling an API, parsing a page or writing a CSV with python3, installing software, checking a file's size with ls -l. Do not type commands into a terminal window and read screenshots: that is slow and unreliable. GUI programs you start appear on that desktop. For a long job raise timeout_seconds (default 60, at most 300). Only available while this turn has a Local VM or VPS desktop.",
+      "description": "Run a shell command on your Local VM or VPS desktop (as its desktop user, starting in /home/cua/workspace), and get its exit code, stdout and stderr back as text. Use this for all command-line work there: downloading with curl, calling an API, parsing a page or writing a CSV with python3, installing software, checking a file's size with ls -l. Do not type commands into a terminal window and read screenshots: that is slow and unreliable. GUI programs you start appear on that desktop. For a long job raise timeout_seconds (default 60, at most 300). Only available while this turn has a Local VM or VPS desktop; a command for the person's own computer goes to your own shell tool.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -2505,7 +2505,7 @@
     },
     {
       "name": "skill_manage",
-      "description": "Submit a new or updated reusable SKILL.md for one kind of work. Update a learned skill when the person corrected how that work is done, asked you to revise it, or it misled you; never update one the person wrote or imported unless they asked for that named skill. If the result is pending, a create stays inactive and an update leaves the current version unchanged. Read the result: it applies immediately at every access level, and the person sees it with an Undo where possible. If applied, continue the work without another confirmation. Only a pending result (a Cloud conversation its owner did not drive) means ending the turn to wait for the owner. Never claim success without an applied result; report failures honestly. This does not elevate another bot's execution permissions.",
+      "description": "Submit a new or updated reusable SKILL.md for one kind of work. Update a learned skill when the person corrected how that work is done, asked you to revise it, or it misled you; never update one the person wrote or imported unless they asked for that named skill. Build a new skill on known good practice (the official docs or a well-regarded public skill, searched when you can); their preferences win. If the result is pending, a create stays inactive and an update leaves the current version unchanged. Read the result: it applies immediately at every access level, and the person sees it with an Undo where possible. If applied, continue the work without another confirmation. Only a pending result (a Cloud conversation its owner did not drive) means ending the turn to wait for the owner. Never claim success without an applied result; report failures honestly. This does not elevate another bot's execution permissions.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,

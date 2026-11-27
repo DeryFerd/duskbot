@@ -352,6 +352,7 @@ describe("routine comms e2e on the job runtime (fake ACP fleet)", () => {
       USERPROFILE: home,
       DUSK_PORT: String(PORT),
       DUSK_TEST_INTERNAL_CAPABILITY_KEY: TEST_CAPABILITY_KEY,
+      FAKE_CHAT_RETRY_SCALE: "0.01",
     };
     if (process.env.PATH) env.PATH = process.env.PATH;
     // Without SystemRoot, winsock fails to initialize in the child.

@@ -1,11 +1,12 @@
 // "Forget X" removes exactly the facts it names, by id or by words that fit facts about one subject, from every note a
-// bot keeps (MEMORY.md, its topic notes and their archive) and from About me.
+// bot keeps (MEMORY.md, its topic notes and their archive) and from About me, in the asking bot's memory and in the same
+// person's memory with every other bot.
 import { join } from "node:path";
 
 import type { AboutMe } from "./about-me.ts";
 import type { CommitResult } from "./host/commitments.ts";
 import type { ProactiveRule } from "./host/proactive-prefs.ts";
-import { factIdentity, parseMemoryEntries, passageMatcher, traceMatcher } from "./memory-entries.ts";
+import { factIdentity, foldForMatch, parseMemoryEntries, passageMatcher, traceMatcher } from "./memory-entries.ts";
 import { noteForget } from "./forget-traces.ts";
 import { ABOUT_FILE, annotateFact, factById, factsOf, syncAboutFacts, syncWorkspaceFacts, type FactRow, type FactSource } from "./memory-facts.ts";
 import { looksLikeInstruction, saidByPerson } from "./memory-trust.ts";
@@ -74,14 +75,37 @@ export function forgetInNotes(botId: string, mentions: (text: string) => boolean
 
 const SOURCE_QUOTE = /(· from [^·\n"]*?)\s*"(?:[^"\\]|\\.)*"/;
 
+/** Whether a chat name a note quotes (a chat's first words, cut short) touches what was forgotten: any one telling word of
+ * it, or a cut-short last word that begins one. Looser than `names`, since dropping a quote loses only where a note came from. */
+export function quoteMatcher(texts: readonly string[]): ((quote: string) => boolean) | null {
+  const words = new Set<string>();
+  for (const text of texts) {
+    for (const raw of text.split(/\s+/)) {
+      const word = raw.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+      const folded = foldForMatch(word);
+      if (folded.length >= 3 && (/^\p{Lu}/u.test(word) || /\p{N}/u.test(word) || folded.length >= 6) && !QUOTE_STOP.has(folded)) words.add(folded);
+    }
+  }
+  const terms = [...words].map(passageMatcher).filter((match): match is (text: string) => boolean => match !== null);
+  if (!terms.length) return null;
+  return (quote) => {
+    if (terms.some((matches) => matches(quote))) return true;
+    const cut = /([\p{L}\p{N}']{4,})…"?$/u.exec(quote.trim());
+    const tail = cut ? foldForMatch(cut[1]!) : "";
+    return Boolean(tail) && [...words].some((word) => word.length > tail.length && word.startsWith(tail));
+  };
+}
+
+const QUOTE_STOP = new Set("about after again always another around because before between people person prefers really should something someone thing things through though whether without working remember reminder reminders the".split(" "));
+
 /** `text` with no trace of a forgotten fact: a source quote that names it loses the quote, and a line that names it (in
- * a daily log any line, in a note a struck old version) goes. */
-export function withoutTraces(text: string, names: (text: string) => boolean, log: boolean): string {
+ * a daily log any line, in a note a struck old version) goes. `quoted`: how a source quote is judged, `names` by default. */
+export function withoutTraces(text: string, names: (text: string) => boolean, log: boolean, quoted: (text: string) => boolean = names): string {
   const struck = new Set(parseMemoryEntries(text).filter((entry) => entry.struck && names(entry.body)).map((entry) => entry.line));
   return text.split("\n").flatMap((line, index) => {
     if (struck.has(index)) return [];
     const quote = SOURCE_QUOTE.exec(line);
-    const kept = quote && names(quote[0].slice(quote[1].length)) ? line.replace(SOURCE_QUOTE, "$1") : line;
+    const kept = quote && quoted(quote[0].slice(quote[1].length)) ? line.replace(SOURCE_QUOTE, "$1") : line;
     return log && /^\s*-\s/.test(kept) && names(kept) ? [] : [kept];
   }).join("\n");
 }
@@ -90,26 +114,32 @@ export function withoutTraces(text: string, names: (text: string) => boolean, lo
 const emptyTopic = (text: string) => !text.replace(/^---\n[\s\S]*?\n---\n?/, "").split("\n").some((line) => line.trim() && !line.trim().startsWith("#"));
 
 /** Every other place a bot's memory could still name forgotten facts: source quotes and struck lines in its notes, a topic
- * left empty, and its daily logs. Each file is rewritten through the writers that keep the recall index current. */
-export function forgetTraces(botId: string, names: (text: string) => boolean): void {
+ * left empty, and its daily logs. Each file is rewritten through the writers that keep the recall index current.
+ * `changed`: any file was; `logLines`: daily log lines dropped. */
+export function forgetTraces(botId: string, names: (text: string) => boolean, quoted: (text: string) => boolean = names): { changed: boolean; logLines: number } {
+  let changed = false, logLines = 0;
   const index = readNote(botId, "MEMORY.md");
   if (index !== null && !isMemorySeed(index)) {
-    const kept = withoutTraces(index, names, false);
-    if (kept !== index) writeMemoryFile(botId, kept);
+    const kept = withoutTraces(index, names, false, quoted);
+    if (kept !== index) { writeMemoryFile(botId, kept); changed = true; }
   }
   for (const topic of listMemoryTopics(botId)) {
     const text = readMemoryTopic(botId, topic.name);
     if (text === null) continue;
-    if (emptyTopic(text) && names(`${topic.name.replace(/\.md$/, "")} ${text}`)) { removeMemoryTopic(botId, topic.name); continue; }
-    const kept = withoutTraces(text, names, false);
-    if (kept !== text) writeMemoryTopic(botId, topic.name, kept);
+    if (emptyTopic(text) && names(`${topic.name.replace(/\.md$/, "")} ${text}`)) { removeMemoryTopic(botId, topic.name); changed = true; continue; }
+    const kept = withoutTraces(text, names, false, quoted);
+    if (kept !== text) { writeMemoryTopic(botId, topic.name, kept); changed = true; }
   }
   for (const log of listMemoryLogs(botId)) {
     const text = readMemoryLog(botId, log);
     if (text === null) continue;
-    const kept = withoutTraces(text, names, true);
-    if (kept !== text) writeMemoryLog(botId, log, kept);
+    const kept = withoutTraces(text, names, true, quoted);
+    if (kept === text) continue;
+    writeMemoryLog(botId, log, kept);
+    changed = true;
+    logLines += text.split("\n").length - kept.split("\n").length;
   }
+  return { changed, logLines };
 }
 
 /** The person's own words started this turn: not another person's, not another bot's, not a room's. */
@@ -118,7 +148,11 @@ export function ownersOwnAsk(path: ReadonlyArray<{ role: string; kind?: string; 
   return Boolean(asked) && !asked!.sender && !asked!.peerAsk;
 }
 
-export type BotMemoryResult = MemoryUpdateResult | { ok: true; forgotten: string[]; aboutMe: string[] }
+/** What a forget removed: facts from notes (`forgotten`) and About me, daily log lines that named them, and the other bots
+ * whose memory of the person it changed. */
+export type ForgetResult = { ok: true; forgotten: string[]; aboutMe: string[]; logLines: number; ownMemory: boolean; otherBots: string[] };
+
+export type BotMemoryResult = MemoryUpdateResult | ForgetResult
   | { ok: true; preference: "saved" | "known"; person?: string }
   | { ok: true; notify: "saved" | "known" }
   | { ok: true; commit: Exclude<CommitResult, "unknown"> }
@@ -202,7 +236,10 @@ export function botMemoryUpdate(
   opts: { source: string; aboutMe: Pick<AboutMe, "forget"> | null; prefer?: PreferenceTarget | null; trust?: WriteTrust; about?: { owner: string; text: string };
     /** Saves one rule in the person's What to tell me about (host/proactive-prefs.ts); absent where no one person owns it. */
     notify?: ((rule: ProactiveRule, text: string) => "saved" | "known" | null) | null;
-    commit?: ((item: { text: string; who?: string; due?: string; done?: boolean }) => CommitResult | null) | null },
+    commit?: ((item: { text: string; who?: string; due?: string; done?: boolean }) => CommitResult | null) | null;
+    /** The same person's memory with each other bot (host/cloud-team-host.ts sameOwnerLayers), which a forget clears too;
+     * none where this conversation is not one person's own (a room, the team's). */
+    elsewhere?: ReadonlyArray<{ layer: string; name: string }> },
 ): BotMemoryResult {
   const theirs = opts.trust?.from === "outside" && (body.action === "append" || body.action === "replace" || body.action === "supersede" || body.action === "prefer" || body.action === "notify" || body.action === "commit")
     && typeof body.text === "string" && saidByPerson(body.text, opts.trust.personSaid ?? []);
@@ -251,8 +288,10 @@ export function botMemoryUpdate(
     const ids = Array.isArray(body.ids) ? body.ids.filter((id): id is string => typeof id === "string").slice(0, 20) : [];
     const passage = typeof body.oldText === "string" ? body.oldText : "";
     if (opts.about) syncAboutFacts(opts.about.owner, opts.about.text);
-    syncWorkspaceFacts(layer);
-    const owners = [layer, ...(opts.aboutMe && opts.about ? [opts.about.owner] : [])];
+    const elsewhere = (opts.elsewhere ?? []).filter((other) => other.layer !== layer);
+    const layers = [layer, ...elsewhere.map((other) => other.layer)];
+    for (const id of layers) syncWorkspaceFacts(id);
+    const owners = [...layers, ...(opts.aboutMe && opts.about ? [opts.about.owner] : [])];
     const found = factsToForget(owners, { ids, passage });
     if ("error" in found) return { ok: false, code: "invalid", error: found.error };
     if ("ambiguous" in found) {
@@ -262,20 +301,35 @@ export function botMemoryUpdate(
     }
     const idents = new Set(found.facts.map((fact) => fact.ident));
     const exact = (text: string) => idents.has(factIdentity(text));
-    const forgotten = found.facts.some((fact) => fact.file !== ABOUT_FILE) ? forgetInNotes(layer, exact) : [];
-    const aboutMe = opts.aboutMe ? opts.aboutMe.forget(layer, exact) : [];
+    const inNotes = found.facts.some((fact) => fact.file !== ABOUT_FILE);
     const traces = traceMatcher(found.facts.map((fact) => fact.text));
     const named = passageMatcher(passage);
-    if (traces || named) forgetTraces(layer, (text) => Boolean(traces?.(text) || named?.(text)));
+    const names = (text: string) => Boolean(traces?.(text) || named?.(text));
+    const loose = quoteMatcher([...found.facts.map((fact) => fact.text), passage]);
+    const quoted = (text: string) => names(text) || Boolean(loose?.(text));
+    const forgotten: string[] = [], aboutMe: string[] = [], otherBots: string[] = [];
+    let logLines = 0, ownMemory = false;
+    for (const id of layers) {
+      const removed = inNotes ? forgetInNotes(id, exact) : [];
+      const left = traces || named ? forgetTraces(id, names, quoted) : { changed: false, logLines: 0 };
+      forgotten.push(...removed.filter((fact) => !forgotten.includes(fact)));
+      logLines += left.logLines;
+      const other = elsewhere.find((one) => one.layer === id);
+      if (removed.length || left.changed) {
+        if (other) otherBots.push(other.name);
+        else ownMemory = true;
+      }
+      if (id === layer) aboutMe.push(...(opts.aboutMe ? opts.aboutMe.forget(layer, exact) : []));
+      syncWorkspaceFacts(id);
+    }
     noteForget(layer, opts.source);
-    syncWorkspaceFacts(layer);
     if (opts.aboutMe) {
       // words of their own ("forget short answers") keep that from being learned again; one bare word only blocks these facts
       const words = passage.split(/[^\p{L}\p{N}]+/u).filter((word) => word.length > 2);
       if (!ids.length && words.length >= 2 && passageMatcher(passage)) rememberForgotten(passage, passageMatcher(passage)!);
       for (const fact of found.facts) rememberForgotten(fact.text, exact);
     }
-    return { ok: true, forgotten, aboutMe };
+    return { ok: true, forgotten, aboutMe, logLines, ownMemory, otherBots };
   }
   if (outside && (body.action === "append" || body.action === "replace" || body.action === "supersede")) {
     const text = typeof body.text === "string" ? body.text.replace(/\s+/g, " ").trim().slice(0, 1_000) : "";

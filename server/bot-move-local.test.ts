@@ -150,7 +150,7 @@ describe("OpenClaw", () => {
     put("elsewhere/cron/jobs.json", "not json at all");
     const app = lookForBots(machineAt(home, { OPENCLAW_STATE_DIR: state }), { now: NOW }).apps[0]!;
     expect(app.bots.map((bot) => [bot.name, bot.instructions])).toEqual([["OpenClaw", "Still me."]]);
-    expect(app.unreadable.sort()).toEqual(["cron/jobs.json", "openclaw.json"]);
+    expect(app.unreadable.sort()).toEqual([join("cron", "jobs.json"), "openclaw.json"]);
   });
 
   it("never follows a link out of a workspace, and skips a file it may not read", () => {
@@ -166,7 +166,8 @@ describe("OpenClaw", () => {
     expect(machine.opened).not.toContain(outside);
     expect(JSON.stringify(app)).not.toContain(SENTINEL);
     expect(app.bots[0]!.instructions).toBe("");
-    if (process.getuid?.() !== 0) expect(app.unreadable).toContain("workspace/USER.md");
+    // chmod cannot take read access away on Windows, nor from root
+    if (process.platform !== "win32" && process.getuid?.() !== 0) expect(app.unreadable).toContain("workspace/USER.md");
     chmodSync(join(home, ".openclaw/workspace/USER.md"), 0o644);
   });
 });

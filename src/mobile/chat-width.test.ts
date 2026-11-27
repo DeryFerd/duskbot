@@ -7,6 +7,7 @@ import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AppState, Bot, InstanceInfo, Message } from "@/state/store";
+import { SIMPLE_BUBBLE_MAX } from "@/components/chat-bubble";
 
 vi.mock("@/components/ChatMarkdown", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/components/ChatMarkdown")>(),
@@ -116,6 +117,17 @@ describe("message width on the phone, on the rendered chat", () => {
       expect(row.querySelectorAll('[data-testid="message-actions"]').length).toBeGreaterThan(0);
       for (const actions of row.querySelectorAll('[data-testid="message-actions"]')) expect(phone(actions, "position")).toBe("absolute");
     }
+  });
+
+  it.each(["data-app", "data-data-result"])("stops a page or chart (%s) where a bubble stops, 44px short of the column (#340)", (attr) => {
+    const row = rows()[1]!;
+    const card = document.createElement("div");
+    card.setAttribute(attr, "x");
+    card.className = `w-full ${SIMPLE_BUBBLE_MAX}`;
+    row.append(card);
+    expect(phone(card, "max-width")).toBe(phone(bubbleOf(row), "max-width"));
+    expect(phone(card, "max-width")).toBe("calc(100% - 44px)");
+    card.remove();
   });
 
   it("puts no other width cap between the bubble and the row", () => {

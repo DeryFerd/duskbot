@@ -11,6 +11,12 @@ describe("toolStepLabel", () => {
     [{ name: "manage_task" }, "Checking a background task"],
     [{ name: "Run manage_task" }, "Checking a background task"],
     [{ name: "Run another tool" }, "Run another tool"],
+    // other Antigravity calls titled with their bare tool id
+    [{ name: "Run command_status" }, "Checking a background task"],
+    [{ name: "Run invoke_subagent" }, "Hand a task to a helper"],
+    [{ name: "Run send_message" }, "Send message"],
+    [{ name: "Run manage_inbox" }, "Manage inbox"],
+    [{ name: "Run tests" }, "Run tests"],
     [{ name: "WebSearch" }, "Search the web"],
     [{ name: "mcp__dusk__computer_batch" }, "Use the screen"],
     [{ name: "mcp__dusk__screenshot" }, "Look at the screen"],

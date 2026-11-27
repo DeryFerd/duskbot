@@ -6,9 +6,10 @@ import { pacedMs } from "./motion-speed";
  * MASCOT_MOTION; the others draw the mascot with WorkingLineMascot and style the line by `data-working-line`. */
 export const WORKING_LINE_PICKS = ["restore", "drift", "ponder", "rock", "ellipsis"] as const;
 export type WorkingLineVariant = (typeof WORKING_LINE_PICKS)[number];
-export type WorkingLinePick = "shipped" | WorkingLineVariant;
+/** "glance" draws the mascot with GlanceMascot: its face does the acting, moved by CSS and timers, not a frame loop. */
+export type WorkingLinePick = "shipped" | WorkingLineVariant | "glance";
 
-export const WORKING_LINE: WorkingLinePick = "rock";
+export const WORKING_LINE: WorkingLinePick = "glance";
 
 /** How a version's line comes and goes, and what carries its thinking besides the mascot. */
 export type LineSpec = {
@@ -28,6 +29,7 @@ export const LINE_SPECS: Record<WorkingLinePick, LineSpec> = {
   drift: { exitMs: pacedMs(240), thoughtDots: false, ellipsis: false },
   ponder: { exitMs: pacedMs(200), thoughtDots: true, ellipsis: false },
   rock: { exitMs: pacedMs(200), thoughtDots: false, ellipsis: false },
+  glance: { exitMs: pacedMs(200), thoughtDots: false, ellipsis: false },
   ellipsis: { exitMs: pacedMs(240), thoughtDots: false, ellipsis: true },
 };
 

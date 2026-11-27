@@ -8,6 +8,21 @@ Allow: /
 Disallow: /explore/
 Disallow: /api/
 
+User-agent: YandexBot
+Allow: /
+Disallow: /explore/
+Disallow: /api/
+
+User-agent: DuckDuckBot
+Allow: /
+Disallow: /explore/
+Disallow: /api/
+
+User-agent: Applebot
+Allow: /
+Disallow: /explore/
+Disallow: /api/
+
 User-agent: OAI-SearchBot
 Allow: /
 Disallow: /explore/
@@ -34,6 +49,26 @@ Disallow: /explore/
 Disallow: /api/
 
 User-agent: Claude-User
+Allow: /
+Disallow: /explore/
+Disallow: /api/
+
+User-agent: GPTBot
+Allow: /
+Disallow: /explore/
+Disallow: /api/
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /explore/
+Disallow: /api/
+
+User-agent: Google-Extended
+Allow: /
+Disallow: /explore/
+Disallow: /api/
+
+User-agent: Applebot-Extended
 Allow: /
 Disallow: /explore/
 Disallow: /api/

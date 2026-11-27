@@ -102,8 +102,8 @@ describe("ModelStore", () => {
   });
 
   it("keeps models in the computer's cache, outside any workspace", () => {
-    expect(defaultModelDir({}, "darwin")).toMatch(/Library\/Caches\/bot\.dusk\.app\/voice$/);
-    expect(defaultModelDir({ XDG_CACHE_HOME: "/c" }, "linux")).toBe("/c/duskbot/voice");
+    expect(defaultModelDir({}, "darwin")).toMatch(/Library[\\/]Caches[\\/]bot\.dusk\.app[\\/]voice$/);
+    expect(defaultModelDir({ XDG_CACHE_HOME: "/c" }, "linux")).toBe(path.join("/c", "duskbot", "voice"));
     expect(defaultModelDir({ DUSK_VOICE_MODELS_DIR: "/m" }, "linux")).toBe("/m");
   });
 });

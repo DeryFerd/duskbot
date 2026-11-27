@@ -10,6 +10,10 @@ import { localVoiceCallKnown, markLocalVoiceUnavailable } from "@/lib/voice-call
 import { ease } from "@/lib/voice-call/meter";
 import { ACCOUNT_VOICE, CALL_SPEEDS, CALL_VOICES, callPrefs, setCallPrefs, useCallPrefs, voiceForBot, type CallVoiceId } from "@/lib/voice-call/prefs";
 import { callLanguageFor, callSpeedFor, setVoicePrefs, useVoicePrefs, voicePrefs } from "./bot-panel/voice-prefs";
+import { languageChoice } from "@/lib/language-preference";
+import { serverListeningReady } from "@/lib/speech";
+import { callLanguage } from "@/lib/voice-call/language";
+import { voicePrefs as voiceInputPrefs } from "@/lib/voice-input/prefs";
 import { VoiceCallSession, type CallFacts, type CallSnapshot } from "@/lib/voice-call/session";
 import { useStore, visibleMessages, type Bot } from "@/state/store";
 import { BotAvatar } from "./Avatar";
@@ -80,6 +84,8 @@ export function VoiceCall({ bot }: { bot: Bot }) {
   const [session, setSession] = useState<VoiceCallSession | null>(null);
   const botRef = useRef(bot);
   botRef.current = bot;
+  const configRef = useRef(state.config);
+  configRef.current = state.config;
 
   useEffect(() => {
     const { id, threadId } = botRef.current;
@@ -90,7 +96,11 @@ export function VoiceCall({ bot }: { bot: Bot }) {
         decide: (requestId, allow) => dispatch({ type: "decideRequest", threadId, requestId, behavior: allow ? "allow" : "deny", message: allow ? undefined : t("call.denied") }),
         answer: (messageId, text) => dispatch({ type: "answerCard", botId: id, threadId, messageId, answer: text }),
       },
-      { voice: voiceForBot(id), speed: callSpeedFor(voicePrefs(id), callPrefs().speed), language: callLanguageFor(voicePrefs(id)), accountVoiceId: botRef.current.voice },
+      {
+        voice: voiceForBot(id), speed: callSpeedFor(voicePrefs(id), callPrefs().speed), accountVoiceId: botRef.current.voice,
+        language: callLanguage({ bot: callLanguageFor(voicePrefs(id)), voiceInput: voiceInputPrefs().language, app: languageChoice() ?? configRef.current?.language, device: globalThis.navigator?.language }),
+        serverHears: voiceInputPrefs().engine !== "system" && serverListeningReady(configRef.current), accountVoice: configRef.current?.tts?.ready === true,
+      },
     );
     next.skipSteps(visibleMessages(botRef.current).filter((m) => m.kind === "activity").map((m) => m.id));
     setSession(next);

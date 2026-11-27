@@ -1,4 +1,6 @@
 import { randomBytes } from "node:crypto";
+import { CARRIED_DRIVERS } from "./ai-signins-carry.mjs";
+import { cancelSurvey, retentionStep, SURVEY_WAIT_MS } from "./cloud-cancel.mjs";
 import { createManagedDesktopStore, retryDelay, unreadableRecord } from "./managed-desktop.mjs";
 import { CLOUD_MACHINE_CONNECTABLE, cloudUnreachableText, parseCloudOffer, parseCloudPurchase, parseCloudSummary, parseCloudTeams, parseCloudRoom, parseCloudTrial, parseCloudUsage, parsePairingGrant, parsePublicOffer, withoutTrial } from "./cloud-home.mjs";
 import { CLOUD_ID, CLOUD_SWATCHES, cleanCloudListName, ORGANIZATION_BLOCKS, otherOwnClouds, ownCloud, parseCloudList, parseCloudPayment, parseCloudRenewal, parseOrganizations, releaseVersion } from "./cloud-list.mjs";
@@ -44,21 +46,7 @@ export const UPGRADE_SOURCES = Object.freeze(["app_usage", "app_settings", "app_
 const UPGRADE_TIERS = Object.freeze(["starter", "personal", "pro", "max"]);
 const UPGRADE_REFUSALS = Object.freeze(["payment_failed", "not_subscribed", "already_on_plan", "plan_change_unavailable", "confirmation_required", "price_changed", "rate_limited"]);
 const CONFIRMATION = /^[A-Za-z0-9_-]{43}$/;
-/** The cancel sheet's reasons, as the Admin takes them. */
-export const CLOUD_CANCEL_ANSWERS = Object.freeze(["feature", "price", "setup", "broken", "later", "other"]);
-const SURVEY_TEXT_MAX = 2_000, SURVEY_WAIT_MS = 8_000;
-/**
- * The cancel sheet's survey as main sends it: one reason and each box trimmed, at most 2,000 characters. Words without a
- * reason are kept as `other`; null when nothing was said, and for anything that isn't a survey (it is never sent then).
- */
-export function cancelSurvey(input) {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
-  const box = value => typeof value === "string" ? value.trim() : "";
-  const answer = CLOUD_CANCEL_ANSWERS.includes(input.answer) ? input.answer : null, expected = box(input.expected), improve = box(input.improve);
-  if ((input.answer !== undefined && input.answer !== null && !answer) || expected.length > SURVEY_TEXT_MAX || improve.length > SURVEY_TEXT_MAX) return null;
-  if (!answer && !expected && !improve) return null;
-  return { answer: answer ?? "other", ...(expected ? { expected } : {}), ...(improve ? { improve } : {}) };
-}
+export { CLOUD_CANCEL_ANSWERS, CLOUD_RETENTION_OFFERS, cancelSurvey, retentionStep } from "./cloud-cancel.mjs";
 /** Why the Admin won't open another Cloud's checkout now (POST clouds, 409 `addBlocked`; contract v1). */
 export const ADD_BLOCKS = Object.freeze(["cap", "checkout_open", "rate", "signups_closed"]);
 const ADD_INTERVALS = Object.freeze(["month", "year"]);
@@ -75,7 +63,7 @@ export function checkoutDestination(value, { fixture = false, staging = false, c
 }
 const HANDOFF_PLANS = Object.freeze(["plus", "pro"]);
 /** The website pages a handoff opens (shared/account-api.ts HANDOFF_PAGES), and where each is when the browser signs in itself. */
-export const HANDOFF_PAGES = Object.freeze({ plans: "/billing", home: "/", workspace: "/", cloud: "/cloud", billing: "/billing", account: "/account", usage: "/usage" });
+export const HANDOFF_PAGES = Object.freeze({ plans: "/billing", home: "/", workspace: "/", cloud: "/cloud", billing: "/account#billing", account: "/account", usage: "/usage" });
 /** The service's page for approving this app's sign-in: on its own origin, at /cloud/desktop under the page's base (a
  *  service that shares its origin with the site serves the page at /dashboard), for exactly this code. */
 export function desktopApprovalLink(value, origin, userCode) {
@@ -855,6 +843,16 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
       return { outcome: "cancelled", renewal: answered === cloudId ? renewal : null, surveyed, state: await refresh().catch(() => state()) };
     },
     /**
+     * One step of the cancel sheet for the save rate, for the plan's own Cloud as `cancelPlan` names it: best effort (given
+     * SURVEY_WAIT_MS), never in the sheet's way. True when the Admin kept it.
+     */
+    async retention(input) {
+      const signedIn = grant, cloudId = renewalCloud, step = retentionStep(input);
+      if (!signedIn || !cloudId || !step || state().status !== "connected") return false;
+      try { await request("", { path: `/v1/clouds/${encodeURIComponent(cloudId)}/retention`, method: "POST", body: step, token: signedIn.token, timeoutMs: SURVEY_WAIT_MS }); return true; }
+      catch { return false; }
+    },
+    /**
      * The first run's AI sign-ins for the account's own Cloud while it is being made: the Admin holds them sealed, for a
      * day at most, and hands them to that Cloud once it runs. The Cloud is the session's own, never one a page names;
      * `items` never reach a log here.
@@ -863,15 +861,10 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
       const signedIn = grant, current = state();
       const cloud = current.clouds?.find(entry => entry.primary && entry.runsOn === "cloud" && ["checkout", "setting_up", "ready"].includes(entry.status));
       if (!signedIn || current.status !== "connected" || !cloud) return { outcome: "no-cloud" };
-      if (!Array.isArray(items) || !items.length) return { outcome: "nothing" };
-      const hold = (list) => request(`clouds/${encodeURIComponent(cloud.id)}/ai-signins`, { method: "POST", body: { items: list }, token: signedIn.token, timeoutMs: 30_000 });
-      try { await hold(items); }
-      catch (error) {
-        // an older Admin refuses kinds it doesn't know: it still holds the ChatGPT login, the one kind it always took
-        const known = items.filter(item => item?.kind === "codex-auth");
-        if (error?.status !== 400 || !known.length || known.length === items.length) return { outcome: "failed" };
-        try { await hold(known); } catch { return { outcome: "failed" }; }
-      }
+      const movable = Array.isArray(items) ? items.filter(item => CARRIED_DRIVERS[item?.kind]) : [];
+      if (!movable.length) return { outcome: "nothing" };
+      try { await request(`clouds/${encodeURIComponent(cloud.id)}/ai-signins`, { method: "POST", body: { items: movable }, token: signedIn.token, timeoutMs: 30_000 }); }
+      catch { return { outcome: "failed" }; }
       return { outcome: "held" };
     },
     /** Keep my plan: renewal back on for the same Cloud, as `cancelPlan` names it. */

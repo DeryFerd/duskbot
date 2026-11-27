@@ -12,7 +12,7 @@
     "ai microsoft to do from notes"
   ],
   "answer": "**the promise you made on a call deserves better than a sticky note.** tell the bot the next step and the microsoft to do list it belongs in. it can add notes, source links, categories, dates and reminders. give real deadlines when you have them; leave the date blank when you never agreed one.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -43,7 +43,7 @@
     "toolkit": "outlook",
     "slug": "OUTLOOK_CREATE_TASK"
   },
-  "what": "**keep the promise and the email behind it together.** give the bot a task title and list name. it looks up the list before creation, so you can distinguish lists with the same name.\n\nyou can add categories, source links and low, normal or high importance. dates and reminders need a time zone. due dates and reminders are separate choices; request both when you need both.",
+  "what": "**keep the promise and the email behind it together.** give the bot a task title and list name. it looks up the list before creation, so you can distinguish lists with the same name.\n\nyou can add categories, source links and low, normal or high importance. dates and reminders need a time zone. due dates and reminders are separate choices; request both when you need both.\n\nthe usual chain: the bot finds the email with [query emails](/integrations/outlook/query-emails), creates the task with a link back to it, and later reads the list with [list tasks from a to do list](/integrations/outlook/list-tasks-from-a-to-do-list).",
   "uses": [
     "**keep a supplier promise.** capture the follow-up you accepted on a call.",
     "**keep the fault report handy.** link it from a repair task.",

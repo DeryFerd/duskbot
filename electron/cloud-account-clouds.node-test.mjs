@@ -323,18 +323,17 @@ test("starting a sign-in over a good one is refused, and goes once that one has 
   assert.equal(f.requests.some(row => row.route === "/api/cloud/desktop/authorize"), true);
 });
 
-test("an older Admin that refuses the new sign-in kinds still holds the ChatGPT login alone", async t => {
+test("holds only the logins a second computer may renew too: a ChatGPT or Grok login never leaves this computer", async t => {
   const f = await admin(t);
   f.session = { ...f.session, clouds: [PRIMARY] };
-  f.signIns = body => body.items.length > 1 ? [400, { error: "invalid_body" }] : [200, { ok: true }];
+  f.signIns = () => [200, { ok: true }];
   await f.client.start();
-  const codex = { kind: "codex-auth", auth: "{}" }, grok = { kind: "grok-auth", auth: "{}" };
-  assert.deepEqual(await f.client.holdSignIns([codex, grok]), { outcome: "held" });
-  assert.deepEqual(f.requests.filter(row => row.route.endsWith("/ai-signins")).map(row => row.body.items.map(item => item.kind)), [["codex-auth", "grok-auth"], ["codex-auth"]]);
-  f.signIns = () => [400, { error: "invalid_body" }];
-  assert.deepEqual(await f.client.holdSignIns([grok]), { outcome: "failed" }, "nothing an older Admin takes");
+  const codex = { kind: "codex-auth", auth: "{}" }, grok = { kind: "grok-auth", auth: "{}" }, gemini = { kind: "gemini-oauth", auth: "{}" };
+  assert.deepEqual(await f.client.holdSignIns([codex, grok]), { outcome: "nothing" });
+  assert.deepEqual(await f.client.holdSignIns([codex, gemini, grok]), { outcome: "held" });
+  assert.deepEqual(f.requests.filter(row => row.route.endsWith("/ai-signins")).map(row => row.body.items.map(item => item.kind)), [["gemini-oauth"]]);
   f.signIns = () => [503, { error: "unavailable" }];
   const before = f.requests.length;
-  assert.deepEqual(await f.client.holdSignIns([codex, grok]), { outcome: "failed" }, "a refusal that isn't about the kinds is not retried");
+  assert.deepEqual(await f.client.holdSignIns([gemini]), { outcome: "failed" }, "a refusal is not retried");
   assert.equal(f.requests.length - before, 1);
 });

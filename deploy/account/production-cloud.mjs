@@ -13,6 +13,7 @@ import { chmodSync, copyFileSync, mkdtempSync, readFileSync, rmSync, statSync, w
 import { homedir, tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { packageSsh } from "./package-ssh.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const source = process.env.DUSK_ENV || join(homedir(), ".config/duskbot/dusk.env");
@@ -80,7 +81,7 @@ if (step === "env") {
   const value = (name) => { const i = names.get(name); return i === undefined ? null : lines[i].slice(name.length + 1).replace(/^(["'])(.*)\1$/, "$2"); };
   const file = value(`DUSK_MANAGED_HOME_PACKAGE_FILE_${suffix}`), sig = value(`DUSK_MANAGED_HOME_PACKAGE_SIGNATURE_FILE_${suffix}`), sha = value(`DUSK_MANAGED_HOME_PACKAGE_SHA256_${suffix}`);
   if (!file || !sig || !sha) fail(`dusk.env has no DUSK_MANAGED_HOME_PACKAGE_FILE/SIGNATURE_FILE/SHA256_${suffix}: the release flow places ${target}'s package first`);
-  const there = execFileSync("ssh", ["-o", "BatchMode=yes", "contabo", `sha256sum '${file}' 2>/dev/null | cut -c1-64; test -s '${sig}' && echo sig; true`], { encoding: "utf8" }).split("\n");
+  const there = execFileSync("ssh", [...packageSsh().args, `sha256sum '${file}' 2>/dev/null | cut -c1-64; test -s '${sig}' && echo sig; true`], { encoding: "utf8" }).split("\n");
   if (there[0] !== sha) fail(`${file} has sha256 ${there[0] ? `${there[0].slice(0, 12)}...` : "(missing)"}, dusk.env says ${sha.slice(0, 12)}...: do not deploy`);
   if (there[1] !== "sig") fail(`${sig} is missing or empty: do not deploy`);
   console.log(`${target}: ${file} matches dusk.env (sha256 ${sha.slice(0, 12)}...) and has its signature`);

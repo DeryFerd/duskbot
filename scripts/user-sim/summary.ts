@@ -9,7 +9,8 @@ interface Row {
   key: string; id: string; world: string; tags: string[]; success: boolean; pass: boolean; crashed?: string;
   checks: Array<{ label: string; ok: boolean; recall?: boolean }>;
   verdict: { score: number; done: boolean; quality?: number; tone?: number; needlessQuestions?: number; patterns: string[]; why: string };
-  metrics?: { personTurns: number; steps: number; failedTurns: number; ttftMs: number | null; turnLatencyMs: number | null; tokensIn: number; tokensOut: number; costUsd: number; costEstimated: boolean; recall: { hit: number; of: number } | null; wallMs: number };
+  metrics?: { personTurns: number; steps: number; failedTurns: number; ttftMs: number | null; turnLatencyMs: number | null; tokensIn: number; tokensOut: number; costUsd: number; costEstimated: boolean; recall: { hit: number; of: number } | null; wallMs: number;
+    workTurns?: number; earlyOnWork?: number; quickTurns?: number; earlyOnQuick?: number; beats?: Record<string, number> };
 }
 
 const pct = (n: number, d: number) => (d ? Math.round((n / d) * 1000) / 10 : 0);
@@ -46,6 +47,10 @@ export function summarize(rows: Row[], info: RunInfo = {}) {
     medianTtftMs: quantile(ttft, 0.5), p90TtftMs: quantile(ttft, 0.9),
     medianTurnMs: quantile(lat, 0.5), p90TurnMs: quantile(lat, 0.9),
     personTurns: m.reduce((t, x) => t + x.personTurns, 0),
+    // a quick first line or progress note before the result, on turns past 15 s; and on quicker turns, where none should come
+    firstMessageOnWork: `${m.reduce((t, x) => t + (x.earlyOnWork ?? 0), 0)}/${m.reduce((t, x) => t + (x.workTurns ?? 0), 0)}`,
+    firstMessageOnQuick: `${m.reduce((t, x) => t + (x.earlyOnQuick ?? 0), 0)}/${m.reduce((t, x) => t + (x.quickTurns ?? 0), 0)}`,
+    beats: m.reduce<Record<string, number>>((t, x) => { for (const [k, v] of Object.entries(x.beats ?? {})) t[k] = (t[k] ?? 0) + v; return t; }, {}),
     toolSteps: m.reduce((t, x) => t + x.steps, 0),
     failedTurns: m.reduce((t, x) => t + x.failedTurns, 0),
     tokensIn: m.reduce((t, x) => t + x.tokensIn, 0), tokensOut: m.reduce((t, x) => t + x.tokensOut, 0),

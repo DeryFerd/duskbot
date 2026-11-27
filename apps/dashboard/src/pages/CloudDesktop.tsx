@@ -33,7 +33,7 @@ function Empty() {
     <div className="flex flex-col gap-4">
       <CloudPitch title="keep your bots working" body={`dusk cloud keeps your bots available, even while your ${computerWord()} sleeps.`} link={{ to: "/workspaces#add-server", label: "use my own server instead" }} />
       <Card className="enter" style={{ ["--i" as string]: 1 }} aria-labelledby="sizes-title">
-        <SectionTitle id="sizes-title" action={<Link to="/billing" className="text-link inline-flex h-8 items-center text-13">plans and billing</Link>}>plans</SectionTitle>
+        <SectionTitle id="sizes-title" action={<Link to="/billing" className="text-link inline-flex h-8 items-center text-13">compare plans</Link>}>plans</SectionTitle>
         {catalog ? (
           <ul className="">
             {catalog.bundles.filter((b) => b.id !== "free").map((b) => {
@@ -219,7 +219,7 @@ function Live({ cloud }: { cloud: CloudDesktop }) {
             <KV k="created" v={longDate(cloud.createdAt)} />
             {sub && <KV k={sub.cancelAt ? "ends" : "renews"} v={longDate(sub.cancelAt ?? sub.currentPeriodEnd)} />}
           </dl>
-          {deleting ? <DeleteDataAction cloud={cloud} /> : <p className="mt-4 text-13 text-ink-3">to remove it, cancel it in <Link to="/billing" className="text-link">plans and billing</Link>.</p>}
+          {deleting ? <DeleteDataAction cloud={cloud} /> : <p className="mt-4 text-13 text-ink-3">to remove it, cancel your plan in <Link to="/account#billing" className="text-link">account, plan &amp; billing</Link>.</p>}
         </Card>
         {catalog ? <Size cloud={cloud} catalog={catalog} /> : <Skeleton className="h-[220px] !rounded-card" />}
       </div>

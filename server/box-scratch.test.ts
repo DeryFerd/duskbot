@@ -62,7 +62,8 @@ describe("clearBoxScratch", () => {
   });
 });
 
-describe("the desktop's scratch script", () => {
+// the script runs in the bot computer's Linux container; Windows has no bash that reads its paths
+describe.skipIf(process.platform === "win32")("the desktop's scratch script", () => {
   it("empties the scratch folder at a turn's end and touches nothing else", () => {
     const home = box();
     const shot = file(join(home, "scratch", "shot.png"));

@@ -48,6 +48,8 @@
 :is(button, a, [role="button"], textarea):not([data-sidebar-bot-row], [data-chathead-pill], #bot-panel [data-panel-tab], #bot-panel [role="switch"],
   #bot-panel [data-tour="model"], #bot-panel button[aria-label="Close"], button[aria-label="Open bot list"], [data-ask-card] button,
   [data-model-picker-content] [data-model], [data-model-picker-content] [data-simple-show-all], [data-model-picker-content] [data-scope-pill]) { pointer-events: none; }
+/* a question card is answered here by its choices alone: its own-words row would be a box that takes no typing */
+[data-ask-card] :has(> form) { display: none; }
 
 /* the model chip keeps one look: its hairline at rest, focused or not, and a quiet fill in place of it on hover or open */
 #bot-panel [data-tour="model"] { --tw-inset-ring-color: color-mix(in oklab, var(--color-ink) 7%, transparent) !important; }

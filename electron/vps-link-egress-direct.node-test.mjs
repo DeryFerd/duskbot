@@ -77,6 +77,9 @@ async function socks(port, host, targetPort) {
   return { socket, reply: reply ? reply[1] : null, read };
 }
 
+// the link agent runs on a Linux server, where the direct command reaches the tunnel's process over a unix socket file
+const UNIX_SOCKET = process.platform === "win32" && "the link agent's direct socket is a unix socket on its Linux server";
+
 async function fixture({ serverPort = 9, viaProcess = false } = {}) {
   const root = fileURLToPath(new URL("../apps/link-service/", import.meta.url));
   const service = createLinkService({ base: "http://fixture.invalid", scriptPath: `${root}install.sh`, agentPath: `${root}agent.mjs`, trustProxy: false });
@@ -180,7 +183,7 @@ test("a lost direct path ends its egress streams, and the next dial takes the re
   } finally { await f.close(); }
 });
 
-test("the direct command hands its connection to the tunnel's process, which serves it in the hub", { timeout: 10_000 }, async () => {
+test("the direct command hands its connection to the tunnel's process, which serves it in the hub", { timeout: 10_000, skip: UNIX_SOCKET }, async () => {
   const dir = mkdtempSync(join(tmpdir(), "dusk-direct-sock-"));
   const file = join(dir, "direct.sock");
   const accepted = [];
@@ -201,7 +204,7 @@ test("the direct command hands its connection to the tunnel's process, which ser
   } finally { listening?.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("a desktop stream that ends, from either side and either way (the hand-back), closes only that stream, not the direct path", { timeout: 30_000 }, async () => {
+test("a desktop stream that ends, from either side and either way (the hand-back), closes only that stream, not the direct path", { timeout: 30_000, skip: UNIX_SOCKET }, async () => {
   // the bot computer's websockify: an upgrade that streams screen bytes until either end closes
   const desk = createHttpServer((_req, res) => { res.writeHead(404); res.end(); });
   const sockets = new Set();

@@ -52,13 +52,16 @@ export function claimsUnmadeChange(text: string, effectful: number): boolean {
 }
 
 // tools that only report: they never change anything a person would call done
-const LOOKUP_TOOL = /(?:^|_)(?:set_status|find_tool|tool_result_read|ask_user|list_[a-z_]+|[a-z_]+_info|search[a-z_]*|read[a-z_]*|get[a-z_]*|describe|show|load|sql|recall)$/;
+const LOOKUP_TOOL = /(?:^|_)(?:set_status|find_tool|tool_result_read|ask_user|list_[a-z_]+|[a-z_]+_info|search[a-z_]*|read[a-z_]*|get[a-z_]*|describe|describe_tool|show|load|sql|recall)$/;
+
+/** a call that runs another tool by name: the agents bridge's use_tool, or call_tool of a server reached by tool search */
+export const BRIDGE_TOOL = /(?:^|_)(?:use_tool|call_tool)$/;
 
 /** a tool call (its name and raw JSON arguments) that can have changed something; a bridged call counts by the tool it ran */
 export function effectfulCall(name: string, rawArgs: string): boolean {
   let args: unknown;
   try { args = JSON.parse(rawArgs); } catch { args = null; }
-  const bridged = /(?:^|_)use_tool$/.test(name) && args && typeof args === "object" && typeof (args as { name?: unknown }).name === "string" ? (args as { name: string }).name : name;
+  const bridged = BRIDGE_TOOL.test(name) && args && typeof args === "object" && typeof (args as { name?: unknown }).name === "string" ? (args as { name: string }).name : name;
   return !LOOKUP_TOOL.test(bridged);
 }
 
@@ -86,11 +89,26 @@ export function retryDelay(error: unknown, verdict: ErrorClassification, attempt
   // a 429 naming a wait within the minute is a per-minute limit, whatever its words call it (Gemini's free tier says
   // "You exceeded your current quota ... Please retry in 33s")
   const brief = verdict.reason === "quota" && typeof message === "string" && /\bHTTP 429\b/.test(message) && hinted !== undefined && hinted <= MAX_RETRY_WAIT_MS;
-  if ((!verdict.transient && !brief) || attempt >= RETRY_MAX_ATTEMPTS - 1) return null;
-  if (typeof asked === "number" && asked > MAX_RETRY_WAIT_MS) return null;
-  if (verdict.reason === "rate_limited" && typeof asked !== "number" && typeof named === "number" && named - Date.now() > MAX_RETRY_WAIT_MS) return null;
-  return Math.max(computeBackoff(attempt), brief || typeof asked === "number" ? Math.max(0, hinted!) : 0);
+  const spaced = SPACED_RETRIES[verdict.reason];
+  if ((!verdict.transient && !brief) || attempt >= retryAttempts(verdict.reason) - 1) return null;
+  if (hinted !== undefined && hinted > MAX_RETRY_WAIT_MS) return null;
+  const backoff = spaced ? jittered(spaced[attempt]!) : computeBackoff(attempt);
+  return Math.max(backoff, brief || hinted !== undefined ? Math.max(0, hinted!) : 0);
 }
+
+/** The waits before each further try for failures that clear on their own within the minute: a per-minute rate limit
+ * that names no wait, and a connection that dropped or never opened (a network still coming back after a wake). */
+const SPACED_RETRIES: Partial<Record<string, readonly number[]>> = {
+  rate_limited: [2_000, 8_000, 20_000],
+  connection_reset: [1_000, 3_000, 8_000],
+};
+
+/** Every try a failed completion request gets for this reason, the first included. */
+export function retryAttempts(reason: string): number {
+  return (SPACED_RETRIES[reason]?.length ?? RETRY_MAX_ATTEMPTS - 1) + 1;
+}
+
+const jittered = (ms: number) => Math.round(ms * (0.85 + Math.random() * 0.3));
 
 // gpt-oss's harmony tokens (`<|channel|>commentary to=functions.x <|constrain|>json<|message|>{...}<|call|>`), which a
 // provider whose parser missed them passes on as the reply's text
@@ -166,10 +184,12 @@ export class LeakHoldback {
 }
 
 const FAILURE_WORDS = /\b(?:could(?:n['’]t| not)|can(?:['’]t|not)|did(?:n['’]t| not)|was(?:n['’]t| not)|is(?:n['’]t| not) (?:connected|available|set up)|failed|unable|not connected|nothing (?:was|went|got)|no (?:access|connection)|blocked|refused|went wrong)\b/i;
+// the languages the app ships in, plus French, Portuguese and Italian, said the plain way a model reports a step that broke
+const FAILURE_WORDS_MORE = /\b(?:(?:returned|got|hit|gave|threw) an error|an error (?:came back|occurred)|errored|timed out|ran into (?:a |an )?(?:problem|issue|error)|had trouble|unfortunately|(?:is|was|are|were) (?:currently )?unavailable|access denied|no pude|no se pudo|no he podido|fall[óo](?![a-z])|error al|konnte\b[^.!?\n]{0,60}\bnicht|fehlgeschlagen|je n['’]ai pas pu|impossible de|a échoué|não consegui|não foi possível|falhou|non (?:sono riuscit[oa]|è stato possibile|ho potuto)|non riesco)/i;
 
 /** a reply that tells the person a step failed and does not claim it worked: a failure card under it would say it twice */
 export function ownsFailure(reply: string): boolean {
-  return FAILURE_WORDS.test(reply) && !claimsUnmadeChange(reply, 0);
+  return (FAILURE_WORDS.test(reply) || FAILURE_WORDS_MORE.test(reply)) && !claimsUnmadeChange(reply, 0);
 }
 
 const REPEAT_MIN = 20;

@@ -12,7 +12,7 @@
     "claude revise gmail email draft"
   ],
   "answer": "**say \"shorter\" instead of rewriting the email yourself.** a bot can revise a saved gmail draft's wording, subject or recipients. it updates the draft without sending it.\n\nevery edit rebuilds the message, so attachments need adding again. ask for a proposed revision if you want to read it before the saved draft changes.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,7 +45,7 @@
     "toolkit": "gmail",
     "slug": "GMAIL_UPDATE_DRAFT"
   },
-  "what": "**keep the proposal attached while you cut the waffle.** the bot replaces the draft's message. recipients, subject and body stay as they were unless you ask to change them. files need adding again, even for a one-word edit.\n\nhave it retrieve the existing attachments first and stop if one is missing. a shorter email still needs the proposal it promises.",
+  "what": "**keep the proposal attached while you cut the waffle.** the bot replaces the draft's message. recipients, subject and body stay as they were unless you ask to change them. files need adding again, even for a one-word edit.\n\nhave it retrieve the existing attachments first and stop if one is missing. a shorter email still needs the proposal it promises.\n\n**once it reads right, release it.** [send the saved draft](/integrations/gmail/send-draft) after you've read the copy in gmail. no draft yet? [start one](/integrations/gmail/create-email-draft).",
   "uses": [
     "**cut a long proposal.** keep the pricing pdf attached while shortening the wording.",
     "**fix the introduction before sending.** correct its recipient and subject on the saved draft.",

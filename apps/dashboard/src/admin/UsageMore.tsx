@@ -10,13 +10,15 @@ import { n } from "./ui";
 interface Count { key: string; count: number }
 interface RateRow { key: string; total: number; good: number; bad: number; rate: number | null; reason?: string }
 export interface MoreAnswer {
-  setup: { onboarding: Array<{ step: string; reached: number; medianMs: number | null }>; signIn: RateRow[];
+  setup: { onboarding: Array<{ step: string; reached: number; medianMs: number | null; fromApp?: number }>; signIn: RateRow[];
     /** the app's account sign-in funnel, by install; absent from an older server */
     account?: { steps: Array<{ step: string; reached: number }>; methods: RateRow[]; errors: Count[] };
     /** the app's account step to the website and back, one person across both; absent from an older server */
     handoff?: Array<{ step: string; side: "app" | "web"; from: string | null; reached: number; medianMs: number | null }> };
   reliability: { firstP50: number | null; firstP90: number | null; engines: Array<{ key: string; turns: number; p50: number | null; p90: number | null; firstP50: number | null }>;
-    models: Array<{ key: string; turns: number; p50: number | null; firstP50: number | null; failRate: number | null }>; toolErrors: Array<{ kind: "tool" | "app"; key: string; errors: number; turns: number; rate: number | null }>;
+    models: Array<{ key: string; turns: number; p50: number | null; firstP50: number | null; failRate: number | null }>; toolErrors: Array<{ kind: "tool" | "app"; key: string; errors: number; turns: number; rate: number | null;
+      /** turns whose calls failed only in ways the model handles (a non-zero exit, bad arguments), not in `errors`; absent from an older server */
+      expected?: number }>;
     /** absent from an older server */
     toolFailures?: Array<{ tool: string; error: string; turns: number; calls: number; people: number }>;
     crashes: { count: number; people: number; top: Count[] }; wake: { count: number; p50Ms: number | null; p90Ms: number | null } };
@@ -25,7 +27,9 @@ export interface MoreAnswer {
   bots: { perPerson: number | null; engines: Count[]; topBotShare: number | null; memory: Count[]; roles: Count[] };
   apps: { connects: RateRow[]; actions: Count[] };
   routines: { every: RateRow[]; runP50: number | null; survival: { eligible: number; survived: number; share: number | null } };
-  money: { planViews: number; checkouts: { started: number; paid: number; abandoned: number; rate: number | null }; cancelReasons: Count[]; upgrades: number; downgrades: number };
+  money: { planViews: number; checkouts: { started: number; paid: number; abandoned: number; rate: number | null }; cancelReasons: Count[];
+    /** cancel flows that ended in the window, kept or cancelled; absent from an older server */
+    saves?: { saved: number; cancelled: number; rate: number | null }; upgrades: number; downgrades: number };
   discovery: Array<{ feature: string; people: number; share: number | null; medianDays: number | null }>;
   setups: Record<"version" | "os" | "arch" | "locale" | "screen" | "theme" | "skin" | "notifications", Count[]>;
 }
@@ -36,7 +40,7 @@ export const MORE_TITLE: Record<MoreDetail, string> = { setup: "setup and sign-i
 const I = { size: 14, strokeWidth: 1.75 } as const;
 const words = (key: string) => key.replace(/_/g, " ");
 const TOOL_WORDS: Record<string, string> = { app: "connected apps", web: "web search", x: "X search", computer: "computer use", mcp: "mcp tools", other: "other tools" };
-const TOOL_ERROR_WORDS: Record<string, string> = { not_found: "not found", schema_invalid: "bad arguments (model)", bot_wall: "bot wall", crashed: "crashed" };
+const TOOL_ERROR_WORDS: Record<string, string> = { not_found: "not found", schema_invalid: "bad arguments (model)", exit_code: "exited non-zero (expected)", bot_wall: "bot wall", crashed: "crashed" };
 const toolWords = (kind: "tool" | "app", key: string) => kind === "tool" ? TOOL_WORDS[key] ?? words(key) : words(key);
 const ACCOUNT_STEP: Record<string, string> = { shown: "saw the sign-in", method: "picked a way", handoff: "went to the website", returned: "came back signed in",
   cancelled: "cancelled", skipped: "skipped", error: "hit an error", back: "back from the website" };
@@ -44,7 +48,9 @@ const HANDOFF_STEP: Record<string, string> = { shown: "saw the account step", me
   signed_in: "app signed in by itself", app_place: "app: picked where bots live", app_done: "app: finished its first run", name: "named themselves", plan: "saw the plans",
   checkout: "opened checkout", all_set: "reached all set", sent_back: "sent back to the app", back: "back in the app" };
 const STEP: Record<string, string> = { name: "named themselves", plan: "picked a plan", app: "got the app", done: "finished setup" };
-const CANCEL: Record<string, string> = { feature: "missing a feature", price: "too expensive", setup: "hard to set up", broken: "something broke", later: "not now", other: "other" };
+const CANCEL: Record<string, string> = { price: "too expensive", unused: "not using it enough", feature: "missing a feature", switching: "switching to something else", broken: "technical problems",
+  skip: "prefer not to say", setup: "hard to set up", later: "not now", other: "other" };
+const saveRate = (saves: MoreAnswer["money"]["saves"]) => saves && saves.saved + saves.cancelled > 0 ? `save rate ${percent(saves.rate)} (${n(saves.saved)} of ${n(saves.saved + saves.cancelled)} kept their plan). ` : "";
 const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 const days = (value: number | null) => value === null ? "-" : value < 1 ? "same day" : `${Math.round(value)} day${Math.round(value) === 1 ? "" : "s"}`;
 
@@ -81,7 +87,7 @@ export function MoreCards({ more, open }: { more: MoreAnswer; open(detail: MoreD
     <>
       <div className="grid grid-cols-2 gap-2 max-lg:grid-cols-1">
         <Card title="setup and sign-in" icon={<KeyRound {...I} />} wash="bg-wash-sky" onOpen={() => open("setup")}>
-          {more.setup.onboarding.map((step) => <Line key={step.step} label={STEP[step.step] ?? words(step.step)} value={n(step.reached)} bar={step.reached / signups} onClick={() => open("setup")} />)}
+          {more.setup.onboarding.map((step) => <Line key={step.step} label={STEP[step.step] ?? words(step.step)} value={n(step.reached)} bar={step.reached / signups} note={step.fromApp ? `${n(step.fromApp)} had it already` : undefined} onClick={() => open("setup")} />)}
           {more.setup.handoff?.[0]?.reached ? <p className="mt-2 px-1 text-12 text-ink-3">sign-up from the app: {n(more.setup.handoff.find((row) => row.step === "back")?.reached ?? 0)} of {n(more.setup.handoff[0].reached)} back in the app</p> : null}
           {more.setup.account?.steps[0]?.reached ? <p className="mt-2 px-1 text-12 text-ink-3">app sign-in: {n(more.setup.account.steps.find((row) => row.step === "returned")?.reached ?? 0)} of {n(more.setup.account.steps[0].reached)} who saw it signed in</p> : null}
           {more.setup.signIn.length ? <p className="mt-2 px-1 text-12 text-ink-3">ai sign-ins that finish: {more.setup.signIn.slice(0, 4).map((row) => `${row.key} ${percent(row.rate)}`).join(", ")}</p> : null}
@@ -92,7 +98,7 @@ export function MoreCards({ more, open }: { more: MoreAnswer; open(detail: MoreD
               <button key={label} type="button" onClick={() => open("reliability")} className="rounded-[16px] bg-pop px-3 py-2 text-start"><span className="block truncate text-12 text-ink-3">{label}</span><span className="block font-mono text-[20px] font-medium leading-7 text-ink num">{value}</span></button>
             ))}
           </div>
-          {r.toolErrors.length ? <Slotted rows={r.toolErrors.slice(0, 3)} keyOf={(row) => `${row.kind}:${row.key}`} render={(row, key) => <Line key={key} label={`${toolWords(row.kind, row.key)} ${row.kind}`} value={percent(row.rate)} note={`${n(row.errors)} errors`} onClick={() => open("reliability")} />} />
+          {r.toolErrors.length ? <Slotted rows={r.toolErrors.slice(0, 3)} keyOf={(row) => `${row.kind}:${row.key}`} render={(row, key) => <Line key={key} label={`${toolWords(row.kind, row.key)} ${row.kind}`} value={percent(row.rate)} note={`${n(row.errors)} errors${row.expected ? `, ${n(row.expected)} expected` : ""}`} onClick={() => open("reliability")} />} />
             : <Empty>no tool errors in this window.</Empty>}
         </Card>
       </div>
@@ -101,7 +107,7 @@ export function MoreCards({ more, open }: { more: MoreAnswer; open(detail: MoreD
           <Line label="looked at plans" value={n(money.planViews)} onClick={() => open("money")} />
           <Line label="started a checkout" value={n(money.checkouts.started)} onClick={() => open("money")} />
           <Line label="paid" value={n(money.checkouts.paid)} note={percent(money.checkouts.rate)} bar={money.checkouts.rate} onClick={() => open("money")} />
-          <p className="mt-2 px-1 text-12 text-ink-3">{money.cancelReasons.length ? `why people cancel: ${money.cancelReasons.slice(0, 3).map((row) => `${CANCEL[row.key] ?? words(row.key)} ${n(row.count)}`).join(", ")}. ` : "no cancellations in this window. "}{n(money.upgrades)} upgrades, {n(money.downgrades)} downgrades.</p>
+          <p className="mt-2 px-1 text-12 text-ink-3">{money.cancelReasons.length ? `why people cancel: ${money.cancelReasons.slice(0, 3).map((row) => `${CANCEL[row.key] ?? words(row.key)} ${n(row.count)}`).join(", ")}. ` : "no cancellations in this window. "}{saveRate(money.saves)}{n(money.upgrades)} upgrades, {n(money.downgrades)} downgrades.</p>
         </Card>
         <Card title="day to day" icon={<Clock {...I} />} onOpen={() => open("daily")}>
           <Line label="sessions a day" value={more.engagement.sessionsPerPersonDay === null ? "-" : String(Math.round(more.engagement.sessionsPerPersonDay * 10) / 10)} onClick={() => open("daily")} />
@@ -165,7 +171,7 @@ export function MoreTable({ detail, more }: { detail: MoreDetail; more: MoreAnsw
       <Table label="by model"><thead><tr><Th>model</Th><Th className="!text-end">turns</Th><Th className="!text-end">first reply</Th><Th className="!text-end">median</Th><Th className="!text-end">failed</Th></tr></thead>
         <tbody>{r.models.map((row) => <tr key={row.key}><Td>{row.key}</Td><Td className="text-end font-mono num">{n(row.turns)}</Td><Td className="text-end font-mono num">{duration(row.firstP50)}</Td><Td className="text-end font-mono num">{duration(row.p50)}</Td><Td className="text-end font-mono num">{percent(row.failRate)}</Td></tr>)}</tbody></Table>
       <Table label="tool and app errors"><thead><tr><Th>what</Th><Th className="!text-end">turns using it</Th><Th className="!text-end">errors</Th><Th className="!text-end">rate</Th></tr></thead>
-        <tbody>{r.toolErrors.map((row) => <tr key={`${row.kind}:${row.key}`}><Td>{toolWords(row.kind, row.key)} <span className="text-ink-4">{row.kind}</span></Td><Td className="text-end font-mono num">{n(row.turns)}</Td><Td className="text-end font-mono num">{n(row.errors)}</Td><Td className="text-end font-mono num">{percent(row.rate)}</Td></tr>)}</tbody></Table>
+        <tbody>{r.toolErrors.map((row) => <tr key={`${row.kind}:${row.key}`}><Td>{toolWords(row.kind, row.key)} <span className="text-ink-4">{row.kind}</span></Td><Td className="text-end font-mono num">{n(row.turns)}</Td><Td className="text-end font-mono num">{n(row.errors)}{row.expected ? <span className="text-ink-4"> +{n(row.expected)} expected</span> : null}</Td><Td className="text-end font-mono num">{percent(row.rate)}</Td></tr>)}</tbody></Table>
       {r.toolFailures?.length ? <Table label="tool failures"><thead><tr><Th>tool</Th><Th>error</Th><Th className="!text-end">turns</Th><Th className="!text-end">calls</Th><Th className="!text-end">people</Th></tr></thead>
         <tbody>{r.toolFailures.map((row) => <tr key={`${row.tool}|${row.error}`}><Td className="font-mono">{row.tool}</Td><Td>{TOOL_ERROR_WORDS[row.error] ?? words(row.error)}</Td><Td className="text-end font-mono num">{n(row.turns)}</Td><Td className="text-end font-mono num">{n(row.calls)}</Td><Td className="text-end font-mono num">{n(row.people)}</Td></tr>)}</tbody></Table> : null}
       <CountTable title={`app errors (${n(r.crashes.count)} from ${n(r.crashes.people)} people)`} rows={r.crashes.top} />
@@ -198,7 +204,7 @@ export function MoreTable({ detail, more }: { detail: MoreDetail; more: MoreAnsw
   );
   if (detail === "money") return (
     <div className="flex flex-col gap-4">
-      <p className="text-13 text-ink-3">{n(more.money.planViews)} plan page views, {n(more.money.checkouts.started)} checkouts started, {n(more.money.checkouts.paid)} paid, {n(more.money.checkouts.abandoned)} left unpaid; {n(more.money.upgrades)} upgrades and {n(more.money.downgrades)} downgrades.</p>
+      <p className="text-13 text-ink-3">{n(more.money.planViews)} plan page views, {n(more.money.checkouts.started)} checkouts started, {n(more.money.checkouts.paid)} paid, {n(more.money.checkouts.abandoned)} left unpaid; {n(more.money.upgrades)} upgrades and {n(more.money.downgrades)} downgrades. {saveRate(more.money.saves)}</p>
       <CountTable title="why people cancel" rows={more.money.cancelReasons} label={(key) => CANCEL[key] ?? words(key)} />
     </div>
   );

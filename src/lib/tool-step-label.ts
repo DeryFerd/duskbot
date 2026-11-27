@@ -44,9 +44,22 @@ const STEP_KEYS: Record<string, LocaleKey> = {
   todowrite: "toolStep.updatePlan",
   update_plan: "toolStep.updatePlan",
   schedule: "toolStep.waitForBackgroundTask",
-  "run schedule": "toolStep.waitForBackgroundTask",
   manage_task: "toolStep.checkBackgroundTask",
-  "run manage_task": "toolStep.checkBackgroundTask",
+  command_status: "toolStep.checkBackgroundTask",
+  send_command_input: "toolStep.runCommand",
+  read_terminal: "toolStep.runCommand",
+  view_file: "toolStep.readFile",
+  list_dir: "toolStep.searchFiles",
+  grep_search: "toolStep.searchFiles",
+  find_by_name: "toolStep.searchFiles",
+  write_to_file: "toolStep.writeFile",
+  replace_file_content: "toolStep.editFile",
+  multi_replace_file_content: "toolStep.editFile",
+  search_web: "toolStep.searchWeb",
+  read_url_content: "toolStep.openWebPage",
+  browser_subagent: "toolStep.useBrowser",
+  invoke_subagent: "toolStep.askHelper",
+  manage_subagents: "toolStep.askHelper",
   task: "toolStep.askHelper",
   agent: "toolStep.askHelper",
   think: "toolStep.think",
@@ -91,11 +104,14 @@ function stepWords(tool: StepTool): string {
   if (tool.label) return tool.label;
   // Codex and ACP title a command's chip with the command line; only a command carries a summary.
   if (tool.summary) return t("toolStep.runCommand");
+  // Antigravity titles a call with no summary of its own "Run <tool id>"; a phrase like "Run tests" stays as it is.
+  const ran = /^Run ([a-z][a-z0-9_]*)$/.exec(name)?.[1];
+  const id = ran && (ran.includes("_") || STEP_KEYS[ran]) ? ran : name;
   // Claude names a call mcp__agents__tool; the chat runtime names it agents_tool.
-  const bare = name.replace(/^mcp__.+?__(?=.)/, "").replace(/^agents_(?=.)/, "");
+  const bare = id.replace(/^mcp__.+?__(?=.)/, "").replace(/^agents_(?=.)/, "");
   const key = STEP_KEYS[bare.toLowerCase()];
   if (key) return t(key);
-  if (/\s/.test(name)) return name;
+  if (/\s/.test(id)) return id;
   if (/(?:^|_)browser_/i.test(bare)) return t("toolStep.useBrowser");
   const composio = composioActionPhrase(bare);
   if (composio) return sentence(composio);

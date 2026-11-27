@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { BOX_HOSTNAME } from "../bot-box/plan.ts";
@@ -10,7 +10,10 @@ const made: string[] = [];
 afterEach(() => { for (const dir of made.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
 function fixture() {
-  const work = mkdtempSync(join(homedir(), ".box-attach-test-"));
+  // a working folder outside /tmp, as a box's is: the test HOME lives in the temp folder, which on Linux is /tmp
+  const scratch = fileURLToPath(new URL("../../.dusk-scratch/", import.meta.url));
+  mkdirSync(scratch, { recursive: true });
+  const work = mkdtempSync(join(scratch, "box-attach-test-"));
   const tmp = join("/tmp", `box-attach-${process.pid}-${made.length}`);
   mkdirSync(tmp, { recursive: true });
   made.push(work, tmp);

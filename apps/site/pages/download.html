@@ -10,20 +10,23 @@
       </div>
       <p class="dl-note" data-dl-note>apple silicon · version {{version}}</p>
       <div class="dl-phone" data-dl-phone hidden>
-        <a class="btn dark" href="{{ios-link}}" data-dl-ios><span class="dl-os">{{os apple}}</span>get it on the app store</a>
-        <a class="btn dark" href="{{dl android}}" data-dl-android hidden download><span class="dl-os">{{os android mono}}</span>download for android</a>
+        <a class="btn dark" href="{{ios-link}}" data-dl-ios data-dusk-platform="ios"><span class="dl-os">{{os apple}}</span>get it on the app store</a>
+        <a class="btn dark" href="{{dl android}}" data-dl-android data-dusk-platform="android" hidden download><span class="dl-os">{{os android mono}}</span>download for android</a>
         <p class="dl-note"><span data-dl-ios>for iphone. </span>the full app runs on your computer, so send yourself the link for later.</p>
-        <form class="dl-mail" data-dl-mail>
+        <form class="dl-mail" id="dl-mail" data-dl-mail novalidate>
           <label class="vh" for="dl-mail-to">your email</label>
           <div class="dl-mail-row">
-            <input id="dl-mail-to" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" maxlength="254" required placeholder="your email">
-            <button class="btn light" type="submit">email me the link</button>
+            <input id="dl-mail-to" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" maxlength="254" required placeholder="your email" aria-describedby="dl-mail-say">
+            <button class="btn light" type="submit" data-dl-send>email me the link</button>
           </div>
+          <div class="vh" aria-hidden="true"><label for="dl-mail-site">leave this empty</label><input id="dl-mail-site" name="website" type="text" tabindex="-1" autocomplete="off"></div>
+          <p class="dl-say" id="dl-mail-say" role="status" hidden>{{i check dl-say-ok}}{{i triangle-alert dl-say-bad}}<span data-dl-say></span></p>
         </form>
+        <button class="dl-share" type="button" data-dl-share data-dusk-ignore>or share the link</button>
       </div>
 {{/released}}
 {{^released}}
-      <a class="btn dark" href="/waitlist?source=download">join the waitlist</a>
+      <a class="btn dark" href="/waitlist" data-dusk-source="download">join the waitlist</a>
       <p class="notice">downloads open with the first public release. join the waitlist and we'll let you in early, or write to <a href="mailto:hello@dusk.bot">hello@dusk.bot</a>.</p>
 {{/released}}
     </div>
@@ -44,7 +47,7 @@
     <li id="windows" data-key="windows" data-note="windows 10 and 11"><span class="dl-ico">{{os windows}}</span><span class="dl-name"><b>windows</b><span>x64</span></span><span class="dl-type">installer .exe</span><span class="dl-size">{{size windows}}</span><a class="btn" href="{{dl windows}}" download>download</a></li>
     <li id="linux" data-key="linux-deb" data-note="ubuntu 24.04"><span class="dl-ico">{{os linux}}</span><span class="dl-name"><b>linux</b><span>x64</span></span><span class="dl-type">.deb</span><span class="dl-size">{{size linux-deb}}</span><a class="btn" href="{{dl linux-deb}}" download>download</a></li>
     <li data-key="linux-appimage"><span class="dl-ico">{{os linux}}</span><span class="dl-name"><b>linux</b><span>x64</span></span><span class="dl-type">.appimage</span><span class="dl-size">{{size linux-appimage}}</span><a class="btn" href="{{dl linux-appimage}}" download>download</a></li>
-    <li id="android" data-key="android"><span class="dl-ico">{{os android}}</span><span class="dl-name"><b>android</b><span>phone app</span></span><span class="dl-type">.apk</span><span class="dl-size">{{size android}}</span><a class="btn" href="{{dl android}}" download>download</a></li>
+    <li id="android" data-key="android"><span class="dl-ico">{{os android}}</span><span class="dl-name"><b>android</b><span>phone app{{android-version}}</span></span><span class="dl-type">.apk</span><span class="dl-size">{{size android}}</span><a class="btn" href="{{dl android}}" download>download</a></li>
   </ul>
   <p class="dl-fine">mac builds are signed and notarized by apple. windows builds aren't code-signed yet, so if windows says it protected your pc, click more info, then run anyway.</p>
 </section>

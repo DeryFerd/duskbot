@@ -18,6 +18,17 @@ export const AI_SIGNIN_DRIVERS: Readonly<Record<AiSignInKind, readonly string[]>
   "kimi-auth": ["kimiAgent"],
 };
 
+/** Logins whose refresh token is single-use: every renewal retires the one it was given and reusing a retired one can
+ * end the whole sign-in (OpenAI's "refresh token was already used"). A copy on a second computer turns each renewal into
+ * a race that signs the loser out, so these stay where they were made and each computer signs in on its own. A Google
+ * login (Gemini CLI) keeps its refresh token and may be carried. */
+export const ROTATING_AI_SIGNIN_KINDS: ReadonlySet<AiSignInKind> = new Set(["codex-auth", "grok-auth", "kimi-auth"]);
+
+/** The sign-ins that may live on a second computer as well. */
+export function movableAiSignIns<T extends { kind: string }>(items: readonly T[]): T[] {
+  return items.filter((item) => !ROTATING_AI_SIGNIN_KINDS.has(item.kind as AiSignInKind));
+}
+
 export const MAX_AI_SIGNIN_BYTES = 32 * 1024;
 const MAX_TOTAL_BYTES = 64 * 1024;
 export const KIMI_TOKEN_FILE = /^kimi-code(?:-env-[0-9a-f]{1,64})?\.json$/;

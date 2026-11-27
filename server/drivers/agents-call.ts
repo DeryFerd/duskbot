@@ -13,6 +13,7 @@ import { callTriggerTool, TRIGGER_TOOL_NAMES } from "./agents-call-triggers.ts";
 import { catalogProfileFromEnv, fullInputSchema } from "./agents-catalog.ts";
 import { harnessClientFromEnv } from "./agents-client.ts";
 import type { HarnessClient, Json } from "./agents-client.ts";
+import { forgetText } from "./agents-call-forget.ts";
 import { memorySearchText } from "./memory-search-text.ts";
 import { boundedAgentResult } from "./agents-result.ts";
 import { attachablePath } from "./box-attach.ts";
@@ -144,7 +145,6 @@ function handoffIds(r: Json): string[] {
   return receipts.map((receipt) => receipt.requestId).filter((id): id is string => typeof id === "string" && id.trim().length > 0);
 }
 const MOVED_ENTRIES_SHOWN = 5;
-const FORGOTTEN_SHOWN = 8;
 
 /** A preference saved once in the person's About me, which every bot reads in their work. */
 function preferText(r: Json): string {
@@ -152,19 +152,6 @@ function preferText(r: Json): string {
   return r.preference === "saved"
     ? `Saved in ${whose} About me, which every bot reads in their work. Don't pass it on to other bots or save it in your own notes too.`
     : `Already in ${whose} About me, or they removed it before: nothing to save or pass on.`;
-}
-
-function forgetText(passage: string, r: Json): string {
-  const list = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-  const notes = list(r.forgotten);
-  const aboutMe = list(r.aboutMe);
-  if (!notes.length && !aboutMe.length) {
-    return `Nothing saved mentions ${JSON.stringify(passage)}: not in your notes, not in About me. Try other words for it once; if nothing matches, tell the person it was not saved.`;
-  }
-  const facts = [...new Set([...notes, ...aboutMe])];
-  const shown = facts.slice(0, FORGOTTEN_SHOWN).map((fact) => JSON.stringify(fact)).join(", ");
-  const more = facts.length > FORGOTTEN_SHOWN ? ` and ${facts.length - FORGOTTEN_SHOWN} more` : "";
-  return `Forgotten everywhere it was saved${aboutMe.length ? ", About me included, which all their bots read" : ""}: ${shown}${more}. Confirm to the person in one plain line what you forgot.`;
 }
 
 export const capResult = (text: string, context: ToolCallContext) => boundedAgentResult(text, (retained, truncated) => {

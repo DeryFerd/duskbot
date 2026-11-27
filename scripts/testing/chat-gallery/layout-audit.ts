@@ -91,6 +91,9 @@ export function auditLayout(options: AuditOptions = {}): LayoutIssue[] {
         if (child.matches('[role="menu"], [role="listbox"], .popover-surface, .menu-surface, [role="dialog"]:not([aria-modal="true"])')) continue;
         // a resize grip straddles its pane's edge on purpose, a transparent strip to drag
         if (style.cursor.endsWith("resize") && (parse(style.backgroundColor)?.a ?? 0) === 0) continue;
+        // a popover's click-catcher (fixed, no fill, no edge, nothing inside) takes the press outside it and paints nothing
+        if (style.position === "fixed" && !child.children.length && !child.textContent?.trim() && (parse(style.backgroundColor)?.a ?? 0) === 0
+          && style.backgroundImage === "none" && style.boxShadow === "none" && parseFloat(style.borderTopWidth) + parseFloat(style.borderLeftWidth) === 0) continue;
         const box = child.getBoundingClientRect();
         if (box.width > 0 && box.height > 0) {
           const t = Math.max(box.top, clip.top), b = Math.min(box.bottom, clip.bottom);
@@ -166,6 +169,10 @@ export function auditLayout(options: AuditOptions = {}): LayoutIssue[] {
       return Array.from(element.querySelectorAll("*")).some((child) => {
         const box = child.getBoundingClientRect();
         if (box.width === 0 || box.height === 0 || !visible(child) || hiddenByAncestor(child)) return false;
+        // what a scroller inside scrolls past its own edge is that scroller's to show (and judged there), not this box's to cut
+        for (let node = child.parentElement; node && node !== element; node = node.parentElement) {
+          if (/auto|scroll/.test(getComputedStyle(node)[axis === "x" ? "overflowX" : "overflowY"])) return false;
+        }
         return axis === "x" ? box.right > edge.right + 2 || box.left < edge.left - 2 : box.bottom > edge.bottom + 2 || box.top < edge.top - 2;
       }) || Array.from(element.childNodes).some((node) => node.nodeType === 3 && (node.textContent ?? "").trim());
     };
@@ -199,6 +206,16 @@ export function auditLayout(options: AuditOptions = {}): LayoutIssue[] {
     }
     return null;
   };
+  // a field under another surface or in a drawer slid off the side (the sidebar's search behind a phone's full-screen
+  // panel) is not seen beside the others; one further down a page is, once scrolled to
+  const covered = (field: Element) => {
+    const box = field.getBoundingClientRect();
+    if (box.right <= 0 || box.left >= innerWidth) return true;
+    const x = Math.min(Math.max(box.left + box.width / 2, 1), innerWidth - 1), y = box.top + box.height / 2;
+    if (y < 0 || y >= innerHeight) return false;
+    const hit = document.elementFromPoint(x, y);
+    return Boolean(hit && !(painted(field) ?? field).contains(hit) && !hit.contains(field));
+  };
   // fill, corners and line: what makes two fields read as two kinds. A field nothing paints is part of a row, not a box.
   const signature = (box: Element) => {
     const style = getComputedStyle(box);
@@ -208,7 +225,7 @@ export function auditLayout(options: AuditOptions = {}): LayoutIssue[] {
   for (const scope of scopes) {
     const looks = new Map<string, Element[]>();
     for (const field of fields) {
-      if (scopes.find((one) => one.contains(field)) !== scope) continue;
+      if (scopes.find((one) => one.contains(field)) !== scope || covered(field)) continue;
       const box = painted(field);
       if (box) looks.set(signature(box), [...(looks.get(signature(box)) ?? []), field]);
     }
@@ -263,6 +280,8 @@ export function auditLayout(options: AuditOptions = {}): LayoutIssue[] {
   if (options.touch) {
     for (const control of controls) {
       if (control.matches("input[type=text], input[type=password], input[type=email], textarea, a[href]:not([role])") && control.closest(".chat-md, p")) continue;
+      // a scroller that takes the keyboard only so its lines can be scrolled is no target a thumb presses
+      if (control.matches("[tabindex='0']:not(button, a[href], input, textarea, select, [role])") && /auto|scroll/.test(getComputedStyle(control).overflowY + getComputedStyle(control).overflowX)) continue;
       // what a screen-reader-only input's label draws is what a thumb hits
       // a label takes the tap for the control it holds
       let hit: Element = control.closest("label") ?? (readerOnly(control) ? control.parentElement ?? control : control);

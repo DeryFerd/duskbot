@@ -2,7 +2,9 @@ import { useId, useState } from "react";
 import { ChartNoAxesCombined, ChevronRight, Table2 } from "../icons";
 import type { Message } from "@/state/store";
 import { t } from "@/lib/i18n";
+import { cn } from "@/lib/cn";
 import { InlineDataChart } from "./data/InlineDataChart";
+import { SIMPLE_BUBBLE_MAX } from "./chat-bubble";
 
 export function DataResultChip({ message }: { message: Message }) {
   const [expanded, setExpanded] = useState(false);
@@ -12,7 +14,7 @@ export function DataResultChip({ message }: { message: Message }) {
   const chart = result.kind === "chart";
   const Icon = chart ? ChartNoAxesCombined : Table2;
   return (
-    <div data-data-result={result.cardId} className="w-full max-w-[min(var(--chat-prose-max),var(--chat-card-pct))] overflow-hidden rounded-xl border border-transparent bg-panel text-sm">
+    <div data-data-result={result.cardId} className={cn("w-full overflow-hidden rounded-xl border border-transparent bg-panel text-sm", SIMPLE_BUBBLE_MAX)}>
       <div className="flex items-center gap-3 px-3 py-2">
         <Icon size={16} className="shrink-0 text-ink-tertiary" aria-hidden="true" />
         {result.sql ? <button type="button" aria-expanded={expanded} aria-controls={queryId}

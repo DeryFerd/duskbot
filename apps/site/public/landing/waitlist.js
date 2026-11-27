@@ -86,7 +86,8 @@ if (form) {
   const input = $('#wl-email', form), go = $('[data-wl-go]', form), msg = $('#wl-msg', form), label = go.textContent;
   const title = $('[data-wl-title]'), lede = $('[data-wl-lede]'), done = $('[data-wl-done]');
   const params = new URLSearchParams(location.search);
-  const source = params.get('source') || params.get('utm_source') || 'site', ref = params.get('ref') || '';
+  const kept = (() => { try { return sessionStorage.getItem('dusk:source'); } catch { return null; } })();
+  const source = params.get('source') || params.get('utm_source') || kept || 'site', ref = params.get('ref') || '';
   const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
   const COPY = {
     bad_email: "that doesn't look like an email address. check it for a typo and try again.",

@@ -233,12 +233,13 @@ describe("Settings → General → Appearance", () => {
     for (const text of ["Automatic recovery", "Experimental features"]) expect(general, text).not.toContain(text);
   });
 
-  it("keeps the local look reachable remotely without exposing server settings", () => {
+  it("keeps the local look and this app's own Updates reachable remotely without exposing server settings", () => {
     fixture.section = "looks";
     vi.stubGlobal("window", { duskDesktop: { remoteClient: { active: true } } });
     const html = render();
     expect(html).toContain('aria-label="Theme"');
-    expect(html).not.toContain('data-settings-page="updates"');
+    // the app updates itself while it is a client of another server
+    expect(html).toContain('data-settings-page="updates"');
     expect(html).not.toContain('data-settings-page="permissions"');
   });
 

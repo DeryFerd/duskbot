@@ -75,17 +75,24 @@ export function dockEdge(display) {
   return screenRight - right < HIDDEN_DOCK_STRIP ? screenRight : right;
 }
 
+const overlaps = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
 /** The dock window: a strip against the right edge of the screen (left of a Dock pinned right), as tall as the work
- * area, so the body grows with what it shows; its page draws the body centred and lets clicks through everywhere else. */
-export function dockLayout(display) {
+ * area, so the body grows with what it shows; its page draws the body centred and lets clicks through everywhere else.
+ * `others`: the rest of the displays. One that sits against that edge gets none of the overhang, so no sliver of the
+ * dock ever shows on it. */
+export function dockLayout(display, others = []) {
   const area = display.workArea;
-  const width = DOCK.open + DOCK.overhang;
   // whole points, rounded outward: the window's right side always lands past the edge, never short of it
   const right = dockEdge(display);
   const y = Math.floor(area.y), height = Math.ceil(area.y + area.height) - y;
-  const window = { x: Math.floor(right - DOCK.open), y, width, height };
+  const x = Math.floor(right - DOCK.open);
+  const strip = { x: right, y, width: DOCK.overhang, height };
+  const neighbour = others.some(other => other && other.id !== display.id && rect(other.bounds) && overlaps(strip, other.bounds));
+  const overhang = neighbour ? 0 : DOCK.overhang;
+  const window = { x, y, width: neighbour ? Math.ceil(right) - x : DOCK.open + overhang, height };
   const top = DOCK.ear + DOCK.margin;
-  return { window, body: Math.max(DOCK.cell * 2, area.height - 2 * top), top };
+  return { window, body: Math.max(DOCK.cell * 2, area.height - 2 * top), top, overhang };
 }
 
 const contains = (bounds, point) => point.x >= bounds.x && point.x < bounds.x + bounds.width && point.y >= bounds.y && point.y < bounds.y + bounds.height;

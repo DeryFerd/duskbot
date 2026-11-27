@@ -44,7 +44,8 @@ beforeEach(() => {
     onAppUrl: () => () => {}, onResume: () => () => {}, openExternal: vi.fn(async () => {}), camera: undefined };
   fetcher = vi.fn<typeof fetch>(async () => response({ v: 1, providers: [], signupOpen: true })); vi.stubGlobal("fetch", fetcher);
 });
-afterEach(async () => { await act(async () => root?.unmount()); host.remove(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); });
+// a test that queued a once-implementation it never reached must not hand it to the next one
+afterEach(async () => { await act(async () => root?.unmount()); host.remove(); vi.mocked(redeemPairing).mockReset(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); });
 
 const mount = (child: ReactNode) => act(async () => {
   root = createRoot(host);
@@ -629,8 +630,10 @@ describe("linking always ends within its deadline", () => {
       field.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await act(async () => { host.querySelector<HTMLFormElement>("form")!.requestSubmit(); });
+    // the code's lookup id and the sealed answer use real crypto, which the fake clock does not wait for
+    await act(async () => { await vi.waitFor(() => expect(fetcher.mock.calls.some(([input]) => String(input).includes("/v1/lookups/"))).toBe(true)); });
     await act(async () => { await vi.advanceTimersByTimeAsync(10_500); });
-    expect(vi.mocked(redeemPairing)).toHaveBeenCalled();
+    await act(async () => { await vi.waitFor(() => expect(vi.mocked(redeemPairing)).toHaveBeenCalled()); });
     expect(host.querySelector("main")?.getAttribute("aria-busy")).toBe("true");
     await act(async () => { await vi.advanceTimersByTimeAsync(4_600); });
     expect(host.querySelector("main")?.getAttribute("aria-busy")).toBe("false");

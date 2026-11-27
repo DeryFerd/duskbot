@@ -163,6 +163,7 @@ export async function cloudJobRefusal(job, { folders = null, mode = "auto", home
  *   reauth?(origin: string): Promise<boolean>,
  *   onChange?(view: import("../shared/cloud-mac.ts").CloudMacState): void,
  *   execute?: ReturnType<typeof createMacExecutor>,
+ *   shell?: string,
  *   screen?: { available(): boolean, version(): string, tools(): Promise<unknown>, call(name: string, args: unknown, signal: AbortSignal): Promise<unknown>, close(): void, requestAccess?(): Promise<unknown> },
  *   wait?(ms: number, signal: AbortSignal): Promise<void>,
  * }} deps
@@ -236,7 +237,7 @@ export function createCloudMac(deps) {
   let lastScreen = null, accessAskedAt = -Infinity;
   let origin = null, linkKey = null, keyCheckedAt = -Infinity, keyOrigin = null, lastOkAt = -Infinity, refused = null;
   const limit = () => (limitFolders ? folders : null);
-  const execute = deps.execute ?? createMacExecutor({ home, log, source: "cloud", defaultCwd: () => defaultCwd(limit()) });
+  const execute = deps.execute ?? createMacExecutor({ home, log, source: "cloud", defaultCwd: () => defaultCwd(limit()), ...(deps.shell ? { shell: deps.shell } : {}) });
 
   const view = () => {
     const place = deps.cloud();

@@ -12,7 +12,7 @@
     "ai append values to spreadsheet"
   ],
   "answer": "**get this week’s records into the sheet without replacing last week’s.** the bot adds rows after your google sheets table. paste the link, name the tab and give the column order. the range helps it find the table’s end; it does not choose an exact empty cell. ask for a row preview and a pause before it writes.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,7 +45,7 @@
     "toolkit": "googlesheets",
     "slug": "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND"
   },
-  "what": "**use append for a log that keeps growing.** each new entry gets a row after the existing table. the bot reads tab names and column headings before writing.\n\nname the tab exactly and compare the proposed column order with its headings. “attendance” and “session log” can be different places in the same file.\n\nsay whether codes should stay literal text or whether sheets should interpret values such as dates.",
+  "what": "**use append for a log that keeps growing.** each new entry gets a row after the existing table. the bot reads tab names and column headings before writing.\n\nname the tab exactly and compare the proposed column order with its headings. “attendance” and “session log” can be different places in the same file.\n\nsay whether codes should stay literal text or whether sheets should interpret values such as dates.\n\nfind the file with [search spreadsheets](/integrations/google-sheets/search-spreadsheets) and read its headings with [get spreadsheet values](/integrations/google-sheets/get-spreadsheet-values). rows that may already exist suit [upsert rows](/integrations/google-sheets/upsert-rows) better.",
   "uses": [
     "**finish the workshop register.** add the attendance entries from your session records.",
     "**extend the loan log.** append equipment loans after approval.",
@@ -111,6 +111,10 @@
       "fix": "have the bot list the real tabs before choosing the destination."
     }
   ],
+  "worked": {
+    "before": "the loan log ends at row 48.\nnew loan: projector p-07 to pascale, due friday.",
+    "after": "row 49 added: p-07, pascale, due friday\nrows 2 to 48 untouched\ncode p-07 kept as plain text"
+  },
   "tip": {
     "text": "a row in the wrong columns is worse than a row still waiting to be added."
   },

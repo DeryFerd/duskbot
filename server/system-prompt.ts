@@ -6,7 +6,7 @@ import type { ConnectorToolGrant } from "../shared/wire.ts";
 import { loginLabel, type LoginPlace } from "../shared/logins.ts";
 import { isConversational, type ReplyStyle } from "../shared/reply-style.ts";
 import { TALK_HABITS_PROMPT, workHabitsPrompt } from "./reply-habits.ts";
-import { CHARACTER_PROMPT, DEFAULT_SOUL_PROMPT } from "./character.ts";
+import { characterPrompt, type BotVoice } from "./character.ts";
 import { talkingStylePrompt } from "./talking-style.ts";
 import { generalForPrompt } from "./general-memory.ts";
 import { backgroundJobsPrompt } from "./jobs/prompt.ts";
@@ -72,12 +72,12 @@ export function buildSystemPrompt(
   soul: string,
   parts: PromptPart[],
   agents?: { env?: Record<string, string | undefined> },
-  opts?: { replyStyle?: ReplyStyle; talkingStyle?: TalkingStyle; quickUpdates?: boolean },
+  opts?: { replyStyle?: ReplyStyle; talkingStyle?: TalkingStyle; quickUpdates?: boolean; voice?: BotVoice },
 ): { text: string; sections: PromptSection[]; stable: string; volatile: string } {
   const ordered: PromptPart[] = [
     { id: "persona", label: "Identity", text: persona },
     { id: "soul", label: "Standing instructions (SOUL.md)", text: soulSystemPrompt(soul) },
-    { id: "character", label: "Character", text: (soul.trim() ? "" : DEFAULT_SOUL_PROMPT) + CHARACTER_PROMPT },
+    { id: "character", label: "Character", text: characterPrompt(opts?.voice ?? "open", soul) },
     // ahead of every section that names a tool
     { id: "tool-bridge", label: "Tool search", text: agentsToolBridged(agents) ? AGENTS_TOOL_BRIDGE_PROMPT : "" },
     { id: "talking-style", label: "Talking style", text: talkingStylePrompt(opts?.talkingStyle) },
@@ -232,6 +232,10 @@ function appToolsPrompt(apps: readonly string[]): string {
 
 export const BROWSER_FALLBACK_PROMPT = " When a connected app has no tool for what is needed, or its tool cannot do it, do that step in your browser on the app's own website with the same account instead of refusing; if the site asks to sign in, ask the person to sign in there once.";
 
+export function composioConnectSystemPrompt(browser = false): string {
+  return browser ? `${COMPOSIO_PROMPT.trimEnd().replace(/\.?$/, ".")}${BROWSER_FALLBACK_PROMPT}` : COMPOSIO_PROMPT;
+}
+
 export function composioSystemPrompt(grants: Record<string, ConnectorToolGrant> | undefined, browser = false): string {
   const withFallback = (text: string) => (browser ? `${text.trimEnd().replace(/\.?$/, ".")}${BROWSER_FALLBACK_PROMPT}` : text);
   if (grants === undefined) return withFallback(COMPOSIO_PROMPT + appToolsPrompt(Object.keys(APP_TOOLS_PROMPT)));
@@ -265,12 +269,26 @@ export const JUST_DO_IT_PROMPT =
 export const EXECUTION_PROMPT =
   " Prices, rates, hours, scores and anything else current come from a search or a page read this turn, never from what you remember; a sum over more than a few numbers goes through a data query when you have one. \"Is it running?\" or \"did it work?\" means look with your tools, not ask them where.";
 
-export const CREDENTIAL_PROMPT =
-  " Secrets: when a key, token or password is needed, call request_credential (one the person pasted in this chat goes in with pasted_as, no card); never copy a value into a tool call, command or reply, or ask for one in chat. For computer access use select_computer (their own VPS needs no provider key); mcp_server adds an MCP server when a task needs a service you can't reach yet, once the person asks or agrees.";
+const credentialPrompt = (ownFiles: boolean) =>
+  ` Secrets: when a key, token or password is needed, call request_credential (one the person pasted in this chat goes in with pasted_as, no card); never copy a value into a tool call, command or reply, or ask for one in chat${ownFiles ? OWN_FILES_EXCEPTION : ""}. For computer access use select_computer (their own VPS needs no provider key); mcp_server adds an MCP server when a task needs a service you can't reach yet, once the person asks or agrees.`;
+/** Their own note is theirs to read back: refusing it protects nobody. Anything from a page, a message or another person
+ * could be planted there to be read out, and a room or chat app has other readers. */
+const OWN_FILES_EXCEPTION =
+  ", except a detail they ask for here from their own files (a Wi-Fi password in their note), never one from a page, a message or someone else";
+export const CREDENTIAL_PROMPT = credentialPrompt(false);
+/** A one-to-one turn's secrets rule: the person may have back what they keep in their own files only in their own
+ * chat, never on a team, in a chat app (Telegram, Discord), for a guest, a member of a shared server or an automation. */
+export function oneToOneCredentialPrompt(turn: { team: boolean; guest: boolean; chatApp: boolean; member: boolean; personAsked: boolean }): string {
+  const own = !turn.team && !turn.guest && !turn.chatApp && !turn.member && turn.personAsked;
+  return own ? credentialPrompt(true) : CREDENTIAL_PROMPT;
+}
 /** Ten minutes stays inside the 20-minute turn stall watchdog, which sees nothing while a command runs. */
 export const BASH_MAX_TIMEOUT_MS = 600_000;
+/** A tool the person already set up on their computer does the job surely and quietly; a website for it is a detour. */
+export const CLI_FIRST =
+  " A CLI set up here (gh, git, ssh, docker) beats a website for its job: check it (`gh auth status`) and use it before a site or connecting an app.";
 const LONG_COMMANDS_TEXT =
-  ` Long commands: a shell call stops after a default limit (2 minutes for Bash) and its output is lost; for anything longer (transcription, renders, big builds or transfers) pass a longer timeout (Bash takes \`timeout\` in milliseconds, up to ${BASH_MAX_TIMEOUT_MS}) or start it detached with its output in a file and read that later; never rerun a timed-out command the same way. A file the person named, you find yourself by name with the system's file index (\`mdfind -name\` on macOS, Windows Search from PowerShell), never a whole-disk scan. Never wait inside a command for CI, a deploy or another job: check once, then set wait_until to check back and end your turn. When the person writes while you work, answer them first.`;
+  ` Long commands: a shell call stops after its limit (2 minutes for Bash) and loses its output; for longer work (renders, builds) pass a longer timeout (Bash \`timeout\` in ms, up to ${BASH_MAX_TIMEOUT_MS}) or run it detached, output to a file, and never rerun a timed-out command the same way. Find their files yourself: \`mdfind -name\` (Windows Search on Windows), then \`find ~ -maxdepth 8 -iname\` or \`grep -rl\`; never scan the whole disk.${CLI_FIRST} Never wait inside a command for CI or a deploy: check once, set wait_until and end your turn. When the person writes while you work, answer them first.`;
 const VM_LONG_COMMANDS_TEXT =
   " In your Local VM, vm_exec takes `timeout_seconds` instead (default 60, at most 300); start anything longer detached the same way, inside the VM, and check its log with later vm_exec calls.";
 /** Codex at Ask or Auto runs commands in a sandbox whose reviewer can approve one step outside it. */
@@ -279,10 +297,10 @@ export const SANDBOX_ESCALATION_PROMPT =
 /** For an engine with no shell of its own, given this computer's through the shell tools. */
 /** On a dusk cloud home the shell is the cloud computer's, which has no file index to search. */
 export const hostShellPrompt = (cloudHome: boolean): string => cloudHome
-  ? " Your shell on your cloud computer: shell_run_command runs a command there, starting in your working folder (files you make there can be attached to the chat). Use it for every file and command-line task: listing, reading, moving or converting files, running scripts with python3 or node, git, curl. Never say you cannot run commands. A command is stopped after 60 seconds unless you pass a longer timeout_seconds (at most 300); start anything longer in the background with its output in a file and read that file later."
+  ? " Your shell on your cloud computer: shell_run_command runs a command there, starting in your working folder (files you make there can be attached to the chat). Use it for every file and command-line task: listing, reading, moving or converting files, running scripts with python3 or node, git, curl. Never say you cannot run commands. A command is stopped after 60 seconds unless you pass a longer timeout_seconds (at most 300); start anything longer in the background with its output in a file and read that file later." + CLI_FIRST
   : HOST_SHELL_PROMPT;
 export const HOST_SHELL_PROMPT =
-  " Your shell on this computer: shell_run_command runs a command on the person's own computer, starting in your working folder (files you make there can be attached to the chat), and shell_find_files finds their files through the system's search index (Spotlight on macOS, Windows Search on Windows). Use them for every file and command-line task on this computer: finding, listing, reading, moving or converting files, running scripts. Never say you cannot search their files or run commands, and never open a terminal on their screen to type a command these can run. Never scan the whole disk with a command; find files by name with shell_find_files. A command is stopped after 60 seconds unless you pass a longer timeout_seconds (at most 300); start anything longer in the background with its output in a file and read that file later.";
+  " Your shell on this computer: shell_run_command runs a command on the person's own computer, starting in your working folder (files you make there can be attached to the chat), and shell_find_files finds their files anywhere in their home folder (the system's search index first, then a walk of the folder, iCloud Drive included). Your working folder is not their home folder: their files are under ~ (Desktop, Documents, Downloads, iCloud Drive). Use these for every file and command-line task on this computer: finding, listing, reading, moving or converting files, running scripts, installing or removing an app (removing one takes its support files in ~/Library too, to the Trash). Never say you cannot search their files or run commands, and never open a terminal on their screen to type a command these can run. To find a file, call shell_find_files with one or two distinctive words of its name, or with in_content for words inside it, before any other way; never scan the whole disk with a command. A command is stopped after 60 seconds unless you pass a longer timeout_seconds (at most 300); start anything longer in the background with its output in a file and read that file later." + CLI_FIRST;
 export function longCommandsPrompt(computer: ComputerPromptKind | null): string {
   return LONG_COMMANDS_TEXT + (computer === "vm-private" || computer === "vm-shared" ? VM_LONG_COMMANDS_TEXT : "");
 }

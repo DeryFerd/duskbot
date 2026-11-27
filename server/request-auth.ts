@@ -319,6 +319,8 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["POST"], path: /^\/api\/notifications\/[\w-]+\/read$/ },
   // the update check only reads a version
   { methods: ["GET"], path: /^\/api\/updates\/check$/ },
+  // what each release changed: the public changelog, read through this server
+  { methods: ["GET"], path: /^\/api\/updates\/changelog$/ },
   // the public key a secret is sealed for, signed by this server's identity
   { methods: ["GET"], path: /^\/api\/seal-key$/ },
   { methods: ["POST"], path: /^\/api\/auth\/stream-ticket$/ },

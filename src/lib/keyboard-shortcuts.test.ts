@@ -109,18 +109,26 @@ describe("keyboard shortcut opening guard", () => {
     expect(shouldOpenKeyboardShortcuts(event("k", { metaKey: true }))).toBe(false);
   });
 
-  it.each(["input", "textarea", "select", "dialog", "[role=dialog]"])("does not open from %s", (selector) => {
+  it.each(["input", "textarea", "select", "dialog", "[role=dialog]"])("does not open on ? from %s", (selector) => {
+    expect(shouldOpenKeyboardShortcuts(event("?", { target: new Target(selector) }))).toBe(false);
+  });
+
+  it.each(["dialog", "[role=dialog]"])("does not open on the chord from %s", (selector) => {
     const target = new Target(selector);
-    expect(shouldOpenKeyboardShortcuts(event("?", { target }))).toBe(false);
     expect(shouldOpenKeyboardShortcuts(event("/", { target, metaKey: true }))).toBe(false);
     expect(shouldOpenKeyboardShortcuts(event("/", { target, ctrlKey: true }))).toBe(false);
   });
 
+  it.each(["input", "textarea"])("opens on the chord from a %s, like the focused composer", (selector) => {
+    const target = new Target(selector);
+    expect(shouldOpenKeyboardShortcuts(event("/", { target, metaKey: true }))).toBe(true);
+    expect(shouldOpenKeyboardShortcuts(event("/", { target, ctrlKey: true }))).toBe(true);
+  });
+
   it("respects editable ancestors, composition, handled events, and extra modifiers", () => {
-    for (const overrides of [
-      { target: new Target(null, true) }, { isComposing: true },
-      { defaultPrevented: true }, { altKey: true },
-    ]) {
+    expect(shouldOpenKeyboardShortcuts(event("?", { target: new Target(null, true) }))).toBe(false);
+    expect(shouldOpenKeyboardShortcuts(event("/", { metaKey: true, target: new Target(null, true) }))).toBe(true);
+    for (const overrides of [{ isComposing: true }, { defaultPrevented: true }, { altKey: true }]) {
       expect(shouldOpenKeyboardShortcuts(event("?", overrides))).toBe(false);
       expect(shouldOpenKeyboardShortcuts(event("/", { metaKey: true, ...overrides }))).toBe(false);
     }

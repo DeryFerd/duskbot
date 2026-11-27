@@ -60,6 +60,9 @@ export interface MobilePairingRequest {
   companion?: CompanionEndpoint[];
   /** Optional desktop account sign-in to seal into the typed-code lookup alongside the pairing payload. */
   signIn?: PairSignIn;
+  /** An https origin this workspace answers at that it may not know itself (`duskbot pair --public-url`); the server
+   * puts it in the code only once that origin's descriptor names this workspace. */
+  origin?: string;
 }
 
 export interface MobilePairingResponse {
@@ -119,6 +122,27 @@ export interface MobileRelayAsk { pub: string; verifier: string }
 
 /** A phone's own relay channel: where it is, and the place's key half to derive the channel key with. */
 export interface MobileRelayChannel { base: string; channel: string; agentPub: string }
+
+/** POST /api/mobile/device: a session signed in with a link (not paired) makes itself this workspace's phone. */
+export interface MobileDeviceAdoptRequest {
+  name?: string;
+  platform?: MobilePlatform;
+  app?: string;
+  install?: string;
+}
+
+/** The code the phone routes answer for a session that is not a paired phone. */
+export const NOT_PAIRED = "not_paired";
+
+/** What one test push did for one phone. `unregistered`: the phone never gave the server a push token. */
+export type PushTestOutcome = "sent" | "gone" | "failed" | "skipped" | "unregistered";
+
+/** POST /api/mobile/push/test: a test push to this phone (a phone's own session) or every phone (owner or admin). */
+export interface PushTestResponse {
+  /** where pushes go when this server has no APNs or FCM keys of its own; null when nowhere */
+  relay: string | null;
+  results: { id: string; name: string; platform: MobilePlatform; service: PushService | null; outcome: PushTestOutcome }[];
+}
 
 /** PUT /api/mobile/push with the device's own session. */
 export interface MobilePushRegistration {
@@ -345,10 +369,11 @@ function legacyOrigin(value: string | null): string | undefined {
 /** A scanned QR or opened pairing link: a v2 link first, else an older `duskbot://pair?address=&token=` link from
  * the server pairing card or the companion. Null when it is neither or anything required is malformed. */
 export function parseMobilePairingLink(link: string): MobilePairingPayload | null {
-  const payload = parseMobileLink(link.trim());
+  const app = appLinkFromUniversal(link) ?? link.trim();
+  const payload = parseMobileLink(app);
   if (payload) return pairingFromPayload(payload);
   let url: URL;
-  try { url = new URL(link.trim()); } catch { return null; }
+  try { url = new URL(app); } catch { return null; }
   if (url.protocol !== "duskbot:" || (url.hostname || url.pathname.replace(/^\/+/, "")) !== "pair") return null;
   const q = url.searchParams;
   const credential = q.get("token") ?? "";

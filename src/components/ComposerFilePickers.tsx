@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type InputHTMLAttributes, type RefObject } from "react";
 
 import { FILE_MAX_BYTES } from "@/lib/composer-attachments";
+import type { AttachNotice } from "@/lib/intake-files";
 import { t } from "@/lib/i18n";
 import { nativeAttach, onAttachToComposer, PickProblem } from "@/lib/native-attach";
 import { CARD_ACTION, ChatErrorCard } from "./ChatErrorBanner";
@@ -80,6 +81,20 @@ export function PickProblemCard({ pickers }: { pickers: Pick<ReturnType<typeof u
             ? t("composer.attach.tooLarge", { name: problem.tooLarge.join(", "), mb: FILE_MAX_BYTES / (1024 * 1024) })
             : t("composer.attach.pickFailedBody")}
         </p>
+      </ChatErrorCard>
+    </div>
+  );
+}
+
+/** What an attach left out (a title, the files and why, and a way to pick again), or only news such as a photo sent as a
+ * file. */
+export function AttachNoticeCard({ notice, onDismiss, onPick }: { notice: AttachNotice; onDismiss: () => void; onPick: () => void }) {
+  const problem = notice.tone === "warning";
+  return (
+    <div className="pointer-events-auto mb-2 w-full" data-attach-notice={notice.tone}>
+      <ChatErrorCard tone={notice.tone} title={t(problem ? "composer.attach.noticeTitle" : "composer.attach.noticeInfoTitle")} onDismiss={onDismiss}
+        actions={problem ? <button type="button" className={CARD_ACTION} onClick={onPick}>{t("composer.attach.chooseFiles")}</button> : undefined}>
+        <p dir="auto" className="text-ink-secondary">{notice.text}</p>
       </ChatErrorCard>
     </div>
   );

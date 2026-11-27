@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -59,7 +59,7 @@ export const VITEST_SUBSETS = {
   },
   "docs-tests": {
     part: "docs tests",
-    files: ["scripts/testing/analytics-docs.test.ts", "server/settings-models-path.test.ts"],
+    files: ["scripts/testing/analytics-docs.test.ts", "server/settings-models-path.test.ts", "scripts/npm-install-docs.test.ts"],
     shards: 1,
     nodeTests: false,
   },
@@ -288,6 +288,12 @@ export function moveLinuxIntoStatic(outputs) {
   };
 }
 
+/** This repo carries no `evals/` suite (it was not part of the import), so the behavior-evals job has nothing to run
+ * and stays out of the selection until one is added. */
+export function withoutMissingEvals(outputs, hasEvals) {
+  return hasEvals ? outputs : { ...outputs, jobs: outputs.jobs.filter((job) => job !== "behavior-evals") };
+}
+
 const SHA = /^[a-f\d]{40}(?:[a-f\d]{24})?$/i;
 
 const git = (args) => execFileSync("git", args, { encoding: "utf8", timeout: 30_000, stdio: ["ignore", "pipe", "pipe"] });
@@ -402,7 +408,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     }
   }
   const linuxInStatic = process.env.DUSK_CI_LINUX_IN_STATIC === "true";
-  const outputs = linuxInStatic ? moveLinuxIntoStatic(ciOutputs(scope, vitestOs)) : ciOutputs(scope, vitestOs);
+  const selected = withoutMissingEvals(ciOutputs(scope, vitestOs), existsSync("evals/tsconfig.json"));
+  const outputs = linuxInStatic ? moveLinuxIntoStatic(selected) : selected;
   console.log(`CI scope: ${scope.areas.join(", ")} -> ${outputs.jobs.join(", ") || "static checks only"}`);
   if (linuxInStatic) {
     const { vitest, evals, packaged_server: packaged } = outputs.linux_lanes;

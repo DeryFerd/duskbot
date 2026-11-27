@@ -3,7 +3,7 @@
 // app signed in through the tunnel, AI sign-ins sent from this mac, and the move with its backup first.
 import { execFile, execFileSync, spawn } from "node:child_process";
 import { generateKeyPairSync, sign } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -81,6 +81,7 @@ beforeAll(async () => {
       if (req.url === "/api/auth/session") return reply(200, signedIn ? { kind: "session" } : { kind: "none" });
       if (!signedIn) return reply(403, { error: "pair this device" });
       if (req.url === "/api/config") return reply(200, { onboarding: req.method === "PUT" ? JSON.parse(body).onboarding : { completedAt: "", version: 0 } });
+      if (req.url === "/api/instances/codex/auth/start") return reply(200, { auth: { flowId: "codex-device", phase: "waiting", authorizationUrl: "https://auth.openai.com/codex/device", userCode: "ABCD-1234" } });
       if (req.url === "/api/instances?fresh=1") return reply(200, { instances: [
         { instanceId: "claude", driverKind: "claudeAgent", snapshot: { authenticated: false } },
         { instanceId: "codex", driverKind: "codex", snapshot: { authenticated: false } },
@@ -212,8 +213,8 @@ describe("Add your VPS", () => {
     expect(heartbeat.steps.find((step) => step.id === "app").progress).toEqual({ kind: "download", receivedBytes: 25, totalBytes: 100 });
 
     // the agent finishes the setup on the server and keeps the tunnel open
-    await run(process.execPath, [agentPath, "link"], { env: { ...process.env, HOME: home, LINK_BASE: base, LINK_ID: id, LINK_TOKEN: vpsToken, LINK_MODE: "relay", LINK_NAME: "oracle-arm", LINK_SERVER_PORT: String(vpsPort) } });
-    tunnelChild = spawn(process.execPath, [agentPath, "tunnel"], { env: { ...process.env, HOME: home, CODEX_HOME: join(home, ".codex"), LINK_SERVER_PORT: String(vpsPort) }, stdio: "ignore" });
+    await run(process.execPath, [agentPath, "link"], { env: { ...process.env, HOME: home, USERPROFILE: home, LINK_BASE: base, LINK_ID: id, LINK_TOKEN: vpsToken, LINK_MODE: "relay", LINK_NAME: "oracle-arm", LINK_SERVER_PORT: String(vpsPort) } });
+    tunnelChild = spawn(process.execPath, [agentPath, "tunnel"], { env: { ...process.env, HOME: home, USERPROFILE: home, CODEX_HOME: join(home, ".codex"), LINK_SERVER_PORT: String(vpsPort) }, stdio: "ignore" });
 
     const linked = await until(() => link.view().stage === "linked" && link.view());
     expect(linked.server).toMatchObject({ id: "env-1", name: "oracle-arm" });
@@ -232,8 +233,9 @@ describe("Add your VPS", () => {
 
     const engines = await link.engines();
     expect(engines.map((engine) => engine.kind)).toEqual(["claude", "codex"]);
-    expect(await link.signIn("codex")).toMatchObject({ phase: "succeeded" });
-    expect(JSON.parse(readFileSync(join(home, ".codex", "auth.json"), "utf8")).tokens.access_token).toBe("codex-on-the-mac");
+    // ChatGPT signs in on the server itself: a copy of this mac's login would race it for the single-use refresh token
+    expect(await link.signIn("codex")).toMatchObject({ phase: "waiting", authorizationUrl: "https://auth.openai.com/codex/device", userCode: "ABCD-1234" });
+    expect(existsSync(join(home, ".codex", "auth.json"))).toBe(false);
     const claude = await link.signIn("claude");
     expect(claude.phase).toBe("waiting");
     await until(async () => (await link.signInStatus("claude", claude.flowId)).phase === "succeeded");
@@ -276,9 +278,9 @@ describe("Add your VPS", () => {
       const token = /\/i\/([a-z2-7]{10}-[a-z2-7]{26})\)/.exec((await link.start()).command)[1];
       const [id, secret] = token.split("-");
       await post(`/v1/sessions/${id}/claim`, vpsTokenOf(secret), {});
-      await run(process.execPath, [agentPath, "link"], { env: { ...process.env, HOME: home, LINK_BASE: base, LINK_ID: id, LINK_TOKEN: vpsTokenOf(secret), LINK_MODE: "relay", LINK_NAME: "oracle-arm", LINK_SERVER_PORT: String(vpsPort) } });
+      await run(process.execPath, [agentPath, "link"], { env: { ...process.env, HOME: home, USERPROFILE: home, LINK_BASE: base, LINK_ID: id, LINK_TOKEN: vpsTokenOf(secret), LINK_MODE: "relay", LINK_NAME: "oracle-arm", LINK_SERVER_PORT: String(vpsPort) } });
       tunnelChild?.kill();
-      tunnelChild = spawn(process.execPath, [agentPath, "tunnel"], { env: { ...process.env, HOME: home, LINK_SERVER_PORT: String(vpsPort) }, stdio: "ignore" });
+      tunnelChild = spawn(process.execPath, [agentPath, "tunnel"], { env: { ...process.env, HOME: home, USERPROFILE: home, LINK_SERVER_PORT: String(vpsPort) }, stdio: "ignore" });
       await until(() => store.read()?.links?.some((entry) => entry.id === id));
       return id;
     };

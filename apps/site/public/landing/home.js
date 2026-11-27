@@ -117,14 +117,23 @@ if (bill) {
 }
 
 // the hero download is the file for this computer, a plain link that starts at once; the arrow lists every other build.
-// on a phone it opens the download page, since the app runs on a computer
+// on a phone, where a computer's installer goes nowhere, it is this phone's app, and the arrow offers the other phone and
+// sending the computer link
 const dl = $('[data-dl]');
 if (dl) {
   const more = $('.split-more', dl), menu = $('.dl-menu', dl), main = $('.split-main', dl);
   // site.js (loaded after this file) finds the build
   addEventListener('DOMContentLoaded', async () => {
     const key = await window.duskBuild?.();
-    if (key === 'phone') { main.href = '/download'; main.removeAttribute('download'); return; }
+    if (key === 'phone') {
+      const app = $(`[data-key="${/android/i.test(navigator.userAgent) ? 'android' : 'ios'}"]`, menu);
+      for (const li of menu.children) li.hidden = !li.hasAttribute('data-phone') || li.contains(app);
+      main.href = app.href; main.dataset.duskPlatform = app.dataset.duskPlatform;
+      main.toggleAttribute('download', app.hasAttribute('download'));
+      $('.dl-os', dl).replaceChildren($('.os', app).cloneNode(true));
+      $('.dl-label', dl).textContent = 'get the app';
+      return;
+    }
     const item = key && $(`[data-key="${key}"]`, menu);
     if (!item) return;
     main.href = item.href;

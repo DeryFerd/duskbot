@@ -10,7 +10,7 @@
 // Admin's team pairing (its claims are the Admin's), never an address a page supplied.
 import { cloudHomeConnectUrl, cloudSetupOf, cloudUnreachableText, machineSetup, readyCloudOrigin } from "./cloud-home.mjs";
 import { cloudMachine, cloudState, otherOwnClouds, ownCloud } from "./cloud-list.mjs";
-import { asleepAnswer, BACKGROUND_HEADERS, goneAnswer, openSleepingCloud, SIGNED_IN_MS } from "./cloud-power.mjs";
+import { asleepAnswer, BACKGROUND_HEADERS, goneAnswer, SIGNED_IN_MS } from "./cloud-power.mjs";
 import { awayIn, parseJournal } from "./one-home.mjs";
 
 export const HOME_SCREEN_PATH = "/home";
@@ -22,10 +22,18 @@ export const LOOK_MS = 2_500;
 /** A place whose page hasn't loaded this long after the window went there (it answered the look, then nothing) is the
  * offline screen, with Try again: never an endless spinner. */
 export const OPEN_MS = 30_000;
-export const RETRY_MS = Object.freeze([2_000, 4_000, 8_000, 15_000, 30_000]);
+/** the look is one small request: a Cloud back from an outage opens within 10 s of answering, never 30 */
+export const RETRY_MS = Object.freeze([2_000, 4_000, 6_000, 10_000]);
 /** A place that hasn't answered since the window set out to open it (a launch, a wake, a switch) may still be connecting:
  * the opening screen stays, looking again on RETRY_MS, for this long before the offline screen says it can't be reached. */
 export const CONNECT_GRACE_MS = 20_000;
+/** My Cloud being woken is looked at this often: it opens within seconds of answering. */
+export const WAKE_LOOK_MS = 2_000;
+/** A wake past this says it is taking longer than usual (a cold boot is ~45 s, a resume seconds). */
+export const WAKE_SLOW_MS = 60_000;
+/** A wake that hasn't answered in this long is a real outage (the cloud service counts it a failed start at 5 min too):
+ * the offline screen, with Try again. */
+export const WAKE_GIVE_UP_MS = 5 * 60_000;
 /** A brand-new Cloud's name can be missing for minutes after the Admin says it is ready: a resolver that was asked while
  * it was set up keeps that "no such name" (RFC 2308 negative caching; Chromium's own host cache does too). For a Cloud
  * ready within FRESH_MS, a name not found keeps the setup screen up and the window tries again on NAME_RETRY_MS, with
@@ -273,6 +281,10 @@ export function createHomeWindow(deps) {
   /** My Cloud asleep: what the person did that wakes it (`type`, `click`, `send`), until its page opens; and the message they
    *  sent from the asleep screen, held for My Cloud's page to send once (`takeHeld`). */
   let wakeIntent = null, held = null;
+  /** since when My Cloud is being woken and waited for (the waking screen, looked at every WAKE_LOOK_MS), else null */
+  let wakingSince = null;
+  /** a wake waited on for WAKE_GIVE_UP_MS that never answered: the offline screen until it answers or the person asks again */
+  let wakeGaveUp = false;
   const state = () => account()?.state() ?? null;
   const wanted = (token) => token === opens;
   const cloudOrigin = () => (home.kind === "cloud" ? home.origin : null);
@@ -354,7 +366,7 @@ export function createHomeWindow(deps) {
   function toScreen(next) {
     screen = next;
     status = null;
-    onSplash(splashText("opening", teamName()));
+    onSplash(splashText(next?.waking ? "waking" : "opening", teamName()));
     goScreen();
   }
 
@@ -366,11 +378,54 @@ export function createHomeWindow(deps) {
   }
 
   /** My Cloud asleep on this computer's screen: `waking` once the person asked, `held` the message they sent meanwhile. */
-  const asleepScreen = () => ({ screen: "asleep", ...(wakeIntent ? { waking: true } : {}), ...(held ? { held: held.text } : {}) });
+  const asleepScreen = () => ({ screen: "asleep", ...(wakeIntent || wakingSince !== null ? { waking: true } : {}),
+    ...(wakingSince !== null && now() - wakingSince >= WAKE_SLOW_MS ? { slow: true } : {}), ...(held ? { held: held.text } : {}) });
+  /** the Admin's word on My Cloud's power: "asleep", "waking", "awake", or null for a Cloud that never sleeps */
+  const adminSays = () => { try { return account()?.power?.()?.state ?? null; } catch { return null; } };
+  function endWaking() {
+    if (wakingSince === null) return;
+    wakingSince = null;
+    try { account()?.setWaking?.(false); } catch {}
+  }
+  /** My Cloud being woken: asked to wake once, then looked at every WAKE_LOOK_MS on the waking screen until it answers
+   * (true) or WAKE_GIVE_UP_MS passed (the offline screen: a real outage). False when this look left it waking. */
+  async function untilAwake(place, token) {
+    if (wakingSince === null) {
+      wakingSince = now();
+      try { account()?.setWaking?.(true); } catch {}
+      log("home: waking My Cloud");
+      if (adminSays() !== "waking" && adminSays() !== "awake") await Promise.resolve().then(() => account()?.wakeHome(wakeIntent ?? "click")).catch(() => null);
+      if (!wanted(token)) return false;
+    }
+    const look = await answers(place.origin);
+    if (!wanted(token)) return false;
+    if (look === "yes") { log(`home: My Cloud answered ${Math.round((now() - wakingSince) / 1000)} s after its wake`); return true; }
+    if (look === "gone") { endWaking(); wakeIntent = null; clearRetry(); connecting = null; toScreen(goneScreen(place)); return false; }
+    return stillWaking(token) ? false : (giveUpWaking(token), false);
+  }
+  /** still within its wake: the waking screen, looked at again soon; false once it is late enough to be a real outage */
+  function stillWaking(token) {
+    if (wakingSince === null || now() - wakingSince >= WAKE_GIVE_UP_MS || !wanted(token)) return false;
+    toScreen(asleepScreen());
+    later([WAKE_LOOK_MS], () => 0);
+    return true;
+  }
+  function giveUpWaking(token) {
+    log(`home: My Cloud didn't answer ${Math.round(WAKE_GIVE_UP_MS / 60_000)} min after its wake`);
+    endWaking(); wakeIntent = null; connecting = null; wakeGaveUp = true;
+    offline(token, true);
+  }
 
   /** The place didn't answer: this computer's screen says so, with the Admin's reason for My Cloud, and looks again by itself. */
-  function offline(token) {
+  function offline(token, gaveUp = false) {
     if (!wanted(token)) return;
+    // My Cloud asleep or waking is never "can't reach": the waking screen while it boots, its asleep screen while it sleeps
+    if (!otherPlace(opening) && !gaveUp) {
+      const word = adminSays();
+      if (word === "waking" && wakingSince === null) { wakingSince = now(); try { account()?.setWaking?.(true); } catch {} }
+      if (stillWaking(token)) return;
+      if (word === "asleep" && wakingSince === null) { clearRetry(); connecting = null; return toScreen(asleepScreen()); }
+    }
     if (connecting !== null && now() - connecting < CONNECT_GRACE_MS && screen?.screen !== "offline") { toScreen({ screen: "opening" }); return later(); }
     const reason = otherPlace(opening) ? null : cloudUnreachableText(state(), cloudOrigin());
     if (screen?.screen !== "offline") tries = 0;
@@ -397,6 +452,7 @@ export function createHomeWindow(deps) {
   /** The person went somewhere else while My Cloud was asked for: nothing pulls the window back. */
   function letAskGo() {
     asked = null; naming = null; connecting = null; screen = null; status = null; away = false;
+    wakeIntent = null; endWaking();
     clearRetry();
   }
   const signInNeeded = () => ["reauth-required", "signed-out"].includes(state()?.status);
@@ -481,12 +537,12 @@ export function createHomeWindow(deps) {
     if (shows(origin) && (away || loadedHere) && !screen && !open) {
       if (loadedHere) { away = home.kind !== "computer"; openedAsServer = null; }
       shown = place;
+      if (place.kind === "cloud") { wakeIntent = null; wakeGaveUp = false; endWaking(); }
       if (place.kind === "team" && !renewal) renewLater(place, TEAM_RENEW_MS);
       return;
     }
     clearRetry();
     opening = place;
-    const client = account();
     const machine = otherPlace(place) ? place.machine : state()?.status === "connected" ? state().machine : null;
     // My Cloud the session's list says isn't running: its own screen, never its address, and nothing to look again for.
     const listed = place.kind === "cloud" ? cloudScreen(myListed()) : null;
@@ -501,26 +557,28 @@ export function createHomeWindow(deps) {
     const blank = !win || win.isDestroyed() || !originOf(win.webContents.getURL());
     // A team's Cloud never sleeps, and the Admin wakes only My Cloud: a team that answers asleep is simply not reachable yet.
     // once the person asked My Cloud to wake, its page is only looked for through the wake: a waking machine answers nothing
-    let asleep = place.kind === "cloud" && (power.asleep() || Boolean(wakeIntent));
+    // the person asked My Cloud to wake, or the Admin already wakes it (another device, the edge, a routine): it is waited
+    // for on the waking screen until it answers, never "can't reach" while it boots
+    const wakingNow = place.kind === "cloud" && (Boolean(wakeIntent) || wakingSince !== null || (!wakeGaveUp && adminSays() === "waking"));
+    let asleep = place.kind === "cloud" && !wakingNow && power.asleep();
     connecting ??= now();
-    say(asleep && wakeIntent ? "waking" : "opening");
+    say(wakingNow ? "waking" : "opening");
     const handoff = blank ? timers.set(() => { if (wanted(token) && status) goScreen(); }, SPLASH_HANDOFF_MS) : null;
     try {
-      if (!asleep) {
+      if (wakingNow) {
+        if (!(await untilAwake(place, token))) return;
+      } else if (!asleep) {
         if (naming) await forgetNames();
         const look = await answers(origin);
         if (look === "no") return unreachable(place, token);
         if (look === "gone") { clearRetry(); connecting = null; return toScreen(goneScreen(place)); }
-        if (look === "asleep" && otherPlace(place)) return offline(token);
+        if (look === "asleep" && (otherPlace(place) || wakeGaveUp)) return offline(token, wakeGaveUp);
         if (look === "asleep") { power.hold(); asleep = true; }
       }
       // opening never wakes My Cloud: its last-seen chats show, read-only, until the person types, clicks or sends there
-      if (asleep && place.kind === "cloud" && !wakeIntent) { clearRetry(); connecting = null; return toScreen(asleepScreen()); }
+      if (asleep && place.kind === "cloud") { clearRetry(); connecting = null; return toScreen(asleepScreen()); }
       let session = null;
-      const intent = wakeIntent;
-      const signedIn = asleep
-        ? await openSleepingCloud({ power: client?.power() ?? { state: "asleep" }, wake: () => client?.wakeHome(intent), waking: (on) => client?.setWaking(on), signedIn: (ms) => signedInAt(origin, ms) })
-        : Boolean(session = await sessionAt(origin, SIGNED_IN_MS));
+      const signedIn = Boolean(session = await sessionAt(origin, SIGNED_IN_MS));
       if (!wanted(token)) return;
       let grant = null;
       if (!signedIn) {
@@ -544,15 +602,21 @@ export function createHomeWindow(deps) {
       }
       // My Cloud opened before the move made it home is a saved server the window shows, as the Server menu opens one.
       const asHome = otherPlace(place) || home.kind !== "computer";
+      // a picture of the offline screen held over the load would look like Try again did nothing
+      const leaving = screen?.screen ?? null;
       screen = null; status = null; tries = 0; connecting = null; away = asHome; shown = asHome ? place : null;
       openedAsServer = !asHome && place.kind === "cloud" ? origin : null;
       // A page that never finishes loading is the offline screen after OPEN_MS, which looks again by itself and has Try again.
       let slow = null;
-      const fromHere = place.kind === "cloud" && !blank && originOf(win.webContents.getURL()) === originOf(localOrigin());
+      const fromHere = place.kind === "cloud" && !blank && leaving !== "offline" && originOf(win.webContents.getURL()) === originOf(localOrigin());
       const load = () => go(cloudHomeConnectUrl({ origin, grant }, now(), open === "phone" ? "phone" : null, place.kind === "cloud" && open !== "phone" ? cloudRoute : null), origin, place);
-      const loaded = await Promise.race([fromHere ? holdPaint(load) : Promise.resolve(load()).then(() => true, () => true),
+      let loaded = await Promise.race([fromHere ? holdPaint(load) : Promise.resolve(load()).then(() => true, () => true),
         new Promise((done) => { slow = timers.set(() => done(false), OPEN_MS); })]);
       timers.clear(slow);
+      // a load that failed went through failed() (a newer open); one whose page is there but hadn't drawn yet is loading,
+      // never "can't reach": a just-woken Cloud can take longer than the picture's 20 s to draw its first frame, and taking
+      // the window back to the offline screen then left the person there until they restarted the app (2026-11-26)
+      if (!loaded && asHome && wanted(token) && shows(origin)) { log(`home: ${otherPlace(place) ? place.name : "My Cloud"} is still drawing; its page stays`); loaded = true; }
       // opened from this computer's own page before any move: that page comes back, with its own Try again
       if (!loaded && fromHere && !asHome) {
         log("home: My Cloud didn't draw in time; this computer's page is back");
@@ -561,7 +625,7 @@ export function createHomeWindow(deps) {
         return;
       }
       if (!loaded) { log(`home: ${otherPlace(place) ? place.name : "My Cloud"} didn't load in ${OPEN_MS / 1000} s`); return unreachable(place, token); }
-      if (place.kind === "cloud") { clearRenewal(); power.woke(); wakeIntent = null; }
+      if (place.kind === "cloud") { clearRenewal(); power.woke(); wakeIntent = null; wakeGaveUp = false; endWaking(); }
       else if (place.kind === "team") renewLater(place, grant || !session?.expiresAt ? TEAM_RENEW_MS : session.expiresAt - now() - TEAM_RENEW_EARLY_MS);
       else clearRenewal();
       tell();
@@ -730,7 +794,7 @@ export function createHomeWindow(deps) {
     /** The place the window was last sent to: My Cloud, or a team's or another own Cloud (`{ kind: "team" | "own", id, name, origin }`). */
     shown: () => shown,
     /** The person asked again (the screen's timer, back online, or the window focused). */
-    retry: () => show(),
+    retry: () => { wakeGaveUp = false; tries = 0; return show(); },
     /** This Mac chosen while My Cloud is home: its fresh workspace; throws when it can't start. */
     async openHere() {
       here = true;
@@ -771,7 +835,7 @@ export function createHomeWindow(deps) {
     accountLeaving({ keep = false } = {}) {
       opens++; here = false;
       clearRetry(); clearRenewal();
-      asked = null; naming = null; connecting = null; shown = null; opening = null; screen = null; status = null; wakeIntent = null; held = null;
+      asked = null; naming = null; connecting = null; shown = null; opening = null; screen = null; status = null; wakeIntent = null; held = null; endWaking();
       away = away || (!keep && !shows(localOrigin()));
       void lastSeen?.forget?.()?.catch?.(() => {});
     },

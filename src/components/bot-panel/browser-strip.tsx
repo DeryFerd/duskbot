@@ -253,7 +253,7 @@ export function BrowserHeader({ bot, headline, wide, closing, failed, ready = tr
           {closing ? <Loader2 size={16} aria-hidden="true" className="motion-safe:animate-spin" /> : <X size={16} aria-hidden="true" />}
         </button>
         {asking && (
-          <div role="alertdialog" aria-labelledby={title} data-local-browser-confirm=""
+          <div role="dialog" aria-labelledby={title} data-local-browser-confirm=""
             className="absolute right-0 top-full z-30 mt-1 w-[248px] origin-top-right rounded-[14px] bg-menu p-3 text-ink shadow-[var(--shadow-popover)] transition-[opacity,transform] duration-150 ease-out starting:scale-[0.97] starting:opacity-0 motion-reduce:starting:scale-100">
             <p id={title} className="m-0 text-[13px] leading-[18px]">
               <span className="font-medium">{t("localBrowser.closeAsk")}</span>{" "}

@@ -193,6 +193,28 @@ export function whisperRunner({ binary, model, language, spawn = nodeSpawn, tmpd
   };
 }
 
+// ElevenLabs' `detail.status` when it refuses to mint a token; a 400 can mean the key itself (a key without
+// speech-to-text access, terms not accepted) as well as the account's credit
+const TOKEN_KEY_STATUSES = new Set(["invalid_api_key", "missing_permissions", "unaccepted_terms", "needs_authorization", "detected_unusual_activity"]);
+const TOKEN_CREDIT_STATUSES = new Set(["quota_exceeded", "payment_required", "insufficient_credits", "too_many_concurrent_requests", "system_busy"]);
+
+/** Why ElevenLabs refused the token, read from its answer; its raw words ride on `detail` for the log, never the card. */
+export async function refusedToken(response) {
+  const body = (await response.text().catch(() => "")).slice(0, 400);
+  let status = "", said = "";
+  try {
+    const detail = JSON.parse(body)?.detail;
+    status = typeof detail?.status === "string" ? detail.status : "";
+    said = typeof detail?.message === "string" ? detail.message : typeof detail === "string" ? detail : "";
+  } catch {}
+  const reason = response.status === 401 || response.status === 403 || TOKEN_KEY_STATUSES.has(status) ? "bad-key"
+    : response.status === 429 || TOKEN_CREDIT_STATUSES.has(status) ? "rate-limited" : "service";
+  const plain = reason === "bad-key" ? "ElevenLabs did not accept the key." : reason === "rate-limited" ? "ElevenLabs is busy or out of credit right now." : "ElevenLabs could not start listening.";
+  const error = new VoiceProviderError(reason, plain, response.status);
+  error.detail = `ElevenLabs token ${response.status}${status ? ` ${status}` : ""}${said ? `: ${said.slice(0, 200)}` : body && !status ? `: ${body.slice(0, 200)}` : ""}`;
+  return error;
+}
+
 /** ElevenLabs Scribe realtime over a WebSocket, behind the same push/finish/stop as a piece session. The key never goes
  * on the socket: a single-use token is minted with it first. */
 export function createRealtimeSession({ key, model, language, onText, onError, fetch = globalThis.fetch, WebSocket = globalThis.WebSocket, finishMs = REALTIME_FINISH_MS }) {
@@ -253,9 +275,7 @@ export function createRealtimeSession({ key, model, language, onText, onError, f
   const open = async () => {
     const minted = await fetch("https://api.elevenlabs.io/v1/single-use-token/realtime_scribe", { method: "POST", headers: { "xi-api-key": key } })
       .catch(() => { throw new VoiceProviderError("network", "Could not reach ElevenLabs."); });
-    if (minted.status === 401 || minted.status === 403) throw new VoiceProviderError("bad-key", "ElevenLabs did not accept the key.", minted.status);
-    if (minted.status === 429) throw new VoiceProviderError("rate-limited", "ElevenLabs is busy or out of credit right now.", 429);
-    if (!minted.ok) throw new VoiceProviderError("service", `ElevenLabs answered ${minted.status}.`, minted.status);
+    if (!minted.ok) throw await refusedToken(minted);
     const { token } = await minted.json().catch(() => ({}));
     if (typeof token !== "string" || !token) throw new VoiceProviderError("service", "ElevenLabs did not open a session.");
     if (!live()) return;
@@ -435,7 +455,7 @@ export function installVoiceInput({
       send(contents, "voice-input:transcript", { id, text: heard, partial });
     };
     const onError = (error) => {
-      if (!session.ended) log(`voice input ${options.provider} failed: ${error?.reason ?? ""} ${error?.status ?? ""}`.trim());
+      if (!session.ended) log(`voice input ${options.provider} failed: ${error?.reason ?? ""} ${error?.status ?? ""}${error?.detail ? ` (${error.detail})` : ""}`.trim());
       end(session, failure(error));
     };
     const model = voiceProviderModel(options.provider, options.model);

@@ -78,6 +78,14 @@ describe("dashboard collector", () => {
     await collect.plans(); await collect.activity();
     expect(deps.planUsage).toHaveBeenCalledTimes(1); expect(deps.usage?.read).toHaveBeenCalledTimes(1);
   });
+  it("reports the one model each bot's turns used, or null when it used several", async () => {
+    const row = (botId: string, model: string) => ({ at: new Date().toISOString(), botId, botName: botId, threadId: "t", model, instanceId: "engine", driverKind: "fixture", input: 1, output: 1, costUsd: 0, trigger: { kind: "owner" as const } });
+    const deps = dependencies();
+    const rows = [row("nova", "model-a"), row("nova", "model-a"), row("echo", "model-a"), row("echo", "model-b")];
+    const activity = await createDashboardCollector({ ...deps, usage: { ...deps.usage!, read: vi.fn(() => rows) } as typeof deps.usage }).activity();
+    expect(activity.byBot.map(({ botId, model }) => [botId, model])).toEqual([["nova", "model-a"], ["echo", null]]);
+    expect(parseWorkspaceReport({ v: 1, seq: 1, at: 1, workspace: createDashboardCollector(deps).workspace(), activity })?.activity?.byBot.map((bot) => bot.model)).toEqual(["model-a", null]);
+  });
   it("maps inherited team computers and honors a routine's human schedule label", () => {
     const deps = dependencies(), routines = deps.routines();
     const collect = createDashboardCollector({ ...deps, computerKind: () => "team", routines: () => routines.map((routine) => ({ ...routine, scheduleLabel: "Every morning" })) });

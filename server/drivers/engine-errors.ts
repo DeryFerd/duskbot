@@ -128,13 +128,13 @@ export function engineFailureMessage(
   }
 }
 
-const DURATION_PART = /(\d+(?:\.\d+)?)\s*(d|days?|h|hrs?|hours?|m|mins?|minutes?|s|secs?|seconds?)(?![a-z])/gi;
-const UNIT_MS: Record<string, number> = { d: 86_400_000, h: 3_600_000, m: 60_000, s: 1_000 };
+const DURATION_PART = /(\d+(?:\.\d+)?)\s*(d|days?|h|hrs?|hours?|ms|milliseconds?|m|mins?|minutes?|s|secs?|seconds?)(?![a-z])/gi;
+const UNIT_MS: Record<string, number> = { d: 86_400_000, h: 3_600_000, m: 60_000, s: 1_000, ms: 1 };
 
 function durationMs(text: string): number | undefined {
   let total = 0, found = false;
   for (const [, amount, unit] of text.matchAll(DURATION_PART)) {
-    total += Number(amount) * UNIT_MS[unit!.toLowerCase().replace(/^(?:hrs?|hours?)$/, "h").replace(/^(?:mins?|minutes?)$/, "m").replace(/^(?:secs?|seconds?)$/, "s").replace(/^days?$/, "d")]!;
+    total += Number(amount) * UNIT_MS[unit!.toLowerCase().replace(/^(?:hrs?|hours?)$/, "h").replace(/^(?:mins?|minutes?)$/, "m").replace(/^(?:secs?|seconds?)$/, "s").replace(/^days?$/, "d").replace(/^milliseconds?$/, "ms")]!;
     found = true;
   }
   return found && total > 0 ? total : undefined;
@@ -177,6 +177,9 @@ export function limitResetFromWords(text: string, now = Date.now()): number | un
     const value = retryAfter[1]!.trim();
     return pick(/^\d+$/.test(value) ? now + Number(value) * 1000 : Date.parse(value));
   }
+  // Google's RetryInfo detail, which its RESOURCE_EXHAUSTED message may not put in words
+  const retryInfo = /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(text);
+  if (retryInfo) return pick(now + Number(retryInfo[1]) * 1000);
   const within = /\b(?:try again|resets?|available again|retry)\s+in\s+((?:\d+(?:\.\d+)?\s*[a-z]+[\s,]*(?:and\s+)?){1,4})/i.exec(text);
   if (within) return pick((() => { const span = durationMs(within[1]!); return span === undefined ? undefined : now + span; })());
   const clock = /\b(?:try again|resets?)\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i.exec(text);

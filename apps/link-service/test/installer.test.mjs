@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 
@@ -49,7 +50,9 @@ printf 'result %s\\n' "$code" >> "$calls"
   }
 }
 
-describe("desktop installer work", () => {
+// POSIX only: install.sh is the Linux server installer, run here under sh with stub commands on a POSIX PATH; Windows
+// has neither, and no server runs it there.
+describe.skipIf(process.platform === "win32")("desktop installer work", () => {
   it("requests the new desktop image when only the retired v1 image is cached", async () => {
     expect(currentImage).toMatch(/^ghcr\.io\/duskbotai\/dusk-desktop:v\d+$/);
     const oldImage = "ghcr.io/sidddevz/omb-bot-desktop:v1";
@@ -94,7 +97,7 @@ describe("desktop installer work", () => {
   });
 });
 
-describe("host memory guards", () => {
+describe.skipIf(process.platform === "win32")("host memory guards", () => {
   it("puts the server and link above bot computers and sshd out of the oom killer's reach", async () => {
     const dir = await mkdtemp(join(tmpdir(), "omb-install-units-"));
     try {
@@ -130,8 +133,8 @@ if ssh_guard; then echo "again 0" >> "$1/result"; else echo "again 1" >> "$1/res
 });
 
 describe("installer transport", () => {
-  const installer = new URL("../install.sh", import.meta.url).pathname;
-  it.each(["http://link.example.com", "ftp://link.example.com", "link.example.com"])("refuses a LINK_BASE of %s before doing anything", async (base) => {
+  const installer = fileURLToPath(new URL("../install.sh", import.meta.url));
+  it.skipIf(process.platform === "win32").each(["http://link.example.com", "ftp://link.example.com", "link.example.com"])("refuses a LINK_BASE of %s before doing anything", async (base) => {
     const failed = await run("sh", [installer, "abcdefghij-abcdefghijklmnopqrstuvwxyz"], { env: { PATH: "/usr/bin:/bin", TERM: "dumb", LINK_BASE: base } }).then(() => null, error => error);
     expect(failed?.code).toBe(1);
     expect(failed?.stderr).toContain("LINK_BASE must be an https:// address.");
@@ -144,7 +147,7 @@ describe("installer transport", () => {
   });
 });
 
-describe("basics", () => {
+describe.skipIf(process.platform === "win32")("basics", () => {
   // ffmpeg (the bot browser's H.264 live view) and poppler-utils (PDF text and page pictures) are best effort: a server
   // where they cannot be installed still installs
   it.each([["installs", 0], ["fails", 1]])("asks for ffmpeg and poppler-utils and carries on when apt %s", async (_name, fail) => {

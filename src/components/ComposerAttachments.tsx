@@ -1,9 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { ClipboardPaste, MessageSquareText, RotateCcw, X } from "../icons";
 import { Icon } from "./Icon";
 import { cn } from "@/lib/cn";
-import { intakeFiles } from "@/lib/intake-files";
+import { intakeFiles, type AttachNotice } from "@/lib/intake-files";
 import {
   attachmentImageUrl,
   formatSize,
@@ -41,7 +41,7 @@ export function ComposerAttachments({
   items: Attachment[];
   onAdd: (attachments: Attachment[]) => void;
   allowImages?: boolean;
-  onNotice: (notice: string | null) => void;
+  onNotice: (notice: AttachNotice | null) => void;
   /** A dropped file of notes another AI wrote: brought in, not attached. */
   onNotes?: (text: string) => void;
   onPendingChange?: (pending: boolean) => void;
@@ -144,6 +144,80 @@ export function ComposerAttachments({
   );
 }
 
+const GLOW_MS = 1_200;
+
+function attachmentLabel(attachment: Attachment): string {
+  return attachment.kind === "paste" ? t("composer.pastedText") : attachment.name;
+}
+
+/** A ring that lights up over a tile and fades out; a transition, so lighting it again mid-fade picks up from there. */
+function AttachmentGlow({ lit }: { lit: boolean }) {
+  return (
+    <span aria-hidden="true" data-attachment-glow={lit ? "" : undefined}
+      className={cn("pointer-events-none absolute inset-0 rounded-[inherit] inset-ring-[1.5px] inset-ring-accent transition-opacity ease-out",
+        lit ? "opacity-100 duration-[120ms]" : "opacity-0 duration-[700ms]")} />
+  );
+}
+
+/** The attachments just added (or asked for again by `flash`): each scrolls into view and lights up for a moment, so a
+ * paste or drop that lands past the visible end of the row is never silent. `added` names the newest for a status line. */
+function useLitAttachments(items: readonly Attachment[], flash: { id: string; at: number } | null | undefined, row: RefObject<HTMLDivElement | null>): { ids: ReadonlySet<string>; added: string | null } {
+  const known = useRef<Set<string> | null>(null);
+  const [lit, setLit] = useState<{ ids: ReadonlySet<string>; added: string | null }>({ ids: new Set(), added: null });
+  const light = useRef<(ids: string[], added: string | null) => void>(() => {});
+  const timer = useRef(0);
+  light.current = (ids, added) => {
+    if (!ids.length) return;
+    setLit({ ids: new Set(ids), added });
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setLit((now) => ({ ids: new Set(), added: now.added })), GLOW_MS);
+    const last = row.current?.querySelector<HTMLElement>(`[data-attachment-id="${CSS.escape(ids.at(-1)!)}"]`);
+    last?.scrollIntoView?.({ block: "nearest", inline: "nearest", behavior: movesLess() ? "auto" : "smooth" });
+  };
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  useLayoutEffect(() => {
+    const ids = items.map((a) => a.id);
+    const before = known.current;
+    known.current = new Set(ids);
+    // the draft's attachments as they were when the composer opened are not news
+    if (!before) return;
+    const fresh = ids.filter((id) => !before.has(id));
+    if (fresh.length) light.current(fresh, fresh.at(-1)!);
+  }, [items]);
+  useLayoutEffect(() => {
+    if (flash && known.current?.has(flash.id)) light.current([flash.id], null);
+  }, [flash]);
+  return lit;
+}
+
+/** The row holds more tiles than it shows, and on which sides tiles are hidden. */
+function useOverflows(row: RefObject<HTMLDivElement | null>, count: number): { overflows: boolean; start: boolean; end: boolean } {
+  const [edges, setEdges] = useState({ overflows: false, start: false, end: false });
+  useLayoutEffect(() => {
+    const el = row.current;
+    if (!el) { setEdges({ overflows: false, start: false, end: false }); return; }
+    const measure = () => {
+      // scrollLeft runs negative from the right edge in a right-to-left row
+      const left = Math.abs(el.scrollLeft), hidden = el.scrollWidth - el.clientWidth;
+      const next = { overflows: hidden > 1, start: left > 1, end: left < hidden - 1 };
+      setEdges((now) => now.overflows === next.overflows && now.start === next.start && now.end === next.end ? now : next);
+    };
+    measure();
+    el.addEventListener("scroll", measure, { passive: true });
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(measure) : null;
+    observer?.observe(el);
+    return () => { el.removeEventListener("scroll", measure); observer?.disconnect(); };
+  }, [row, count]);
+  return edges;
+}
+
+/** Fades the row out at a side that hides tiles, so a cut-off card reads as more to scroll to. */
+function edgeFade(edges: { start: boolean; end: boolean }): CSSProperties | undefined {
+  if (!edges.start && !edges.end) return undefined;
+  const mask = `linear-gradient(to right, ${edges.start ? "transparent, #000 32px" : "#000"}, ${edges.end ? "#000 calc(100% - 32px), transparent" : "#000"})`;
+  return { maskImage: mask, WebkitMaskImage: mask };
+}
+
 const TILE_REMOVE = "opacity-0 transition-[opacity,background-color] duration-[120ms] ease-[ease] group-hover/tile:opacity-100 focus-visible:opacity-100 touch:opacity-100";
 const CARD = "group/tile relative flex h-14 w-[calc(50%-4px)] min-w-[220px] max-w-[354px] shrink-0 items-center gap-2 rounded-[10px] bg-composer p-2 shadow-[0_0_0_0.5px_rgb(28_28_28/0.08),0_1px_4px_rgb(28_28_28/0.07),0_6px_12px_rgb(28_28_28/0.035)]";
 
@@ -151,18 +225,19 @@ const CARD = "group/tile relative flex h-14 w-[calc(50%-4px)] min-w-[220px] max-
  * grok's attachments inside the composer: 56px tiles 8px apart in one scrolling row above the field, files as
  * cards, and a one-line notice above them. The row rides the pill's top edge while the pill opens.
  */
-export function ComposerAttachmentStrip({ items, onRemove, onRetry, onDisplayInChatBox, notice, onNotice }: {
+export function ComposerAttachmentStrip({ items, onRemove, onRetry, onDisplayInChatBox, onNotice, flash }: {
   items: Attachment[];
+  /** An attachment to show again, as when the same text is pasted twice: it scrolls into view and lights up. */
+  flash?: { id: string; at: number } | null;
   onRemove: (id: string) => void;
   onRetry: (id: string) => void;
   onDisplayInChatBox: (attachment: PasteAttachment) => void;
-  notice: string | null;
-  onNotice: (notice: string | null) => void;
+  /** Clears the composer's attach notice once the person acts on a tile. */
+  onNotice: (notice: AttachNotice | null) => void;
 }) {
   const [preview, setPreview] = useState<{ images: PreviewImage[]; index: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
-  const shown = items.length > 0 || Boolean(notice);
-  useEffect(() => { if (!items.length) onNotice(null); }, [items.length, onNotice]);
+  const shown = items.length > 0;
   useLayoutEffect(() => {
     const strip = ref.current;
     const content = strip?.parentElement;
@@ -175,6 +250,10 @@ export function ComposerAttachmentStrip({ items, onRemove, onRetry, onDisplayInC
     strip.animate([{ transform: `translateY(${grow}px)` }, { transform: "none" }], { duration: 300, easing });
     strip.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, easing: "ease-out" });
   }, [shown]);
+  const row = useRef<HTMLDivElement>(null);
+  const lit = useLitAttachments(items, flash, row);
+  const edges = useOverflows(row, items.length);
+  const added = lit.added ? items.find((a) => a.id === lit.added) : undefined;
   if (!shown) return null;
   const images = items.flatMap((a) => {
     if (a.kind !== "image") return [];
@@ -186,9 +265,10 @@ export function ComposerAttachmentStrip({ items, onRemove, onRetry, onDisplayInC
   const retry = (id: string) => { onNotice(null); onRetry(id); };
   return (
     <div ref={ref} data-composer-strip className="mt-0.5 mb-0.5 flex min-w-0 flex-col gap-1">
-      {notice && <p role="status" className="px-0.5 text-[11px] leading-[14px] text-ink/56">{notice}</p>}
+      {edges.overflows && <p data-composer-attachment-count className="px-0.5 text-[11px] leading-[14px] text-ink/56">{t("composer.attach.count", { count: items.length })}</p>}
+      <span role="status" className="sr-only">{added ? t("composer.attach.added", { name: attachmentLabel(added), count: items.length }) : ""}</span>
       {items.length > 0 && (
-        <div data-composer-attachments role="list" aria-label={t("attach.gallery")} className="pointer-events-none -mx-[9px] -mt-1.5 -mb-[18px] flex min-w-0 flex-nowrap gap-2 overflow-x-auto px-[9px] pt-1.5 pb-[18px] [scrollbar-width:none] *:pointer-events-auto">
+        <div ref={row} data-composer-attachments data-edge-start={edges.start ? "" : undefined} data-edge-end={edges.end ? "" : undefined} style={edgeFade(edges)} role="list" aria-label={t("attach.gallery")} className="pointer-events-none -mx-[9px] -mt-1.5 -mb-[18px] flex min-w-0 flex-nowrap gap-2 overflow-x-auto px-[9px] pt-1.5 pb-[18px] [scrollbar-width:none] *:pointer-events-auto">
           {items.map((a) => a.kind === "image" ? (
             <div key={a.id} role="listitem" aria-label={a.failed ? `${a.name}, ${t("attach.uploadFailed")}` : a.name} data-composer-attachment data-attachment-id={a.id} data-attachment-kind="image" data-attachment-failed={a.failed ? "" : undefined} aria-busy={a.uploading || undefined}
               className="group/tile relative size-14 shrink-0 overflow-hidden rounded-[10px] border-[0.5px] border-ink/12 bg-composer">
@@ -214,6 +294,7 @@ export function ComposerAttachmentStrip({ items, onRemove, onRetry, onDisplayInC
                   <RotateCcw size={14} strokeWidth={2} aria-hidden="true" />
                 </button>
               )}
+              <AttachmentGlow lit={lit.ids.has(a.id)} />
               <button type="button" data-attachment-action="remove" onClick={() => remove(a.id)} aria-label={t("attach.removeNamed", { name: a.name })}
                 className={cn("absolute end-0.5 top-0.5 flex size-5 items-center justify-center rounded-full bg-ink text-app hover:bg-[color-mix(in_srgb,var(--color-ink),white_12%)]", !a.failed && TILE_REMOVE)}>
                 <Icon name="close" size={12} />
@@ -222,6 +303,7 @@ export function ComposerAttachmentStrip({ items, onRemove, onRetry, onDisplayInC
           ) : (
             <div key={a.id} role="listitem" aria-label={a.kind === "paste" ? t("composer.pastedText") : a.name} title={a.kind === "paste" ? a.text.slice(0, 4000) : a.path || undefined}
               data-composer-attachment data-attachment-id={a.id} data-attachment-kind={a.kind} aria-busy={(a.kind === "file" && a.uploading) || undefined} className={CARD}>
+              <AttachmentGlow lit={lit.ids.has(a.id)} />
               <span className="flex size-10 shrink-0 items-center justify-center">
                 {a.kind === "paste" ? (
                   <span className="chat-file-glyph flex h-10 w-8 items-center justify-center rounded-[6px] bg-composer text-ink/40" aria-hidden="true"><ClipboardPaste size={14} strokeWidth={1.75} /></span>

@@ -2,16 +2,18 @@
 // the disk image it cannot update itself, and it stops when the image is ejected.
 
 const node = (name) => globalThis.process.getBuiltinModule(name);
+// macOS paths: always POSIX, whichever host reads them
+const posix = () => node("node:path").posix;
 
 export function bundleOf(execPath) {
-  const path = node("node:path");
+  const path = posix();
   const app = path.resolve(execPath, "..", "..", "..");
   return app.endsWith(".app") ? app : null;
 }
 
 export function inApplications(bundle, home) {
   if (!bundle) return false;
-  const path = node("node:path");
+  const path = posix();
   return [path.join("/", "Applications"), path.join(home, "Applications")].some((dir) => bundle.startsWith(`${dir}${path.sep}`));
 }
 

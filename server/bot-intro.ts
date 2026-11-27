@@ -2,6 +2,7 @@
 // message, as a real turn on its own engine and model with its full instructions, from its name, role, template, skills,
 // apps, where it runs and what it knows about the person. The words to the model are control-plane context, never a line
 // the person wrote, so the chat shows only the bot's reply. When the engine cannot answer, the person gets a fixed hello.
+import type { BotVoice } from "./character.ts";
 import type { TalkingStyle } from "../shared/talking-style.ts";
 import type { Message } from "./store.ts";
 import { serverLine } from "./server-lines.ts";
@@ -41,6 +42,8 @@ export interface IntroFacts {
   /** The person's local time, from `introMoment`. */
   moment: IntroMoment;
   style: TalkingStyle;
+  /** "work" for a plainly work bot: its hello is crisp, with no friendly color. */
+  voice?: BotVoice;
   /** How it came to be: picked from the ready-made bots, made from scratch, brought in, or made by a bot they asked. */
   origin: { kind: "template" | "scratch" | "import" } | { kind: "bot"; by: string };
   /** What the person did last: the bot they wrote to and how long ago. */
@@ -136,7 +139,9 @@ export function introPrompt(facts: IntroFacts): string {
   ].filter(Boolean);
   return [
     "You were just created, and this is your very first message to the person, before they have written anything to you.",
-    "Write it the way someone who knows them would text them right now, not like a product tour. Read the moment: the time and day where they are (late at night, early morning, a Monday morning, a weekend) and what they were just doing, and let it color one short clause of your first line the way a friend's would (\"Hey, you're up late\", \"Happy Saturday\"), never a whole sentence about their day, without reciting the time or these facts. Sound like a sharp friend, not a product: no \"I'm here to help\", no list of everything you can do, and at most one light, original touch of personality.",
+    facts.voice === "work"
+      ? "Your role is work, so keep it crisp: no greeting beyond your name, no remark about their day, no joke. Say what you will handle for them in plain, exact words, the way a sharp new colleague would, not like a product tour."
+      : "Write it the way someone who knows them would text them right now, not like a product tour. Read the moment: the time and day where they are (late at night, early morning, a Monday morning, a weekend) and what they were just doing, and let it color one short clause of your first line the way a friend's would (\"Hey, you're up late\", \"Happy Saturday\"), never a whole sentence about their day, without reciting the time or these facts. Sound like a sharp friend, not a product: no \"I'm here to help\", no list of everything you can do, and at most one light, original touch of personality.",
     `Talk in the person's chosen style (${facts.style}), in Sentence case (capital letters where they belong, your name included) whatever case they type in, unless they asked you to write otherwise; match their length and their emoji or lack of it (described below). With no lines to go on, use no emoji.`,
     "Say who you are in a few words and what you can take off their plate right now. Ground every claim in what you really have: your role and standing instructions, your skills index, the connected apps listed below and in your instructions, your computer and browser, and what you know about them. Never claim an app, skill or access you do not have, never invent facts about them, and never point out what you do not know about them.",
     OFFERS[facts.style],

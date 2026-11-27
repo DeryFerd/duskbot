@@ -77,6 +77,12 @@ describe("a schedule's confirmation, in the person's words", () => {
     expect(result.text).toMatch(/tell the person what you set up and what you assumed: when it runs, saying the time zone as "India time", never as a zone id; where its results will appear \(here in this chat\); what each run covers; that the first run is tomorrow \(\w+, \w+ \d+\) at 9:00 AM India time; and that they can change, pause or stop it by saying so here\.$/);
   });
 
+  it("says a routine set up for another bot reports in that bot's own chat, not this one", async () => {
+    const result = await callTool("create_trigger", { when: "schedule", name: "AI news", instructions: "Send five bullets of AI news.", schedule, for_bot_id: "other-bot" }, applied("create").context);
+    expect(result.text).toContain("where its results will appear (in that bot's own chat);");
+    expect(result.text).not.toContain("here in this chat");
+  });
+
   it("says what changed and the next run for an update, and one sentence for the rest", async () => {
     const update = await callTool("manage_trigger", { trigger_id: "r-1", action: "update", changes: { schedule } }, applied("update").context);
     expect(update.text).toMatch(/Tell the person in one plain sentence what changed, saying the time zone as "India time", and that the next run is tomorrow/);

@@ -70,6 +70,9 @@ describe("effectfulCall", () => {
     expect(effectfulCall("agents_list_bots", "{}")).toBe(false);
     expect(effectfulCall("data_data_sql", "{}")).toBe(false);
     expect(effectfulCall("agents_use_tool", "not json")).toBe(true);
+    expect(effectfulCall("mcp_call_tool", JSON.stringify({ name: "gmail_gmail_read", arguments: {} }))).toBe(false);
+    expect(effectfulCall("mcp_call_tool", JSON.stringify({ name: "slack_slack_post", arguments: {} }))).toBe(true);
+    expect(effectfulCall("mcp_describe_tool", JSON.stringify({ name: "slack_slack_post" }))).toBe(false);
   });
 });
 
@@ -78,7 +81,14 @@ describe("retryDelay", () => {
   it("retries a transient failure within the attempts, waiting at least what the provider asked", () => {
     expect(retryDelay(new Error("429"), transient, 0)).toBeGreaterThan(0);
     expect(retryDelay(Object.assign(new Error("429"), { retryAfterMs: 20_000 }), transient, 0)).toBe(20_000);
-    expect(retryDelay(new Error("429"), transient, 2)).toBeNull();
+    expect(retryDelay(new Error("429"), transient, 3)).toBeNull();
+  });
+  it("spaces a rate limit's and a dropped connection's tries over about half a minute; other hiccups get two", () => {
+    expect(retryDelay(new Error("429"), transient, 2)).toBeGreaterThanOrEqual(17_000);
+    expect(retryDelay(new Error("fetch failed"), { transient: true, reason: "connection_reset" }, 2)).toBeGreaterThanOrEqual(6_800);
+    expect(retryDelay(new Error("fetch failed"), { transient: true, reason: "connection_reset" }, 3)).toBeNull();
+    expect(retryDelay(new Error("HTTP 503"), { transient: true, reason: "server_error" }, 1)).toBeGreaterThan(0);
+    expect(retryDelay(new Error("HTTP 503"), { transient: true, reason: "server_error" }, 2)).toBeNull();
   });
   it("never retries a terminal failure or one asking for a longer wait than a hiccup", () => {
     expect(retryDelay(new Error("401"), { transient: false, reason: "auth" }, 0)).toBeNull();
@@ -163,6 +173,28 @@ describe("ownsFailure", () => {
     expect(ownsFailure("Nothing was sent; the page did not load.")).toBe(true);
     expect(ownsFailure("Done.")).toBe(false);
     expect(ownsFailure("I've posted it, though the preview failed to load.")).toBe(false);
+  });
+
+  it.each([
+    "The search returned an error, so I don't have today's prices yet.",
+    "The calendar request timed out; try again in a minute.",
+    "I ran into a problem reading the sheet: it says access denied.",
+    "Unfortunately the page is unavailable right now.",
+    "I wasn't able to open the file.",
+    "I had trouble reaching Slack, so the summary below is from email only.",
+    "No pude enviar el correo: Gmail no está conectado.",
+    "La búsqueda falló, así que no tengo los precios.",
+    "Ich konnte die Datei nicht öffnen.",
+    "Das Senden ist fehlgeschlagen.",
+    "Je n'ai pas pu envoyer le message.",
+    "Não consegui abrir a planilha.",
+    "Non sono riuscito a inviare l'email.",
+  ])("reads a failure said in other words or another language: %s", (reply) => {
+    expect(ownsFailure(reply)).toBe(true);
+  });
+
+  it.each(["Here are today's three meetings.", "Listo, aquí tienes el resumen.", "Erledigt.", "No problem, here is the summary."])("does not read a plain answer as a failure: %s", (reply) => {
+    expect(ownsFailure(reply)).toBe(false);
   });
 });
 

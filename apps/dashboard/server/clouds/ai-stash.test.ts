@@ -14,6 +14,7 @@ const cleanup: Array<() => void> = [];
 afterEach(() => { for (const fn of cleanup.splice(0).reverse()) fn(); });
 const plan: DesktopPlan = { kind: "dedicated", placement: "dedicated", spec: { vcpu: 2, ramGb: 4, diskGb: 40 }, botComputers: null };
 const auth = JSON.stringify({ tokens: { access_token: "codex-secret-token" } });
+const gemini = { kind: "gemini-oauth" as const, auth };
 
 function fixture(sealKey: Buffer | null = Buffer.alloc(32, 7)) {
   const dataDir = mkdtempSync(join(tmpdir(), "dusk-ai-stash-")); cleanup.push(() => rmSync(dataDir, { recursive: true, force: true }));
@@ -44,14 +45,14 @@ it("takes only a ChatGPT login that is a JSON object, once, within its size", ()
 it("holds a sign-in sealed while the Cloud is made, hands it to the Cloud once it runs, then deletes it", async () => {
   const f = fixture(), c = f.order();
   f.service.activate(c.id, "sub1", plan);
-  await f.service.holdSignIns!("a", c.id, [{ kind: "codex-auth", auth }]);
+  await f.service.holdSignIns!("a", c.id, [gemini]);
   const stored = f.put.mock.calls[0]![0];
   expect(stored.sealed).not.toContain("codex-secret-token");
   expect(stored.expiresAt).toBe(1_790_000_000_000 + AI_STASH_TTL_MS);
   for (let n = 0; n < 20 && c.status === "provisioning"; n++) await f.service.reconcile();
   expect(c.status).toBe("running");
   await f.service.reconcile();
-  expect(f.home.signIns).toHaveBeenCalledExactlyOnceWith(c.origin, expect.any(String), [{ kind: "codex-auth", auth }]);
+  expect(f.home.signIns).toHaveBeenCalledExactlyOnceWith(c.origin, expect.any(String), [gemini]);
   expect(await f.store.pending()).toEqual([]);
   await f.service.reconcile();
   expect(f.home.signIns, "delivered once").toHaveBeenCalledOnce();
@@ -60,7 +61,7 @@ it("holds a sign-in sealed while the Cloud is made, hands it to the Cloud once i
 it("keeps it for another try when the Cloud can't take it yet", async () => {
   const f = fixture(), c = f.order();
   f.service.activate(c.id, "sub1", plan);
-  await f.service.holdSignIns!("a", c.id, [{ kind: "codex-auth", auth }]);
+  await f.service.holdSignIns!("a", c.id, [gemini]);
   f.home.signIns.mockRejectedValueOnce(new Error("down"));
   for (let n = 0; n < 20 && c.status === "provisioning"; n++) await f.service.reconcile();
   expect(f.home.signIns).toHaveBeenCalledOnce();
@@ -69,22 +70,33 @@ it("keeps it for another try when the Cloud can't take it yet", async () => {
   expect(await f.store.pending()).toEqual([]);
 });
 
-it("hands a Cloud on an older image the ChatGPT login alone when it refuses the kinds it doesn't know", async () => {
+it("drops the held sign-ins when a Cloud on an older image refuses their kind", async () => {
   const f = fixture(), c = f.order();
   f.service.activate(c.id, "sub1", plan);
-  const grok = { kind: "grok-auth" as const, auth };
-  await f.service.holdSignIns!("a", c.id, [{ kind: "codex-auth", auth }, grok]);
+  await f.service.holdSignIns!("a", c.id, [gemini]);
   f.home.signIns.mockRejectedValueOnce(Object.assign(new Error("refused"), { status: 400 }));
   for (let n = 0; n < 20 && c.status === "provisioning"; n++) await f.service.reconcile();
   await f.service.reconcile();
-  expect(f.home.signIns.mock.calls.map(call => (call as unknown[])[2])).toEqual([[{ kind: "codex-auth", auth }, grok], [{ kind: "codex-auth", auth }]]);
+  expect(f.home.signIns).toHaveBeenCalledOnce();
+  expect(await f.store.pending()).toEqual([]);
+});
+
+it("never hands the Cloud a login whose refresh token the computer it came from keeps renewing", async () => {
+  const f = fixture(), c = f.order(), other = f.order();
+  f.service.activate(c.id, "sub1", plan);
+  f.service.activate(other.id, "sub2", plan);
+  await f.service.holdSignIns!("a", c.id, [{ kind: "codex-auth", auth }, { kind: "grok-auth", auth }, gemini]);
+  await f.service.holdSignIns!("a", other.id, [{ kind: "codex-auth", auth }]);
+  for (let n = 0; n < 20 && (c.status === "provisioning" || other.status === "provisioning"); n++) await f.service.reconcile();
+  await f.service.reconcile();
+  expect(f.home.signIns).toHaveBeenCalledExactlyOnceWith(c.origin, expect.any(String), [gemini]);
   expect(await f.store.pending()).toEqual([]);
 });
 
 it("keeps a refused batch for another try when the refusal wasn't about the kinds", async () => {
   const f = fixture(), c = f.order();
   f.service.activate(c.id, "sub1", plan);
-  await f.service.holdSignIns!("a", c.id, [{ kind: "codex-auth", auth }, { kind: "grok-auth", auth }]);
+  await f.service.holdSignIns!("a", c.id, [gemini]);
   f.home.signIns.mockRejectedValueOnce(Object.assign(new Error("down"), { status: 503 }));
   for (let n = 0; n < 20 && c.status === "provisioning"; n++) await f.service.reconcile();
   expect(f.home.signIns).toHaveBeenCalledOnce();

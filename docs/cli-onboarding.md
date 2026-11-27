@@ -1,18 +1,15 @@
 # Terminal setup
 
-Install [Node.js](https://nodejs.org/) 24 or newer, then choose either way to run dusk bot:
+Install [Node.js](https://nodejs.org/) 24 or newer, then install dusk bot from the newest GitHub release
+(it is not on the npm registry, so installing it by name with npm or npx does not work):
 
 ```sh
-# Install once, then use the short command:
-npm install -g duskbot
+npm install --global --prefix "$HOME/.local" https://github.com/DuskBotAI/duskbot-releases/releases/latest/download/duskbot.tgz
+export PATH="$HOME/.local/bin:$PATH"   # once, or add it to your shell profile
 duskbot
 ```
 
-Or, without a global install:
-
-```sh
-npx duskbot
-```
+`duskbot update` installs newer releases later.
 
 Use the same command next time. The first launch guides you through setup; later launches reuse your saved AI connection and phone-access choice. `duskbot start` is the same as the bare command. If that workspace is already running, dusk bot opens it instead of starting a second server.
 
@@ -61,7 +58,9 @@ The examples below assume a global install; prefix them with `npx` otherwise.
 | `duskbot --no-open` | Start without opening a browser. |
 | `duskbot --local` | Ignore saved remote access for this launch; keep the saved choice for next time. |
 | `duskbot --no-pair` | Suppress phone setup prompts and pairing invitations. This does **not** turn off saved remote access; use `--local` for that. |
-| `duskbot pair` | Create another phone invitation while the configured workspace and HTTPS connection are running. |
+| `duskbot pair` | Pair another device while the workspace runs. In a terminal it asks which phone and pairs the phone app; in a script it prints a browser sign-in code. |
+| `duskbot pair --phone ios\|android [--public-url https://host]` | Pair the phone app as a paired phone, the only kind that gets notifications. Needs an HTTPS address the phone can reach (or the link service) and says so plainly when there is none. `--public-url` names that address for this one code; the server checks it is really this server. |
+| `duskbot push` / `duskbot push test` | List paired phones and whether each registered for notifications; `test` sends each one a test notification and prints what the push service answered. |
 | `duskbot sessions` | List paired devices; `duskbot sessions revoke ID` signs one out. |
 | `duskbot serve` | Start without onboarding prompts or automatic browser opening; specify remote-access flags explicitly for a service. |
 | `duskbot login` | Sign in to a dusk bot account for `--tunnel`; this does not sign in to an AI provider or start the tunnel. dusk.bot does not run the service behind it today, so it says so and points to the app's one line, `--tailscale` or `--domain`. |

@@ -37,6 +37,7 @@ export const STORE_LAYOUTS: Record<string, StoreLayout> = {
     invoices: { collection: "billing_invoices", key: byId, indexes: [...byAccount, { keys: { providerPaymentId: 1 }, unique: true }] },
     webhookEvents: { collection: "billing_webhook_events", key: byId, indexes: [{ keys: { at: 1 } }] },
     feedback: { collection: "billing_feedback", key: byId },
+    winbacks: { collection: "billing_winbacks", key: byId, indexes: byAccount },
     closures: { collection: "billing_closures", key: byId },
     refunds: { collection: "billing_refunds", key: byId },
     providerCancels: { collection: "billing_provider_cancels", key: byId },

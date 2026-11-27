@@ -94,7 +94,8 @@ export interface ActivityReport {
   timeZone: string;
   /** only days with activity, YYYY-MM-DD in the workspace's time zone */
   days: Array<{ date: string } & ActivityTotals>;
-  byBot: Array<{ botId: string; botName: string } & ActivityTotals>;
+  /** `model`: the one model this bot's turns used in the window, null when it used several; workspaces from before it leave it out. */
+  byBot: Array<{ botId: string; botName: string; model?: string | null } & ActivityTotals>;
   byModel: Array<{ model: string } & ActivityTotals>;
   totals: ActivityTotals;
 }
@@ -331,7 +332,7 @@ const dashboardSections: Record<string, DashboardParser> = {
   }), 200),
   activity: dashboardObject({ from: dashboardText(), to: dashboardText(), timeZone: dashboardText(),
     days: dashboardArray(dashboardObject({ date: dashboardText(), ...dashboardTotals }), 400),
-    byBot: dashboardArray(dashboardObject({ botId: dashboardId, botName: dashboardName, ...dashboardTotals }), 200),
+    byBot: dashboardArray(dashboardObject({ botId: dashboardId, botName: dashboardName, model: dashboardOptional(dashboardNullable(dashboardText())), ...dashboardTotals }), 200),
     byModel: dashboardArray(dashboardObject({ model: dashboardText(), ...dashboardTotals }), 100), totals: dashboardObject(dashboardTotals),
   }),
   devices: dashboardObject({ thisDevice: dashboardObject({ label: dashboardName, kind: dashboardEnum("mac", "linux", "windows", "server") }),

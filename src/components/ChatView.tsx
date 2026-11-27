@@ -39,7 +39,7 @@ import { ScreenAccessNotice } from "./ScreenAccessNotice";
 import { ComposerNoticeSlot } from "./ComposerNoticeSlot";
 import { macCuaPermissionMessage, missingMacCuaPermissions } from "@/lib/mac-cua-permissions";
 import { claudeUpdateTarget, failedTurnCause, signedOutEngine } from "@/lib/failed-turn";
-import { blockerDetail, failedReplyDetail, failedReplyKind } from "@/lib/failed-reply";
+import { blockerDetail, failedReplyDetail, failedReplyKind, ownKeyCommand } from "@/lib/failed-reply";
 import { resetTime } from "@/lib/limit-resets";
 import { openBotSettings } from "./bot-panel/panel-link";
 import { providerName } from "@/lib/simple-model-menu";
@@ -99,7 +99,7 @@ import { MessageBoundary } from "./MessageBoundary";
 import { RichMessageRow, UserLineNote, richRowKind } from "./RichMessageRow"; import { SetupOffer } from "./SetupOffer";
 import { Composer } from "./Composer"; import { ComposerSignInNotice } from "./ComposerSignInNotice"; import { FailedReplyCard, FoldedNoticesContext, foldedNoticeIds, useTrailingRows } from "./FailedReplyCard";
 import { CARD_ACTION, ChatErrorBanner, ChatErrorCard, ChatNotice } from "./ChatErrorBanner";
-import { ThreadContextWarning } from "./ContextWarning";
+import { ThreadContextWarning } from "./ContextWarning"; import { CompactionNote, compactionShown } from "./CompactionNote"; import { isAutoSummaryRow } from "@/lib/auto-summary";
 import { UsageAlert, useLimitResetContinue } from "./EngineUsage";
 import { ChatFindBar } from "./ChatFindBar";
 import { QuotedText, ReplyQuote } from "./ReplyQuote"; import { useQuotedMessage } from "@/lib/quoted-messages";
@@ -313,7 +313,7 @@ export function FailedTurnRow({ tool, engine, onRetry, botId, threadId }: {
   const headline = signedOut ? t("chat.error.signedOut", { name: signedOut.displayName })
     : limited ? (tool.limitResetsAt ? t("failedReply.limitHit", { ai, time: resetTime(tool.limitResetsAt) }) : t("failedReply.limitHitUnknown", { ai }))
     : tool.blocker ? blockerDetail(tool.blocker)
-    : failedReplyDetail(kind, engine?.displayName ?? t("failedReply.yourAi"), false);
+    : failedReplyDetail(kind, engine?.displayName ?? t("failedReply.yourAi"), false, ownKeyCommand(engine));
   return (
     <ErrorRow
       message={cause}
@@ -776,13 +776,13 @@ const noneTransparent = () => false;
 const hiddenSteps = (item: TranscriptItem) => item.kind !== "message";
 
 function hiddenChatRow(message: Message, botId: string, showToolCalls: boolean): boolean {
-  if (message.reaction || message.quietRun || isCancelledTranscriptRow(message)) return true;
+  if (message.reaction || message.quietRun || isAutoSummaryRow(message) || isCancelledTranscriptRow(message)) return true;
   if (message.role === "bot" && message.kind === "text" && !message.attachments?.length && SILENT_LINE.test(message.text ?? "")) return true;
   switch (richRowKind(message)) {
     case "activity":
       return Boolean(message.peerResume) || (!message.dataResult && !isStatusActivity(message) && quietRow(message, showToolCalls));
     case "compaction":
-      return true;
+      return !compactionShown(message);
     case "digest":
     case "screen":
       return !showToolCalls;
@@ -955,7 +955,7 @@ const MessagesList = memo(function MessagesList({
             case "digest":
               return <DigestChip message={m} />;
             case "compaction":
-              return null;
+              return <CompactionNote message={m} />;
             case "screen":
               return <ScreenFrame threadId={threadId} message={m} />;
             default: {
@@ -1178,7 +1178,8 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
   const mountDue = useReached(!turnBusy ? null : turnStartedAt && messages.length > 0 ? turnStartedAt + mountDelay : 0);
   // notes from another AI being brought in: the import's own steps are this bot's working row until its summary lands
   const importing = useNotesWork(bot.id);
-  const presenceVisible = !stopCut && (hold.typing || (waiting && mountDue) || teammatesWorking || Boolean(importing) || networkWait);
+  const compacting = Boolean(bot.busy && bot.tasks?.find((task) => task.threadId === bot.threadId)?.compacting); // a summary the person waits on is the working line
+  const presenceVisible = !stopCut && (hold.typing || (waiting && mountDue) || teammatesWorking || Boolean(importing) || networkWait || compacting);
   // while the turn runs its notices are the working row's to say, not the chat's too; once it ends, what it left is one
   // card above the composer
   const trailing = useTrailingRows(messages, !bot.busy);
@@ -1264,7 +1265,7 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
         className={cn(
           // A container query never matches the container itself, so the row that wraps is the child below.
           "@container/chathead",
-          simpleHead ? "px-5 pt-2.5 pb-2.5 max-md:pl-14 max-md:pr-3" : "px-5 py-3 pl-11 md:pl-5 max-md:pl-14 max-md:pr-3",
+          simpleHead ? "px-5 pt-2.5 pb-2.5 max-md:pl-[var(--narrow-lead,3.5rem)] max-md:pr-3" : "px-5 py-3 pl-11 md:pl-5 max-md:pl-[var(--narrow-lead,3.5rem)] max-md:pr-3",
         )}
       >
         <div data-chathead-row className={cn("flex items-center justify-between", phone ? "gap-2" : "@max-[30rem]/chathead:flex-wrap @max-[30rem]/chathead:gap-y-1 @min-[30rem]/chathead:grid @min-[30rem]/chathead:grid-cols-[minmax(0,1fr)_minmax(0,auto)_minmax(max-content,1fr)]")}>
@@ -1460,12 +1461,12 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
             wordsAtOnce
             simple
             className={cn(!statusSlot && presenceUnderBubble && SIMPLE_STACKED)}
-            label={networkWait ? t("mobile.chat.waitingForConnection") : teammatesWorking ? t("chat.teammatesWorking") : importing && !turnBusy ? importing : undefined}
+            label={networkWait ? t("mobile.chat.waitingForConnection") : compacting ? t("chat.compacting") : teammatesWorking ? t("chat.teammatesWorking") : importing && !turnBusy ? importing : undefined}
             visible={presenceVisible}
             {...now}
             // grok shows no steps in the chat: the list under the line only with tool calls shown
             card={showToolCalls ? now.card : undefined}
-            phrases={networkWait || teammatesWorking || (importing && !turnBusy) ? undefined : writing ? typingPhrases : turnLabel ? [turnLabel] : now.phrases}
+            phrases={networkWait || compacting || teammatesWorking || (importing && !turnBusy) ? undefined : writing ? typingPhrases : turnLabel ? [turnLabel] : now.phrases}
             phase={writing ? TYPING_PHASE : turnLabel ? `label:${turnLabel}` : now.phase}
             seed={presenceSeed}
             since={busySince ?? (turnBusy ? turnStartedAt ?? null : null)}

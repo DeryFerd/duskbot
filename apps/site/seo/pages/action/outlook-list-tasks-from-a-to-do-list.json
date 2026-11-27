@@ -12,7 +12,7 @@
     "ai list tasks microsoft to do"
   ],
   "answer": "**see what needs doing before the week gets away from you.** through outlook, a bot reads one microsoft to do list with task statuses and due dates. name the list and it finds it.\n\nyou get a private checklist with undated work kept separate. long lists arrive in parts; ask it to reach the end.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,7 +45,7 @@
     "toolkit": "outlook",
     "slug": "OUTLOOK_LIST_TODO_TASKS"
   },
-  "what": "**get the deadlines and the forgotten tasks in one view.** the bot can filter a list by status, importance or dates, then sort by due date or title. keep tasks without deadlines in their own group.\n\nname the list and say whether to include completed work. for long lists, ask it to keep fetching until the end. that first batch can leave half your backlog out.",
+  "what": "**get the deadlines and the forgotten tasks in one view.** the bot can filter a list by status, importance or dates, then sort by due date or title. keep tasks without deadlines in their own group.\n\nname the list and say whether to include completed work. for long lists, ask it to keep fetching until the end. that first batch can leave half your backlog out.\n\na task with a hard date often needs real time set aside. [create calendar event](/integrations/outlook/create-calendar-event) can block that time, and [create to do task](/integrations/outlook/create-to-do-task) adds the follow-ups the review turns up.",
   "uses": [
     "**bring the household maintenance list back into view.** see due dates without assigning new ones.",
     "**prepare for a planning call.** read important tasks without marking them complete.",
@@ -119,5 +119,9 @@
   "tip": {
     "text": "ask what the filter left out. an empty short list can hide a busy long one."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "freya's home list holds a boiler service, a gutter clean and a window quote.\nonly the boiler service has a due date.",
+    "after": "due soon: boiler service, friday\nno date yet: gutter clean, window quote\nnothing marked complete. no dates added."
+  }
 }

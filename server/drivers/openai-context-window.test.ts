@@ -34,7 +34,7 @@ it("carries discovered capacity into compaction and reported turn usage", async 
   try {
     const window = contextWindowFor(MODEL, inst.models);
     expect(window).toBe(262144);
-    expect(compactBudget(window)).toBe(Math.floor(window * 0.8));
+    expect(compactBudget(window)).toBe(Math.min(Math.floor(window * 0.8), 200_000));
     await inst.adapter.sendTurn({ threadId: "window", text: "hello", model: MODEL });
     await recorder.until(event => event.type === "turn.completed");
     expect(recorder.events.find(event => event.type === "thread.token-usage.updated")).toMatchObject({ contextWindow: window, contextTokens: 102 });

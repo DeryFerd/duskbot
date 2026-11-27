@@ -134,8 +134,8 @@ export interface BotMovedTo {
 /** One task = one conversation with its own context, thread and provider
  * session. */
 export interface WireTask extends InboxTask {
-  /** Outstanding handoffs, not an active provider turn. */
-  waitingForTeammates?: boolean;
+  /** Outstanding handoffs, not an active provider turn. compacting: a summary the person waits on is being written. */
+  waitingForTeammates?: boolean; compacting?: true;
   threadId: string;
   title: string;
   createdAt: number;
@@ -435,7 +435,7 @@ export type BotVisibility = "everyone" | "admins" | { people: string[] };
  * request raised. */
 export interface ResolvedSender {
   name: string;
-  id?: string;
+  id?: string; /** Not the server's owner or an admin: a member, a chat-only device, or another app relaying for someone. */ member?: true;
 }
 
 /** Who answered a card: a signed-in person (named as their messages are), the owner on this machine, a session-less
@@ -476,7 +476,7 @@ export interface WireMessage extends HelperIntroField, SetupCardFields, WaitLine
     firstKeptId: string;
     foldedThroughId: string;
     tokensBefore: number;
-    by: "person" | "harness";
+    by: "person" | "harness"; awayHours?: number; // awayHours: written after the person was away that long (server/idle-compaction.ts)
   };
   /** Renderers receive only the allowlisted /api/attachments URL. `file`
    * entries are opened through the message-scoped file route, never by path. */
@@ -557,7 +557,7 @@ export interface WireMessage extends HelperIntroField, SetupCardFields, WaitLine
   /** A bot line a "post" webhook wrote: whoever called the webhook chose
    * its words. On a room line this also carries `from`, so the room renders
    * the webhook's bot as the speaker. */
-  webhookPost?: boolean; /** A routine run's NOTHING NEW reply in the chat it worked in: kept for its session, never shown. */ quietRun?: true;
+  webhookPost?: boolean; /** A routine run's NOTHING NEW reply in the chat it worked in: kept for its session, never shown. */ quietRun?: true; autoSummary?: true; // the warm summary's line: kept, never shown
   /** user messages sent INTO a running turn (capabilities.queueing). */
   steered?: boolean;
   /** user messages a peer bot handed to this thread's RUNNING turn: peer

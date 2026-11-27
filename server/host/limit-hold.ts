@@ -31,6 +31,8 @@ export const OPEN_RECHECK_MS = 60_000;
 export const AFTER_START_MS = 30_000;
 /** setTimeout's delay is a signed 32-bit number; a longer wait is armed in steps. */
 const MAX_TIMER_MS = 2_147_000_000;
+/** Node's timers stand still while the computer sleeps, so a wait looks at the clock at least this often. */
+export const CLOCK_CHECK_MS = 60_000;
 /** How long a resumed turn's failure waits for the limit path to claim it before the wait is dropped. */
 const CLAIM_MS = 15_000;
 const REQUEST_QUOTE_MAX = 1_500;
@@ -139,13 +141,24 @@ function savedTurn(value: unknown): HeldTurn | null {
   };
 }
 
+/** Runs `run` once the wall clock reaches `ms` from now, looking at it every CLOCK_CHECK_MS: a reset that passed while
+ * the computer slept (lid shut overnight) is caught within a minute of waking, not hours after. */
+export function wallClockTimer(ms: number, run: () => void, now: () => number = Date.now): { cancel(): void } {
+  const due = now() + ms;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const arm = (left: number) => { timer = setTimeout(check, Math.min(Math.max(0, left), CLOCK_CHECK_MS)); timer.unref?.(); };
+  const check = () => {
+    const left = due - now();
+    if (left <= 0) { timer = undefined; run(); return; }
+    arm(left);
+  };
+  arm(ms);
+  return { cancel: () => { if (timer) clearTimeout(timer); timer = undefined; } };
+}
+
 export function createLimitHold(deps: LimitHoldDeps) {
   const now = deps.now ?? Date.now;
-  const after = deps.after ?? ((ms: number, run: () => void) => {
-    const timer = setTimeout(run, ms);
-    timer.unref?.();
-    return { cancel: () => clearTimeout(timer) };
-  });
+  const after = deps.after ?? ((ms: number, run: () => void) => wallClockTimer(ms, run));
   const turns = new Map<string, HeldTurn>();
   const timers = new Map<string, { cancel(): void }>();
   let started = false;
@@ -291,6 +304,12 @@ export function createLimitHold(deps: LimitHoldDeps) {
       arm(turn);
       pausedLine(turn);
       return turn;
+    },
+
+    /** When the soonest waiting turn carries on, for the desktop's keep-awake. */
+    soonestWake(): number | undefined {
+      const due = [...turns.values()].filter((turn) => !turn.resuming).map((turn) => turn.wakeAt);
+      return due.length ? Math.min(...due) : undefined;
     },
 
     /** Ends the wait: the person pressed Stop, sent another message, or chose another way on. */

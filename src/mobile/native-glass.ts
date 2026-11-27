@@ -135,7 +135,8 @@ export type GlassEvent =
   | { type: "takeoverMenu"; target: TakeoverGlassButtonId; key: string; text?: string }
   | { type: "viewerTap"; target: "close" | "share" }
   | { type: "pillTap"; slot: "top" | "bottom"; id: string; kind: "pill" | "action" | "dismiss" }
-  | { type: "button"; index: number; kind?: GlassButtonKind }
+  /** `alternate`: Send was held, which sends with the other follow-up as a Ctrl/⌘-click does (older apps never set it) */
+  | { type: "button"; index: number; kind?: GlassButtonKind; alternate?: boolean }
   | { type: "text"; text: string; edit?: number }
   | { type: "submit" }
   | { type: "focus"; focused: boolean }
@@ -743,8 +744,11 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
       const left = chatEl?.closest(".mobile-page")?.getBoundingClientRect().left ?? 0;
       const title = navEl?.querySelector("[data-glass=title]");
       const header = chatEl && navEl && title && !covered(title, chatEl) ? readHeader(navEl, left) : null;
+      // the line the page's composer rests on, read live: a bottom inset that settles after the chat opened (a cold start
+      // into it) never fires a resize, and a stale one drew the native composer a home indicator above the page's room
       const kb = parseFloat(root.style.getPropertyValue("--m-kb")) || 0;
-      const baseline = window.innerHeight - Math.max(safeBottom, kb);
+      const chatPad = chatEl ? parseFloat(getComputedStyle(chatEl).paddingBottom) : NaN;
+      const baseline = window.innerHeight - (Number.isFinite(chatPad) ? chatPad : Math.max(safeBottom, kb));
       const calling = callHoldsComposer(chatEl);
       const read = chatEl && shellEl && !calling && !covered(shellEl, chatEl) ? readComposer(shellEl, baseline, left, transcriptRoom(chatEl), allowReply, allowAttachments, thumbCache, attachmentCache) : null;
       const jumpEl = glass.jump ? jump() : null;
@@ -818,7 +822,9 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
             kbTrace("send tap", { kind: event.kind, keyboard: root.dataset.keyboard ?? "down" });
             sends.tapped(liveField()?.value ?? "", performance.now(), nativeEdit);
           }
-          click((event.kind && elements.find((el) => buttonKind(el) === event.kind)) || elements[event.index]);
+          const target = (event.kind && elements.find((el) => buttonKind(el) === event.kind)) || elements[event.index];
+          if (event.alternate && target instanceof HTMLElement) target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true, ctrlKey: true }));
+          else click(target);
           break;
         }
         case "text": {

@@ -390,6 +390,16 @@ describe("the page's file picker and downloads", () => {
     expect(existsSync(join(fixture.dataDir, "browser-uploads"))).toBe(false);
   });
 
+  it("reads a small refused upload to its end and keeps the connection, so the client gets the answer, not a reset", async () => {
+    const fixture = await serve();
+    const body = new FormData();
+    body.append("file", new File(["hello"], "notes.txt", { type: "text/plain" }));
+    const refused = await fetch(`http://${fixture.origin}/api/bots/pepper/browser/upload?chooser=bogus`, { method: "POST", body });
+    expect(refused.status).toBe(409);
+    expect(refused.headers.get("connection")).not.toBe("close");
+    expect(fixture.answers).toEqual([]);
+  });
+
   it("takes one upload at a time from each person", async () => {
     const fixture = await serve();
     const [host, port] = fixture.origin.split(":");

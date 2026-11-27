@@ -45,7 +45,7 @@ it("lets a bot stay quiet with (pass) in a 1:1 chat without flashing (pass), mar
 
     const dump = JSON.parse(readFileSync(fixture.fixtureDumpPath, "utf8"));
     expect(dump.systemPrompt).toContain("Know when not to reply: in a 1:1 chat");
-    expect(dump.systemPrompt).toContain("end with just (pass)");
+    expect(dump.systemPrompt).toContain("gets just (pass) (nothing is sent), or one react and (pass)");
 
     await api("PATCH", `/api/bots/${bot.id}`, { unread: false });
     expect((await botRow()).unread).toBe(false);

@@ -12,7 +12,7 @@
     "ai clean gmail trash"
   ],
   "answer": "**clear the old shipping notice and keep the booking you still need.** a bot can move a gmail message to trash while leaving the rest of its conversation alone. you can recover it until trash empties. it still uses storage until then. trash moves don't use sending approval, so put 'ask me before moving anything' in the request.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -43,7 +43,7 @@
     "toolkit": "gmail",
     "slug": "GMAIL_MOVE_TO_TRASH"
   },
-  "what": "**trash one email without wiping the conversation.** the bot searches for the message and checks its subject and first lines. other replies stay where they are.\n\ntrash keeps a recovery path until it empties. it doesn't free storage on its own. for a large clear-out, ask about a bulk action rather than repeating this one.",
+  "what": "**trash one email without wiping the conversation.** the bot searches for the message and checks its subject and first lines. other replies stay where they are.\n\ntrash keeps a recovery path until it empties. it doesn't free storage on its own. for a large clear-out, [change labels in bulk](/integrations/gmail/batch-modify-gmail-messages) rather than repeating this one. trashed the wrong email? [restore it from trash](/integrations/gmail/untrash-message).",
   "uses": [
     "**drop the old delivery notice.** keep the replacement that has the right date.",
     "**remove a duplicate booking email.** leave the amended confirmation alone.",
@@ -106,6 +106,10 @@
     {
       "mistake": "matching only a common subject",
       "fix": "add the sender and date range. read the preview before saying yes."
+    },
+    {
+      "mistake": "picking the email by its place in a list",
+      "fix": "the bot needs the message's own id. let it search, then read back the subject and first lines."
     }
   ],
   "tip": {
@@ -120,5 +124,9 @@
       "the request forbids emptying trash"
     ]
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "thread with dunmore deliveries:\nnotice for 12 may\nreplacement notice for 14 may\nyour reply",
+    "after": "the 12 may notice moved to trash.\nthe 14 may notice and your reply stay put.\nstorage use unchanged until trash empties."
+  }
 }

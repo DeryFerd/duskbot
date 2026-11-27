@@ -73,8 +73,7 @@ computer. A server installed before this has it after its next update; until
 then run `sudo -u dusk /home/dusk/.local/bin/duskbot pair --label desktop`.
 
 Already running dusk bot? The sheet's last choice takes what
-`duskbot pair --label desktop` (or `npx duskbot pair --label desktop`, for a
-server started with npx) prints on it: paste the whole output into the first
+`duskbot pair --label desktop` prints on it: paste the whole output into the first
 field and the app picks the server's public pairing link out of it. With no
 public address it prints only a code; then enter the address and that code.
 A server linked only through the relay has no address to enter: a new line from
@@ -95,7 +94,7 @@ Runs fully on a server:
 - text-to-speech (with a key), the web UI (the server serves it itself)
 
 - a browser for bots, once the engine is installed on the server
-  (`npx duskbot browser install`, or nothing to do in the Docker image,
+  (`duskbot browser install`, or nothing to do in the Docker image,
   which ships it): each bot gets its own isolated, persistent session.
   Watching it live from the app is the next step.
   It reaches the public internet and the dev servers a bot starts itself,
@@ -106,13 +105,20 @@ Desktop-only for now (needs the Mac/Linux app):
 
 - dictation/voice, controlling the host desktop
 
-## Quickest: one command with Node
+## Quickest: install with Node
 
-On any machine with Node 24 or newer (a VPS, a Mac mini, a Raspberry Pi):
+On any machine with Node 24 or newer (a VPS, a Mac mini, a Raspberry Pi), install the
+server and CLI from the newest GitHub release, then start it:
 
 ```sh
-npx duskbot start
+npm install --global --prefix "$HOME/.local" https://github.com/DuskBotAI/duskbot-releases/releases/latest/download/duskbot.tgz
+export PATH="$HOME/.local/bin:$PATH"   # once, or add it to your shell profile
+duskbot start
 ```
+
+The package is not on the npm registry, so installing it by name with npm or npx
+does not work. Every release has the package as `duskbot-<version>.tgz` (and
+`duskbot.tgz`, always the newest) on https://github.com/DuskBotAI/duskbot-releases/releases.
 
 First launch asks you to choose AI access, connect an account or API key,
 and choose the default model for new bots. Existing sign-ins can be reused;
@@ -123,8 +129,8 @@ explains the choices, key storage, and how to run setup again safely.
 It then starts the server and keeps your data in `~/.duskbot`. If you
 choose phone access, it prints a pairing link and QR code only after checking
 the HTTPS connection. Choosing **Skip for now** keeps the workspace local-only
-and creates no pairing invitation. Use `npx duskbot setup` to configure without starting, or
-`npx duskbot serve` to start non-interactively with your existing config
+and creates no pairing invitation. Use `duskbot setup` to configure without starting, or
+`duskbot serve` to start non-interactively with your existing config
 (for services and scripts).
 
 The npm package does not include engine CLIs (`claude`, `codex`, …); setup
@@ -136,23 +142,23 @@ directories, not all under `.duskbot`.
 For a Linux service, the [VPS guide](deploy-vps.md#before-you-start) shows the
 account setup, engine installation, and browser dependency installation.
 After installing browser libraries as administrator, also run
-`npx duskbot browser install` as the service user so that user's browser
+`duskbot browser install` as the service user so that user's browser
 is present. Ways to make the server reachable from elsewhere:
 
 - **On your Tailscale network, no domain needed:**
-  `npx duskbot serve --tailscale`. Tailscale terminates HTTPS with its
+  `duskbot serve --tailscale`. Tailscale terminates HTTPS with its
   own certificate and the link uses this machine's MagicDNS name, so only
   devices on your tailnet can reach it. Needs Tailscale signed in and HTTPS
   certificates enabled for the tailnet (admin console → DNS).
 - **No domain, no proxy, no open port:** use [the app's one line](#from-the-app-one-line-any-way-in)
   instead of `npx`. It links the server to your app through the dusk bot
   relay or a Cloudflare quick tunnel, with no account or sign-in.
-  `npx duskbot login` and `npx duskbot serve --tunnel` sign in to a secure
+  `duskbot login` and `duskbot serve --tunnel` sign in to a secure
   access service that dusk.bot does not run today, so they fail and say so.
 - **Your own domain, still one command:**
 
   ```sh
-  npx duskbot serve --domain maus.example.com
+  duskbot serve --domain maus.example.com
   ```
 
   Point the domain's A record at this machine and open ports 80 and 443.
@@ -161,13 +167,13 @@ is present. Ways to make the server reachable from elsewhere:
   and renews the certificate from Let's Encrypt. On Linux, binding ports 80
   and 443 as a normal user needs one privilege grant; when Caddy reports the
   refusal, `serve` prints the exact `setcap` command to run once.
-- **Behind your own proxy or domain:** `npx duskbot serve --public-url
+- **Behind your own proxy or domain:** `duskbot serve --public-url
   https://maus.example.com`, with the proxy rules from "Putting a proxy in
   front".
 
-Later: `npx duskbot pair --label "Kitchen iPad"` for another device
+Later: `duskbot pair --label "Kitchen iPad"` for another device
 (`--client` for one that may chat but not change settings), and
-`npx duskbot sessions` to see or revoke them. `duskbot serve` is a
+`duskbot sessions` to see or revoke them. `duskbot serve` is a
 plain foreground process. For unattended use, follow the
 [systemd example](deploy-vps.md#keep-it-running), which installs a chosen
 release and runs its binary directly. Restarting that service does not
@@ -295,7 +301,7 @@ DUSK_DATA_DIR="$HOME/.duskbot" DUSK_PORT=8799 \
 For something durable, let the CLI write the service for you:
 
 ```sh
-npx duskbot service install --domain maus.example.com   # or --tailscale, or nothing
+duskbot service install --domain maus.example.com   # or --tailscale, or nothing
 ```
 
 It renders a systemd unit (Linux) or a launchd agent (macOS) that runs the
@@ -304,8 +310,8 @@ for `--domain`, grants the unit the capability to bind ports 80 and 443
 without root. The file is written next to your data and the two commands
 that install and start it are printed (they need `sudo` on Linux).
 `duskbot service uninstall` prints the reverse. Install the package
-permanently first (`npm install -g duskbot`): a service must not point
-at an `npx` cache that npm may prune.
+first ([Quickest](#quickest-install-with-node)), so the service runs
+`$HOME/.local/bin/duskbot`.
 
 Engine CLIs read their logins from the service user's home: sign them in
 from Settings → Models (below), or as that user in a terminal, before you
@@ -380,7 +386,7 @@ reach it. On the server:
 
 ```sh
 duskbot pair                             # the app's one-line install
-npx duskbot pair                         # npm install
+duskbot pair                         # npm install
 pnpm dusk pair                                # from a checkout
 docker compose exec dusk node dist-server/duskbot.js pair   # Docker
 ```
@@ -398,7 +404,9 @@ to a server…**, or **Settings → Servers**. Enter the server's
 HTTPS address or full pairing link, with an optional name. Custom domains and
 Cloudflare tunnel addresses work; Tailscale is not required. Generate a fresh
 link for each device: `duskbot pair --label "My desktop"` (with `npx` in front on an npm install) creates an
-owner link without the phone wizard; add `--client` for chat-only access.
+owner link without the phone wizard; add `--client` for chat-only access. That code signs in a browser or the
+desktop app; for the phone app use `duskbot pair --phone ios|android` (below), the only way a phone gets
+notifications.
 A code already used by your phone cannot also pair your desktop.
 
 Confirm the server address in the app's connection dialog, then finish pairing
@@ -490,7 +498,7 @@ address of its own:
 
 ```sh
 ssh -N -L 8790:127.0.0.1:8799 you@your-server
-# then run `npx duskbot pair` on the server and type its code at http://127.0.0.1:8790/pair
+# then run `duskbot pair` on the server and type its code at http://127.0.0.1:8790/pair
 ```
 
 Port 8790 on this side keeps clear of the desktop app's own server on 8799.
@@ -608,9 +616,9 @@ npm package, the same thing from the command line, with the server running
 or not, no restart needed:
 
 ```sh
-npx duskbot access add her@yourcompany.com
-npx duskbot access add freelancer@example.com --chat-only
-npx duskbot access list
+duskbot access add her@yourcompany.com
+duskbot access add freelancer@example.com --chat-only
+duskbot access list
 ```
 
 An entry is an address or `@domain` (everyone at that domain). Admins get
@@ -815,19 +823,45 @@ apps and cloud desktops — those stay with the owner. A server reinstalled at
 the same address has a new identity; the app then asks to pair again rather
 than present the old session to it.
 
-Both native apps pair this way. `duskbot pair --phone android` prints the
-app-scheme QR that Android's scanner needs, and the iOS app accepts either
-that QR or the web link. Pass `--phone` whenever nothing is watching the
-terminal, such as `docker compose exec dusk node dist-server/duskbot.js
-pair --phone android --public-url https://your-domain`, since a scripted run
-never reaches the question the interactive command asks. Nothing extra to install, and the phone becomes a
-session like any other.
+### Pairing the phone app (and getting notifications)
+
+A phone gets notifications only as a **paired phone**. A phone that signed in
+with a browser code (`duskbot pair` without `--phone`, or the `/pair` page) is a
+session like a laptop's: it can chat, but the server has no phone to push to.
+Pair the phone app with `--phone`:
+
+```sh
+duskbot pair --phone ios                                    # or android
+duskbot pair --phone ios --public-url https://your-domain   # an address the server does not know itself
+docker compose exec dusk node dist-server/duskbot.js pair --phone android --public-url https://your-domain
+```
+
+It prints a QR (scan it with the camera, or in the app under **Add a computer or
+server**) and a typed code when the server has the link service. The phone
+reaches the server at its HTTPS address (`DUSK_PUBLIC_URL`, `--domain`,
+`--tailscale`, `--tunnel`, or the `--public-url` you pass, which the server first
+checks answers as itself) or over the link service's relay. With none of those it
+makes no code and says so, with what to run. `--phone` also names the push
+service the line under the QR checks: `ios` is APNs, `android` is FCM. Pass it
+whenever nothing is watching the terminal, since a scripted run never reaches the
+question the interactive `duskbot pair` asks.
+
+The phone can fix an older sign-in itself: in the app, **Settings** shows
+**Notifications can't reach this phone** with **Pair this phone**, which makes
+that signed-in phone a paired phone (`POST /api/mobile/device`). To check
+notifications end to end:
+
+```sh
+duskbot push        # each paired phone and whether it registered for notifications
+duskbot push test   # sends each a test notification and prints what the push service answered
+```
+
+The phone has the same check under **Settings → Send a test notification**.
 
 Push to a closed app goes through the public relay at `link.dusk.bot` unless the
-server has APNs or FCM keys of its own. Today that relay sends to iPhones only:
-an Android phone paired with a self-hosted server gets notifications only while
-the app is open, and the server log says so once. Details and what fixes it:
-[`docs/phone-push.md`](phone-push.md#what-a-self-hosted-server-does-today).
+server has APNs or FCM keys of its own. The relay holds both the APNs key and
+the FCM service account, so iPhones and Android phones get pushes with nothing
+to set up. Details: [`docs/phone-push.md`](phone-push.md#what-a-self-hosted-server-does-today).
 
 Older way, still supported, and only useful on a LAN or a tailnet: run the
 companion sidecar next to the harness and pair by its own QR. It advertises
@@ -1202,15 +1236,49 @@ settings do not change it.
 
 ## Updating
 
-For the npm service, [install the chosen new version](deploy-vps.md#update)
-as the service user while the server is stopped, then start it again.
-For a foreground invocation, `npx --yes duskbot@X.Y.Z serve --tailscale`
-selects a particular published release; replace `X.Y.Z` with that version.
+`duskbot update --check` tells you whether a newer dusk bot is out, lists
+what changed for the server and the CLI since your version (from
+https://dusk.bot/releases/changelog.json, with the issue or pull request for
+each line) and names the one step that updates this install. It never changes
+anything. Exit code 0 means up to date, 10 an update is available, 1 the check
+failed; `--json` prints one document. `duskbot version` prints the version
+and how this copy was installed; `duskbot --version` prints only the number.
+
+What `duskbot update` does, by how the server was installed:
+
+| Install | What `duskbot update` does |
+|---|---|
+| npm (`npm install --global --prefix …`) | Downloads the release's `duskbot-X.Y.Z.tgz`, checks its sha256 against the release's `SHA256SUMS`, whose own hash the signed `latest.json` vouches for, and installs it into the same prefix. Asks first; `--yes` skips the question, and without a terminal it only looks. Then restart the server (`sudo systemctl restart duskbot` for a `duskbot service install` unit). |
+| Linked from the app (the one line) | Nothing to do: the server installs new versions itself while no bot is working, looking every 15 minutes. `sudo duskbot update --yes` (or `sudo systemctl start duskbot-server-update.service`) looks now. |
+| Docker or Podman | Prints the host step: `docker compose pull dusk && docker compose up -d` in the deploy folder, or the tag to set when `DUSK_IMAGE` is pinned. |
+| Desktop app | The app runs and updates its server. |
+| git checkout | Prints `git pull && pnpm install && pnpm build:server`, then restart. |
+| dusk cloud | Kept up to date for you. |
+
+### A server set up with the app's one line updates itself
+
+You don't have to do anything. Its link agent asks link.dusk.bot for a newer signed build every 10 to 15 minutes
+and downloads it; `duskbot-server-update.timer` then looks every 15 minutes and installs it only while no bot is
+working (no turn, routine run, call or computer in use), restarts the server, and puts the build before back if the
+new one does not answer or fails its self-test. A new release usually lands within half an hour of going out, longer
+while your bots are busy or during a staged rollout.
 
 ```sh
-(cd deploy && docker compose pull dusk && docker compose up -d)   # Docker, with the project overrides
-git pull && pnpm install && sudo systemctl restart duskbot          # from source
+duskbot version                                          # what runs now, and that it is a linked server
+duskbot update --check                                   # is a newer one out, and what changed
+sudo tail -n 50 /var/log/duskbot-link/server-update.log  # what the updater did, with times
+sudo systemctl start duskbot-server-update.service       # install a downloaded build now (still waits for idle)
+sudo systemctl disable --now duskbot-server-update.timer # stop updating by itself; enable --now turns it back on
 ```
+
+Every release also attaches the server package to its GitHub release:
+`duskbot-X.Y.Z.tgz` at
+`https://github.com/DuskBotAI/duskbot-releases/releases/download/vX.Y.Z/`, and
+the newest one at
+`https://github.com/DuskBotAI/duskbot-releases/releases/latest/download/duskbot.tgz`,
+with its hash in that release's `SHA256SUMS`. To install by hand, check the hash
+first, then `npm install --global --prefix "$HOME/.local" ./duskbot-X.Y.Z.tgz`.
+Releases before 0.2.32 did not attach it; build those from source.
 
 Routines and queued work survive restarts. A teammate turn in flight runs
 again once at the next start, told to check what it already did, and the bot

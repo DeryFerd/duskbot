@@ -18,6 +18,8 @@ import { catalogServer } from "./testing/cua-driver-tools.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { freePortBlock } from "./testing/ports.ts";
 
+// the Mac's zsh, or plain sh where the suite runs off a Mac (a Linux runner has no zsh)
+const SHELL = existsSync("/bin/zsh") ? "/bin/zsh" : "/bin/sh";
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const HOST = "dusk-t-0123456789ab.fly.dev";
 const EDGE = { host: HOST, "x-forwarded-for": "203.0.113.9", "x-forwarded-proto": "https", origin: `https://${HOST}` };
@@ -60,7 +62,7 @@ beforeAll(async () => {
     cwd: join(SERVER_DIR, ".."),
     env: { PATH: dirname(process.execPath), HOME: root, USERPROFILE: root, TMPDIR: root, DUSK_DATA_DIR: dataDir, DUSK_PORT: String(port), DUSK_WEBHOOK_PORT: String(port + 1),
       DUSK_TEST_SEALED_PATH: "1", DUSK_NO_TEST_BOTS: "1", FAKE_CLAUDE_MODE: "happy", FAKE_CLAUDE_DUMP: join(root, "dump.json"),
-      DUSK_CLOUD_ROLE: "home", DUSK_CLOUD_MACHINE_ID: "3f9c2a4e-8b1d-4c6e-9a7f-2d5e8c1b0a93", DUSK_CLOUD_ADMIN_URL: "https://cloud.example.test",
+      DUSK_BOT_BOX: "0", DUSK_CLOUD_ROLE: "home", DUSK_CLOUD_MACHINE_ID: "3f9c2a4e-8b1d-4c6e-9a7f-2d5e8c1b0a93", DUSK_CLOUD_ADMIN_URL: "https://cloud.example.test",
       DUSK_CLOUD_BOOTSTRAP_SECRET: secret, DUSK_PUBLIC_URL: `https://${HOST}` },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -93,7 +95,7 @@ it("a dusk cloud's bot works on the person's Mac: ordinary work runs, a risky co
     fetch: (input: string, init?: RequestInit) => fetch(input, { ...init, headers: { ...init?.headers as Record<string, string>, ...EDGE, authorization: `Bearer ${token}` } }),
     name: () => "Sid's MacBook", home,
     prefs: { read: () => prefs, write: (value: unknown) => { prefs = value; } },
-    cloud: () => ({ origin: base, awake: true }), linkKey: async () => link.publicKey.export({ type: "spki", format: "der" }).toString("base64"),
+    cloud: () => ({ origin: base, awake: true }), linkKey: async () => link.publicKey.export({ type: "spki", format: "der" }).toString("base64"), shell: SHELL,
   });
   await app.sync();
   await until(async () => (await api("GET", "/api/mac")).body?.online === true, "the Mac to reach its cloud");
@@ -167,7 +169,7 @@ it("a dusk cloud's bot uses the person's screen through the Mac's computer contr
     fetch: (input: string, init?: RequestInit) => fetch(input, { ...init, headers: { ...init?.headers as Record<string, string>, ...EDGE, authorization: `Bearer ${token}` } }),
     name: () => "Sid's MacBook", home,
     prefs: { read: () => prefs, write: (value: unknown) => { prefs = value; } },
-    cloud: () => ({ origin: base, awake: true }), linkKey: async () => link.publicKey.export({ type: "spki", format: "der" }).toString("base64"),
+    cloud: () => ({ origin: base, awake: true }), linkKey: async () => link.publicKey.export({ type: "spki", format: "der" }).toString("base64"), shell: SHELL,
     screen: createScreenDriver({ connection: () => ({ mode: "embedded", mcpCommand: driver.server.command, mcpArgs: driver.server.args, mcpEnv: { ...driver.server.env, CATALOG_CALLS: driverCalls,
       CATALOG_RESULTS: JSON.stringify({ list_apps: { structuredContent: { apps: [{ pid: 42, name: "Notes", bundle_id: "com.apple.Notes", running: true },
         { pid: 77, name: "Safari", bundle_id: "com.apple.Safari", running: true }] }, content: [] } }) } }) }),

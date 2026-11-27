@@ -204,9 +204,10 @@ export function shouldOpenKeyboardShortcuts(event: KeyboardEvent): boolean {
   const helpChord = event.key === "/" && (event.metaKey || event.ctrlKey) && !event.shiftKey;
   if (!helpKey && !helpChord) return false;
   const target = event.target;
-  return !(target instanceof HTMLElement && (
-    target.isContentEditable || target.closest("input, textarea, select, dialog, [role=dialog]")
-  ));
+  if (!(target instanceof HTMLElement)) return true;
+  if (target.closest("dialog, [role=dialog]")) return false;
+  // a bare ? is typing in a field; the ⌘/ chord isn't, and focus sits in the composer most of the time
+  return helpChord || !(target.isContentEditable || target.closest("input, textarea, select"));
 }
 
 export function isMacPlatform(): boolean {

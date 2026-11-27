@@ -27,7 +27,7 @@ it("saves each folded call's result word for word, secrets masked, and points at
   expect(text).not.toContain(secret);
   expect(text).toContain("````\ntoken=");
   expect(text).toContain("## 3. WebFetch (no result recorded)\nResult: none recorded");
-  expect(statSync(written!.path).mode & 0o777).toBe(0o600);
+  if (process.platform !== "win32") expect(statSync(written!.path).mode & 0o777).toBe(0o600);
   expect(archivePointer(written!)).toBe(`- ${written!.path}: 3 tool results from before this point, word for word. Read or search it with your file tools when an exact earlier result matters.`);
 });
 

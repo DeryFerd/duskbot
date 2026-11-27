@@ -102,7 +102,7 @@ export function world({ clean = null, journal = done(), marker = null, state = c
       return json({}, 404);
     },
     power: { asleep: () => w.power?.state === "asleep", hold: () => { w.power = { state: "asleep", since: 1 }; }, woke: () => w.calls.push("woke") },
-    go: async (url, origin, place) => { w.went.push(place?.kind === "team" || place?.kind === "own" ? [url, origin, place.id] : [url, origin]); w.url = url; if (w.stall(url)) await new Promise(() => {}); },
+    go: async (url, origin, place) => { w.went.push(place?.kind === "team" || place?.kind === "own" ? [url, origin, place.id] : [url, origin]); if (w.stall(url)) await new Promise(() => {}); w.url = url; },
     showLocal: (leaving) => { w.local.push(leaving); if (leaving) w.url = `${LOCAL}/`; },
     remembered: () => w.remembered,
     remember: (place) => { w.remembers.push(place); w.remembered = place ? { ...place, name: ACME.name, origin: TEAM } : null; },

@@ -1,7 +1,9 @@
 // A reply that says something was sent, saved, scheduled, set up or removed is held to the calls its turn ran: each kind
 // of claim needs a successful call that could have done that kind of thing. The chat loop sends an unbacked claim back
 // inside the turn; the finish guard does the same for engines that own their loop.
+import { isClientCancellation } from "../shared/client-cancel.ts";
 import { isOutboundTool } from "../shared/outbound.ts";
+import { BRIDGE_TOOL } from "./drivers/openai-chat-habits.ts";
 
 export type Deed = "send" | "schedule" | "save" | "remove" | "setup";
 type Evidence = Deed | "browser" | "shell" | "other";
@@ -30,6 +32,8 @@ const NOT_A_CLAIM = /\b(?:not|never|no|nothing|haven['’]?t|hasn['’]?t|didn['
 const TO_THIS_CHAT = /\b(?:sent|messaged|shared|posted|replied)\s+(?:to\s+)?you\b|\b(?:above|below|here)\b/i;
 /** "Created a reminder" is scheduling, not saving. */
 const LATER_WORK = /\b(?:reminders?|routines?|automations?|triggers?|watch(?:er)?|alerts?|check-?ins?|schedules?)\b/i;
+/** "the time when this message was sent" says when, not that the bot did it; the clause goes, the rest still counts. */
+const WHEN_CLAUSE = /\bwhen\s+(?:[\w'’-]+\s+){0,3}(?:was|were)\s+(?:just\s+|already\s+)?[\w-]+/gi;
 const QUOTED = /```[\s\S]*?```|`[^`\n]*`|"[^"\n]*"|“[^”\n]*”|^>.*$/gm;
 
 const sentences = (text: string) => text.replace(QUOTED, " ").split(/(?<=[.!?])\s+|\n+/).map((part) => part.trim()).filter(Boolean);
@@ -37,7 +41,10 @@ const sentences = (text: string) => text.replace(QUOTED, " ").split(/(?<=[.!?])\
 /** The kinds of outside change a reply says it made. */
 export function claimedDeeds(text: string): Deed[] {
   const found = new Set<Deed>();
-  for (const sentence of sentences(text)) {
+  // a gateway's "The request was cancelled by the client." stops the turn; it is not the bot saying it cancelled something
+  if (isClientCancellation(text)) return [];
+  for (const whole of sentences(text)) {
+    const sentence = whole.replace(WHEN_CLAUSE, " ");
     if (NOT_A_CLAIM.test(sentence)) continue;
     for (const [deed, verbs] of Object.entries(VERBS) as Array<[Deed, string]>) {
       if (deed === "send" && TO_THIS_CHAT.test(sentence)) continue;
@@ -63,12 +70,12 @@ function argsOf(rawArgs: string | undefined): Record<string, unknown> {
   } catch { return {}; }
 }
 
-/** What one successful call that could change something may have done, by its tool name (a bridged `use_tool` call by
- * the tool it ran) and, for memory, its action. */
+/** What one successful call that could change something may have done, by its tool name (a bridged `use_tool` or `call_tool`
+ * call by the tool it ran) and, for memory, its action. */
 export function callEvidence(name: string, rawArgs?: string): Evidence[] {
   let args = argsOf(rawArgs);
   let tool = name;
-  if (/(?:^|_)use_tool$/.test(name) && typeof args.name === "string") {
+  if (BRIDGE_TOOL.test(name) && typeof args.name === "string") {
     tool = args.name;
     args = args.arguments && typeof args.arguments === "object" ? args.arguments as Record<string, unknown> : {};
   }

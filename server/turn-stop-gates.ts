@@ -5,7 +5,7 @@
 // carries on inside the turn; the finish guard starts one carry-on turn for engines that own their loop.
 
 import { isOutboundTool } from "../shared/outbound.ts";
-import { effectfulCall } from "./drivers/openai-chat-habits.ts";
+import { BRIDGE_TOOL, effectfulCall } from "./drivers/openai-chat-habits.ts";
 import { callEvidence, claimedDeeds, unbackedClaimNote, unbackedDeeds } from "./claim-check.ts";
 
 export type StopGate = "follow_up" | "checklist" | "unconfirmed_write" | "open_items" | "unbacked_claim";
@@ -35,9 +35,9 @@ export function promisesFollowUp(text: string): boolean {
 // a tool that makes the bot act later: a wait, a trigger, a routine, a background job, a reminder
 const SCHEDULES = /(?:^|_)(?:wait_until|create_trigger|trigger|schedule_task|background_job|watcher|create_routine|routine|set_reminder|create_reminder|remind(?:er)?)$/i;
 
-/** The tool a call ran: a bridged `use_tool` call counts as the tool it named. */
+/** The tool a call ran: a bridged `use_tool` or `call_tool` call counts as the tool it named. */
 export function ranTool(name: string, rawArgs?: string): string {
-  if (!/(?:^|_)use_tool$/.test(name) || !rawArgs) return name;
+  if (!BRIDGE_TOOL.test(name) || !rawArgs) return name;
   try {
     const args = JSON.parse(rawArgs) as { name?: unknown };
     return typeof args?.name === "string" ? args.name : name;
@@ -223,7 +223,7 @@ export class TurnGates {
 
   /** `automationRun`: a routine's own run, whose promises of later work are its routine's. */
   mount(names: readonly string[], automationRun = false): void {
-    const bridged = names.some((name) => /(?:^|_)use_tool$/.test(name));
+    const bridged = names.some((name) => BRIDGE_TOOL.test(name));
     this.canSchedule = !automationRun && (bridged || names.some(schedulesWork));
     this.lookupFor = (tool) => bridged || names.some((name) => name !== tool && name.split("_")[0] === tool.split("_")[0] && !effectfulCall(name, "{}"));
   }

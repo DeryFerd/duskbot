@@ -12,7 +12,7 @@
     "ai close issue not planned"
   ],
   "answer": "**get finished work out of the open queue, with the right reason attached.** the bot can close a github issue as completed or not planned. paste its full link so it finds the right repository. want the final say? tell it to show the title and closure reason, then wait for your answer. closures do not pause automatically.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,7 +45,7 @@
     "toolkit": "github",
     "slug": "GITHUB_CLOSE_ISSUE"
   },
-  "what": "**leave the next reader a clear decision.** completed means the work passed its acceptance criteria. not planned means you decided against doing it. closing takes the issue out of the open queue.\n\nit changes the state and optional reason. code still needs its own fix and merge; an explanation needs a separate comment.\n\nhave the bot read the owner’s latest reply before proposing closure. an old report can still describe a live problem.",
+  "what": "**leave the next reader a clear decision.** completed means the work passed its acceptance criteria. not planned means you decided against doing it. closing takes the issue out of the open queue.\n\nit changes the state and optional reason. code still needs its own fix and merge; an explanation needs a separate comment.\n\nhave the bot read the owner’s latest reply before proposing closure. an old report can still describe a live problem.\n\nexplain the decision first with [a comment](/integrations/github/create-an-issue-comment). tidy the queue later with [labels](/integrations/github/add-labels-to-an-issue).",
   "uses": [
     "**finish verified work.** close an issue after its acceptance test passes.",
     "**make the product decision clear.** mark a rejected feature request not planned.",
@@ -121,5 +121,9 @@
   "tip": {
     "text": "“not planned” saves the next person from hunting for a fix that never happened."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "issue 212 in thornfield/web: login button misaligned.\nyara says the fix passed its acceptance test.",
+    "after": "state: closed\nreason: completed\ncomment posted separately, after your yes.\nno code changed."
+  }
 }

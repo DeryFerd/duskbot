@@ -202,7 +202,10 @@ html[data-native-menu] .dusk-mobile [data-mobile-chat] [data-message-row] [data-
   inset-inline: auto 0;
   transform-origin: right bottom;
 }
-.dusk-mobile [data-mobile-chat] [data-chat-bubble][class*="100%-82px"] { max-width: calc(100% - 44px); }
+/* a page or chart in the chat stops where a bubble does */
+.dusk-mobile [data-mobile-chat] [data-chat-bubble][class*="100%-82px"],
+.dusk-mobile [data-mobile-chat] [data-app][class*="100%-82px"],
+.dusk-mobile [data-mobile-chat] [data-data-result][class*="100%-82px"] { max-width: calc(100% - 44px); }
 
 /* the room's setup form is drawn at desktop density; on a phone its labels and hints read at the shell's sizes */
 .dusk-mobile [data-testid="room-setup"] .text-\[13px\] { font-size: 15px; line-height: 20px; }

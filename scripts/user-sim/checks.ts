@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { Check, Where } from "./scenario.ts";
 
 export interface Msg { id: string; at: number; role: string; kind?: string; text?: string; threadId: string; botName: string }
+export interface ToolCall { at: number; threadId: string; name: string; input: string }
 export interface ChatRecord { label?: string; botName: string; threadId: string; start: number; end: number }
 export interface Evidence {
   state: any;
@@ -19,6 +20,8 @@ export interface Evidence {
   aboutMe: string;
   home: string;
   mainBot: string;
+  /** every tool call the bots made, from their activity lines */
+  tools?: ToolCall[];
 }
 export interface CheckResult { label: string; ok: boolean; recall: boolean; detail: string }
 
@@ -85,6 +88,16 @@ export function runCheck(c: Check, ev: Evidence): CheckResult {
       if (!existsSync(path)) return { ...base, ok: false, detail: `${c.file.path} missing` };
       const ok = !c.file.match || re(c.file.match).test(readFileSync(path, "utf8"));
       return { ...base, ok, detail: ok ? "ok" : `${c.file.path} lacks /${c.file.match}/` };
+    }
+    if ("tool" in c) {
+      const chats = c.tool.step ? ev.chats.filter((one) => one.label === c.tool.step) : null;
+      const pool = (ev.tools ?? []).filter((t) => !chats || chats.some((one) => one.threadId === t.threadId && t.at >= one.start && t.at <= one.end + 1_000));
+      const hits = pool.filter((t) => re(c.tool.match).test(`${t.name} ${t.input}`));
+      return { ...base, ok: count(hits.length, c.min, c.max), detail: `${hits.length} of ${pool.length} tool calls match (want ${range(c.min, c.max)}); used: ${[...new Set(pool.map((t) => t.name))].join(", ") || "none"}` };
+    }
+    if ("gone" in c) {
+      const ok = !existsSync(join(ev.home, c.gone.path));
+      return { ...base, ok, detail: ok ? "gone" : `${c.gone.path} still there` };
     }
     return { ...base, ok: false, detail: "unknown check kind" };
   } catch (error) {

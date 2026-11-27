@@ -26,14 +26,20 @@ vi.mock("./tunnel.ts", () => ({
 
 const advertisedOrigin = "https://current.example.test";
 const explicitOrigin = "https://override.example.test";
-const workspaceId = "4e406646-1030-4613-8878-e227ab722ffc";
 const code = "ABCD-EFGH-JKLM";
+const typed = "WXYZ-2345-6789";
 const ttyDescriptors = [process.stdin, process.stdout].map((stream) => Object.getOwnPropertyDescriptor(stream, "isTTY"));
 let dataDir: string;
 let options: CliOptions;
 let publicUrl: string | null;
-let remoteWorkspaceId: string;
+/** what POST /api/mobile/pairing answers in this test */
+let mobilePairing: (body: Record<string, unknown>) => Response;
 const fetchMock = vi.fn<typeof fetch>();
+const local = () => `http://127.0.0.1:${options.port}`;
+const httpsPairing = (origin: string) => Response.json({
+  link: "duskbot://link?v=2&p=fixture", code: typed, expiresAt: Date.now() + 300_000,
+  payload: { via: [{ kind: "https", url: origin }] },
+});
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -42,7 +48,7 @@ beforeEach(() => {
   vi.stubEnv("DUSK_DATA_DIR", dataDir);
   options = { command: "pair", port: 18451, dataDir, tailscale: false, tunnel: false, client: false, pair: true, json: false };
   publicUrl = advertisedOrigin;
-  remoteWorkspaceId = workspaceId;
+  mobilePairing = (body) => httpsPairing(typeof body.origin === "string" ? body.origin : advertisedOrigin);
   for (const stream of [process.stdin, process.stdout]) Object.defineProperty(stream, "isTTY", { value: true, configurable: true });
   mocks.ui.choose.mockResolvedValue(0);
   mocks.createTunnelAccount.mockReturnValue({ credentials: { read: () => ({}) } });
@@ -52,16 +58,13 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   fetchMock.mockImplementation(async (input, init) => {
     const url = String(input);
-    const local = `http://127.0.0.1:${options.port}`;
-    if (url === `${local}/api/health`) return Response.json({ app: "duskbot", pid: 12345 });
-    if (url === `${local}/api/auth/pairing`) {
+    if (url === `${local()}/api/health`) return Response.json({ app: "duskbot", pid: 12345 });
+    if (url === `${local()}/api/auth/pairing`) {
       if (init?.method === "POST") return Response.json({ code, expiresAt: Date.now() + 300_000, url: `${advertisedOrigin}/pair#code=${code}` });
       return Response.json({ pairings: [], publicUrl });
     }
-    if (url === `${local}/.well-known/duskbot/environment`) return Response.json({ environmentId: workspaceId });
-    if ([advertisedOrigin, explicitOrigin].some((origin) => url === `${origin}/.well-known/duskbot/environment`)) {
-      return Response.json({ environmentId: remoteWorkspaceId });
-    }
+    if (url === `${local()}/api/mobile/pairing` && init?.method === "POST") return mobilePairing(JSON.parse(String(init.body)));
+    if (url === `${local()}/api/mobile/push`) return Response.json({ own: [], relay: "https://link.dusk.bot", relayServices: ["apns", "fcm"] });
     // No real network fallback is allowed, including stale saved addresses.
     throw new Error(`Unexpected fixture request: ${url}`);
   });
@@ -80,142 +83,127 @@ afterEach(async () => {
   await removeTempDir(dataDir);
 });
 
-function expectPhonePairing(origin: string): void {
-  const probes = fetchMock.mock.calls.filter(([url]) => String(url).startsWith("https://"));
-  expect(probes).toHaveLength(1);
-  expect(String(probes[0]![0])).toBe(`${origin}/.well-known/duskbot/environment`);
-  expect(probes[0]![1]).not.toHaveProperty("body");
-  expect(probes[0]![1]).not.toHaveProperty("headers");
-  const invitations = fetchMock.mock.calls.filter(([, init]) => init?.method === "POST");
-  expect(invitations).toHaveLength(1);
-  expect(String(invitations[0]![0])).toBe(`http://127.0.0.1:${options.port}/api/auth/pairing`);
-  expect(JSON.parse(String(invitations[0]![1]?.body))).toMatchObject({ scopes: ["client"] });
-  const transcript = mocks.ui.log.mock.calls.map(([line]) => line).join("\n");
-  expect(transcript).toContain(`pairing code:  ${code}`);
-  expect(transcript).toContain(`${origin}/pair#code=${code}`);
-  expect(transcript).toMatch(/[▀▄█]/);
-  expect(mocks.createTunnelAccount).not.toHaveBeenCalled();
-  expect(mocks.tailscaleStatus).not.toHaveBeenCalled();
+const posts = () => fetchMock.mock.calls.filter(([, init]) => init?.method === "POST").map(([url, init]) => ({ url: String(url).replace(local(), ""), body: JSON.parse(String(init?.body ?? "{}")) }));
+const transcript = () => [...mocks.ui.log.mock.calls, ...vi.mocked(console.log).mock.calls, ...vi.mocked(console.error).mock.calls].map(([line]) => String(line)).join("\n");
+
+function expectPhonePairing(origin?: string): void {
+  expect(posts()).toEqual([{ url: "/api/mobile/pairing", body: expect.objectContaining({ scopes: ["client"], ...(origin ? { origin } : {}) }) }]);
+  if (!origin) expect(posts()[0]!.body).not.toHaveProperty("origin");
+  // the server checks the address itself; the CLI never sends anything to it
+  expect(transcript()).toContain(typed);
+  expect(transcript()).toMatch(/[▀▄█]/);
+  expect(transcript()).toContain("notifications:  iPhone (APNs) through https://link.dusk.bot");
+  expect(transcript()).not.toContain("duskbot://pair?");
+  expect(fetchMock.mock.calls.filter(([url]) => String(url).startsWith("https://"))).toHaveLength(0);
 }
 
-describe("guided phone pairing address discovery", () => {
+describe("guided phone pairing", () => {
   it.each([
     { access: "tunnel", phone: "ios" },
     { access: "tailscale", phone: "android" },
     { access: "public-url", publicUrl: "https://old-proxy.example.test", phone: "ios" },
-  ])("uses the running server's advertised origin instead of saved $access access", async (saved) => {
+  ])("pairs the phone app at the running server's own address instead of saved $access access", async (saved) => {
     mocks.readCliStartup.mockReturnValue(saved);
     expect(await runPair(options)).toBe(0);
     expectPhonePairing(advertisedOrigin);
+    expect(mocks.readCliStartup).not.toHaveBeenCalled();
   });
 
-  it("allows an explicit --public-url to override the advertised and saved addresses", async () => {
-    mocks.readCliStartup.mockReturnValue({ access: "tunnel", phone: "ios" });
+  it("hands the server an explicit --public-url to check and use", async () => {
     expect(await runPair({ ...options, publicUrl: explicitOrigin })).toBe(0);
     expectPhonePairing(explicitOrigin);
   });
 
-  it.each([
-    "https://localhost",
-    "https://user:stale-secret@example.test",
-    "https://old.example.test/pair#code=stale-code",
-    undefined,
-  ])("ignores an invalid saved public URL (%s) when the server advertises a valid origin", async (savedUrl) => {
-    mocks.readCliStartup.mockReturnValue({ access: "public-url", publicUrl: savedUrl, phone: "ios" });
+  it("uses saved access when the server advertises no address", async () => {
+    publicUrl = null;
+    mocks.readCliStartup.mockReturnValue({ access: "public-url", publicUrl: "https://saved.example.test", phone: "ios" });
     expect(await runPair(options)).toBe(0);
-    expectPhonePairing(advertisedOrigin);
+    expectPhonePairing("https://saved.example.test");
   });
 
-  it("does not read stale or unreadable setup settings before using the running origin", async () => {
-    mocks.readCliStartup.mockImplementation(() => { throw new Error("Fixture config is stale or unreadable"); });
-    expect(await runPair(options)).toBe(0);
-    expect(mocks.readCliStartup).not.toHaveBeenCalled();
-    expectPhonePairing(advertisedOrigin);
-  });
-
-  it("does not probe a fabricated origin when Tailscale has no MagicDNS name", async () => {
+  it("says plainly that a phone cannot pair, and makes no code, when nothing can reach the server", async () => {
     publicUrl = null;
     mocks.readCliStartup.mockReturnValue({ access: "tailscale", phone: "ios" });
     mocks.tailscaleStatus.mockResolvedValue({ status: { dnsName: null } });
+    mobilePairing = () => Response.json({ error: "A phone cannot reach this workspace yet", code: "unreachable" }, { status: 409 });
     expect(await runPair(options)).toBe(1);
-    expect(mocks.ui.choose).not.toHaveBeenCalled();
-    expect(fetchMock.mock.calls.filter(([url]) => String(url).startsWith("https://"))).toHaveLength(0);
-    expect(fetchMock.mock.calls.filter(([url, init]) => init?.method === "POST" && !String(url).endsWith("/api/mobile/pairing"))).toHaveLength(0);
-    expect(console.log).toHaveBeenCalledWith(expect.stringContaining("running only on this computer"));
+    expect(posts().map((one) => one.url)).toEqual(["/api/mobile/pairing"]);
+    expect(transcript()).toContain("could not get notifications");
+    expect(transcript()).toContain("--public-url https://your.host");
   });
 
-  it("pairs the phone app over the link relay on a server with no public address", async () => {
+  it("pairs over the link relay on a server with no public address", async () => {
     publicUrl = null;
     mocks.readCliStartup.mockReturnValue({ access: "local" });
-    const local = `http://127.0.0.1:${options.port}`, typed = "WXYZ-2345-6789";
-    const base = fetchMock.getMockImplementation()!;
-    fetchMock.mockImplementation(async (input, init) => String(input) === `${local}/api/mobile/pairing` && init?.method === "POST"
-      ? Response.json({ link: "duskbot://link?v=1&g=grant", code: typed, expiresAt: Date.now() + 300_000, payload: { via: [{ kind: "relay" }] } })
-      : base(input, init));
+    mobilePairing = () => Response.json({ link: "duskbot://link?v=1&g=grant", code: typed, expiresAt: Date.now() + 300_000, payload: { via: [{ kind: "relay", base: "https://link.dusk.bot" }] } });
     expect(await runPair(options)).toBe(0);
-    const printed = vi.mocked(console.log).mock.calls.map(([line]) => String(line)).join("\n");
-    expect(printed).toContain(typed);
-    expect(printed).toMatch(/[▀▄█]/);
-    expect(printed).not.toContain("running only on this computer");
-    expect(mocks.ui.choose).not.toHaveBeenCalled();
-  });
-
-  it("does not mint a code when the advertised endpoint identifies another workspace", async () => {
-    remoteWorkspaceId = "another-workspace";
-    expect(await runPair(options)).toBe(1);
-    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
-    expect(mocks.ui.log).toHaveBeenCalledWith(expect.stringContaining("no phone pairing code was created"));
+    expectPhonePairing();
   });
 
   it.each([2, new SetupCancelled()])("does not mint a code when phone selection is cancelled (%s)", async (cancel) => {
     if (cancel instanceof Error) mocks.ui.choose.mockRejectedValue(cancel);
     else mocks.ui.choose.mockResolvedValue(cancel);
     expect(await runPair(options)).toBe(cancel instanceof Error ? 130 : 0);
-    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
-    expect(fetchMock.mock.calls.filter(([url]) => String(url).startsWith("https://"))).toHaveLength(0);
+    expect(posts()).toHaveLength(0);
   });
 });
 
-// `duskbot pair` talks to 127.0.0.1, so the server answers as its owner and builds the phone-app invite from its own
-// public address; the CLI prints it as it is and builds its own only for --public-url.
-describe("the phone-app link `duskbot pair` prints", () => {
-  const credential = `omb_pair_${"b".repeat(43)}`;
-  const serverName = "Miguel's computer";
-  const pairingResponse = (fields: Record<string, unknown>) => {
-    fetchMock.mockImplementation(async (input, init) => {
-      if (String(input) === `http://127.0.0.1:${options.port}/api/health`) return Response.json({ app: "duskbot", pid: 12345 });
-      if (String(input) === `http://127.0.0.1:${options.port}/api/auth/pairing` && init?.method === "POST") {
-        return Response.json({ code, expiresAt: Date.now() + 300_000, credential, serverName, ...fields });
-      }
-      throw new Error(`Unexpected fixture request: ${String(input)}`);
-    });
-  };
-  const printed = () => vi.mocked(console.log).mock.calls.map(([line]) => String(line)).join("\n");
-
-  it("prints the server's own invite unchanged", async () => {
-    const serverInvite = `duskbot://pair?address=${encodeURIComponent(advertisedOrigin)}&token=${credential}&name=Miguel's%20computer`;
-    pairingResponse({ url: `${advertisedOrigin}/pair#code=${code}`, inviteUrl: serverInvite });
-    expect(await runPair({ ...options, label: "Pixel" })).toBe(0);
-    expect(printed()).toContain(`phone app:     ${serverInvite}\n`);
+// `duskbot pair --label iPhone --phone ios --public-url https://dusk.example` on a server with no link service must pair
+// the phone app, never make a browser sign-in the phone takes as a pairing that push cannot use
+describe("duskbot pair --phone", () => {
+  beforeEach(() => {
+    for (const stream of [process.stdin, process.stdout]) Object.defineProperty(stream, "isTTY", { value: false, configurable: true });
+    publicUrl = null;
   });
 
-  it("builds the invite for --public-url from the server's credential and name", async () => {
-    pairingResponse({
-      url: `${advertisedOrigin}/pair#code=${code}`,
-      inviteUrl: `duskbot://pair?address=${encodeURIComponent(advertisedOrigin)}&token=${credential}&name=Miguel's%20computer`,
-    });
-    expect(await runPair({ ...options, label: "Pixel", publicUrl: explicitOrigin })).toBe(0);
-    expect(printed()).toContain(
-      `phone app:     duskbot://pair?address=${encodeURIComponent(explicitOrigin)}&token=${credential}&name=Miguel's%20computer\n`,
-    );
-    expect(printed()).not.toContain(encodeURIComponent(advertisedOrigin));
+  it("makes a real phone pairing at the --public-url address, never a sign-in code", async () => {
+    expect(await runPair({ ...options, label: "iPhone", phone: "ios", publicUrl: explicitOrigin })).toBe(0);
+    expect(posts()).toEqual([{ url: "/api/mobile/pairing", body: { label: "iPhone", origin: explicitOrigin } }]);
+    expect(transcript()).toContain(typed);
+    expect(transcript()).toContain("iPhone (APNs)");
+    expect(transcript()).not.toContain("Android (FCM)");
+    expect(transcript()).not.toContain("duskbot://pair?");
   });
 
-  // DUSK_PUBLIC_URL may name a path behind a proxy; phones dial an origin, so re-deriving an invite would point at the proxy's root.
-  it("prints no invite for a server whose public address has a path", async () => {
-    pairingResponse({ url: `https://proxy.example.test/omb/pair#code=${code}`, inviteUrl: null });
+  it("names the Android app's scanner and FCM for --phone android", async () => {
+    expect(await runPair({ ...options, phone: "android", publicUrl: explicitOrigin })).toBe(0);
+    expect(posts()[0]!.body).toMatchObject({ label: "Android" });
+    expect(transcript()).toContain("Scan this in the dusk bot app");
+    expect(transcript()).toContain("Android (FCM)");
+  });
+
+  it("says the address is not this server when the server could not confirm it", async () => {
+    mobilePairing = () => Response.json({ error: "no", code: "origin_unverified" }, { status: 409 });
+    expect(await runPair({ ...options, phone: "ios", publicUrl: explicitOrigin })).toBe(1);
+    expect(transcript()).toContain(`${explicitOrigin} does not answer as this server`);
+    expect(posts().map((one) => one.url)).toEqual(["/api/mobile/pairing"]);
+  });
+
+  it("tells an old server's owner to update instead of printing a code a phone cannot use", async () => {
+    mobilePairing = () => Response.json({ error: "not found" }, { status: 404 });
+    expect(await runPair({ ...options, phone: "ios" })).toBe(1);
+    expect(transcript()).toContain("too old to pair the phone app");
+    expect(posts().map((one) => one.url)).toEqual(["/api/mobile/pairing"]);
+  });
+});
+
+describe("duskbot pair without --phone", () => {
+  beforeEach(() => {
+    for (const stream of [process.stdin, process.stdout]) Object.defineProperty(stream, "isTTY", { value: false, configurable: true });
+  });
+
+  it("signs in a web browser and says how to pair the phone app instead", async () => {
+    mobilePairing = () => Response.json({ error: "A phone cannot reach this workspace yet", code: "unreachable" }, { status: 409 });
+    expect(await runPair({ ...options, label: "Laptop" })).toBe(0);
+    expect(transcript()).toContain(`pairing code:  ${code}`);
+    expect(transcript()).toContain("duskbot pair --phone ios");
+    expect(transcript()).not.toContain("phone app:");
+  });
+
+  it("prints the phone app's relay pairing when the server has the link service", async () => {
+    mobilePairing = () => Response.json({ link: "duskbot://link?v=1&g=grant", code: typed, expiresAt: Date.now() + 300_000, payload: { via: [{ kind: "relay", base: "https://link.dusk.bot" }] } });
     expect(await runPair({ ...options, label: "Pixel" })).toBe(0);
-    expect(printed()).toContain(`https://proxy.example.test/omb/pair#code=${code}`);
-    expect(printed()).not.toContain("phone app:");
+    expect(transcript()).toContain(typed);
+    expect(posts().map((one) => one.url)).toEqual(["/api/mobile/pairing"]);
   });
 });

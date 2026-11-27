@@ -12,7 +12,7 @@
     "claude sort spreadsheet by multiple columns"
   ],
   "answer": "**put dispatch in due-date order, with every customer still beside their own job.** the bot can sort a google sheets range by several columns. later rules break ties, such as customer name after due date. include the full width of each record, with headers and totals outside. ask it to show the range and wait before reordering.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,7 +45,7 @@
     "toolkit": "googlesheets",
     "slug": "GOOGLESHEETS_SORT_RANGE"
   },
-  "what": "**a date must travel with its customer and quantity.** sorting one column can separate values that belong together. give the bot the sheet link, tab and full record width.\n\nkeep headers and totals outside the range. name the last row or ask the bot to find where records end.\n\nput rules in order: due date first, customer second. the second rule only breaks ties in the first.",
+  "what": "**a date must travel with its customer and quantity.** sorting one column can separate values that belong together. give the bot the sheet link, tab and full record width.\n\nkeep headers and totals outside the range. name the last row or ask the bot to find where records end.\n\nput rules in order: due date first, customer second. the second rule only breaks ties in the first.\n\nrows still arriving? sort after [append values](/integrations/google-sheets/append-values-to-spreadsheet) adds them. want a temporary view, not a new order? use [set basic filter](/integrations/google-sheets/set-basic-filter).",
   "uses": [
     "**put dispatch in order.** sort by due date, then customer for matching dates.",
     "**find attendees faster.** alphabetise complete records while leaving the header above.",

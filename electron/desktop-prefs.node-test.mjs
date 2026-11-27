@@ -323,17 +323,12 @@ test("production wiring: main answers this computer's page, My Cloud's own page 
   assert.equal(await vm.runInNewContext(`${navigate}; navigateMainWindow`, { servePlaceFrom: async () => {}, mainWindow: null })(`${LOCAL}/`), false, "no window");
 });
 
-test("the window's rail of places is shown until the person hides it, and the choice survives a restart", () => {
-  let saved = null, writes = 0;
-  const prefs = createDesktopPrefs({ read: () => saved, write: value => { saved = structuredClone(value); writes++; } });
-  assert.equal(prefs.railHidden(), false);
-  prefs.setRailHidden(false);
-  assert.equal(writes, 0, "showing a rail that shows writes nothing");
-  prefs.setRailHidden(true);
-  assert.equal(createDesktopPrefs({ read: () => saved, write: () => {} }).railHidden(), true);
-  prefs.setRailHidden("no");
-  assert.equal(createDesktopPrefs({ read: () => saved, write: () => {} }).railHidden(), false, "only true hides it");
-  assert.equal(createDesktopPrefs({ read: () => ({ railHidden: "yes" }), write: () => {} }).railHidden(), false);
+test("a railHidden kept by an older release is dropped on the next save: the window has no rail to hide", () => {
+  let saved = { railHidden: true, windowFrame: false };
+  const prefs = createDesktopPrefs({ read: () => saved, write: value => { saved = structuredClone(value); } });
+  assert.equal("railHidden" in prefs, false);
+  prefs.setWindowFrame(true);
+  assert.equal("railHidden" in saved, false);
 });
 
 test("the talk shortcut is off until turned on, with ⌃⌥Space as its key, and the choice survives a restart", () => {

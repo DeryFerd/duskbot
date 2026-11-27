@@ -32,8 +32,47 @@ runs still require `package.json`'s version to be bumped on the selected ref.
 A release is rejected if any installer, stable download
 name, size, or digest is absent or inconsistent.
 
-GitHub generates the release body (the changelog) from pull requests since the previous tag. Write PR titles for
-people: they become the release notes on the downloads repo.
+## What every release carries
+
+[`scripts/release-assets.ts`](../scripts/release-assets.ts) holds the one list: the Mac, Windows and Linux installers
+(stable and versioned names), the Mac update zips and browser parts, **DuskBot.apk** (the newest phone app; a release
+that built none carries the last one forward), the **server and CLI package** `duskbot-<version>.tgz` plus its stable
+copy `duskbot.tgz` (the npm package `scripts/build-npm-package.mjs` assembles; `npm install -g <url>` works with Node
+24+ on any OS), `SHA256SUMS` and the signed `latest.json`. The Docker image is `ghcr.io/duskbotai/duskbot:v<version>`
+(server-image.yml). release.yml's assemble job, `publish-downloads.sh` and `release-all.ts` all refuse a release that
+lacks one. For a release assembled by hand:
+
+```sh
+node scripts/release-assets.ts 0.2.32 --dir release/gh --pack-cli --carry-apk   # or --apk ~/Desktop/dusk-android/dusk-bot-1.2.13.apk
+gh release upload v0.2.32 release/gh/* --repo DuskBotAI/duskbot --clobber
+```
+
+It reads the APK's version with aapt2 (Android build-tools), writes `SHA256SUMS` and `latest.json` (signed with
+`DUSK_RELEASE_SIGNING_KEY`, else marked unsigned) and prints every file as ok or MISSING.
+
+### What latest.json says
+
+`{ v, version, sha256sums, signature }` as before, plus fields the apps and `duskbot update` read:
+`android: { version, code, url, sha256 }`, `cli: { version, url, sha256 }` and `docker`. Each `sha256` is that file's
+line in SHA256SUMS, whose own hash the signature vouches for.
+
+## Release notes and the changelog
+
+Changes are written for people as they land: add a line to [`docs/releases/unreleased.json`](releases/unreleased.json)
+(`{ text, area: desktop|phone|server|cli|all, issue?, pr? }`, plain words, no em dashes) with the fix. At release time,
+on the release branch before tagging:
+
+```sh
+node scripts/release-notes.ts 0.2.32 --apply     # --since v0.2.31 --to HEAD by default
+```
+
+It writes `release/notes/0.2.32.md` (the GitHub release body: what's new by area with issue and PR links, a downloads
+table with every file including the CLI and the APK's version, how each kind of install updates, and every merged PR,
+closed issue and uncurated commit folded away) and moves the curated lines into
+`apps/site/public/landing/releases/changelog.json`, which dusk.bot/changelog, the apps' What's new and `duskbot update`
+read. Draft lines from commits stay in the folded part until someone writes them in user words. `release-all.ts`
+refuses a version with no changelog entry; release.yml uses the generated body for the draft (falling back to GitHub's
+generated notes).
 
 ## Putting a release on dusk.bot
 

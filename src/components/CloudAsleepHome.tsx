@@ -39,6 +39,8 @@ export function CloudAsleepHome({ bridge, view }: { bridge: Pick<HomeBridge, "wa
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { wake("click"); }, []);
 
+  // waking says so with how long it usually takes, and past a minute that it's slower than usual: never "can't reach"
+  const line = t(view.slow ? "cloudAsleep.wakingSlow" : "cloudAsleep.wakingUp");
   const bots = seen?.bots ?? [];
   const bot = bots.find((entry) => entry.id === selected) ?? bots[0] ?? null;
   useEffect(() => { end.current?.scrollIntoView({ block: "end" }); }, [bot?.id, view.held]);
@@ -68,7 +70,7 @@ export function CloudAsleepHome({ bridge, view }: { bridge: Pick<HomeBridge, "wa
             <p role="alert" className="max-w-[360px] text-center text-[14px] leading-relaxed text-danger">{t("cloudAccount.actionFailed")}</p>
             <button type="button" className="ui-button ui-button-primary" onClick={() => wake("click")}>{t("cloudHome.tryAgain")}</button>
           </>
-          : <MascotLoader size={64} first={t("cloudAsleep.waking")} lineClassName="text-[14px] leading-5 text-ink" />}
+          : <MascotLoader size={64} first={line} lineClassName="text-[14px] leading-5 text-ink" />}
       </main>
     );
   }
@@ -79,7 +81,7 @@ export function CloudAsleepHome({ bridge, view }: { bridge: Pick<HomeBridge, "wa
         style={{ ...dragProps.style, ...(macInset ? { paddingLeft: MAC_TRAFFIC_LIGHT_CLEAR_X } : {}) }}>
         <p role="status" data-cloud-asleep-line className="flex min-w-0 items-center gap-2 text-[13px] text-ink-secondary">
           <span aria-hidden="true" className="size-3 shrink-0 animate-spin rounded-full border-2 border-transparent border-t-accent motion-reduce:animate-none" />
-          <span className="truncate">{t("cloudAsleep.waking")}</span>
+          <span className="truncate">{line}</span>
         </p>
       </header>
       <div className="flex min-h-0 flex-1 flex-col sm:flex-row">

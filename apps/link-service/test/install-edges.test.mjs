@@ -51,7 +51,7 @@ async function claimed() {
   return { keys, made, vpsToken };
 }
 const agentLink = (home, id, token) => run(process.execPath, [join(root, "agent.mjs"), "link"], {
-  env: { ...process.env, HOME: home, LINK_BASE: base, LINK_ID: id, LINK_TOKEN: token, LINK_MODE: "relay", LINK_SERVER_PORT: String(fakePort) },
+  env: { ...process.env, HOME: home, USERPROFILE: home, LINK_BASE: base, LINK_ID: id, LINK_TOKEN: token, LINK_MODE: "relay", LINK_SERVER_PORT: String(fakePort) },
 });
 
 describe("the link service and agent when a link is repeated", () => {
@@ -164,7 +164,9 @@ ${actions}
 }
 const sha = (text) => createHash("sha256").update(text).digest("hex");
 
-describe("install.sh run again after a stop", () => {
+// POSIX only: install.sh is the Linux server installer, run here under sh with stub commands on a POSIX PATH; Windows
+// has neither, and no server runs it there.
+describe.skipIf(process.platform === "win32")("install.sh run again after a stop", () => {
   it("a line already used by this server, stopped before it noted the link, repairs instead of refusing", async () => {
     const s = await sh(`
 mkdir -p "$LINK_HOME/.config/duskbot-link"

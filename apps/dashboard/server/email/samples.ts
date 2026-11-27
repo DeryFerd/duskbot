@@ -1,5 +1,5 @@
-import { accountDeletedEmail, cancelledEmail, cloudBackEmail, cloudDeletedEmail, cloudDeletionEmail, cloudReadyEmail, codeEmail, paymentFailedEmail, paymentRecoveredEmail, paymentReminderEmail, promoEmail, receiptEmail,
-  recoveryEmail, welcomeEmail } from "./templates.ts";
+import { accountDeletedEmail, cancelledEmail, cloudBackEmail, cloudDeletedEmail, cloudDeletionEmail, cloudReadyEmail, codeEmail, desktopLinkEmail, paymentFailedEmail, paymentRecoveredEmail, paymentReminderEmail, promoEmail, receiptEmail,
+  recoveryEmail, welcomeEmail, winbackEmail } from "./templates.ts";
 import type { EmailConfig, Rendered } from "./templates.ts";
 
 const at = Date.UTC(2026, 10, 11, 14, 30);
@@ -22,7 +22,9 @@ export function samples(cfg: EmailConfig): Array<{ id: string; trigger: string; 
     { id: "05b-payment-final", trigger: "billing dunning sweep: 3 days before the fix-by date", email: paymentReminderEmail(cfg, { amountCents: 2000, currency: "USD", description: "dusk cloud plus", cloudName: cloud.name, fixBy: at + 3 * DAY, final: true }) },
     { id: "05c-payment-recovered", trigger: "subscription active or renewed after a payment problem (billing webhook)", email: paymentRecoveredEmail(cfg, { description: "dusk cloud plus", cloudName: cloud.name }) },
     { id: "06-cancelled", trigger: "plan set to end at period end (cancel route or webhook)", email: cancelledEmail(cfg, { description: "dusk cloud plus", cloudName: cloud.name, endsAt: at + 20 * DAY, keepDays: 30, keptPaused: true }) },
+    { id: "06a-winback", trigger: "billing sweep: 7 days after a person cancelled, once, unless resumed or a new plan started", email: winbackEmail(cfg, { description: "dusk cloud plus", cloudName: cloud.name, endsAt: at + 13 * DAY, keepDays: 30, now: at }) },
     { id: "08-cloud-deleted", trigger: "cloud deleted (managed notice deleted, or generic lifecycle)", email: cloudDeletedEmail(cfg, { name: cloud.name, at }) },
+    { id: "11-desktop-link", trigger: "a phone visitor asks for the desktop download link (POST /api/public/desktop-link)", email: desktopLinkEmail(cfg) },
     { id: "09-account-deleted", trigger: "account deleted (auth.onAccountDeleted)", email: accountDeletedEmail(cfg, { email: "sam@example.com" }) },
     { id: "10-promo", trigger: "template only: launches and feature news", email: promoEmail(cfg, {
       subject: "rooms are here", preheader: "put a few bots in one chat and let them pass work along.", eyebrow: "new", title: "bots can work together now",

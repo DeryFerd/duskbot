@@ -3,6 +3,7 @@
 // answer it cannot parse is a failure, never posted.
 import type { CalendarEvent, EmailHeader } from "../connected-reads.ts";
 import type { RoutineRun } from "../routines.ts";
+import { SILENT_LINE } from "../../shared/routine-run.ts";
 import { clean, recordsBlock } from "../records-block.ts";
 import { CHAIN_READ_CHARS } from "../routine-chain.ts";
 import { PICKS_PER_TRIAGE } from "./check-plan.ts";
@@ -101,7 +102,8 @@ function jsonObject(text: string): Record<string, unknown> | null {
 /** The watch run's answer, keeping only picks and preps of items it was given; null when it is not the JSON asked for. */
 export function parseWatchResult(text: string, given: { mail: ReadonlySet<string>; prep: ReadonlySet<string> }): WatchResult | null {
   const json = jsonObject(text);
-  if (!json) return null;
+  // a routine's own way of saying nothing matters (no reply, or NOTHING NEW) is the quiet answer, not an unreadable one
+  if (!json) return !text.trim() || SILENT_LINE.test(text.trim().split(/\r?\n/).at(-1) ?? "") ? { quiet: true } : null;
   if (json.quiet === true && json.important === undefined && json.prep === undefined) return { quiet: true };
   if ((json.important !== undefined && !Array.isArray(json.important)) || (json.prep !== undefined && !Array.isArray(json.prep))) return null;
   if (json.important === undefined && json.prep === undefined) return null;

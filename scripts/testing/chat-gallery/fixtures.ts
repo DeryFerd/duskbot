@@ -96,7 +96,25 @@ const eventLines = (): Message[] => [
   bot("That's everything."),
 ];
 
+/** The chat's own notes beside a change a bot made, so they read as the same kind of line. */
+const systemNotes = (): Message[] => [
+  user("Clear out the old routine and keep going."),
+  bot("Done."),
+  appliedCard({ routineRequest: { requestId: "rd", botId: "b", threadId: "t", createdAt: 1, version: 1, reason: "",
+    operation: { action: "delete", routineId: "r2", expectedUpdatedAt: 1 }, undo: { name: "Order a heat pad and massager" } } as never }),
+  row("compaction", { compaction: { by: "person", summary: "", firstKeptId: "", foldedThroughId: "", tokensBefore: 0 } }),
+  row("compaction", { compaction: { by: "harness", awayHours: 7, summary: "", firstKeptId: "", foldedThroughId: "", tokensBefore: 0 } }),
+  row("activity", { tool: { name: "recovery: Claude did not answer, so Codex took over.", ok: true } }),
+  row("activity", { tool: { name: "notice: Hermes can't run Kimi K2 anymore, so this chat uses Hermes' default model. Pick another model to stop seeing this.", ok: true } }),
+  row("activity", { tool: { name: "notice: Paused “Morning inbox sweep” after 3 runs failed the same way: the site asked for a code. Turn it back on once that is fixed.", ok: true } }),
+  row("activity", { tool: { name: "notice: Gmail stayed on Sidd's MacBook when your bots moved to my cloud, so bots here can't read or send mail through it.", ok: true } }),
+  row("activity", { tool: { name: "notice: Routines are paused. Sign in to your AI to turn them back on.", ok: true, signIn: true } }),
+  row("activity", { tool: { name: "error: The model provider is overloaded.", partial: true } }),
+  bot("Back on it."),
+];
+
 const RAW_SCENARIOS: GalleryScenario[] = [
+  { id: "system-notes", title: "The chat's own notes: compaction, takeovers, model and routine notices", messages: systemNotes },
   { id: "exchange-asker", title: "A bot asking another bot, from the asker's chat", messages: askerExchange },
   { id: "exchange-asker-open", title: "The same exchange, opened", messages: askerExchange, openExchanges: true },
   { id: "exchange-asked", title: "The same exchange, from the asked bot's chat", messages: askedExchange },

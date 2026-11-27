@@ -86,6 +86,31 @@ describe("ApprovalCard routine proposals", () => {
     expect(pendingApprovals([message])).toEqual([]);
   });
 
+  it("keeps a script check's card open for the person's Confirm, as the server waits on it", () => {
+    const message: Message = {
+      id: "script-check-card",
+      role: "bot",
+      kind: "options",
+      at: 1,
+      card: {
+        title: "Confirm routine",
+        subtitle: "Every 3 minutes\nBefore each run: ./check.sh",
+        options: ["Confirm", "Cancel"],
+        requestId: "routine-request",
+        tool: "schedule_routine",
+        routineRequest: { ...routineRequest, operation: { ...createRoutineOperation, routine: { ...createRoutineOperation.routine, probe: { kind: "script", url: "", command: "./check.sh", access: "full" } } } },
+      },
+    };
+
+    const markup = renderToStaticMarkup(createElement(ApprovalCard, { message }));
+    expect(markup).not.toContain("Expired");
+    expect(markup).toContain("Waiting for your confirmation");
+    expect(pendingApprovals([message]).map((pending) => pending.requestId)).toEqual(["routine-request"]);
+    // a later change that adds the check waits the same way
+    const update: Message = { ...message, card: { ...message.card!, routineRequest: { ...routineRequest, operation: { action: "update", routineId: "routine-1", expectedUpdatedAt: 1, changes: { probe: { kind: "script", url: "", command: "./check.sh" } } } } } };
+    expect(pendingApprovals([update])).toHaveLength(1);
+  });
+
   it("records the exact routine action after confirmation", () => {
     const message: Message = {
       id: "routine-delete-card",

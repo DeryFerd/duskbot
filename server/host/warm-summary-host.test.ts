@@ -137,7 +137,7 @@ describe("warm summaries for a Claude conversation", () => {
     expect(f.compactCalls).toEqual([{ threadId: "t1", session: "live-session", instructions: expect.stringContaining("every question still waiting"), signal: expect.any(AbortSignal) }]);
     expect(f.task.resumeCursors.claude).toBe("fork-session");
     expect(f.task.handedMessages.claude).toEqual({ session: "fork-session", config: "cfg", through: f.messages[1]!.id, ids: [] });
-    expect(f.appended).toEqual([expect.objectContaining({ kind: "activity", tool: { name: "Summarized this conversation while it was idle; the latest messages carry on word for word", ok: true } })]);
+    expect(f.appended).toEqual([expect.objectContaining({ kind: "activity", autoSummary: true, tool: { name: "Summarized this conversation while it was idle; the latest messages carry on word for word", ok: true } })]);
     expect(f.book).toHaveBeenCalledWith({ threadId: "t1", botId: "b1", instanceId: "claude" }, expect.objectContaining({ ok: true, cacheRead: 150_000 }));
   });
 

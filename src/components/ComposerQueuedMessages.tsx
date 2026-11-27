@@ -1,4 +1,4 @@
-import { CornerDownRight, Pencil, Trash2 } from "../icons";
+import { Clock, CornerDownRight, Pencil, Trash2 } from "../icons";
 
 import type { SteerQueueReason } from "../../shared/wire";
 import { t } from "@/lib/i18n";
@@ -18,28 +18,6 @@ export function composerCanSteerQueuedMessages(
   approvalPending = false,
 ): boolean {
   return busy && !locked && !approvalPending && pendingCount > 0;
-}
-
-export const DOUBLE_ENTER_STEER_WINDOW_MS = 1_500;
-
-export function doubleEnterSteerWindowExpiresAt(
-  prevPendingCount: number,
-  pendingCount: number,
-  busy: boolean,
-  canSteer: boolean,
-  now = Date.now(),
-): number | null {
-  if (!busy || !canSteer) return null;
-  return pendingCount > prevPendingCount ? now + DOUBLE_ENTER_STEER_WINDOW_MS : null;
-}
-
-export function doubleEnterSteersQueue(
-  windowExpiresAt: number,
-  now: number,
-  pendingCount: number,
-  hasContent: boolean,
-): boolean {
-  return !hasContent && pendingCount > 0 && now < windowExpiresAt;
 }
 
 export function QueuedComposerMessages({
@@ -108,7 +86,7 @@ export function QueuedComposerMessages({
         {items.map((item, index) => {
           const label = queuedMessageLabel(item.text);
           return <li key={item.queueId} className="flex min-h-10 min-w-0 items-center gap-2 px-2.5 py-1.5">
-            <CornerDownRight
+            <Clock
               size={14}
               strokeWidth={1.8}
               className="shrink-0 text-ink-secondary"

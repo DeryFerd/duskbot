@@ -222,9 +222,9 @@ describe("Settings, drawn as Grok Bot's", () => {
     expect(panes(open("general"))).toContain("permissions");
   });
 
-  it("shows a paired remote client General and Computer (Texting while the phone app is offered), with its look in General", () => {
+  it("shows a paired remote client General, Computer and Updates (Texting while the phone app is offered), with its look in General", () => {
     vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn(), duskDesktop: { remoteClient: { active: true }, environments: {} } });
-    expect(panes(open("general"))).toEqual(["general", "voice", "computer", "texting"]);
+    expect(panes(open("general"))).toEqual(["general", "voice", "computer", "texting", "updates"]);
     expect(groups(open("general"))).toEqual(["How it looks", "Notifications", "More"]);
     expect(current(open("looks"))).toBe("general");
     expect(current(open("engines"))).toBe("general");

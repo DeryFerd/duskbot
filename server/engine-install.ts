@@ -88,6 +88,8 @@ interface InstallOptions {
   env?: NodeJS.ProcessEnv;
   path?: string;
   onProgress?: ProgressSink;
+  /** An exact release (1.2.3) instead of the latest. */
+  version?: string;
   /** Tests only: what the dry run and the real install run instead of npm. */
   npm?: NpmRunner;
 }
@@ -101,6 +103,7 @@ export function installNpmEngine(pkg: string, options: InstallOptions = {}): Pro
   const key = `${options.baseDir ?? DATA_DIR} ${pkg}`;
   const existing = running.get(key);
   if (existing) return existing;
+  if (options.version !== undefined && !/^\d+\.\d+\.\d+$/.test(options.version)) return Promise.reject(new Error(`Not a release version: ${options.version}`));
   const run = installOnce(pkg, options).finally(() => running.delete(key));
   running.set(key, run);
   return run;
@@ -121,7 +124,7 @@ async function installOnce(pkg: string, options: InstallOptions): Promise<void> 
   stripWorkspaceCredentialEnv(env as Record<string, string | undefined>);
   // npm 11 skips a dependency's install script unless the package is named here (Claude Code needs one), and Codex ships
   // its native binary as a platform optional dependency, which a user-level `omit=optional` must not drop.
-  const args = ["install", "-g", "--prefix", prefix, "--loglevel=error", "--include=optional", `--allow-scripts=${pkg}`, `${pkg}@latest`];
+  const args = ["install", "-g", "--prefix", prefix, "--loglevel=error", "--include=optional", `--allow-scripts=${pkg}`, `${pkg}@${options.version ?? "latest"}`];
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   await measuredInstall(pkg, args, env, prefix, timeoutMs, options);
   const binDir = enginesBinDir(options.baseDir);

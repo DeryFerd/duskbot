@@ -99,6 +99,8 @@ and redirect (app to `/dashboard`, dev home, www to the apex); old `/app/...` an
    waitlist view, `DUSK_DASHBOARD_PAGE_BASE=/dashboard`, `DUSK_SITE_UPSTREAM=http://127.0.0.1:3103` (dusk-landing).
 3. `deploy/account/deploy.sh production` (or `preview`), then `curl -fsS https://dusk.bot/v1/health`.
    The deploy key must be able to read the private repo (a read-only deploy key on the repo).
+   Without Tailscale, set `DUSK_PACKAGE_SSH_HOST` and `DUSK_PACKAGE_SSH_JUMP` for its home package check
+   (`deploy/account/PRODUCTION-CLOUD.md`, section 2).
 4. **Brevo**: add and authenticate the domain dusk.bot (its Brevo code, DKIM and a DMARC record
    `v=DMARC1; p=quarantine; rua=mailto:hello@dusk.bot`) in DNS, create an API key.
 5. **Dodo Payments**: live mode products for each plan id in `shared/billing-api.ts`; webhook

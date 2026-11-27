@@ -93,6 +93,14 @@ export function createBillingRoutes(ctx: BillingContext) {
         service.handleWebhook(req.headers, await rawBody(req, 64 * 1024));
         json(res, 200, { ok: true }); return true;
       }
+      // the apps' cancel flow steps: their sign-in's bearer token, for the plan of a cloud that account owns
+      const appRetention = method === "POST" ? /^\/v1\/clouds\/([^/]+)\/retention$/.exec(path) : null;
+      if (appRetention) {
+        const bearer = /^Bearer omc_[A-Za-z0-9_-]{43}$/.test(req.headers.authorization ?? "");
+        const owner = bearer ? await ctx.accounts.fromBearer(req) : await ctx.accounts.fromCookie(req);
+        if (!owner) throw new BillingError(401, "signed_out");
+        json(res, 200, service.cloudRetentionStep(owner, appRetention[1]!, await body(req))); return true;
+      }
       const account = await ctx.accounts.fromCookie(req);
       if (!account) throw new BillingError(401, "signed_out");
       const send = (data: unknown) => { json(res, 200, data); return true; };

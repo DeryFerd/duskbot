@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "updatedAt": "2026-11-20T00:00:00.000Z",
+  "updatedAt": "2026-11-26T00:00:00.000Z",
   "engines": {
     "codex": {
       "models": [
-        { "id": "gpt-6.2-sol", "label": "GPT-6.2 Sol", "add": true },
-        { "id": "gpt-6.2-astra", "label": "GPT-6.2 Astra", "add": true },
+        { "id": "gpt-6.2-sol", "label": "GPT-6.2 Sol" },
+        { "id": "gpt-6.2-astra", "label": "GPT-6.2 Astra" },
         { "id": "gpt-6.1-terra", "label": "GPT-6.1 Terra" },
         { "id": "gpt-6.1-sol", "label": "GPT-6.1 Sol" },
         { "id": "gpt-6-astra", "label": "GPT-6 Astra" },

@@ -24,7 +24,7 @@ import type { BillingNotice } from "./billing/service.ts";
 import { BILLING_CONFIG, MANAGED_REGION, regionLabel } from "./billing/plans.ts";
 import type { StoredCloud } from "./clouds/types.ts";
 import { DEFAULT_RETENTION_DAYS } from "../../cloud-service/src/retention.ts";
-import { CODE_SUBJECT, accountDeletedEmail, cancelledEmail, cloudDeletedEmail, cloudNoticeEmail, cloudReadyEmail, emailConfig, paymentFailedEmail, paymentRecoveredEmail, paymentReminderEmail, receiptEmail, teamInviteEmail, teamSeatFullEmail, welcomeEmail } from "./email/templates.ts";
+import { CODE_SUBJECT, accountDeletedEmail, cancelledEmail, cloudDeletedEmail, cloudNoticeEmail, cloudReadyEmail, emailConfig, paymentFailedEmail, paymentRecoveredEmail, paymentReminderEmail, receiptEmail, teamInviteEmail, teamSeatFullEmail, welcomeEmail, winbackEmail } from "./email/templates.ts";
 import type { Rendered } from "./email/templates.ts";
 import { render } from "./email/layout.ts";
 import { BillingError } from "./billing/service.ts";
@@ -62,6 +62,7 @@ import { createIncidents, type Incidents } from "./incidents/index.ts";
 import { memoryIncidentStore } from "./incidents/store.ts";
 import { createIncidentRoutes, IncidentRouteError } from "./incidents/routes.ts";
 import { BUG_REPORT_PATH, createBugReports } from "./bug-reports/index.ts";
+import { createDesktopLink } from "./email/desktop-link.ts";
 import { memoryBugReportStore, type BugReportStore } from "./bug-reports/store.ts";
 import { createSealer, parseSealKey } from "./clouds/seal.ts";
 import { aliasLegacyCookies, aliasLegacyHeaders } from "../../../electron/legacy-names.mjs";
@@ -323,6 +324,9 @@ export function createDashboardApp(options: DashboardAppOptions) {
     else if (notice.kind === "payment_failed") sendTo(notice.accountId, "required", paymentFailedEmail(emailCfg, { ...notice, cloudName: cloud?.name ?? null }));
     else if (notice.kind === "payment_reminder") sendTo(notice.accountId, "required", paymentReminderEmail(emailCfg, { ...notice, cloudName: cloud?.name ?? null, final: notice.step === "final" }));
     else if (notice.kind === "payment_recovered") sendTo(notice.accountId, "required", paymentRecoveredEmail(emailCfg, { description: notice.description, cloudName: cloud?.name ?? null }));
+    // not about running the account: the person can turn it off with product news
+    else if (notice.kind === "winback") sendTo(notice.accountId, "product", winbackEmail(emailCfg, { description: notice.description, cloudName: cloud?.name ?? null, endsAt: notice.endsAt,
+      keepDays: cloud?.backend === "managed" ? retentionDays : notice.graceDays, now: now() }));
     else sendTo(notice.accountId, "required", cancelledEmail(emailCfg, { description: notice.description, cloudName: cloud?.name ?? null, endsAt: notice.endsAt,
       keptPaused: cloud?.backend === "managed", keepDays: cloud?.backend === "managed" ? retentionDays : notice.graceDays }));
   }
@@ -449,6 +453,8 @@ export function createDashboardApp(options: DashboardAppOptions) {
     admin: (req, mutation) => { const owner = auth.requireWeb(req, { mutation }); if (!admin.isAdmin(owner.email)) throw new AdminError(403, "not_admin", "This account is not an admin."); } });
   const reportMail = options.bugReports?.mail;
   const cloudSealer = createSealer((options.admin?.env ?? process.env).DUSK_CLOUD_SEAL_KEY ? parseSealKey((options.admin?.env ?? process.env).DUSK_CLOUD_SEAL_KEY!) : null);
+  const desktopLink = createDesktopLink({ mailer, email: emailCfg, json, readJson: async req => bodyObject(await readBody(req)), ip: req => rateIp(clientIp(req, options.trustProxy ?? false)),
+    now, daily: Number(process.env.DUSK_DESKTOP_LINK_DAILY) || undefined });
   const bugReports = createBugReports({ store: bugReportStore, now, json, bodyObject, ip: req => rateIp(clientIp(req, options.trustProxy ?? false)),
     admin: (req, mutation) => { const owner = auth.requireWeb(req, { mutation }); if (!admin.isAdmin(owner.email)) throw new AdminError(403, "not_admin", "This account is not an admin."); return owner.id; },
     audit: (actor, action, target, detail) => { void analytics.sink.audit({ id: `aud_${random(12)}`, at: now(), actor, action, target, detail }).catch(() => {}); },
@@ -873,6 +879,7 @@ export function createDashboardApp(options: DashboardAppOptions) {
     } })) return;
     if (await incidentRoutes.handle(req, res, url)) return;
     if (await bugReports.handle(req, res, url)) return;
+    if (await desktopLink.handle(req, res, url)) return;
     // preview and development only: the latest code and link mailed to a test address, for test harnesses
     if (path === "/v1/ops/test-mail" && method === "GET") {
       const token = adminEnv.DUSK_OPS_TOKEN, given = String(req.headers.authorization ?? "");

@@ -68,7 +68,9 @@ describe("publishing a page", () => {
     applyIncludedPagesMessage({ type: "duskbot:included-pages", access: null, offered: false });
     writeSite(join(f.work, "site"));
     const outcome = await f.publish({ path: "site" });
-    expect(outcome.text).toBe("Publishing pages isn't turned on for this account yet.");
+    expect(outcome.text).toMatch(/^Publishing pages isn't turned on for this account yet\./u);
+    // no switch exists for it: the bot must not send the person looking for one in Settings
+    expect(outcome.text).toMatch(/no setting/u);
     expect(f.service.minted).toEqual([]);
     expect(f.cards).toEqual([]);
     applyIncludedPagesMessage({ type: "duskbot:included-pages", access: null });

@@ -1314,6 +1314,7 @@ export function createMemoryUpkeep(deps: UpkeepDeps): MemoryUpkeep {
 
   return {
     noteTurn(botId, threadId, turn) {
+      setTimeout(kick, 0).unref?.(); // a turn that ended frees its bot: a capture that gave way to it goes on now, not at the next tick
       if (!upkeepEnabled(deps.bot(botId))) return;
       if (!turn.person.trim() && !turn.bot.trim()) return;
       buffer.add(botId, threadId, turn);

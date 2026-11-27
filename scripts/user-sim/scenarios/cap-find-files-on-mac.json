@@ -1,0 +1,73 @@
+{
+  "title": "Find files anywhere in the home folder, by name and by what is inside",
+  "world": "founder",
+  "tags": [
+    "capability",
+    "file"
+  ],
+  "source": "complaints #5 (@AdaLkgn): \"can't even search files on the mac you install it on\".",
+  "computer": true,
+  "seed": {
+    "files": {
+      "Desktop/old stuff/scans 2024/IMG_4471 halyard paddle club card.txt": "Halyard Paddle Club - member card (scan, OCR)\nMember: Daniel Reyes\nMember no. HPC-20417\nValid through: 30 June 2027\nLocker 12\n",
+      "Library/Mobile Documents/com~apple~CloudDocs/Trips/oct-weekend.md": "# October weekend, Quillmoor cabin\n\n- check in 4pm Fri, host is Marguerite Oyelaran (she lives next door)\n- key in the lockbox by the shed\n- bring firewood? no, they have it\n",
+      "Documents/Archive/2023/paddle-club-old.txt": "Halyard Paddle Club 2023 card, member no. HPC-11102, expired 30 June 2024.\n"
+    }
+  },
+  "steps": [
+    {
+      "chat": {
+        "label": "card",
+        "goal": "Find the scan of your Halyard paddle club card somewhere on this Mac and learn your member number and when it is valid through. You don't remember where you put it.",
+        "opener": "theres a scan of my halyard paddle club card somewhere on this mac, no idea where. whats my member number on it and when does it expire",
+        "maxTurns": 3
+      }
+    },
+    {
+      "chat": {
+        "label": "host",
+        "goal": "Find out who the host was at the Quillmoor cabin you stayed at in October. You wrote it in some notes file, you don't remember its name.",
+        "opener": "also i wrote down the host's name for the quillmoor cabin in some notes file in october, can you dig it up",
+        "maxTurns": 3
+      }
+    }
+  ],
+  "checks": [
+    {
+      "label": "current card number",
+      "said": {
+        "step": "card",
+        "match": "HPC-?20417"
+      }
+    },
+    {
+      "label": "valid through 2027",
+      "said": {
+        "step": "card",
+        "match": "2027"
+      }
+    },
+    {
+      "label": "not the old card as current",
+      "said": {
+        "step": "card",
+        "not": "member (no\\.?|number) (is )?HPC-?11102"
+      }
+    },
+    {
+      "label": "host name",
+      "said": {
+        "step": "host",
+        "match": "Marguerite|Oyelaran"
+      }
+    },
+    {
+      "label": "searched the computer",
+      "tool": {
+        "match": "find_files|mdfind|\\bfd\\b|\\bfind |\\bgrep\\b|\\brg\\b"
+      },
+      "min": 1
+    }
+  ],
+  "judge": "Juniper searches Daniel's own files (by name for the card, by what is inside for the cabin notes), finds the 2024 scan on the Desktop (HPC-20417, valid through 30 June 2027) rather than the expired 2023 card, and the iCloud trip notes naming the host, Marguerite Oyelaran. It never says it cannot search the Mac and never asks him to look himself."
+}

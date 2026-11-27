@@ -92,11 +92,32 @@ describe("who a bot's @mention wakes in a room", () => {
     expect(chain.wake(ada)).toEqual([]);
   });
 
-  it("does not wake a bot for a teammate whose reply had already landed", () => {
+  it("does not wake a bot for a teammate whose reply had landed before its turn began", () => {
     const chain = new MentionChain();
     const heard = new Set(["ada", "ben"]);
+    chain.begin("ada");
     expect(chain.wake(ada)).toEqual([]);
+    chain.begin("ben");
     expect(chain.decide(ben, "ada", 0, heard, false, true)).toBeNull();
     expect(chain.wake(ben)).toEqual([]);
+  });
+
+  it("gives a bot one closing turn when the teammate it asks answered while it was already answering", () => {
+    const chain = new MentionChain();
+    const heard = new Set(["ada", "ben"]);
+    // both start at once; Ada lands first, then Ben asks her for the answer it never saw
+    chain.begin("ada");
+    chain.begin("ben");
+    expect(chain.wake(ada)).toEqual([]);
+    expect(chain.decide(ben, "ada", 0, heard, false, true)).toBeNull();
+    expect(chain.wake(ben)).toEqual([{ id: "ben", hop: 1, cue: { by: ada, closing: true } }]);
+    // the closing turn asking again wakes nobody
+    expect(chain.decide(ben, "ada", 1, heard, true, true)).toBeNull();
+    expect(chain.wake(ben)).toEqual([]);
+    // a mention that hands work over is not an ask
+    const handOver = new MentionChain();
+    handOver.begin("ada"); handOver.begin("ben"); handOver.wake(ada);
+    expect(handOver.decide(ben, "ada", 0, heard, false, false)).toBeNull();
+    expect(handOver.wake(ben)).toEqual([]);
   });
 });

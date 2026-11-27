@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { CANCEL_ANSWERS, RETENTION_OFFERS, RETENTION_OUTCOMES, RETENTION_STEPS } from "../../../../shared/billing-api.ts";
 import type { CancelSurvey, Cart, CartLine, LicenseView, RetentionInput, SubscriptionStatus } from "../../../../shared/billing-api.ts";
 import type { DesktopPlan, OrderInput } from "../clouds/types.ts";
 import { createJsonStore } from "./json-store.ts";
@@ -90,6 +89,8 @@ export interface TeamInvite {
 }
 /** a member who left a team cloud: the cloud is told (POST /api/cloud/team/member-left) until it confirms */
 export interface TeamLeave { id: string; cloudId: string; email: string; at: number; doneAt: number | null; tries: number; nextAt: number }
+export const WINBACK_SKIPS = ["resumed", "new_plan", "closed", "gone", "late"] as const;
+export interface StoredWinback { id: string; accountId: string; subscriptionId: string; cancelledAt: number; sentAt: number | null; skipped: (typeof WINBACK_SKIPS)[number] | null }
 export interface BillingState {
   teamInvites?: TeamInvite[];
   teamLeaves?: TeamLeave[];
@@ -109,6 +110,9 @@ export interface BillingState {
   feedback: Array<CancelSurvey & { id: string; accountId: string; cloudId: string | null; subscriptionId: string | null; at: number }>;
   /** each step of the dashboard's cancel flow, for the owner's cancel reasons and saves */
   retention?: Array<RetentionInput & { id: string; accountId: string; subscriptionId: string; at: number }>;
+  /** the one email a week after a person turned their plan's renewal off: due `cancelledAt` + WINBACK.afterDays, sent
+   *  (`sentAt`) or let go (`skipped`) once, per subscription */
+  winbacks?: StoredWinback[];
   /** the stay-on discount, at most one per account */
   retentionDiscounts?: Array<{ id: string; accountId: string; subscriptionId: string; code: string; percent: number; cycles: number; at: number }>;
 }
@@ -151,9 +155,11 @@ const valid = shape({
   licenses: array(shape({ id: str, ownerAccountId: str, kind: one("solo", "team"), seats: int, members: array(shape({ email: str, accountId: nullable(str), role: one("owner", "member"), addedAt: int })), priority: bool, subscriptionId: nullable(str), status: one("active", "grace", "expired"), validUntil: nullable(int) })),
   invoices: array(shape({ id: str, accountId: str, providerPaymentId: str, subscriptionId: nullable(str), checkoutId: nullable(str), amountCents: int, taxCents: optional(int), currency: str, status: one("paid", "failed", "refunded"), mode: optional(one("test", "live")), description: str, createdAt: int })),
   webhookEvents: array(shape({ id: str, at: int, type: str })),
-  retention: optional(array(shape({ id: str, accountId: str, subscriptionId: str, reason: one(...CANCEL_ANSWERS), step: one(...RETENTION_STEPS), outcome: one(...RETENTION_OUTCOMES), at: int }))),
+  // a newer build may write reasons, steps, offers and outcomes this one does not know: these rows only count, so they never stop the store loading
+  retention: optional(array(shape({ id: str, accountId: str, subscriptionId: str, reason: str, step: str, outcome: str, at: int }))),
   retentionDiscounts: optional(array(shape({ id: str, accountId: str, subscriptionId: str, code: str, percent: int, cycles: int, at: int }))),
-  feedback: array(shape({ id: str, accountId: str, cloudId: nullable(str), subscriptionId: nullable(str), answer: one(...CANCEL_ANSWERS), expected: optional(str), improve: optional(str), offer: optional(one(...RETENTION_OFFERS)), outcome: optional(one(...RETENTION_OUTCOMES)), at: int })),
+  winbacks: optional(array(shape({ id: str, accountId: str, subscriptionId: str, cancelledAt: int, sentAt: nullable(int), skipped: nullable(one(...WINBACK_SKIPS)) }))),
+  feedback: array(shape({ id: str, accountId: str, cloudId: nullable(str), subscriptionId: nullable(str), answer: str, expected: optional(str), improve: optional(str), offer: optional(str), outcome: optional(str), at: int })),
 });
 function validState(value: unknown): value is BillingState {
   if (!valid(value)) return false;

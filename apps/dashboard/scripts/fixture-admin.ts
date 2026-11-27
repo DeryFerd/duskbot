@@ -150,7 +150,31 @@ function seedPaymentHistory(app: ReturnType<typeof createDashboardApp>, accounts
   }
   seedHistoric(app, now);
   seedTrials(app, accounts, now);
+  seedCancelFlows(app, now);
   app.billing.store.commit();
+}
+
+/** made-up cancel flows: each reason's steps and what the person picked, some kept their plan and some cancelled */
+function seedCancelFlows(app: ReturnType<typeof createDashboardApp>, now: number) {
+  const state = app.billing.store.state, subs = state.subscriptions.filter(sub => sub.status === "active" && sub.cloudId).slice(0, 6);
+  const flows: Array<{ reason: "price" | "skip" | "switching" | "unused" | "broken"; offer: "discount" | "losses" | "help" | "none"; steps: Array<["reason" | "help" | "confirm", "shown" | "discount" | "kept" | "helped" | "cancelled"]> }> = [
+    { reason: "price", offer: "discount", steps: [["reason", "shown"], ["help", "discount"]] },
+    { reason: "skip", offer: "losses", steps: [["reason", "shown"], ["help", "shown"], ["confirm", "cancelled"]] },
+    { reason: "switching", offer: "losses", steps: [["reason", "shown"], ["help", "shown"], ["confirm", "cancelled"]] },
+    { reason: "unused", offer: "help", steps: [["reason", "shown"], ["help", "kept"]] },
+    { reason: "broken", offer: "help", steps: [["reason", "shown"], ["help", "helped"], ["confirm", "cancelled"]] },
+    { reason: "skip", offer: "losses", steps: [["reason", "shown"], ["confirm", "cancelled"]] },
+  ];
+  state.retention ??= [];
+  for (const [k, flow] of flows.entries()) {
+    const sub = subs[k % subs.length];
+    if (!sub) return;
+    const at = now - (2 + k * 3) * DAY;
+    for (const [i, [step, outcome]] of flow.steps.entries()) {
+      state.retention.push({ id: `rt_fixture_${k}_${i}`, accountId: sub.accountId, subscriptionId: sub.id, reason: flow.reason, step, outcome, at: at + i * 60_000 });
+      if (outcome !== "shown") state.feedback.push({ id: `fb_fixture_${k}_${i}`, accountId: sub.accountId, cloudId: sub.cloudId, subscriptionId: sub.id, answer: flow.reason, offer: flow.offer, outcome, at: at + i * 60_000 });
+    }
+  }
 }
 
 /** made-up trials for the subscribers page: some running, one set to end with its survey answer, one ended, with a few days of app use each */

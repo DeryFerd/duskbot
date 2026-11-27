@@ -24,7 +24,6 @@ import { forgetTranscriptShelf } from "@/state/transcript-cache";
 import { reportPresence } from "./presence";
 import { registerPushForConnection } from "./push";
 import { Unreachable } from "./Unreachable";
-import { PhoneUpdateLine } from "./PhoneUpdateLine";
 import { markCloudAsleep, noteCloudPageActivity, onCloudGone } from "@/lib/cloud-power";
 import { liveEventsHeardAt, retryLiveEventsNow } from "@/lib/live-events";
 import { phoneOffline } from "../network";
@@ -324,7 +323,6 @@ export function ConnectionGate({ children, forcePair }: { children: ReactNode; f
   return (
     <>
       <ActiveConnection value={state.id}><TranscriptShelfScope value={state.id === "same-origin" ? null : state.id}><Fragment key={state.id}>{children}</Fragment></TranscriptShelfScope></ActiveConnection>
-      <PhoneUpdateLine connection={state.kind === "ready" ? state.id : null} />
       {(incoming || adding > 0) && (
         <div className="fixed inset-0 z-50">
           <Onboarding key={incoming ? `in-${incoming.sequence}` : `add-${adding}`} initial={incoming?.payload} initialSignIn={incoming?.signIn} startAtLink startAt={incoming ? undefined : addingStep} email={addingStep === "addAccount" ? undefined : signInEmail?.email} signInCode={incoming ? undefined : signInEmail?.code} signInCloud={incoming ? undefined : signInEmail?.cloud} onOpen={openKept}

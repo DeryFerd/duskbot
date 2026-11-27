@@ -12,7 +12,7 @@
     "claude apply google sheets basic filter"
   ],
   "answer": "**bring the unassigned applications to the top of the meeting.** the bot can filter or sort a chosen google sheets range using your condition. name the tab and table, then ask for a preview. it needs write access because the filter changes the shared sheet. want your own list? ask for matching rows in chat.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,11 +45,12 @@
     "toolkit": "googlesheets",
     "slug": "GOOGLESHEETS_SET_BASIC_FILTER"
   },
-  "what": "**show the rows your team needs right now.** give the spreadsheet link, tab and columns. describe the condition in ordinary words, such as applications without a reviewer. the bot sets the filter.\n\nfor a private report, ask it to read values and list matches in chat. that leaves everyone else's sheet view alone.",
+  "what": "**show the rows your team needs right now.** give the spreadsheet link, tab and columns. describe the condition in ordinary words, such as applications without a reviewer. the bot sets the filter.\n\nfor a private report, ask it to read values and list matches in chat. that leaves everyone else's sheet view alone.\n\nwant matches in chat only? [get spreadsheet values](/integrations/google-sheets/get-spreadsheet-values) reads them without a filter. to reorder rows for good, use [sort range](/integrations/google-sheets/sort-range).",
   "uses": [
     "show applications with no reviewer before a selection session",
     "show confirmed orders in a bounded table before packing",
-    "filter the working table to the region and status your team needs"
+    "filter the working table to the region and status your team needs",
+    "show only overdue invoices on the shared finance tab during a monday call"
   ],
   "routine": {
     "message": "on alternate mondays at 10:55, inspect the applications table in my linked rosehollow bursary sheet. propose a basic filter for rows whose reviewer field is empty. show the tab, range and condition here. ask me before setting it. after i agree, set the filter and report it here. never delete hidden rows or edit applicant details.",
@@ -109,6 +110,10 @@
       "fix": "match the tab and first and last columns to your table before setting the filter."
     }
   ],
+  "worked": {
+    "before": "applications tab, a1:f120.\nreviewer column e is blank on some rows.",
+    "after": "filter on a1:f120: reviewer is empty\nonly the unassigned rows show\neveryone with the sheet open sees the same view"
+  },
   "tip": {
     "text": "missing applications? look for an active filter before rebuilding the list."
   },

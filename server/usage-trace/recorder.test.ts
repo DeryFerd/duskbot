@@ -45,6 +45,19 @@ describe("trace recorder", () => {
     expect(recorder.turnDetail("apps").failedNames).toEqual(["GMAIL_SEND_EMAIL", "SLACK_SEND_MESSAGE"]);
   });
 
+  it("books a call titled with its command as the shell, with the error the command printed, not its preview's brace", () => {
+    const recorder = createTraceRecorder({ dataDir: dataDir() });
+    const command = "/bin/zsh -lc 'rg -n TODO notes.md'";
+    recorder.observe(started("cmd", "t1", 0, "codex"));
+    recorder.observe(event("cmd", "t1", 100, { type: "item.started", itemType: "tool", itemId: "c1", title: command, summary: command }, "codex"));
+    recorder.observe(done("cmd", "t1", 200, "c1", false, JSON.stringify({ output: "", exitCode: 1 }, null, 2)));
+    recorder.observe(event("cmd", "t1", 300, { type: "item.started", itemType: "tool", itemId: "c2", title: "mcp__browser__click" }, "codex"));
+    recorder.observe(done("cmd", "t1", 400, "c2", false, JSON.stringify([{ type: "text", text: "No element matches @e4." }], null, 2)));
+    recorder.observe(completed("cmd", "t1", 500));
+    expect(recorder.toolNames("cmd")).toEqual(["shell", "mcp__browser__click"]);
+    expect(recorder.turnDetail("cmd").failedCalls).toEqual([{ name: "shell", error: "Exit code 1" }, { name: "mcp__browser__click", error: "No element matches @e4." }]);
+  });
+
   it("reads a failed turn's whole error and the driver's code into a usage failure", () => {
     const recorder = createTraceRecorder({ dataDir: dataDir() });
     recorder.observe(started("api", "t1", 0));

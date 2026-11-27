@@ -44,8 +44,9 @@ if (${JSON.stringify(options.holdScreenshots === true)} && args[0] === 'exec' &&
 const image = 'sha256:' + 'a'.repeat(64);
 const labels = {[DOCKER_NAMES.label('local-vm')]:'1',[DOCKER_NAMES.label('cua-driver')]:${JSON.stringify(CUA_DRIVER_VERSION)},
   [DOCKER_NAMES.label('cua-base')]:${JSON.stringify(BASE_IMAGE_DIGEST)},[DOCKER_NAMES.label('image-layer')]:${JSON.stringify(IMAGE_LAYER_VERSION)}};
-const rows = () => fs.readdirSync(records).map(name => JSON.parse(fs.readFileSync(path.join(records,name),'utf8')));
-const save = row => fs.writeFileSync(path.join(records,row.Id+'.json'),JSON.stringify(row));
+const rows = () => fs.readdirSync(records).filter(name => name.endsWith('.json')).map(name => JSON.parse(fs.readFileSync(path.join(records,name),'utf8')));
+// written whole, then renamed: a test or another docker call reading the records never sees a half-written row
+const save = row => { const tmp = path.join(records,'.'+row.Id+'.'+process.pid+'.tmp'); fs.writeFileSync(tmp,JSON.stringify(row)); fs.renameSync(tmp,path.join(records,row.Id+'.json')); };
 const make = name => ({Id:crypto.createHash('sha256').update(name).digest('hex'),Name:'/'+name,Image:image,
   Config:{Image:${JSON.stringify(IMAGE)},Env:['VNC_PW=fixture-only'],Labels:{...labels,[DOCKER_NAMES.label('vps')]:'1',[DOCKER_NAMES.label('container')]:name,[DOCKER_NAMES.label('vps-viewer')]:'1'}},
   State:{Running:true,Status:'running'},Mounts:[],

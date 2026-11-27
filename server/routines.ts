@@ -6,7 +6,7 @@ import { DATA_DIR } from "./config.ts";
 import type { RuntimeEvent } from "./contracts.ts";
 import { OwnedFile } from "./atomic.ts"; import { saveSoon } from "./save-batch.ts";
 import { redactSecretsInText } from "./redact.ts";
-import { withoutEchoedPrompt } from "../shared/failed-turn.ts";
+import { withoutEchoedPrompt } from "../shared/failed-turn.ts"; import type { RoutineFailedFor } from "../shared/usage-signals.ts";
 import { activeRunsOf, catchUpMsOf, enabledHereOf, missedError, nextDueOf, schedulerDueOf, upcomingOf, wakeHoldOf } from "./routine-due.ts"; import { dropQuietFields, nextTicks, quietPatch, stripOf } from "./routine-quiet.ts";
 import { startDueTimer, type DueTimer } from "./due-timer.ts";
 import type { GroupGoalRunStatus } from "../shared/group-goal-run.ts";
@@ -23,7 +23,7 @@ import {
   routineFailure, routineHostWarning, skipNeedsNotice, supersededBy,
 } from "./routine-execution.ts";
 import {
-  dispatchRefusal, engineFacts, loadOwnerNotices, recoverRun, requeueOnce, wakeBusyWaits, weekRuns, type RoutineAlert, type RoutineFailureFacts, type RoutineOwnerNotice,
+  dispatchRefusal, engineFacts, loadOwnerNotices, recoverRun, requeueOnce, silentEnd, wakeBusyWaits, weekRuns, type RoutineAlert, type RoutineFailureFacts, type RoutineOwnerNotice,
 } from "./routine-recovery.ts";
 import { answeredInChat, matchesAsk, openAsk, settleAsk, stopDue, waitingFor, type RoutineRunAsk } from "./routine-waits.ts";
 import { failsLikeLastOutcome, outcomesNewestFirst } from "./routine-outcomes.ts";
@@ -132,7 +132,7 @@ export interface RoutineRun {
   finishedAt?: number;
   output?: string;
   attention?: string;
-  error?: string; partial?: boolean;
+  error?: string; partial?: boolean; failedFor?: RoutineFailedFor;
   /** trigger action=fail: when the run's turn ends well, the run fails with this reason. */ failReason?: string;
   cost?: number | null;
   denials?: string[];
@@ -208,6 +208,8 @@ export interface RoutineManagerOptions {
   createGoalTask?: (groupId: string, title: string) => { threadId: string } | null;
   isResultsThread?: (botId: string, threadId: string) => boolean;
   resolveResultsThread?: (routine: Routine, forceNew: boolean) => { threadId: string; main?: true } | undefined;
+  /** The open chat a routine made from a chat reports to, so it reads that way from the moment it is made. */
+  sourceResultsThread?: (routine: Routine) => string | undefined;
   eventResultsThread?: (event: { webhookId: string; webhookName: string; botId: string }) => string | undefined;
   frozenResultsThread?: (botId: string, threadId: string) => boolean;
   discardResultsThread?: (botId: string, threadId: string) => void;
@@ -258,7 +260,7 @@ export interface RoutineManagerOptions {
   heldAfterWake?: () => boolean; held?: (run: RoutineRun) => string | null; decorate?: (routine: Routine) => Partial<Routine>; /** How much earlier than its time a run may start (a Cloud home folding an "around" run into its wake). */ earlyMs?: (routine: Routine) => number;
 }
 
-const WAKE_HORIZON_MS = 60 * 60_000;
+export const WAKE_HORIZON_MS = 60 * 60_000;
 export const ROUTINE_RESTARTED = "dusk bot restarted while this routine was running";
 const MAX_RUNS = 2_000;
 export class RoutineManager {
@@ -279,7 +281,7 @@ export class RoutineManager {
   private ownerNotices: RoutineOwnerNotice[] = [];
   /** Why routines are held now (routine-holds.ts): a change between two of these pauses or frees routines. */
   private holds: RoutineHoldCause[] = [];
-  private readonly failureFacts = new Map<string, RoutineFailureFacts>();
+  private readonly failureFacts = new Map<string, RoutineFailureFacts>(); private readonly worked = new Set<string>();
   /** Saves are refused while unreadable, so an empty state never overwrites the file; malformedAttachments: a saved list failed to load, so no clear may trust attachmentPaths(). */
   private unreadable = false; private malformedAttachments = false;
   private frozenPending = false;
@@ -330,7 +332,7 @@ export class RoutineManager {
         continue;
       }
       if (!requeueOnce(run, "restarted", ROUTINE_RESTARTED, this.now())) {
-        Object.assign(run, { status: "failed", error: ROUTINE_RESTARTED, attention: undefined, finishedAt: this.now() } satisfies Partial<RoutineRun>);
+        Object.assign(run, { status: "failed", error: ROUTINE_RESTARTED, failedFor: "restarted", attention: undefined, finishedAt: this.now() } satisfies Partial<RoutineRun>);
         if (run.target === "room-goal") run.goalStatus = "failed";
       }
       cut.push(cloneRun(run));
@@ -524,6 +526,10 @@ export class RoutineManager {
       updatedAt: at,
     };
     const discardResults = this.applyResultsInput(routine, input.resultsThreadId);
+    if (routine.target === "bot" && input.resultsThreadId === undefined && routine.sourceThreadId) {
+      const here = this.options.sourceResultsThread?.(routine);
+      if (here) routine.resultsThreadId = here;
+    }
     this.commitMutation(() => {
       this.routines.unshift(routine);
       if (request) this.rememberRoutineRequest(request, routine.id, at);
@@ -1030,7 +1036,7 @@ export class RoutineManager {
               const run = this.newRun(routine, scheduledFor, false, allocations);
               // A reset is a state, not a moment: it still holds however late the computer wakes.
               if (late > catchUpMs && routine.schedule.type !== "limit_reset") {
-                Object.assign(run, { status: "missed", finishedAt: now, error: missedError(routine) } satisfies Partial<RoutineRun>);
+                Object.assign(run, { status: "missed", finishedAt: now, error: missedError(routine), failedFor: "missed" } satisfies Partial<RoutineRun>);
               }
               scheduledRuns.push(run);
             } else {
@@ -1040,7 +1046,7 @@ export class RoutineManager {
                 const missed = this.newRun(routine, scheduledFor, false, allocations);
                 missed.status = "missed";
                 missed.finishedAt = now;
-                missed.error = ROUTINE_SKIPPED_WHILE_WAITING;
+                Object.assign(missed, { error: ROUTINE_SKIPPED_WHILE_WAITING, failedFor: "unanswered" });
                 scheduledRuns.push(missed);
               }
               routine.skippedRuns = Math.min(Number.MAX_SAFE_INTEGER, (routine.skippedRuns ?? 0) + 1);
@@ -1082,7 +1088,7 @@ export class RoutineManager {
             (!requiresCurrentDayOccurrence || (latest !== null && isSameLocalDay(latest, now)));
           if (!mayDispatch) {
             if (nextOccurrence(definition.schedule, now) === null) {
-              this.failRun(run, "The routine ended before this scheduled run could start", "missed");
+              this.failRun(run, "The routine ended before this scheduled run could start", "missed", undefined, "missed");
             }
             continue;
           }
@@ -1113,7 +1119,7 @@ export class RoutineManager {
           this.failRun(run, this.missingTargetMessage(run.target));
           continue;
         }
-        const held = this.options.held?.(run); if (held) { this.failRun(run, held, "missed", null); continue; }
+        const held = this.options.held?.(run); if (held) { this.failRun(run, held, "missed", null, "held"); continue; }
         const startedAt = this.now();
         const suffix = ` · ${new Date(startedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
         const title = `${run.routineName.slice(0, 80 - suffix.length).trimEnd()}${suffix}`;
@@ -1150,7 +1156,7 @@ export class RoutineManager {
           } else if (run.scriptOnly) { this.postRun(run, task.threadId); } else {
             const execution = composeExecutionPrompt({ id: run.routineId, name: run.routineName, trigger: triggerSource, runOn: run.runOn ?? "maus", dryRun: run.dryRun }, prompt, run.attachments, continuityCarry(run, this.routines, this.runs), run.retried, routineMemory(run, this.routines, this.runs),
               triggerSource === "webhook" ? [] : chainReads(this.routines.find((routine) => routine.id === run.routineId), this.routines, this.runs));
-            await this.options.startTurn(run.botId, task.threadId, execution, run.runOn ?? "maus", triggerSource, (message) => this.failThread(task.threadId, message, { cause: "refused" }));
+            await this.options.startTurn(run.botId, task.threadId, execution, run.runOn ?? "maus", triggerSource, (message) => this.failThread(task.threadId, message, { cause: "dispatch" }));
           }
         } catch (error) {
           this.failThread(task.threadId, error instanceof Error ? error.message : String(error), dispatchRefusal(error));
@@ -1198,7 +1204,7 @@ export class RoutineManager {
           run = queued ?? this.newRun(current, this.now(), false, allocations);
           if (queued) Object.assign(run, routineRunDefinition(current), {
             timeoutMinutes: current.timeoutMinutes,
-            resultsThreadId: resolveRoutineResultsThread(current, this.options.resolveResultsThread, allocations, this.now(), run.sourceThreadId),
+            resultsThreadId: resolveRoutineResultsThread(current, this.options.resolveResultsThread, allocations, this.now()),
           });
           if (run.timeoutMinutes === undefined) delete run.timeoutMinutes;
           Object.assign(run, { prompt: result.run.prompt, checkKey: result.run.key }, result.run.post === undefined ? {} : { post: result.run.post, scriptOnly: true as const },
@@ -1251,9 +1257,10 @@ export class RoutineManager {
       if (this.closing && (!event.ok || event.stopReason === "cancelled" || event.stopReason === "interrupted")) return null;
       if (event.cost != null) run.cost = (run.cost ?? 0) + event.cost;
       if (event.denials?.length) run.denials = [...new Set([...(run.denials ?? []), ...event.denials])];
-      const failReason = run.failReason;
+      const failReason = run.failReason, silent = silentEnd(run, event.stopReason, this.worked.delete(run.id));
       delete run.failReason;
-      if (!event.ok) {
+      if (silent === "again" && requeueOnce(run, "provider", routineFailure(run.error, event.stopReason), this.now())) { this.failureFacts.delete(run.id); this.saveLater(); this.emitRun(run); queueMicrotask(() => this.tickInBackground()); return cloneRun(run); }
+      if (!event.ok && !silent) {
         this.settleFailure(run, routineFailure(run.error, event.stopReason), { ...this.failureFacts.get(run.id), stopReason: event.stopReason });
         return cloneRun(run);
       }
@@ -1264,7 +1271,7 @@ export class RoutineManager {
       if (waitsOnTeammates) this.wait(run, "Waiting for work it handed on to finish");
       else { Object.assign(run, { status: "completed", attention: undefined, finishedAt: this.now() } satisfies Partial<RoutineRun>); this.ownerNotices = this.ownerNotices.filter((notice) => notice.botId !== run.botId); }
       run.error = undefined;
-    } else return null;
+    } else { if (event.type === "item.completed" && event.itemType === "tool") this.worked.add(run.id); return null; }
     this.saveLater();
     this.emitRun(run);
     if (event.type === "turn.completed") queueMicrotask(() => this.tickInBackground());
@@ -1276,7 +1283,7 @@ export class RoutineManager {
    * or a text lost to a restart, fails it directly: never engine recovery, never a retry into a turn. */
   private postRun(run: RoutineRun, threadId: string): void {
     const text = run.post; delete run.post;
-    if (typeof text !== "string" || !this.options.postReply) { this.failRun(run, typeof text !== "string" ? text?.error ?? ROUTINE_RESTARTED : "This server cannot post a script's output as a reply"); return queueMicrotask(() => this.tickInBackground()); }
+    if (typeof text !== "string" || !this.options.postReply) { this.failRun(run, typeof text !== "string" ? text?.error ?? ROUTINE_RESTARTED : "This server cannot post a script's output as a reply", "failed", undefined, typeof text === "string" || text ? "script" : "restarted"); return queueMicrotask(() => this.tickInBackground()); }
     Object.assign(run, { status: "completed", output: redactSecretsInText(text).trim().slice(0, 2_000), attention: undefined, error: undefined, finishedAt: this.now() } satisfies Partial<RoutineRun>);
     try { this.options.postReply(run.botId, threadId, text, cloneRun(run)); } catch (error) { return this.rejectResult(run.id, error instanceof Error ? error.message : String(error)); }
     this.ownerNotices = this.ownerNotices.filter((notice) => notice.botId !== run.botId); this.saveLater(); this.emitRun(run); queueMicrotask(() => this.tickInBackground());
@@ -1308,7 +1315,7 @@ export class RoutineManager {
     if (this.closing) return;
     const held = facts.limit !== undefined || facts.limitResetsAt !== undefined ? facts.limit ?? "engine" : facts.stopReason === "auth_required" ? "signed-out" : undefined, backupReady = held !== undefined && this.options.limitBackup?.(run.botId, held) === true;
     const recovery = recoverRun(run, failure, { ...facts, ...(backupReady ? { backupReady } : {}) }, this.now(), this.ownerNotices);
-    if (!recovery.queued) this.failRun(Object.assign(run, { partial: (facts.partial && Boolean(run.output)) || undefined }), recovery.error, "failed", recovery.alert);
+    if (!recovery.queued) this.failRun(Object.assign(run, { partial: (facts.partial && Boolean(run.output)) || undefined }), recovery.error, "failed", recovery.alert, recovery.failedFor);
     else {
       this.saveLater();
       this.emitRun(run);
@@ -1362,14 +1369,14 @@ export class RoutineManager {
 
   private async stopRun(run: RoutineRun, detail: string, status: "stopped" | "limit-reached") {
     if (run.target === "room-goal") run.goalStatus = status;
-    this.failRun(run, detail);
+    this.failRun(run, detail, "failed", undefined, status === "limit-reached" ? "run_limit" : "unanswered");
     if (!run.threadId) return;
     if (run.target === "room-goal") await this.options.interruptGoal?.(run.groupId, run.threadId, { status, detail }).catch(() => {});
     else await this.options.interruptTurn?.(run.botId, run.threadId).catch(() => {});
   }
 
-  private failRun(run: RoutineRun, message: string, status: "failed" | "missed" = "failed", alert?: RoutineAlert | null) {
-    Object.assign(run, { status, attention: undefined, error: redactSecretsInText(message).slice(0, 500), finishedAt: this.now() } satisfies Partial<RoutineRun>);
+  private failRun(run: RoutineRun, message: string, status: "failed" | "missed" = "failed", alert?: RoutineAlert | null, failedFor?: RoutineFailedFor) {
+    Object.assign(run, { status, attention: undefined, error: redactSecretsInText(message).slice(0, 500), finishedAt: this.now(), failedFor } satisfies Partial<RoutineRun>); this.worked.delete(run.id);
     this.saveLater();
     this.emitRun(run);
     const repeat = failsLikeLastOutcome(this.runs, run) || (run.checkKey !== undefined && outcomesNewestFirst(this.runs, run.routineId, run.id)[0]?.status === "failed");
@@ -1407,7 +1414,7 @@ export class RoutineManager {
     allocations: ResultsThreadAllocation[],
     sourceThreadId = routine.sourceThreadId,
   ): RoutineRun {
-    const resultsThreadId = resolveRoutineResultsThread(routine, this.options.resolveResultsThread, allocations, this.now(), sourceThreadId);
+    const resultsThreadId = resolveRoutineResultsThread(routine, this.options.resolveResultsThread, allocations, this.now());
     const run: RoutineRun = {
       id: randomUUID(),
       routineId: routine.id,

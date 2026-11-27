@@ -1,6 +1,7 @@
 // The arguments models write for agent-browser 0.37.0 tools, in the shapes its own MCP server takes. Its server answers a
 // missing or mistyped argument with a JSON-RPC error ("selector must be a string", "state must be a string") instead of a
 // result, and its selectors are CSS, xpath= and @eN refs only.
+import { Script } from "node:vm";
 
 type Args = Record<string, unknown>;
 
@@ -25,6 +26,49 @@ const tabId = (value: unknown): unknown => typeof value === "number" || (typeof 
 export function refSelector(value: string): string {
   const ref = REF.exec(value.trim())?.[1];
   return ref ? `@${ref}` : value;
+}
+
+/** How long a script dusk bot wraps may run in the page: agent-browser 0.37.0 waits 120 s for a promise that never
+ * settles, and runs nothing else for the browser meanwhile. */
+export const PAGE_SCRIPT_MS = 25_000;
+
+// compiled only to check the syntax, in this process; never run here
+const compiles = (source: string): boolean => {
+  try { new Script(source); return true; } catch { return false; }
+};
+const FUNCTION_SOURCE = /^\s*(?:async\s+)?(?:function\b|\([^()]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)/u;
+// an expression that evidently answers with a promise, which could keep the browser waiting
+const PROMISED = /\bfetch\s*\(|\.then\s*\(|\bnew\s+Promise\b|\basync\b/u;
+const bounded = (call: string) =>
+  `Promise.race([${call}, new Promise((_, reject) => setTimeout(() => reject(new Error("the script did not finish within ${PAGE_SCRIPT_MS / 1_000} s")), ${PAGE_SCRIPT_MS}))])`;
+
+/** The body as an async function's, its last expression returned when it returns nothing itself. */
+function asyncBody(body: string): string {
+  const fn = (inner: string) => `(async () => {\n${inner}\n})()`;
+  const trimmed = body.replace(/[\s;]+$/u, "");
+  if (!/\breturn\b/u.test(trimmed)) {
+    for (let at = trimmed.length; at > 0 && trimmed.length - at < 4_000;) {
+      const cut = Math.max(trimmed.lastIndexOf(";", at - 1), trimmed.lastIndexOf("\n", at - 1));
+      const head = trimmed.slice(0, cut + 1), tail = trimmed.slice(cut + 1).trim();
+      if (tail && !tail.startsWith("}") && compiles(fn(`${head}\nreturn (${tail}\n);`))) return fn(`${head}\nreturn (${tail}\n);`);
+      if (cut < 0) break;
+      at = cut;
+    }
+  }
+  return fn(body);
+}
+
+/**
+ * A script as agent-browser can run it. Models write page scripts as Playwright's evaluate takes them: a body with a
+ * top-level `return` or `await` (a SyntaxError in a plain script) or a function's source (which comes back as `{}`).
+ * Those run as an async function that gives up after PAGE_SCRIPT_MS, as does one expression that answers with a promise;
+ * any other script that already runs is left as it is.
+ */
+export function pageScript(script: string): string {
+  if (FUNCTION_SOURCE.test(script) && compiles(`(${script}\n)`)) return bounded(`Promise.resolve((${script}\n)())`);
+  if (compiles(script)) return PROMISED.test(script) && compiles(`(${script}\n)`) ? bounded(`Promise.resolve((${script}\n))`) : script;
+  if (!compiles(`(async () => {\n${script}\n})`)) return script;
+  return bounded(asyncBody(script));
 }
 
 /** `args` with the names and types agent-browser takes for `name`; arguments it would refuse are rewritten, never dropped. */
@@ -63,6 +107,7 @@ export function agentBrowserArguments(name: string, given: Args): Args {
     case "agent_browser_eval": {
       if (typeof args.script !== "string") { const script = firstText(args, ["expression", "code", "js", "function"]); if (script !== undefined) args.script = script; }
       delete args.expression; delete args.code; delete args.js; delete args.function;
+      if (typeof args.script === "string") args.script = pageScript(args.script);
       break;
     }
     case "agent_browser_wait_for_load": {

@@ -464,6 +464,8 @@ describe("ClaudeDriver.decodeConfig", () => {
   );
 });
 
+const ONE_PIXEL_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
 describe("ClaudeDriver turns (fake CLI)", () => {
   let instance: ProviderInstance;
   let recorder: EventRecorder;
@@ -629,6 +631,7 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     const text = deltas.filter((d: any) => d.streamKind === "assistant_text");
     expect(text.map((d: any) => d.delta)).toEqual(["hello from ", "fake claude"]);
     expect(text.some((d: any) => d.delta.includes("SUBAGENT"))).toBe(false);
+    expect(recorder.events.some((e: any) => JSON.stringify(e).includes("SUBAGENT REPORT"))).toBe(false);
     expect(deltas.some((d: any) => d.streamKind === "reasoning_text" && d.delta === "hmm")).toBe(true);
     const settled = recorder.events.filter((e: any) => e.type === "item.completed" && e.itemType === "assistant_text");
     expect(settled).toHaveLength(1);
@@ -645,6 +648,23 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(recorder.events[beat]).toMatchObject({ itemType: "tool" });
     expect(beat).toBeGreaterThan(types.indexOf("item.started"));
     expect(beat).toBeLessThan(types.lastIndexOf("item.completed"));
+  });
+
+  it("keeps a browser or computer tool's screenshot in its tool step, never a picture for the chat", async () => {
+    const shot = { type: "image", source: { type: "base64", media_type: "image/png", data: ONE_PIXEL_PNG } };
+    await create("happy", { FAKE_CLAUDE_SCRIPT: JSON.stringify([
+      { tool: { name: "mcp__browser__agent_browser_screenshot", input: {}, ok: true, output: [{ type: "text", text: "Screenshot of example.com" }, shot] } },
+      { tool: { name: "mcp__computer__screenshot", input: {}, ok: true, output: [shot] } },
+      { text: "The page is open." },
+    ]) });
+    await instance.adapter.sendTurn({ threadId: "t-tool-shots", text: "look at the page" });
+    await recorder.until((e) => e.type === "turn.completed");
+
+    const ends = recorder.events.filter((e) => e.type === "item.completed" && e.itemType === "tool");
+    expect(ends).toHaveLength(2);
+    expect(ends.every((e) => (e as { ok?: boolean }).ok)).toBe(true);
+    expect(recorder.events.filter((e) => e.type === "item.completed" && e.itemType === "assistant_image")).toEqual([]);
+    expect(recorder.events.find((e) => e.type === "item.completed" && e.itemType === "assistant_text")).toMatchObject({ text: "The page is open." });
   });
 
   it("names the CLI process while a long tool runs, and no process once the turn is over", async () => {

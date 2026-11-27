@@ -20,6 +20,13 @@ export function connector(toolkit) {
   return connectorFacts.get(toolkit);
 }
 
+// the call to action. its address never carries a query: /?source=seo:<page> made one crawlable copy of the home page per
+// seo page. the tracker already counts the click on the page it happens on; for the waitlist form, the page that sent
+// someone rides on data-dusk-source, which pages.js keeps for the session (sessionStorage dusk:source)
+export function ctaLink(cta, at, esc) {
+  return `<a class="btn dark" href="${esc(cta.href)}" data-dusk-source="${esc(`seo:${at}`)}">${esc(cta.button)}</a>`;
+}
+
 export function templates(ctx) {
   const { markdown, esc, icon, bot, records, byPath, config, cta, preview } = ctx;
   // a planned seo address with no built page (queued, rejected, not written yet) stays as plain words
@@ -48,7 +55,7 @@ export function templates(ctx) {
       .sort((a, b) => b[0] - a[0] || a[1].path.localeCompare(b[1].path)).slice(0, config.related_count).map(([, o]) => o);
   }
   const card = (o, lazy = true) => `<li><a href="${o.path}"><img src="/art/seo/${sceneId(o.path)}-660.webp" alt="" width="660" height="264"${lazy ? ' loading="lazy"' : ''} decoding="async"><b>${esc(o.h1)}</b><span>${esc(o.og_line || o.description)}</span></a></li>`;
-  const ctaBlock = (r) => `<aside class="seo-cta seo-boiler" aria-label="get dusk bot">${bot('kit', 'violet')}<div><p>${esc(r.cta_line || cta.line)}</p><a class="btn dark" href="${cta.href}${cta.source ? `?source=${encodeURIComponent(`seo:${r.path}`)}` : ''}">${esc(cta.button)}</a></div></aside>`;
+  const ctaBlock = (r) => `<aside class="seo-cta seo-boiler" aria-label="get dusk bot">${bot('kit', 'violet')}<div><p>${esc(r.cta_line || cta.line)}</p>${ctaLink(cta, r.path, esc)}</div></aside>`;
   const faq = (r) => (r.faq?.length ? section('questions', r.faq.map((q) => `<h3 id="${slug(q.q)}">${esc(q.q)}</h3>\n${md(q.a)}`).join('\n'), 'seo-faq') : '');
   const sources = (r) => (r.sources?.length ? `<section class="seo-sources" aria-labelledby="sources"><h2 id="sources">sources</h2><ol>${r.sources.map((s, i) => `<li id="src-${i + 1}">${s.url.startsWith('/') ? `<a href="${s.url}">${esc(s.label)}</a>` : `<a href="${esc(s.url)}" rel="nofollow noopener">${esc(s.label)}</a>`}${s.checked ? `, checked ${day(s.checked)}` : ''}</li>`).join('')}</ol></section>` : '');
 
@@ -67,6 +74,19 @@ export function templates(ctx) {
     tip: (r) => r.tip ? `<aside class="seo-tip${r.tip.careful ? ' careful' : ''}">${mini(r, 'tip', 'seo-mini big')}<p>${inline(r.tip.text)}</p></aside>` : '',
   };
   const extraBlocks = (r) => { const order = [['tip', 'quick', 'worked', 'checklist', 'decide', 'saves', 'mistakes'], ['quick', 'tip', 'saves', 'worked', 'mistakes', 'decide', 'checklist'], ['worked', 'quick', 'decide', 'tip', 'checklist', 'mistakes', 'saves']][[...r.path].length % 3]; return order.map((k) => extras[k](r)).join('\n'); };
+
+  // the app's other actions, in the article itself, so every action page links on to the ones closest to it and back to
+  // its app: those named in related first, then by shared tags and words in the address. it is the same list shape on every
+  // action page, so it counts as boiler, not as the page's own words
+  function siblings(r, appName, app) {
+    const near = (o) => (r.related || []).includes(o.path) * 100 + (o.tags || []).filter((t) => (r.tags || []).includes(t)).length * 3
+      + o.path.split('/').pop().split('-').filter((w) => w.length > 3 && r.path.split('/').pop().split('-').includes(w)).length;
+    const list = records.filter((o) => o !== r && o.kind === 'action' && o.action?.toolkit === r.action.toolkit && o.built && (preview || o.indexable || !r.indexable))
+      .map((o) => [near(o), o]).sort((a, b) => b[0] - a[0] || a[1].path.localeCompare(b[1].path)).slice(0, 8).map(([, o]) => o);
+    if (!list.length) return '';
+    const hubLink = app && app.built ? `<p><a href="${app.path}">everything a bot can do in ${esc(appName)}</a></p>` : '';
+    return section(`more a bot can do in ${appName}`, `<ul class="seo-actions">${list.map((o) => `<li><a href="${o.path}">${esc(o.nav || o.h1)}</a></li>`).join('')}</ul>${hubLink}`, 'seo-boiler seo-more');
+  }
 
   // the body each kind of page is built around
   const BODY = {
@@ -130,7 +150,7 @@ export function templates(ctx) {
         watch: section(H.watch, list(r.watch)),
       };
       const order = [['what', 'uses', 'try', 'steps', 'needs', 'rules', 'watch'], ['what', 'try', 'uses', 'rules', 'steps', 'watch', 'needs'], ['uses', 'what', 'steps', 'try', 'watch', 'rules', 'needs']][variant];
-      return order.map((k) => part[k]).join('\n') + sections(r);
+      return order.map((k) => part[k]).join('\n') + sections(r) + '\n' + siblings(r, appName, app);
     },
 
     tool: (r) => {
@@ -215,6 +235,7 @@ ${toc}
 <figure class="wrap seo-hub-hero"><img src="/art/seo/${sceneId(hub.at)}.webp" srcset="/art/seo/${sceneId(hub.at)}-660.webp 660w, /art/seo/${sceneId(hub.at)}.webp 1320w" sizes="(max-width: 760px) 100vw, 1160px" alt="${esc(HUBS[hub.id].alt)}" width="1320" height="528" fetchpriority="high" decoding="async"></figure>
 ${groups.map(([g, l], i) => `<section class="wrap seo-hub" aria-labelledby="${g.id}"><h2 id="${g.id}">${esc(g.title)}</h2><ul class="seo-cards">${l.map((o) => card(o, i > 0 || l.indexOf(o) > 2)).join('')}</ul></section>`).join('\n')}
 ${actBlock}
+${hub.intro ? `<section class="wrap seo-hub prose" aria-labelledby="${slug(hub.intro.h)}"><h2 id="${slug(hub.intro.h)}">${esc(hub.intro.h)}</h2>\n${md(hub.intro.md)}</section>` : ''}
 ${others.length ? `<nav class="wrap seo-hubs" aria-label="more"><h2>more to read</h2><ul>${others.map(([, h]) => `<li><a href="${h.at}">${esc(h.nav)}</a></li>`).join('')}<li><a href="/docs">the docs</a></li></ul></nav>` : ''}`;
     return { body, pages };
   }

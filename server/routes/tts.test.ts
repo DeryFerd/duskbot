@@ -88,6 +88,19 @@ describe("transcribe route", () => {
     expect(String((fetchMock.mock.calls[0] as unknown as [string])[0])).toMatch(/^https:\/\/api\.deepgram\.com\/v1\/listen\?/);
   });
 
+  it("hears in the language the call asks for, and lets the service detect it otherwise", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ text: "какая погода завтра" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const cfg = { openai: { key: "sk-proj-x" } } as AppConfig;
+    const sent = (index: number) => ((fetchMock.mock.calls[index] as unknown as [string, RequestInit])[1].body as FormData).get("language");
+    expect((await call("POST", "/api/tts/transcribe?language=ru-RU", {}, cfg, upload(Buffer.from("RIFF")))).answers).toEqual([[200, { text: "какая погода завтра" }]]);
+    expect(sent(0)).toBe("ru");
+    await call("POST", "/api/tts/transcribe?language=", {}, cfg, upload(Buffer.from("RIFF")));
+    expect(sent(1)).toBeNull();
+    await call("POST", "/api/tts/transcribe?language=..%2Fx", {}, cfg, upload(Buffer.from("RIFF")));
+    expect(sent(2)).toBeNull();
+  });
+
   it("answers 502 with Fish's message when Fish fails", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ message: "nope" }), { status: 401 })));
     const { answers } = await call("POST", "/api/tts/transcribe", {}, withKey, upload(Buffer.from("RIFF")));

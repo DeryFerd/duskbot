@@ -49,7 +49,12 @@ beforeEach(() => {
   setLocale("en");
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
-afterEach(async () => { await act(async () => root.unmount()); closeAddVps(); host.remove(); document.body.innerHTML = ""; vi.unstubAllGlobals(); vi.clearAllMocks(); });
+// a confirm answered in a test closes its own root once its exit ends; wiping the page before that leaves the root
+// removing nodes that are gone, which throws in whichever test runs then
+const confirmsClosed = async () => {
+  for (let i = 0; i < 100 && document.querySelector("[role=alertdialog]"); i++) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+};
+afterEach(async () => { await confirmsClosed(); await act(async () => root.unmount()); closeAddVps(); host.remove(); document.body.innerHTML = ""; vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 it("adding a server by one line shows the line, then each step live, then opens the server it linked", async () => {
   const link = fakeLink();

@@ -63,6 +63,8 @@ export interface TaskRouteDeps {
   rejectDeletedThreadSkillStages(cleanups: Array<{ botId: string; stagedId: string }>): void;
   /** A person opened this conversation (a Team Cloud's Needs you lines for them there are done). */
   threadRead?(auth: RequestAuth, threadId: string): void;
+  /** A new chat was started from this one (`from`, the composer's /new): its memory is captured and it says so. */
+  leftForNewChat?(botId: string, fromThreadId: string, newThreadId: string): void;
 }
 
 /** `deleteTasks`: the same deletion for the server's own use (a person leaving a Team Cloud, host/team-member-left.ts). */
@@ -180,10 +182,15 @@ export function createTaskRoutes(deps: TaskRouteDeps): RouteHandler & { deleteTa
       if (body.projectId !== undefined && (typeof body.projectId !== "string" || !store.project(bot.id, body.projectId))) {
         return json(res, 400, { error: "projectId must belong to this bot" });
       }
+      if (body.from !== undefined && (typeof body.from !== "string" || !store.taskByThread(bot.id, body.from))) {
+        return json(res, 400, { error: "from must be one of this bot's conversations" });
+      }
+      if (body.from !== undefined && cloudThreadRefusal(auth, body.from)) return json(res, 403, { error: cloudThreadRefusal(auth, body.from) });
       const task = store.createTask(bot.id, typeof body.title === "string" ? body.title : undefined, body.select !== false, body.projectId, undefined, body.approvalMode, undefined, cwd);
       if (!task) return json(res, 500, { error: "couldn't create that task" });
       // Who opened it decides who may answer its cards on a shared workspace.
       if (auth.kind === "session") threadStarters.set(task.threadId, actorKey(auth));
+      if (typeof body.from === "string") deps.leftForNewChat?.(bot.id, body.from, task.threadId);
       return json(res, 201, { bot: publicBot(store.bot(bot.id)!), task: wireTask(task, store.bot(bot.id)!.modelSelection) });
     }
     m = path.match(/^\/api\/bots\/([\w-]+)\/tasks\/delete$/);

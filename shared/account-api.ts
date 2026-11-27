@@ -246,7 +246,7 @@ export const HANDOFF_PLANS = ["plus", "pro"] as const;
 /** `source` is one of billing's CHECKOUT_SOURCES; the page it opens is built by the service from these, never sent. */
 /** the website pages an app opens signed in: "plans" is billing with an optional plan and source, "workspace" a workspace
  * of the account (workspaceId), the rest the page of that name. */
-export const HANDOFF_PAGES = { plans: "/billing", home: "/", workspace: "/", cloud: "/cloud", billing: "/billing", account: "/account", usage: "/usage" } as const;
+export const HANDOFF_PAGES = { plans: "/billing", home: "/", workspace: "/", cloud: "/cloud", billing: "/account#billing", account: "/account", usage: "/usage" } as const;
 export type HandoffPage = keyof typeof HANDOFF_PAGES;
 /** `token`: one the app made itself, so it opens the browser on `${handoffUrl}#t=<token>` before this request lands (the page waits for it) */
 export interface WebHandoffRequest { next: HandoffPage; plan?: (typeof HANDOFF_PLANS)[number]; source?: string; workspaceId?: string; token?: string }

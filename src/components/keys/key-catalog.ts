@@ -2,6 +2,7 @@ import { AudioLines, Blocks, Fingerprint, Image, LockKeyhole, Phone, Search, Ser
 import type { AppSettingsSection, ConfigStatus } from "@/state/store";
 import type { SavedKey } from "@/state/config-status";
 import type { KeyProvider } from "@/lib/analytics-allowlist";
+import { liveCallEnabled } from "@/lib/feature-flags";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import type { ProviderIconPreset } from "../../../shared/provider-icon";
@@ -214,9 +215,10 @@ export function keyEntry(id: KeyId): KeyEntry {
   return entry;
 }
 
-/** With Azure OpenAI chosen for Live calls, the row for their key is about the Azure resource: required, and no OpenAI key. */
+/** With Live calls off the OpenAI key promises none. With Azure OpenAI chosen for Live calls, the row for their key is about the Azure resource: required, and no OpenAI key. */
 export function shownKeyEntry(id: KeyId, config: ConfigStatus | null | undefined): KeyEntry {
   const entry = keyEntry(id);
+  if (id === "openai" && !liveCallEnabled()) return { ...entry, purposeKey: "keys.purpose.openaiNoLive" };
   if (id !== "liveKey" || config?.live?.provider !== "azure" || !entry.target) return entry;
   const { shape: _openAiShape, ...target } = entry.target;
   return { ...entry, name: "Azure OpenAI", labelKey: "call.live.azureKeyField", purposeKey: "keys.purpose.liveKeyAzure", target: { ...target, placeholder: "…", href: "https://portal.azure.com" } };

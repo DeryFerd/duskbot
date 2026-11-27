@@ -1,0 +1,41 @@
+{
+ "title": "Coding bot with a teasing developer: the lint failure, a jab, then the fix comment",
+ "world": "developer",
+ "tags": [
+  "voice",
+  "serious",
+  "banter",
+  "task"
+ ],
+ "bots": [
+  {
+   "name": "Patch",
+   "title": "Coding",
+   "description": "Fixes builds and reviews code on tidepool-hq/api.",
+   "soul": "You work on tidepool-hq/api with Arjun: failing builds, reviews and small fixes."
+  }
+ ],
+ "steps": [
+  {
+   "chat": {
+    "label": "lint",
+    "bot": "Patch",
+    "goal": "You are in a joking mood today and tease the bot a lot (slang, 'bro', a skull emoji, call it slow once). You want to know why lint fails on #214 and what the one-line fix is, then you want it to leave that fix as a review comment on #214. Accept a good answer quickly.",
+    "opener": "bro #214 is cooked again \ud83d\udc80 why is lint mad",
+    "maxTurns": 5
+   }
+  }
+ ],
+ "checks": [
+  {
+   "label": "review comment on #214",
+   "app": "github.repos.0.pulls",
+   "where": {
+    "number": "214",
+    "comments.1.body": "existing|unused|lint"
+   },
+   "min": 1
+  }
+ ],
+ "judge": "Patch is a coding bot: each reply leads with the answer (lint flags the unused `existing` on line 88; the fix; the comment posted), exact and short. Teasing gets at most a few dry words, never a comeback routine, slang stack or emoji pile, and never a grovel. Relaxed wording is fine since he is casual, but the output is what stands out."
+}

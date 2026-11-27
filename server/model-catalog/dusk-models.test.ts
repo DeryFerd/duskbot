@@ -85,6 +85,13 @@ describe("curateModelCatalog", () => {
       .toEqual(["gpt-6.2-astra", "gpt-6.1-terra", "gpt-6-astra", "gpt-6-sol", "gpt-7-nova", "omlx::qwen"]);
   });
 
+  it("adds nothing for an engine whose account refuses what its list leaves out, and still names its rows", () => {
+    const out = curateModelCatalog(live, CURATED, [], false);
+    expect(out.options.map((option) => option.id)).toEqual(["gpt-6.1-terra", "gpt-6-astra", "gpt-6-sol", "gpt-7-nova", "omlx::qwen"]);
+    expect(out.options[1]).toEqual({ id: "gpt-6-astra", label: "GPT-6 Astra", contextWindow: 400_000 });
+    expect(curateModelCatalog({ default: "", options: [] }, CURATED, [], false)).toEqual({ default: "", options: [] });
+  });
+
   it("puts additions with no later curated row before the custom rows", () => {
     const out = curateModelCatalog({ default: "x", options: [{ id: "x", label: "x" }, { id: "p::y", label: "y", custom: true }] }, { models: [{ id: "new", label: "New", add: true }] });
     expect(out.options.map((option) => option.id)).toEqual(["x", "new", "p::y"]);
@@ -118,12 +125,14 @@ describe("parseDuskModels", () => {
     expect(parsed).toEqual({ schema: 1, updatedAt: "2026-11-18T00:00:00.000Z", engines: { codex: { models: [{ id: "ok", label: "OK", add: true, contextWindow: 10 }, { id: "cw", label: "CW" }] } } });
   });
 
-  it("the bundled copy parses, lists GPT-6.2 Astra for Codex, and matches the file dusk.bot serves", () => {
+  it("the bundled copy parses, names GPT-6.2 Astra for Codex without adding it, and matches the file dusk.bot serves", () => {
     const bundled = readFileSync(join(import.meta.dirname, "dusk-models.json"), "utf8");
     const site = readFileSync(join(import.meta.dirname, "..", "..", "apps", "site", "public", "landing", "releases", "models.json"), "utf8");
     expect(site).toBe(bundled);
     const parsed = parseDuskModels(JSON.parse(bundled))!;
-    expect(parsed.engines.codex!.models).toContainEqual({ id: "gpt-6.2-astra", label: "GPT-6.2 Astra", add: true });
+    expect(parsed.engines.codex!.models).toContainEqual({ id: "gpt-6.2-astra", label: "GPT-6.2 Astra" });
+    // an app before 0.2.32 adds a Codex row its CLI leaves out, which ChatGPT then refuses (codex-cli 0.160 and gpt-6.2-sol)
+    expect(parsed.engines.codex!.models.filter((model) => model.add)).toEqual([]);
     for (const key of ["codex", "claude", "grok"]) expect(parsed.engines[key]!.models.length).toBeGreaterThan(0);
   });
   it("the bundled copy offers Claude Fable 5.2 on a Claude Code list that predates it, ahead of Fable 5.1", () => {
@@ -280,6 +289,23 @@ describe("the registry and stale engine lists", () => {
       list = { default: "gpt-6.2-astra", options: [{ id: "gpt-6.2-astra", label: "GPT-6.2-Astra" }] };
       expect(registry.get("a")!.models.default).toBe("gpt-6.2-astra");
       expect(registry.get("a")!.models.options.map((option) => option.id)).toEqual(["gpt-6.2-sol", "gpt-6.2-astra"]);
+      await registry.disposeAll();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("an engine that says its list is the account's gets no curated additions through the registry", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "dusk-models-reg-"));
+    try {
+      const catalog = new DuskModelCatalog({ dataDir: dir, bundled: doc("2026-11-18T00:00:00Z"), env: {}, log: () => {} });
+      const list: ModelCatalog = { default: "gpt-6-sol", options: [{ id: "gpt-6-sol", label: "GPT-6-Sol" }] };
+      const driver = fakeDriver("listed", "codex", () => list);
+      const create = driver.create.bind(driver);
+      driver.create = async (input) => ({ ...(await create(input)), get models() { return list; }, curatedAdditions: false });
+      const registry = new ProviderRegistry([driver], { modelCatalog: catalog, npmAvailable: () => false });
+      await registry.load({ a: { driver: "listed" } });
+      expect(registry.get("a")!.models.options).toEqual([{ id: "gpt-6-sol", label: "GPT-6 Sol" }]);
       await registry.disposeAll();
     } finally {
       rmSync(dir, { recursive: true, force: true });

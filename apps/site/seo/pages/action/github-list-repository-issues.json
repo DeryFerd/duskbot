@@ -12,7 +12,7 @@
     "ai github issues by assignee"
   ],
   "answer": "**walk into the handover knowing which issues still need an owner.** give the bot a github repository and narrow it by label, assignee, milestone or recent updates. it brings the matching work here without editing the queue. github includes pull requests too, so ask for those in a separate list.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -43,12 +43,13 @@
     "toolkit": "github",
     "slug": "GITHUB_LIST_REPOSITORY_ISSUES"
   },
-  "what": "**get the queue down to the work you can act on.** name the assignee, label, milestone or state you need. the bot can find a milestone's number from its name.\n\n'updated since monday' includes older issues with new activity. use opening dates when you want new issues. long lists arrive in batches of up to 100; have the bot reach the end before counting.",
+  "what": "**get the queue down to the work you can act on.** name the assignee, label, milestone or state you need. the bot can find a milestone's number from its name.\n\n'updated since monday' includes older issues with new activity. use opening dates when you want new issues. long lists arrive in batches of up to 100; have the bot reach the end before counting.\n\nsearching across repositories or by wording? [search issues and pull requests](/integrations/github/search-issues-and-pull-requests) fits better. found an untagged one? [add labels](/integrations/github/add-labels-to-an-issue) after you agree.",
   "uses": [
     "find unassigned accessibility reports before deciding who can help",
     "list a teammate’s issues before a coverage handover",
     "collect a milestone’s work without moving or reprioritising it",
-    "find closed issues that picked up fresh activity this week"
+    "find closed issues that picked up fresh activity this week",
+    "find issues that mention a teammate before they hand over the area"
   ],
   "routine": {
     "message": "every wednesday at 11, list open, unassigned issues labelled accessibility in hazelpoint/atlas-desk. finish every result batch. keep pull requests separate. show issue numbers, titles and the filters you used here. report any batch you could not read. if no issues match, say so. never assign people, add labels or close anything.",
@@ -107,10 +108,18 @@
     {
       "mistake": "asking for new issues with an update filter",
       "fix": "say whether you mean opening dates or recent activity."
+    },
+    {
+      "mistake": "trusting the default batch as the whole list",
+      "fix": "a batch holds 30 unless the bot asks for up to 100. ask it to fetch every page before it counts."
     }
   ],
   "tip": {
     "text": "a count without its filters is a number you cannot plan around."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "ulla wants unassigned bug reports in wexcombe/site.\nthe repository has 260 open items.",
+    "after": "filter: open, label bug, no assignee\nbatches read: 2\nissues: 41\npull requests listed apart: 3"
+  }
 }

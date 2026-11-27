@@ -382,9 +382,8 @@ describe("ACP turns (fake CLI)", () => {
     expect(completed.get(started[3])).toMatchObject({ ok: true, output: expect.stringContaining("unkeyed") });
     expect(started[4]).toMatch(/^acp-tool-unkeyed-/);
     expect(completed.get(started[4])).toMatchObject({ ok: false });
-    const failedEnd = recorder.events.findIndex((e) => e.type === "item.completed" && e.itemType === "tool" && e.itemId === started[4]);
-    const image = recorder.events.findIndex((e) => e.type === "item.completed" && e.itemType === "assistant_image");
-    expect(image).toBe(failedEnd + 1);
+    // a tool's screenshot stays in its step: only the agent's own message carries a picture into the chat
+    expect(recorder.events.some((e) => e.type === "item.completed" && e.itemType === "assistant_image")).toBe(false);
     // The stall watchdog sees no tool left running, so the turn's own silence limit applies.
     let now = 0;
     const limits: number[] = [];
@@ -403,7 +402,6 @@ describe("ACP turns (fake CLI)", () => {
     const ends = recorder.events.filter((e) => e.type === "item.completed" && e.itemType === "tool" && e.itemId === "tc-done");
     expect(ends).toHaveLength(1);
     expect(ends[0]).toMatchObject({ ok: true, output: expect.stringContaining("ok") });
-    expect(recorder.events.filter((e) => e.type === "item.completed" && e.itemType === "assistant_image")).toHaveLength(1);
   });
 
   it("normalizes a full turn into the canonical event sequence", async () => {

@@ -246,6 +246,8 @@ describe("per-bot thread capacity through an isolated HTTP fixture", () => {
       await expect.poll(async () => (await api("GET", "/api/routines")).body.runs.find((entry: any) => entry.id === run.id)?.status, { timeout: 15_000 }).toBe("running");
       expect(await busyThreads(botId)).toHaveLength(1);
       expect((await send(botId, task, "TASK_THREAD_WAITS")).body).toMatchObject({ queued: true, reason: "capacity", threadId: task });
+      // the warm-up's gate would let this turn end as soon as it starts, before the poll below sees it busy
+      rmSync(threadFile(main, "gate"), { force: true });
       const direct = await send(botId, main, "MAIN_CHAT_RUNS");
       expect(direct.status).toBe(202);
       expect(direct.body.queued).toBeUndefined();

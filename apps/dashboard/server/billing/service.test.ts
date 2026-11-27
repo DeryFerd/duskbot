@@ -841,6 +841,26 @@ describe("free trial", () => {
     const other = { id: "other", email: "OWNER@example.com" };
     expect(service.trialDays(other)).toBeNull();
   });
+  it("a first checkout whose card check failed never started the trial: the next checkout still starts free", async () => {
+    const first = await service.checkout(owner, { kind: "cart", cart: desktopOnly() });
+    const checkout = store.state.checkouts.find(row => row.id === first.checkoutId)!, input = provider.sessions.get(checkout.providerSessionId!)!;
+    expect(input.trialDays).toBe(3);
+    const data = { subscription_id: "dsub_mandate", customer: { customer_id: "cus_mandate" }, metadata: { checkoutId: checkout.id, accountId: owner.id },
+      product_id: input.cart[0].productId, addons: [], next_billing_date: new Date(time + 3 * day).toISOString(), cancel_at_next_billing_date: false, status: "failed" };
+    deliver([signed("payment.failed", { payment_id: "pay_mandate", subscription_id: "dsub_mandate", customer: { customer_id: "cus_mandate" }, metadata: data.metadata, total_amount: 0, currency: "USD", error_code: "INSUFFICIENT_FUNDS" }, "mandate_pay"),
+      signed("subscription.failed", data, "mandate_sub")]);
+    expect(store.state.subscriptions[0]).toMatchObject({ status: "ended", currentPeriodStart: null }); expect(store.state.subscriptions[0].trialEndsAt).toBeUndefined();
+    expect(service.catalog(owner).trialDays).toBe(3);
+    const retry = await service.checkout(owner, { kind: "cart", cart: desktopOnly() });
+    const again = store.state.checkouts.find(row => row.id === retry.checkoutId)!;
+    expect(again.trialDays).toBe(3); expect(provider.sessions.get(again.providerSessionId!)?.trialDays).toBe(3);
+  });
+  it("a trial that ran and ended unpaid is still the account's one trial", async () => {
+    const { sub } = await buy(desktopOnly());
+    time += 3 * day; deliver(provider.fail(sub.providerSubscriptionId!));
+    store.state.subscriptions[0].status = "ended";
+    expect(service.catalog(owner).trialDays).toBeUndefined(); expect(service.trialDays(owner)).toBeNull();
+  });
   it("keeps a trialing subscription active through the never-paid rules and their heal on restart", async () => {
     const { sub } = await buy(desktopOnly());
     service.close(); service = createBillingService({ store, provider, clouds, config, publicUrl: "https://dashboard.test", now: () => time });
@@ -1305,5 +1325,100 @@ describe("payment problems", () => {
     service.dunning(); service.dunning();
     expect(notices.map(notice => notice.kind), "the new first email, once").toEqual(["payment_failed"]);
     expect(sub.paymentProblem).toMatchObject({ sent: ["first"] });
+  });
+});
+
+describe("cancel flow reasons and the winback", () => {
+  function withNotices() {
+    const notices: Array<{ kind: string; accountId?: string; endsAt?: number | null }> = []; service.close(); store = createBillingStore(dataDir);
+    service = createBillingService({ store, provider, clouds, config, publicUrl: "https://dashboard.test", now: () => time, notify: notice => notices.push(notice) });
+    return notices;
+  }
+  const winbacks = (notices: Array<{ kind: string }>) => notices.filter(notice => notice.kind === "winback");
+
+  it("takes prefer not to say and the losses offer on every way in, and stores them", async () => {
+    const { sub, answer } = await buy();
+    service.retentionStep(owner, sub.id, { reason: "skip", step: "reason", outcome: "shown" });
+    service.retentionStep(owner, sub.id, { reason: "skip", step: "help", outcome: "kept", offer: "losses", note: " fine " });
+    service.cloudRetentionStep(owner, answer.cloudId!, { reason: "switching", step: "help", outcome: "shown", offer: "losses" });
+    service.feedback(owner, { cloudId: answer.cloudId, survey: { answer: "skip", offer: "losses" } });
+    await service.cancel(owner, sub.id, { answer: "skip", offer: "losses" });
+    expect(store.state.retention!.map(row => [row.reason, row.step, row.outcome])).toEqual([["skip", "reason", "shown"], ["skip", "help", "kept"], ["switching", "help", "shown"], ["skip", "confirm", "cancelled"]]);
+    expect(store.state.feedback.map(row => [row.answer, row.offer, row.outcome, row.improve])).toEqual([["skip", "losses", "kept", "fine"], ["skip", "losses", undefined, undefined], ["skip", "losses", "cancelled", undefined]]);
+    service.close(); store = createBillingStore(dataDir);
+    expect(store.state.feedback.at(-1)).toMatchObject({ answer: "skip", offer: "losses", outcome: "cancelled" });
+  });
+
+  it("an app's step is for its own cloud's plan only, and its body is checked", async () => {
+    const { answer } = await buy(), theirs = await buy(desktopOnly(), stranger);
+    expect(service.cloudRetentionStep(owner, answer.cloudId!, { reason: "price", step: "reason", outcome: "shown" })).toEqual({ ok: true });
+    expect(() => service.cloudRetentionStep(owner, theirs.answer.cloudId!, { reason: "price", step: "reason", outcome: "shown" })).toThrow(expect.objectContaining({ status: 404 }));
+    expect(() => service.cloudRetentionStep(owner, answer.cloudId!, { reason: "nope", step: "reason", outcome: "shown" })).toThrow(expect.objectContaining({ status: 400 }));
+    expect(() => service.cloudRetentionStep(owner, answer.cloudId!, { reason: "price", step: "reason", outcome: "shown", offer: "pause" })).toThrow(expect.objectContaining({ status: 400 }));
+    expect(store.state.retention).toHaveLength(1);
+  });
+
+  it("the desktop's survey then its bare cancel is one cancel with the survey's reason; an old survey is not taken", async () => {
+    const { sub, answer } = await buy();
+    service.feedback(owner, { cloudId: answer.cloudId, survey: { answer: "price" } });
+    time += 31 * 60_000;
+    service.feedback(owner, { cloudId: answer.cloudId, survey: { answer: "switching", offer: "losses" } });
+    await service.cancel(owner, sub.id);
+    expect(provider.cancelCalls.at(-1)).toEqual({ subscriptionId: sub.providerSubscriptionId, cancel: true });
+    expect(store.state.feedback.map(row => [row.answer, row.outcome])).toEqual([["price", undefined], ["switching", "cancelled"]]);
+    expect(store.state.retention).toEqual([expect.objectContaining({ reason: "switching", step: "confirm", outcome: "cancelled" })]);
+    await service.keep(owner, sub.id); await service.cancel(owner, sub.id);
+    expect(store.state.retention).toHaveLength(1);
+  });
+
+  it("sends one winback 7 days after the cancel: not before, not on a second sweep, not after a restart", async () => {
+    const notices = withNotices(), { sub } = await buy(), cancelledAt = time;
+    await service.cancel(owner, sub.id, { answer: "price" });
+    expect(provider.cancelCalls.at(-1)).toEqual({ subscriptionId: sub.providerSubscriptionId, cancel: true });
+    time = cancelledAt + 7 * day - 1; expect(service.winbacks()).toEqual({ sent: 0, skipped: 0 });
+    time = cancelledAt + 7 * day; expect(service.winbacks()).toEqual({ sent: 1, skipped: 0 });
+    expect(winbacks(notices)).toEqual([expect.objectContaining({ kind: "winback", accountId: owner.id, endsAt: sub.currentPeriodEnd })]);
+    expect(service.winbacks()).toEqual({ sent: 0, skipped: 0 });
+    const again = withNotices();
+    time += day; expect(service.winbacks()).toEqual({ sent: 0, skipped: 0 });
+    deliver([signed("subscription.updated", { subscription_id: sub.providerSubscriptionId, customer: { customer_id: provider.subscriptions.get(sub.providerSubscriptionId!)!.customerId },
+      metadata: { checkoutId: sub.checkoutId, accountId: owner.id }, product_id: "x", addons: [], next_billing_date: new Date(sub.currentPeriodEnd!).toISOString(), cancel_at_next_billing_date: true, status: "active" }, "event_retry")]);
+    time += 8 * day; service.winbacks();
+    expect(winbacks(again)).toEqual([]);
+    expect(store.state.winbacks).toEqual([expect.objectContaining({ subscriptionId: sub.id, sentAt: cancelledAt + 7 * day, skipped: null })]);
+  });
+
+  it("lets the winback go when the plan was resumed, and starts the week over when it is cancelled again", async () => {
+    const notices = withNotices(), { sub } = await buy(), cancelledAt = time;
+    await service.cancel(owner, sub.id);
+    time += 2 * day; await service.keep(owner, sub.id);
+    time = cancelledAt + 7 * day; expect(service.winbacks()).toEqual({ sent: 0, skipped: 1 });
+    expect(store.state.winbacks![0]).toMatchObject({ skipped: "resumed", sentAt: null });
+    const again = time; await service.cancel(owner, sub.id);
+    time = again + 7 * day - 1; expect(service.winbacks().sent).toBe(0);
+    time = again + 7 * day; expect(service.winbacks().sent).toBe(1);
+    expect(winbacks(notices)).toHaveLength(1);
+  });
+
+  it("lets the winback go when another plan started since, or the account is closing", async () => {
+    const notices = withNotices(), first = await buy(), cancelledAt = time;
+    await service.cancel(owner, first.sub.id);
+    time += day; await buy(desktopOnly());
+    const theirs = await buy(desktopOnly(), stranger);
+    await service.cancel(stranger, theirs.sub.id);
+    await service.closeAccount(stranger, { destroyDesktopsNow: false });
+    time = cancelledAt + 8 * day; expect(service.winbacks()).toEqual({ sent: 0, skipped: 2 });
+    expect(store.state.winbacks!.map(row => row.skipped)).toEqual(["new_plan", "closed"]);
+    expect(winbacks(notices)).toEqual([]);
+  });
+
+  it("queues the winback for a cancel only the provider's webhook tells us about", async () => {
+    const notices = withNotices(), { sub } = await buy(), cancelledAt = time;
+    deliver([signed("subscription.updated", { subscription_id: sub.providerSubscriptionId, customer: { customer_id: provider.subscriptions.get(sub.providerSubscriptionId!)!.customerId },
+      metadata: { checkoutId: sub.checkoutId, accountId: owner.id }, product_id: provider.subscriptions.get(sub.providerSubscriptionId!)!.input.cart[0].productId, addons: [],
+      next_billing_date: new Date(sub.currentPeriodEnd!).toISOString(), cancel_at_next_billing_date: true, status: "active" })]);
+    expect(store.state.subscriptions[0]!.cancelAtPeriodEnd).toBe(true);
+    time = cancelledAt + 7 * day; expect(service.winbacks().sent).toBe(1);
+    expect(winbacks(notices)).toHaveLength(1);
   });
 });

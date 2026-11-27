@@ -71,15 +71,19 @@ export function buildSeo(ctx) {
   const scenes = writeScenes(site, records);
   const og6 = og6Cards(site);
   const mode = config.cta.mode === 'auto' ? (downloads.released ? 'download' : 'waitlist') : config.cta.mode;
-  // the waitlist link carries the page that sent people, and goes straight home when the waitlist is the home page
-  const cta = { ...config.cta[mode], ...(mode === 'waitlist' ? { source: true, ...(ctx.waitlistHome ? { href: '/' } : {}) } : {}) };
+  // the waitlist link goes straight home when the waitlist is the home page; the page that sent people rides on the link's
+  // data-dusk-source, never in its address (templates.mjs ctaLink)
+  const cta = { ...config.cta[mode], ...(mode === 'waitlist' && ctx.waitlistHome ? { href: '/' } : {}) };
   const byPath = new Map(records.map((r) => [r.path, r]));
   // each kit object's size, for the spot pictures
   const kitSizes = Object.fromEntries(Object.keys(PROPS).map((k) => { const f = path.join(site, 'art', k.startsWith('p-') ? `kit/${k}.webp` : `${k}.webp`); return [k, fs.existsSync(f) ? webpDims(f) : [420, 420]]; }));
   const plannedPaths = new Set(JSON.parse(fs.readFileSync(path.join(seoDir, 'planned.json'), 'utf8')).paths);
   const t = templates({ ...ctx, records, byPath, config, cta, preview, hubs, kitSizes, plannedPaths });
   const crumb = (list) => ({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: list.map(([name, at], i) => ({ '@type': 'ListItem', position: i + 1, name, item: `${SITE_URL}${at}` })) });
-  const org = { '@type': 'Organization', name: 'dusk bot', url: `${SITE_URL}/`, logo: `${SITE_URL}/art/icon-512.png` };
+  // the same organisation as the home page's (build-pages.mjs orgLd), by @id
+  const org = { '@type': 'Organization', '@id': `${SITE_URL}/#organization`, name: 'dusk bot', url: `${SITE_URL}/`, logo: `${SITE_URL}/art/icon-512.png`, ...(ctx.sameAs ? { sameAs: ctx.sameAs } : {}) };
+  // a page's questions, as shown on it under "questions", for search engines
+  const faqLd = (r) => (r.faq?.length ? [{ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: r.faq.map((q) => ({ '@type': 'Question', name: q.q, acceptedAnswer: { '@type': 'Answer', text: ctx.text(ctx.markdown(String(q.a).replace(/\[\^\d+\]/g, ''))) } })) }] : []);
 
   // every record is rendered, so queued pages pass the same gate before their day comes
   const rendered = [];
@@ -89,17 +93,17 @@ export function buildSeo(ctx) {
     const updated = r.updated || r.verified;
     const jsonld = [crumb([['dusk bot', '/'], [hub.nav[0].toUpperCase() + hub.nav.slice(1), hub.at], ...(r.parent ? [[r.parent.nav, r.parent.path]] : []), [r.nav || r.h1, r.path]]),
       { '@context': 'https://schema.org', '@type': 'Article', headline: r.h1, description: r.description, image: `${SITE_URL}/art/seo/${sceneId(r.path)}.webp`,
-        datePublished: r.state.live_at || r.created || updated, dateModified: updated, author: org, publisher: org, mainEntityOfPage: `${SITE_URL}${r.path}` }];
+        datePublished: r.state.live_at || r.created || updated, dateModified: updated, author: org, publisher: org, mainEntityOfPage: `${SITE_URL}${r.path}` }, ...faqLd(r)];
     const html = layout({ title: r.title, description: r.description, body, page: r.path.slice(1), at: r.path, section: r.hub, kind: `p-doc p-seo p-seo-${r.kind}`,
       og: 'seo', ogImage: og6(r.path).image, ogType: 'article', ogAlt: og6(r.path).alt, scripts: r.kind === 'tool' ? [`tools/${r.tool}.js`] : [], styles: ['seo.css'], jsonld, noindex: !r.indexable });
     rendered.push({ r, html, related });
   }
-  // a hub with only a page or two is a thin list, so it stays out of search until it has three
-  const hubIndexable = (pages) => pages.filter((o) => o.indexable).length >= 3;
+  // a hub with only a page or two is a thin list, so it stays out of search until it has three (or the hub's own min)
+  const hubIndexable = (pages, h) => pages.filter((o) => o.indexable).length >= (h.min ?? 3);
   const hubPages = hubs.map((h) => {
     const { body, pages } = t.hubPage(h);
     const html = layout({ title: h.title, description: h.description, body, page: h.id, at: h.at, section: h.id, kind: 'p-seo-hub', og: 'seo', ogImage: og6(h.at).image, ogAlt: og6(h.at).alt,
-      styles: ['seo.css'], jsonld: [crumb([['dusk bot', '/'], [h.nav[0].toUpperCase() + h.nav.slice(1), h.at]])], noindex: !hubIndexable(pages) });
+      styles: ['seo.css'], jsonld: [crumb([['dusk bot', '/'], [h.nav[0].toUpperCase() + h.nav.slice(1), h.at]])], noindex: !hubIndexable(pages, h) });
     return { h, html, pages };
   });
 
@@ -128,7 +132,7 @@ export function buildSeo(ctx) {
   for (const at of gonePaths) if (!byPath.has(at)) unwrite(at);
   for (const h of Object.values(HUBS)) if (!hubs.some((x) => x.at === h.at)) unwrite(h.at);
   for (const { r, html } of rendered) if (r.built) write(r.path, html, { index: r.indexable, group: r.state.cohort, lastmodKey: hash(JSON.stringify({ ...r, state: undefined, alt: undefined })) });
-  for (const { h, html, pages } of hubPages) write(h.at, html, { index: hubIndexable(pages), group: 'hubs' });
+  for (const { h, html, pages } of hubPages) write(h.at, html, { index: hubIndexable(pages, h), group: 'hubs' });
 
   // pruned pages: merged ones send people on, removed ones answer 410
   const redirects = {}, gone = [];

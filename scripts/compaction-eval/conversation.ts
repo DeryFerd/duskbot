@@ -118,3 +118,39 @@ export const CONTINUE = [
   { id: "driver-notice", ask: "Vendor signed off. Now do step 5.",
     pass: "The bot drafts the driver notice about the routing cutover (step 5). The notice itself is under 40 words, and any date in it is written DD/MM/YYYY (for example 14/03/2027). It must not ask what step 5 is." },
 ];
+
+const NOTES = [
+  "Morning walk-round of the yard: lighting in bay rows checked, fire exits clear, the spill kit by the fuel point restocked and signed.",
+  "Reminder for everyone on the dock: high-visibility vests on at all times past the yellow line, and phones away while a forklift is moving.",
+  "Pallet wrap supplier delivered as planned; the old rolls go to the back shelf and get used first so nothing sits for a season.",
+  "Drivers asked again for the coffee machine in the rest room to be descaled; facilities have it on their list for the weekend.",
+  "Toolbox talk topic for the week is safe reversing: use a banksman where the mirrors do not cover the corner, and sound the horn once.",
+  "The tail-lift on one of the rigid trucks squeaks on the way down; the workshop will grease it at the next routine service, not urgent.",
+  "Canteen menu changes on Monday; the vegetarian option moves to the hot counter and the salad bar stays open until the late break.",
+  "Housekeeping score for the cross-dock floor was good; the only note was shrink-wrap offcuts collecting behind the stretch wrapper.",
+  "New starters on the evening shift had their induction; buddies are assigned and the sign-off sheets are in the supervisor's tray.",
+  "Weather looks dry for the next few days, so the outdoor marshalling area stays in use and the overflow car park stays closed.",
+  "IT pushed the scanner firmware update overnight; a couple of handhelds needed a restart, after which they all synced without trouble.",
+  "The fire drill went smoothly; everyone was at the assembly point quickly and the roll call matched the signing-in book.",
+];
+
+/** Neutral notes that make a reply as long as a real working day's: no names, numbers or ids a probe asks for. */
+export function shiftNotes(turn: number): string {
+  return ["Shift notes:", ...Array.from({ length: 110 }, (_, k) => `- ${NOTES[(turn + k) % NOTES.length]}`)].join("\n");
+}
+
+/** --long only: what the bot learnt and said in the middle of the chat, in plain words with no id, path or number the
+ * fixed parts of a checkpoint would copy. Only a summary that read the middle can carry them. Turn index -> sentence. */
+export const MIDDLE_FACTS: Record<number, string> = {
+  9: "One thing from Tomasz's reply worth keeping: he only checks zone mappings in the morning, before lunch, Rotterdam time, so anything we send him later waits a day.",
+  12: "Also noted from the drivers' rep: drivers want route changes by text message, not by email, because most of them never open the work inbox on the road.",
+  15: "And Ingrid, who leads the night shift, has to sign off on the cutover plan before anything is scheduled; she asked to see it the day before.",
+  18: "Finance came back too: the new zone software is billed per depot per month, so merging duplicates actually lowers the invoice.",
+};
+
+export const MIDDLE_RECALL: Probe[] = [
+  { id: "tomasz-mornings", ask: "When in the day does Tomasz look at mappings?", expect: /morning|before (lunch|noon|midday)/i, early: false },
+  { id: "drivers-sms", ask: "How do the drivers want to hear about route changes?", expect: /\b(sms|text message|texts?)\b/i, early: false },
+  { id: "ingrid-signoff", ask: "Who has to sign off on the cutover plan before it's scheduled?", expect: /ingrid/i, early: false },
+  { id: "billing", ask: "How is the new zone software billed?", expect: /per depot/i, early: false },
+];

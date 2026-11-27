@@ -68,7 +68,12 @@ beforeEach(() => {
   setLocale("en");
   container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
-afterEach(async () => { await act(async () => root.unmount()); closeAddVps(); container.remove(); document.body.innerHTML = ""; vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+// a confirm answered in a test closes its own root once its exit ends; wiping the page before that leaves the root
+// removing nodes that are gone, which throws in whichever test runs then
+const confirmsClosed = async () => {
+  for (let i = 0; i < 100 && document.querySelector("[role=alertdialog]"); i++) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+};
+afterEach(async () => { await confirmsClosed(); await act(async () => root.unmount()); closeAddVps(); container.remove(); document.body.innerHTML = ""; vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 const settle = async () => { for (let i = 0; i < 6; i++) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); }); };
 const text = () => document.body.textContent ?? "";

@@ -257,6 +257,11 @@
   inherits: true;
   initial-value: 0;
 }
+/* the timestamp waits past the row's edge; the row clips it there, so it never widens the conversation and a scroll into
+   view never slides the chat sideways */
+[data-message-row]:has(> .chat-row-ts) {
+  overflow-x: clip;
+}
 .chat-row-ts {
   position: absolute;
   inset-block: 0;
@@ -475,11 +480,23 @@
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
-  animation: working-line-sheen var(--sheen-ms, 3.4s) var(--dusk-ease-heavy) infinite;
+  animation: working-line-sheen var(--sheen-ms, 3.4s) linear infinite;
 }
+/* the old eased sweep with its fast middle held to an even 1.2 word widths a second: the slow drift at either end keeps
+   its own pace, only the band whipping across the words is slower */
 @keyframes working-line-sheen {
-  from { background-position: 200% 0; }
-  to { background-position: -200% 0; }
+  0% { background-position: 200% 0; }
+  4% { background-position: 197.3% 0; }
+  8% { background-position: 191.9% 0; }
+  12% { background-position: 183.3% 0; }
+  16% { background-position: 170.4% 0; }
+  19.3% { background-position: 155.5% 0; }
+  80% { background-position: -160.4% 0; }
+  84% { background-position: -177.3% 0; }
+  88% { background-position: -188.4% 0; }
+  92% { background-position: -195.3% 0; }
+  96% { background-position: -198.9% 0; }
+  100% { background-position: -200% 0; }
 }
 @keyframes working-line-rise { from { opacity: 0; transform: translateY(var(--rise, 3px)); } }
 @keyframes working-line-grow { from { opacity: 0; transform: scale(var(--from-scale, 0.9)); } }
@@ -506,9 +523,17 @@
 [data-working-line="ponder"] { --sheen-ms: 3.4s; }
 [data-working-line="ponder"].turn-status-in .turn-status-mark { --from-scale: 0.88; animation: working-line-grow calc(360 * var(--line-ms)) var(--dusk-ease-out) backwards; }
 [data-working-line="ponder"].turn-status-in .turn-label-slot { animation: working-line-rise calc(360 * var(--line-ms)) var(--dusk-ease-out) calc(120 * var(--line-ms)) backwards; }
-[data-working-line="rock"] { --sheen-ms: 3s; }
+[data-working-line="rock"] { --sheen-ms: 4.34s; }
 [data-working-line="rock"].turn-status-in .turn-status-mark { transform-origin: 50% 100%; animation: working-line-drop calc(520 * var(--line-ms)) var(--dusk-ease-out) backwards; }
 [data-working-line="rock"].turn-status-in .turn-label-slot { animation: working-line-rise calc(320 * var(--line-ms)) var(--dusk-ease-out) calc(80 * var(--line-ms)) backwards; }
+[data-working-line="glance"] { --sheen-ms: 4.34s; }
+[data-working-line="glance"].turn-status-in .turn-status-mark { animation: working-line-glance-in calc(340 * var(--line-ms)) var(--dusk-ease-out) backwards; }
+[data-working-line="glance"].turn-status-in .turn-label-slot { animation: working-line-rise calc(320 * var(--line-ms)) var(--dusk-ease-out) calc(80 * var(--line-ms)) backwards; }
+[data-working-line="glance"].turn-status-out {
+  transform-origin: 0 18px;
+  animation: working-line-fade-out calc(200 * var(--line-ms)) var(--dusk-ease-out) forwards;
+}
+@keyframes working-line-glance-in { from { opacity: 0; transform: translateY(15%); } 60% { opacity: 1; } }
 [data-working-line="ellipsis"] { --sheen-ms: 4s; }
 [data-working-line="ellipsis"].turn-status-in { animation: working-line-blur-in calc(440 * var(--line-ms)) var(--dusk-ease-out) backwards; }
 .working-ellipsis { display: inline-flex; margin-inline-start: -4px; color: var(--color-ink-secondary); }

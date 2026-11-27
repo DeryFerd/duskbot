@@ -22,6 +22,13 @@ export function alternateSendLabel(mode: SendKey, mac: boolean = isMacPlatform()
   return mode === "mod-enter" ? `${mod}+Shift+Enter` : `${mod}+Enter`;
 }
 
+/** The send key and the other follow-up's key as glyphs short enough for the hint beside Send. */
+export function followUpKeyGlyphs(mode: SendKey, mac: boolean = isMacPlatform()): { send: string; alternate: string } {
+  const mod = mac ? "⌘" : "Ctrl ";
+  const shift = mac ? "⇧" : "Shift ";
+  return mode === "mod-enter" ? { send: `${mod}↵`, alternate: `${mod}${shift}↵` } : { send: "↵", alternate: `${mod}↵` };
+}
+
 let sessionChoice: FollowUpDefault | undefined;
 const listeners = new Set<() => void>();
 

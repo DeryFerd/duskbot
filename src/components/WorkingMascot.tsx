@@ -12,6 +12,7 @@ import { LivelyMascot } from "./LivelyMascot";
 import { MASCOT_MOTION, type MascotMotionPick } from "@/lib/mascot-motion";
 import { LINE_SPECS, WORKING_LINE, type WorkingLinePick } from "@/lib/working-line";
 import { WorkingLineMascot } from "./WorkingLineMascot";
+import { GlanceMascot } from "./GlanceMascot";
 
 type WorkingBot = { id?: string; color: MausColor; mascotBody?: StoredBodyId | null; mascotFaceColor?: MascotFaceColor | null };
 
@@ -118,7 +119,14 @@ export function WorkingMascot({ bot, size, eyes, seed = "", mood, className, mot
   const key = `${bot.id ?? ""}|${seed}`;
   const ink = MASCOT_INK[bot.color] ?? MASCOT_INK.green;
   const eyeInk = mascotFaceInk(bot.mascotFaceColor) ?? eyes ?? "var(--color-app)";
-  if (mood && line !== "shipped") {
+  if (mood && line === "glance") {
+    return (
+      <span aria-hidden="true" data-working-mascot="" data-working-line={line} data-mood={mood} className={cn("relative inline-block shrink-0", className)} style={{ width: size, height: size }}>
+        <GlanceMascot body={body} mood={mood} seed={key} reduced={reduced} box={box} ink={ink} eyeInk={eyeInk} />
+      </span>
+    );
+  }
+  if (mood && line !== "shipped" && line !== "glance") {
     return (
       <span aria-hidden="true" data-working-mascot="" data-working-line={line} data-mood={mood} className={cn("relative inline-block shrink-0", className)} style={{ width: size, height: size }}>
         <WorkingLineMascot variant={line} body={body} mood={mood} seed={key} reduced={reduced} box={box} ink={ink} eyeInk={eyeInk} thoughtDots={LINE_SPECS[line].thoughtDots} />

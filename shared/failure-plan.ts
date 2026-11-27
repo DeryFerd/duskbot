@@ -112,7 +112,8 @@ const KEY_WORDS = /\brejected this key\b|\binvalid_api_key\b|\b(?:invalid|incorr
 const LOGIN_WORDS = /\/login\b|sign in again|not logged in/i;
 const PLAN_WORDS = /\bplan includes \d+\b|\bhas no room for another\b|\bWeekly limit reached\b/i;
 const FOLDER_WORDS = /\b(?:bot|room)'s folder .+ was moved or deleted\b|working folder no longer exists\b/i;
-const MODEL_GONE_WORDS = /'s model is unavailable\b|\bis unavailable: pick another model\b|\ballows only company models\b|\bdoes not allow the .+ engine\b/i;
+// the last two are the Codex driver's words for a model the ChatGPT account refuses (server/drivers/codex-errors.ts)
+const MODEL_GONE_WORDS = /'s model is unavailable\b|\bis unavailable: pick another model\b|\ballows only company models\b|\bdoes not allow the .+ engine\b|\bChatGPT account can't use this model\b|\bisn't available on your ChatGPT plan\b/i;
 const NO_AI_WORDS = /\bConnect an AI first\b|\bno AI is connected yet\b|\bneeds to connect an AI\b/i;
 
 /** What one of dusk bot's own refusals, or an engine's words for a bad key, says stopped a reply; undefined for any other

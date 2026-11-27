@@ -7,6 +7,13 @@ import { MentionText } from "./MentionText";
 const TEXT_LAYOUT = ["font-family", "font-size", "font-weight", "font-style", "font-stretch", "font-feature-settings", "font-variation-settings",
   "letter-spacing", "word-spacing", "line-height", "text-indent", "tab-size", "padding-top", "padding-right", "padding-bottom", "padding-left"] as const;
 
+/** React 19 copies a controlled textarea's value into its defaultValue on every change, which replaces the textarea's
+ * text child; Chromium 158 answers that child change with a :has() restyle of the subtree the field sits
+ * in, the whole chat on each key. Reporting the live value as the default leaves React nothing to copy. */
+export function keepDefaultValueInPlace(input: HTMLTextAreaElement): void {
+  Object.defineProperty(input, "defaultValue", { configurable: true, get: () => input.value, set: () => {} });
+}
+
 export function MentionTextarea({ inputRef, peers, everyone = false, wrapperClassName, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement> & {
   wrapperClassName?: string;
   inputRef: RefObject<HTMLTextAreaElement | null>;
@@ -31,6 +38,10 @@ export function MentionTextarea({ inputRef, peers, everyone = false, wrapperClas
     }
     return null;
   }, []);
+  const setInput = useCallback((input: HTMLTextAreaElement | null) => {
+    inputRef.current = input;
+    if (input) keepDefaultValueInPlace(input);
+  }, [inputRef]);
   useEffect(() => setHoverStart(null), [props.value]);
   const sync = useCallback(() => {
     const input = inputRef.current;
@@ -75,7 +86,7 @@ export function MentionTextarea({ inputRef, peers, everyone = false, wrapperClas
     <div ref={mirrorRef} dir={props.dir} aria-hidden="true" className="mention-editor-mirror pointer-events-none absolute inset-0 overflow-hidden">
       <MentionText text={String(props.value ?? "")} peers={peers} everyone={everyone} links="highlight" hoverStart={hoverStart} />{"\n"}
     </div>
-    <textarea {...props} ref={inputRef}
+    <textarea {...props} ref={setInput}
       style={hoverStart === null ? props.style : { ...props.style, cursor: "pointer" }}
       onScroll={(event) => { sync(); setHoverStart(null); props.onScroll?.(event); }}
       onMouseMove={(event) => { setHoverStart(linkAt(event.clientX, event.clientY)?.start ?? null); props.onMouseMove?.(event); }}

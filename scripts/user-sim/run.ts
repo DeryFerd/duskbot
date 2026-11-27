@@ -15,8 +15,9 @@ import { parseArgs } from "node:util";
 import { client } from "../memory-eval/client.ts";
 import { gatewayFromEnv } from "../memory-eval/sandbox.ts";
 import { launchServer, type StressServer } from "../stress-eval/server.ts";
-import { proactiveMessages, runCheck, SETUP_DONE, type ChatRecord, type Evidence, type Msg } from "./checks.ts";
+import { proactiveMessages, runCheck, SETUP_DONE, type ChatRecord, type Evidence, type Msg, type ToolCall } from "./checks.ts";
 import { judge } from "./judge.ts";
+import { startLimitProxy, type LimitProxy } from "./limit-proxy.ts";
 import { DONE, personReply } from "./person.ts";
 import { loadScenarios, validate, validateWorld, type Scenario, type Step } from "./scenario.ts";
 import { writeSummary } from "./summary.ts";
@@ -58,7 +59,22 @@ const AUTOMATION_PROMPT = /^\[(?:Scheduled routine|Routine|Webhook|App event)\b/
 
 type ApiMsg = { id: string; at: number; role: string; kind?: string; text?: string; quietRun?: boolean; card?: any; turnSucceeded?: boolean; digest?: { durationMs?: number; toolCalls?: number; usage?: { input?: number; output?: number; costUsd?: number | null } } };
 
-interface TurnMetric { latencyMs: number; ttftMs: number | null; state: string }
+/** `early`: a bot line came well before the turn's last one (an ack or a progress note), as the person would see it. */
+interface TurnMetric { latencyMs: number; ttftMs: number | null; state: string; botTexts: number; early: boolean }
+
+const WORK_TURN_MS = 15_000;
+const EARLY_GAP_MS = 3_000;
+
+/** The harness's own beat lines in the server log: what it sent and what it dropped. */
+function beatCounts(logPath: string) {
+  const text = existsSync(logPath) ? readFileSync(logPath, "utf8") : "";
+  const count = (pattern: RegExp) => (text.match(pattern) ?? []).length;
+  return {
+    ackSent: count(/turn beats: sent the ack/g), planSent: count(/turn beats: sent the plan/g), milestoneSent: count(/turn beats: sent the milestone/g),
+    ackSkipped: count(/turn beats: the ack for \S+ was skipped/g), planSkipped: count(/turn beats: the plan for \S+ was skipped/g),
+    notWritten: count(/turn beats: the \w+ for \S+ was not written/g), aborted: count(/review aborted/g),
+  };
+}
 
 /** First bot text per conversation, from the server's event stream, as the app would paint it. */
 function watchFirstText(url: string) {
@@ -139,12 +155,24 @@ async function runScenario(s: Scenario, run: number): Promise<Record<string, unk
   setClock(start);
   writeFileSync(statePath, JSON.stringify(connectorState(world, start), null, 1));
   const preload = `--import=${clockJs}`;
-  const mcpServers = Object.fromEntries(world.apps.map((app) => [app, { command: process.execPath, args: [appsJs, app], env: { APP_STATE: statePath, TZ_SHIFT_FILE: shiftFile, NODE_OPTIONS: preload, TZ: tz } }]));
+  // a CLI the person has signed in on their computer (gh), on the server's PATH and reading the same app state
+  const bin = join(lib, "bin");
+  mkdirSync(bin);
+  for (const tool of s.cli ?? []) {
+    copyFileSync(join(here, `${tool}.mjs`), join(lib, `${tool}.mjs`));
+    writeFileSync(join(bin, tool), `#!/bin/sh\nAPP_STATE=${JSON.stringify(statePath)} exec ${JSON.stringify(process.execPath)} ${JSON.stringify(join(lib, `${tool}.mjs`))} "$@"\n`, { mode: 0o755 });
+  }
+  const apps = s.apps ?? world.apps;
+  const mcpServers = Object.fromEntries(apps.map((app) => [app, { command: process.execPath, args: [appsJs, app], env: { APP_STATE: statePath, TZ_SHIFT_FILE: shiftFile, NODE_OPTIONS: preload, TZ: tz } }]));
+  const limitEnds = s.limit ? relEpoch(s.limit.until, start, tz) : null;
+  if (s.limit && limitEnds === null) throw new Error(`limit.until ${s.limit.until} is not a relative time`);
+  const limit: LimitProxy | null = s.limit ? await startLimitProxy(gateway.url, () => fakeNow() < limitEnds!, s.limit.message) : null;
+  const botUrl = limit?.url ?? gateway.url;
   // a live run on Codex keeps its own CODEX_HOME in the sandbox and reaches the gateway as its Company endpoint
   const codex = values.engine === "codex";
   const instance = codex
-    ? { driver: "codex", displayName: "Codex", environment: { DUSK_COMPANY_API_KEY: gateway.key, CODEX_HOME: join(root, "codex-home") }, config: { managed: { url: gateway.url, models: [values.model] } } }
-    : { driver: "openai-compat", displayName: "OpenAI", config: { url: gateway.url, key: gateway.key, model: values.model } };
+    ? { driver: "codex", displayName: "Codex", environment: { DUSK_COMPANY_API_KEY: gateway.key, CODEX_HOME: join(root, "codex-home") }, config: { managed: { url: botUrl, models: [values.model] } } }
+    : { driver: "openai-compat", displayName: "OpenAI", config: { url: botUrl, key: gateway.key, model: values.model } };
   if (codex) mkdirSync(join(root, "codex-home"), { recursive: true });
   const config = {
     instances: { gw: instance },
@@ -153,7 +181,7 @@ async function runScenario(s: Scenario, run: number): Promise<Record<string, unk
   };
   const launch = async (): Promise<StressServer> => {
     for (let attempt = 0; ; attempt++) {
-      try { return await launchServer(values.repo!, root, gateway, [values.model!], config, undefined, { env: { NODE_OPTIONS: preload, TZ_SHIFT_FILE: shiftFile, TZ: tz }, ...(codex ? { engine: "codex" as const } : {}) }); }
+      try { return await launchServer(values.repo!, root, gateway, [values.model!], config, undefined, { env: { NODE_OPTIONS: preload, TZ_SHIFT_FILE: shiftFile, TZ: tz, DUSK_IDLE_SWEEP_MS: "20000", ...(s.computer ? { DUSK_SELF_HOSTED: "1" } : {}), PATH: `${bin}:${process.env.PATH ?? ""}` }, ...(codex ? { engine: "codex" as const } : {}) }); }
       catch (error) { if (attempt >= 3) throw error; await sleep(2_000 + Math.random() * 5_000); }
     }
   };
@@ -176,10 +204,13 @@ async function runScenario(s: Scenario, run: number): Promise<Record<string, unk
     };
     writeFiles(resolveTimes(world.files ?? {}, start, tz));
     const bots = new Map<string, { id: string; threadId: string }>();
-    bots.set(world.botName, await api.createBot(world.botName, values.model!));
+    // a scenario with a computer gets the app's defaults: Works on Auto and the bot's own browser
+    const withComputer = async (bot: { id: string; threadId: string }) => { if (s.computer) await api.call("PATCH", `/api/bots/${bot.id}`, { computer: null, browser: true }); return bot; };
+    bots.set(world.botName, await withComputer(await api.createBot(world.botName, values.model!)));
     for (const extra of s.bots ?? []) {
-      const bot = await api.createBot(extra.name, values.model!);
-      if (extra.soul) await api.call("PATCH", `/api/bots/${bot.id}`, { soul: extra.soul });
+      const bot = await withComputer(await api.createBot(extra.name, values.model!));
+      const profile = { ...(extra.soul ? { soul: extra.soul } : {}), ...(extra.title ? { title: extra.title } : {}), ...(extra.description ? { description: extra.description } : {}) };
+      if (Object.keys(profile).length) await api.call("PATCH", `/api/bots/${bot.id}`, profile);
       bots.set(extra.name, bot);
     }
     await sleep(3_000);
@@ -275,11 +306,24 @@ async function runScenario(s: Scenario, run: number): Promise<Record<string, unk
         if (text.includes(DONE)) break;
         watcher.arm(threadId);
         const sent = Date.now();
-        await api.call("POST", `/api/bots/${bot.id}/messages`, { text, threadId, sendId: randomUUID().replaceAll("-", ""), ...(turn === 0 && replyToId ? { replyToId } : {}) });
+        const accepted = await api.call("POST", `/api/bots/${bot.id}/messages`, { text, threadId, sendId: randomUUID().replaceAll("-", ""), ...(turn === 0 && replyToId ? { replyToId } : {}) });
+        // `/new` moves the person to a fresh chat: the conversation goes on there, as it does in the app
+        if (accepted?.command === "new" && typeof accepted.threadId === "string" && accepted.threadId !== threadId) {
+          narration.push({ at: fakeNow(), text: `[${first} starts a new chat with ${botName}]` });
+          threadId = accepted.threadId;
+          lastThread = threadId;
+          record.threadId = threadId;
+          if (key !== "new" && key !== "same" && key !== "main") threads.set(key, threadId);
+        }
         personTurns += 1;
         said.push(`${localTime()} (to ${botName}): ${text.slice(0, 300)}`);
         const state = await waitIdle(api, threadId, TURN_TIMEOUT_MS);
-        turns.push({ latencyMs: Date.now() - sent, ttftMs: watcher.read(threadId), state });
+        // the server's clock can be shifted, so the turn is everything after the person's latest message
+        const all = await messages(threadId).catch(() => [] as ApiMsg[]);
+        const asked = all.findLastIndex((m) => m.role === "user");
+        const replies = all.slice(asked + 1).filter((m) => m.role === "bot" && m.kind === "text" && m.text);
+        const early = replies.length >= 2 && replies.at(-1)!.at - replies[0]!.at >= EARLY_GAP_MS;
+        turns.push({ latencyMs: Date.now() - sent, ttftMs: watcher.read(threadId), state, botTexts: replies.length, early });
         if (turn === maxTurns - 1) break;
         text = await personReply(personGateway, { persona: world.persona, goal: c.goal, knows: c.knows, now: localTime(), transcript: await transcript(), turnsLeft: maxTurns - turn - 1, before: said.slice(0, saidBefore) });
       }
@@ -301,11 +345,12 @@ async function runScenario(s: Scenario, run: number): Promise<Record<string, unk
     const raw = (await Promise.all([...threadOwners].map(async ([threadId, botName]) => (await messages(threadId).catch(() => [])).filter((m) => !m.quietRun).map((m) => ({ ...m, threadId, botName }))))).flat();
     const msgs: Msg[] = raw.filter((m) => m.kind === "text" && m.text).map((m) => ({ id: m.id, at: m.at, role: m.role, kind: m.kind, text: m.text, threadId: m.threadId, botName: m.botName }));
     const digests = raw.filter((m) => m.kind === "digest" && m.digest);
+    const tools: ToolCall[] = raw.filter((m: any) => m.kind === "activity" && m.tool?.input !== undefined).map((m: any) => ({ at: m.at, threadId: m.threadId, name: String(m.tool.name ?? ""), input: typeof m.tool.input === "string" ? m.tool.input : JSON.stringify(m.tool.input ?? "") }));
     const memory: Record<string, string> = {};
     for (const [name, b] of bots) memory[name] = Object.values(await api.botMemory(b.id).catch(() => ({}))).join("\n");
     const aboutMe = await api.aboutMe().catch(() => "");
     const state = JSON.parse(readFileSync(statePath, "utf8"));
-    const evidence: Evidence = { state, routines: ours, runs: (runs as any[]).filter((r) => botIds.has(r.botId)), chats, messages: msgs, stepAt, memory, aboutMe, home: srv.dataDir, mainBot: world.botName };
+    const evidence: Evidence = { state, routines: ours, runs: (runs as any[]).filter((r) => botIds.has(r.botId)), chats, messages: msgs, stepAt, memory, aboutMe, home: srv.dataDir, mainBot: world.botName, tools };
     const checks = s.checks.map((c) => runCheck(c, evidence));
 
     const chatThreads = new Set(chats.map((c) => c.threadId));
@@ -321,8 +366,9 @@ async function runScenario(s: Scenario, run: number): Promise<Record<string, unk
     ].sort((a, b) => a.at - b.at);
     const story = lines.map((l) => l.text).join("\n\n");
     const appWrites = JSON.stringify((state.log ?? []).map(({ at, ...rest }: any) => ({ at: localTime(Date.parse(at)), ...rest })), null, 0) + (state.errors?.length ? `\nerrors returned to the bot: ${JSON.stringify(state.errors).slice(0, 800)}` : "");
-    const verdict = await judge(judgeGateway, s, world.persona, story, checks, appWrites);
-    writeFileSync(join(out, "transcripts", `${s.id}-${run}.txt`), `${s.title}\n\n${story}\n\n--- app writes\n${appWrites}\n\n--- checks\n${checks.map((c) => `${c.ok ? "pass" : "FAIL"} ${c.label}: ${c.detail}`).join("\n")}\n\n--- judge\n${JSON.stringify(verdict, null, 1)}\n`);
+    const toolLines = s.computer || s.cli ? `\ntools the bot called, in order: ${tools.map((t) => `${t.name}(${t.input.replace(/\s+/g, " ").slice(0, 120)})`).join("; ").slice(0, 3_000) || "none"}` : "";
+    const verdict = await judge(judgeGateway, s, world.persona, story, checks, appWrites + toolLines);
+    writeFileSync(join(out, "transcripts", `${s.id}-${run}.txt`), `${s.title}\n\n${story}\n\n--- app writes\n${appWrites}${toolLines}\n\n--- checks\n${checks.map((c) => `${c.ok ? "pass" : "FAIL"} ${c.label}: ${c.detail}`).join("\n")}\n\n--- judge\n${JSON.stringify(verdict, null, 1)}\n`);
 
     const usage = digests.reduce((t, m) => ({ input: t.input + (m.digest!.usage?.input ?? 0), output: t.output + (m.digest!.usage?.output ?? 0), cost: t.cost + (m.digest!.usage?.costUsd ?? 0), steps: t.steps + (m.digest!.toolCalls ?? 0) }), { input: 0, output: 0, cost: 0, steps: 0 });
     const estCost = usage.cost || (usage.input * Number(values["price-in"]) + usage.output * Number(values["price-out"])) / 1e6;
@@ -339,11 +385,15 @@ async function runScenario(s: Scenario, run: number): Promise<Record<string, unk
         ttftMs: median(turns.map((t) => t.ttftMs ?? NaN)), turnLatencyMs: median(turns.map((t) => t.latencyMs)), maxTurnLatencyMs: Math.max(0, ...turns.map((t) => t.latencyMs)),
         tokensIn: usage.input, tokensOut: usage.output, costUsd: Math.round(estCost * 1e4) / 1e4, costEstimated: !usage.cost,
         recall: recall.length ? { hit: recall.filter((c) => c.ok).length, of: recall.length } : null,
+        workTurns: turns.filter((t) => t.latencyMs >= WORK_TURN_MS).length, earlyOnWork: turns.filter((t) => t.latencyMs >= WORK_TURN_MS && t.early).length,
+        quickTurns: turns.filter((t) => t.latencyMs < WORK_TURN_MS).length, earlyOnQuick: turns.filter((t) => t.latencyMs < WORK_TURN_MS && t.early).length,
+        beats: beatCounts(srv.logPath),
         routines: ours.length, routineRuns: evidence.runs.length, appErrors: state.errors?.length ?? 0, wallMs: Date.now() - wallStart,
       },
     };
   } finally {
     watcher.close();
+    await limit?.close();
     live.delete(srv);
     await srv.close(values.keep);
     if (!values.keep) rmSync(root, { recursive: true, force: true });

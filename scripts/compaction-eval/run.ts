@@ -9,11 +9,11 @@ import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
 import { gatewayFromEnv } from "../memory-eval/sandbox.ts";
-import { CONTINUE, conversation, RECALL, type Turn } from "./conversation.ts";
+import { CONTINUE, conversation, MIDDLE_FACTS, MIDDLE_RECALL, RECALL, shiftNotes, type Turn } from "./conversation.ts";
 
 const { values } = parseArgs({ options: {
   repo: { type: "string" }, label: { type: "string" }, reps: { type: "string", default: "3" }, model: { type: "string", default: "gpt-6.2-sol" },
-  full: { type: "boolean", default: false }, out: { type: "string" },
+  full: { type: "boolean", default: false }, long: { type: "boolean", default: false }, out: { type: "string" },
 } });
 const repo = resolve(values.repo ?? process.cwd());
 const label = values.label ?? "run";
@@ -51,7 +51,12 @@ async function pool<T, R>(items: readonly T[], width: number, work: (item: T) =>
   return out;
 }
 
-const turns: Turn[] = conversation();
+// --long: every reply carries about 13 KB of shift notes, so the chat is about 600 KB (150k tokens), the size a real fold
+// has at the 200k threshold. The notes hold no fact any probe asks about.
+const turns: Turn[] = values.long
+  ? conversation().map((turn, i) => ({ ...turn, assistant: `${turn.assistant}${MIDDLE_FACTS[i] ? ` ${MIDDLE_FACTS[i]}` : ""}\n\n${shiftNotes(i)}` }))
+  : conversation();
+const PROBES = values.long ? [...RECALL, ...MIDDLE_RECALL] : RECALL;
 const entries: Entry[] = turns.flatMap((turn, i) => [{ id: `u${i}`, role: "user" as const, text: turn.user }, { id: `a${i}`, role: "assistant" as const, text: turn.assistant }]);
 const FIRST_FOLD_AT = 26;
 
@@ -75,8 +80,9 @@ async function fold(context: Entry[], record: Record | undefined, recordAt: numb
   }
   let model = false;
   const started = Date.now();
+  // thorough: a fold off the person's time (warm, idle or asked for); a checkout without the option ignores it
   const summary: string = await summaryModule.draftSummary(point.folded, {
-    signal: new AbortController().signal, timeoutMs: 150_000, previous, archive, today: "2026-11-20",
+    signal: new AbortController().signal, timeoutMs: 150_000, previous, archive, today: "2026-11-20", thorough: true,
     generateText: async (prompt: string) => { const { content } = await chat([{ role: "user", content: prompt }]); model = Boolean(content.trim()); return content; },
   });
   const next: Record = { id: `c${recordAt}`, firstKeptId: point.firstKeptId, foldedThroughId, summary, tokensBefore: 0, by: "harness" };
@@ -141,7 +147,7 @@ async function rep(n: number, full: boolean) {
       const selection = rebuild.selectReplay(second.context, { budgetBytes: rebuild.DEFAULT_REBUILD_BYTES, compaction: second.record });
       transcript = selection.transcript.map(({ role, text }: Entry) => ({ id: "", role, text }));
     }
-    const recall = await pool(RECALL, 4, async (probe) => {
+    const recall = await pool(PROBES, 4, async (probe) => {
       const { reply, calls } = await ask(transcript, probe.ask, archiveDir);
       return { id: probe.id, early: probe.early, archiveOnly: Boolean(probe.archiveOnly), pass: probe.expect.test(reply), read: calls.some((c) => c.name === "read_file"), reply: reply.slice(0, 400) };
     });
@@ -161,9 +167,10 @@ for (let i = 1; i <= reps; i++) results.push(await rep(i, values.full!));
 const rate = (rows: Array<{ pass: boolean }>) => `${rows.filter((r) => r.pass).length}/${rows.length}`;
 const all = results.flatMap((r) => r.recall);
 const totals = {
-  label, model: values.model, reps, turns: turns.length,
+  label, model: values.model, reps, turns: turns.length, long: values.long, chatBytes: entries.reduce((n, e) => n + Buffer.byteLength(e.text), 0),
   earlyFactRecall: rate(all.filter((r) => r.early && !r.archiveOnly)),
-  laterFactRecall: rate(all.filter((r) => !r.early)),
+  laterFactRecall: rate(all.filter((r) => !r.early && !MIDDLE_RECALL.some((probe) => probe.id === r.id))),
+  ...(values.long ? { middleFactsTheBotSaid: rate(all.filter((r) => MIDDLE_RECALL.some((probe) => probe.id === r.id))) } : {}),
   archivedToolResultRecall: rate(all.filter((r) => r.archiveOnly)),
   continuation: rate(results.flatMap((r) => r.continuation)),
   nextStep: rate(results.flatMap((r) => r.continuation.filter((c) => c.id === "next-step"))),

@@ -42,7 +42,7 @@ const NAV: Array<{ label?: string; items: NavItem[] }> = [
     { to: "/connectors", label: "apps", icon: <LayoutGrid {...ICON} /> },
   ] },
   { label: "you", items: [
-    { to: "/billing", label: "plans and billing", icon: <CreditCard {...ICON} /> },
+    { to: "/billing", label: "plans", icon: <CreditCard {...ICON} /> },
     { to: "/team", label: "team", icon: <Users {...ICON} /> },
     { to: "/usage", label: "usage", icon: <ChartNoAxesColumn {...ICON} /> },
     { to: "/account", label: "account", icon: <CircleUser {...ICON} /> },

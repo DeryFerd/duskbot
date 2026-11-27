@@ -25,7 +25,8 @@ export const TYPES = {
   action: { kind: 'action', hub: 'integrations', words: 320, needs: ['action', 'what', 'uses', 'routine', 'steps', 'watch'] },
 };
 
-// the index pages. each lists its live pages in groups, and only exists while at least one of them is live
+// the index pages. each lists its live pages in groups, and only exists while at least one of them is live. a hub is indexed
+// once it has min live pages (3 unless it says), and intro is an optional section of its own under the lists
 export const HUBS = {
   guides: { at: '/guides', nav: 'guides', title: 'Guides to AI bots that work for you / dusk bot', h1: 'guides',
     description: 'Plain-words guides to AI agents and bots: keeping them running with your laptop shut, scheduled AI tasks, group chats, safety and what it all costs.',
@@ -52,7 +53,10 @@ export const HUBS = {
     h1: 'glossary', lede: 'the words around ai agents, in plain english, each with an example.', groups: [{ id: 'words', title: 'words', types: ['glossary'] }] },
   tools: { at: '/tools', nav: 'free tools', title: 'Free tools for planning AI bots / dusk bot',
     description: 'Small free calculators and helpers for planning AI bots: what keeping one running costs, and more. They run in your browser.',
-    h1: 'free tools', lede: 'small helpers that run in your browser. nothing you type leaves the page.', groups: [{ id: 'tools', title: 'tools', types: ['tool'] }] },
+    h1: 'free tools', lede: 'small helpers that run in your browser. nothing you type leaves the page.', groups: [{ id: 'tools', title: 'tools', types: ['tool'] }],
+    // a tool is a page of real working parts, so one is enough for the hub to be indexed; the intro says what it works out
+    min: 1,
+    intro: { h: 'what the calculator works out', md: "**keeping a bot running costs less in power than in your time.** the always-on cost calculator puts four places side by side: your own laptop, a spare computer at home, a rented server and dusk cloud.\n\nyou type six numbers:\n\n- how many hours a day bots should run\n- your electricity price, from your last bill\n- what the spare computer draws when idle\n- your server's monthly price\n- the hours a month you'd spend on upkeep\n- what an hour of your time is worth\n\nit then shows a month of each, with your time counted. dusk bot is free to run on your own computer or [your own server](/docs/your-own-server). dusk cloud is a flat $20 a month on plus or $50 on pro, and we do the upkeep ([pricing](/pricing)).\n\nevery sum runs in your browser, and the page shows the arithmetic one step per line, so you can check it against your own bill." } },
 };
 export const STATUSES = ['draft', 'queued', 'live', 'noindex', 'pruned'];
 

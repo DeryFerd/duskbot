@@ -11,8 +11,8 @@ import { CursorMark, PresetProviderMark, ProviderMark } from "@/components/Provi
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { plainSignIn } from "@/lib/onboarding";
-import { useStore, type InstanceInfo } from "@/state/store";
-import { aiName, aiTiles, type AiTile, type AiTileId } from "./funnel";
+import { api, useStore, type InstanceInfo } from "@/state/store";
+import { AI_TILES, aiName, aiTiles, tileMatches, type AiTile, type AiTileId } from "./funnel";
 import { TILE } from "./FunnelSteps";
 import { connectsInApp, type ConnectInstance } from "./connect-flow";
 import { CONNECT_LEAVE_MS, Reveal, StageSwap } from "./ConnectMotion";
@@ -22,7 +22,7 @@ import { connectedCards, readConnectedCache, writeConnectedCache } from "./ai-co
 
 const ready = (instance: InstanceInfo) => engineReady(instance);
 
-function TileMark({ tile, size }: { tile: AiTile<InstanceInfo>; size: number }) {
+function TileMark({ tile, size }: { tile: { id: AiTileId }; size: number }) {
   switch (tile.id) {
     case "chatgpt": return <ProviderMark driverKind="codex" size={size} />;
     case "claude": return <ProviderMark driverKind="claudeAgent" size={size} />;
@@ -35,7 +35,32 @@ function TileMark({ tile, size }: { tile: AiTile<InstanceInfo>; size: number }) 
   }
 }
 
-const label = (tile: AiTile<InstanceInfo>) => (tile.id === "local" ? t("funnel.ai.local") : tile.label);
+const label = (tile: { id: AiTileId; label: string }) => (tile.id === "local" ? t("funnel.ai.local") : tile.label);
+
+/** A card for one of the eight whose AI this server doesn't list (switched off in Settings, an older setup): a tap brings
+ * it back and opens its connect, or opens every other provider where it can't. */
+function MissingCard({ tile, busy, onPick }: { tile: { id: AiTileId; label: string }; busy: boolean; onPick: () => void }) {
+  return (
+    <div role="listitem" className="flex">
+      <button type="button" data-funnel-ai={tile.id} data-missing="" disabled={busy} aria-busy={busy || undefined} onClick={onPick}
+        className={cn(TILE, "relative flex h-[96px] w-full flex-col items-center justify-center gap-2 px-2 disabled:opacity-60")}>
+        <span className="grid size-7 place-items-center"><TileMark tile={tile} size={26} /></span>
+        <span className="max-w-full truncate text-[13px] leading-[18px] text-ink">{label(tile)}</span>
+      </button>
+    </div>
+  );
+}
+
+/** One of the eight cards whose AI this server doesn't list: one switched off in Settings comes back (and its card then
+ * connects as usual, installing first where it needs to); anything else opens every other provider, where it can be added. */
+export async function bringBackAi(id: AiTileId, refresh: (() => Promise<unknown>) | undefined, openMore: () => void): Promise<void> {
+  const hidden = await api<{ instances?: Array<{ instanceId: string; driverKind: string }> }>("/api/instances/hidden", { signal: AbortSignal.timeout(10_000) })
+    .catch(() => ({ instances: [] as Array<{ instanceId: string; driverKind: string }> }));
+  const entry = hidden.instances?.find((one) => tileMatches(id, one));
+  if (!entry) { openMore(); throw new Error("not listed here"); }
+  await api(`/api/instances/${encodeURIComponent(entry.instanceId)}`, { method: "PATCH", body: JSON.stringify({ hidden: false }), signal: AbortSignal.timeout(10_000) });
+  await Promise.resolve(refresh?.()).catch(() => {});
+}
 
 /** A local endpoint or a step finished in Terminal keeps its own words; a website sign-in says the plain line. */
 export function setupFor(instance: InstanceInfo) {
@@ -63,7 +88,9 @@ export function AiConnect({ tile, flow }: { tile: AiTile<InstanceInfo>; flow: Co
   );
 }
 
-function AiCard({ tile, connected, arrived, picked, suggested, staysHere, onPick, onManage }: { tile: AiTile<InstanceInfo>; connected: boolean; arrived: boolean; picked: boolean; suggested: boolean; staysHere: boolean; onPick: () => void; onManage?: () => void }) {
+function AiCard({ tile, connected, arrived, picked, suggested, staysHere, found = false, onPick, onManage }: { tile: AiTile<InstanceInfo>; connected: boolean; arrived: boolean; picked: boolean; suggested: boolean; staysHere: boolean;
+  /** connected on arrival from what this computer already had: a soft green fill sets it apart */
+  found?: boolean; onPick: () => void; onManage?: () => void }) {
   if (connected) {
     const name = t(staysHere ? "funnel.ai.connectedHereOnly" : "funnel.ai.connectedName", { name: label(tile) });
     const body = <>
@@ -77,7 +104,7 @@ function AiCard({ tile, connected, arrived, picked, suggested, staysHere, onPick
               </span>}
         </span>
     </>;
-    const look = "ai-connected relative flex h-[96px] flex-col items-center justify-center gap-1.5 rounded-2xl bg-ink/[0.035] px-2";
+    const look = cn("ai-connected relative flex h-[96px] flex-col items-center justify-center gap-1.5 rounded-2xl px-2", found ? "bg-success/[0.08]" : "bg-ink/[0.035]");
     return onManage
       ? <div role="listitem" className="flex">
         <button type="button" data-funnel-ai={tile.id} data-connected="" data-stays-here={staysHere ? "" : undefined} aria-label={name} onClick={onManage}
@@ -136,14 +163,18 @@ export function connectedAiCards(instances: readonly InstanceInfo[]): AiTileId[]
 /** The grid of popular AIs and, under it, the pressed one's way in. `onMore`: the small link to every other provider and
  * API keys (the model directory). Nothing runs until a card is pressed. `onConnected`: called once when the AI pressed
  * here becomes connected. */
-export function AiCards({ onMore, className, onConnected, onManage, suggested = [], staysHere = [] }: { tested: WelcomeAiNow | null; onMore?: () => void; className?: string;
+export function AiCards({ onMore, className, onConnected, onManage, suggested = [], staysHere = [], foundFirst = false, onMissing }: { tested: WelcomeAiNow | null; onMore?: () => void; className?: string;
   onConnected?: (tile: AiTileId) => void;
   /** makes a connected card a button that opens its AI's accounts */
   onManage?: (instance: InstanceInfo) => void;
   /** cards marked as used on the person's computer */
   suggested?: readonly AiTileId[];
   /** connected cards whose sign-in stays on this computer when the person's dusk cloud is made */
-  staysHere?: readonly AiTileId[] }) {
+  staysHere?: readonly AiTileId[];
+  /** the first run: the cards already connected when the grid opened lead it, tinted (the order holds while it is open) */
+  foundFirst?: boolean;
+  /** the first run and the Connect an AI dialog: all eight cards always show; one this server doesn't list calls this (it resolves once handled) */
+  onMissing?: (tile: AiTileId) => Promise<void> }) {
   const { state, refreshInstances } = useStore();
   const [picked, setPicked] = useState<AiTileId | null>(null);
   const flow = useConnectFlow();
@@ -157,6 +188,28 @@ export function AiCards({ onMore, className, onConnected, onManage, suggested = 
   useEffect(() => { void EngineSetupCard.preload().catch(() => {}); }, []);
   // a card drawn connected in the first frame stays still; only one that connects while the grid is open fades in
   const [firstShown] = useState(() => new Set(shown));
+  const ordered = foundFirst ? [...tiles.filter((tile) => firstShown.has(tile.id)), ...tiles.filter((tile) => !firstShown.has(tile.id))] : tiles;
+  const [restoring, setRestoring] = useState<AiTileId | null>(null);
+  const missing = onMissing ? AI_TILES.filter((tile) => !tiles.some((shown) => shown.id === tile.id)) : [];
+  // the found cards first (foundFirst), then the rest in the grid's own order, the missing ones in their places
+  const rank = (id: AiTileId) => AI_TILES.findIndex((tile) => tile.id === id);
+  const lead = ordered.filter((tile) => foundFirst && firstShown.has(tile.id));
+  const cards: Array<AiTile<InstanceInfo> | { id: AiTileId; label: string }> = [...lead,
+    ...[...ordered.filter((tile) => !lead.includes(tile)), ...missing].sort((x, y) => rank(x.id) - rank(y.id))];
+  // a card brought back by its tap opens its connect as soon as the server lists it
+  const [wanted, setWanted] = useState<AiTileId | null>(null);
+  useEffect(() => {
+    const tile = wanted ? tiles.find((one) => one.id === wanted) : undefined;
+    if (!tile) return;
+    setWanted(null);
+    if (!ready(tile.instance)) pick(tile);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wanted, tiles.map((tile) => tile.id).join(",")]);
+  const restore = (id: AiTileId) => {
+    if (!onMissing || restoring) return;
+    setRestoring(id);
+    void onMissing(id).then(() => setWanted(id), () => {}).finally(() => setRestoring(null));
+  };
   const pick = (tile: AiTile<InstanceInfo>) => {
     flow.cancel();
     if (picked === tile.id) return setPicked(null);
@@ -180,11 +233,12 @@ export function AiCards({ onMore, className, onConnected, onManage, suggested = 
   return (
     <div data-ai-cards="" className={cn("@container flex w-full flex-col items-center", className)}>
       <div role="list" aria-label={t("funnel.ai.title")} className="grid w-full grid-cols-2 gap-2.5 @min-[400px]:grid-cols-4">
-        {tiles.map((tile) => (
+        {cards.map((tile) => "instance" in tile ? (
           <AiCard key={tile.id} tile={tile} connected={shown.has(tile.id)} arrived={!firstShown.has(tile.id)} picked={picked === tile.id}
+            found={foundFirst && firstShown.has(tile.id)}
             suggested={suggested.includes(tile.id)} staysHere={staysHere.includes(tile.id)} onPick={() => pick(tile)}
             onManage={onManage && (() => onManage(tile.instance))} />
-        ))}
+        ) : <MissingCard key={tile.id} tile={tile} busy={restoring === tile.id} onPick={() => restore(tile.id)} />)}
       </div>
       <Reveal className="pt-5">
         {chosen && (

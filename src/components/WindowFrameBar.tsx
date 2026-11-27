@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { sayFrameDrawn } from "@/lib/chrome-rail";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { useBehindWelcome } from "@/lib/onboarding";
 import { useStore } from "@/state/store";
 import { captionChrome, useDesktopCapabilities, windowFrameable, windowFramed } from "./DesktopCapabilities";
 import { WindowPlaceTitle } from "./WindowPlaceTitle";
@@ -19,6 +20,7 @@ export const FRAME_BAR_BUTTON = "flex size-[22px] shrink-0 items-center justify-
 export function WindowFrameBar() {
   const { capabilities } = useDesktopCapabilities();
   const { dispatch } = useStore();
+  const behindWelcome = useBehindWelcome();
   const frameable = windowFrameable(capabilities), framed = windowFramed(capabilities);
   useEffect(() => { if (frameable) sayFrameDrawn(framed); }, [frameable, framed]);
   if (!framed) return null;
@@ -33,7 +35,7 @@ export function WindowFrameBar() {
       {/* macOS: the traffic lights span 12-72px of the window. */}
       <div data-frame-bar-start className={cn("flex items-center gap-0.5", mac ? "pl-20" : "pl-[calc(var(--rail-beside,0px)+8px)]")} />
       <WindowPlaceTitle />
-      <div data-frame-bar-end className={cn("flex items-center justify-end gap-0.5", mac ? "pr-2" : "pr-[140px]")}>
+      <div data-frame-bar-end {...behindWelcome} className={cn("flex items-center justify-end gap-0.5", mac ? "pr-2" : "pr-[140px]")}>
         <button
           type="button"
           data-frame-settings

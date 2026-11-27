@@ -1,24 +1,21 @@
 # The rail of Clouds and its ＋
 
-The window shows no rail of places: `wanted` is off in `electron/main.mjs`, so
-the page always has the whole window and there is no button to hide or show
-it. Switching between places is the place button in the sidebar's top row (the
-native Server menu) and the profile menu's Switch to…, which list every saved
-place and add a Cloud or a server of the person's own. The rail's page still
-opens, held over the window, for the accounts sheet. The rest of this page
-describes the rail as it worked when shown, kept for that sheet and for
-turning it back on.
+The window shows no rail of places, on any platform and for any account: `wanted`
+is off in `electron/main.mjs`, so the page always has the whole window, and no
+page draws one of its own either (the app has no rail component; even an older
+app that lists places to the page gets none drawn, and the sidebar's switcher
+stays). Switching between places is the place button in the sidebar's top row
+(the native Server menu, This computer first once My Cloud is home), ⌘K's
+switch place, and the profile menu's Switch to…, which list every saved place
+and add a Cloud or a server of the person's own. Add another account is in the
+You menu. The rail's page still opens, held over the window, for the accounts
+sheet. The rail's list and ＋ below are kept for that sheet and the Server
+menu; the rail is not to be turned back on without the owner.
 
-The rail is the window's own chrome, not a page's: this app's page `/rail` in a
-view of its own at the left edge (electron/chrome-rail.mjs), beside whichever
-place's page the window shows, at every width and on every place, whatever that
-server runs. `/rail` is a small page of its own (`rail.html`, `src/rail.tsx`):
-the rail, its sheets, the skin and the person's language, not the app. The
-page beside it moves over by the rail's width (the app's preload, at any zoom).
-The rail's sheets cover the window while open. Its circles are small and named
-on hover; the place on screen wears a ring. Beside the rail the sidebar's
-switcher and the profile menu's Switch to… step aside. The person can hide the
-rail; the page then has the whole window, and those two come back.
+`/rail` is a small page of its own (`rail.html`, `src/rail.tsx`,
+electron/chrome-rail.mjs): only the accounts sheet, in a view over the whole
+window while the sheet is open, in the app's skin and language. Nothing moves
+the page in the window over and nothing hides or shows a rail.
 Nothing here needs a real dusk cloud account, a payment or the Electron app.
 
 ## Contract
@@ -30,24 +27,9 @@ Nothing here needs a real dusk cloud account, a payment or the Electron app.
   named and coloured by the Admin, opened like a team's Cloud: the window pairs
   it through the Admin's `pairing` with that Cloud's id and takes only a grant
   for its own address. My Cloud stays the one home.
-- The person hides the rail and shows it again with a button at the left of the
-  sidebar's top row, right after the macOS traffic lights (on the same spot
-  either way: the app's preload tells the page how far it moved, in
-  `--rail-beside`), or with the "Show your computers" switch in Settings
-  (Simple: General → Appearance; Advanced: Appearance). Both are there only
-  while the window has a rail. The choice is this desktop's (`railHidden` in
-  desktop-prefs.json), never a server's or a place's.
-- The page beside the rail offers that button through `window.duskDesktop.rail`
-  (`state`, `setHidden`, `onState`; its main frame only, and a server's page
-  only from the person's click), and learns only whether there is a rail and
-  whether it is hidden. Main hides the rail only beside a document that offered
-  the button: after the page navigates, reloads, crashes or shows an error page,
-  a hidden rail waits 5 seconds for the new document to offer it and comes back
-  if none does (an older Cloud or server of the person's own), without changing
-  the choice. It comes back too while the page stops responding.
 - The rail's list carries names, colours and states, never an address, and goes
   only to the rail's own page. No place's page reads it, not even this
-  computer's or a Cloud's; a page learns only that the rail stands beside it. A
+  computer's or a Cloud's. A
   circle opens only a place main listed, by its id, through main's own switch,
   and only from the person's click.
 - Buying another Cloud sends the plan, a name and a swatch to the Admin, which
@@ -93,7 +75,7 @@ Nothing here needs a real dusk cloud account, a payment or the Electron app.
 
 ```sh
 node --test electron/cloud-list.node-test.mjs electron/cloud-account-clouds.node-test.mjs electron/cloud-rail.node-test.mjs electron/chrome-rail.node-test.mjs electron/home-window.node-test.mjs electron/place-look.node-test.mjs electron/desktop-prefs.node-test.mjs
-pnpm exec vitest run src/components/PlacesRail.test.ts src/components/ChromeRail.test.ts src/components/Sidebar.header.test.ts src/components/cloud-buy/AddCloudFlow.test.ts src/components/PlaceLookCard.test.ts
+pnpm exec vitest run src/components/ChromeRail.test.ts src/components/Sidebar.header.test.ts src/components/cloud-buy/AddCloudFlow.test.ts src/components/PlaceLookCard.test.ts
 pnpm exec vitest run server/workspace-banner.test.ts server/routes/workspace-banner.test.ts server/workspace-banner.e2e.test.ts src/lib/place-banner.test.ts src/components/PlacePicture.test.ts
 ```
 

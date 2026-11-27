@@ -7,7 +7,7 @@ import type { CallPlayer, SystemVoice } from "./player";
 const QUIET = 0.0005;
 const VOICE = 0.05;
 
-function harness(opts: { heard?: string[]; micError?: MicError; model?: "ready" | "downloading"; listener?: boolean } = {}) {
+function harness(opts: { heard?: string[]; micError?: MicError; model?: "ready" | "downloading"; listener?: boolean; language?: string; serverHears?: boolean; accountVoice?: boolean } = {}) {
   let clock = 0;
   let feed: ((frame: Float32Array) => void) | null = null;
   const heard = [...(opts.heard ?? ["what's on my calendar"])];
@@ -26,6 +26,8 @@ function harness(opts: { heard?: string[]; micError?: MicError; model?: "ready" 
   let downloads = opts.model === "downloading" ? 3 : 0;
   let system: SystemVoice | null = null;
   let said: ((text: string) => void) | null = null;
+  const languages: { voice?: string; listener?: string } = {};
+  let render: ((text: string, signal: AbortSignal) => Promise<ArrayBuffer>) | null = null;
   const listener = { active: false, failed: false, start: vi.fn(() => { listener.active = true; }), stop: vi.fn(() => { listener.active = false; }) };
   const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
     requests.push(`${init?.method ?? "GET"} ${url}`);
@@ -37,6 +39,9 @@ function harness(opts: { heard?: string[]; micError?: MicError; model?: "ready" 
     if (url === "/api/voice/local/prepare") return Response.json({ model: { phase: "ready" } }, { status: 202 });
     if (url === "/api/voice/local/transcribe?partial=1") return Response.json({ text: heard[0] ?? "" });
     if (url === "/api/voice/local/transcribe") return Response.json({ text: heard.shift() ?? "" });
+    if (url.startsWith("/api/tts/transcribe")) return Response.json({ text: heard.shift() ?? "" });
+    if (url === "/api/tts/speak") return new Response(new ArrayBuffer(8));
+    if (url === "/api/voice/local/speak") return new Response(new ArrayBuffer(8));
     if (url === "/api/tts/prepare") return Response.json({ utterances: [JSON.parse(String(init?.body)).text] });
     return new Response("{}", { status: 404 });
   });
@@ -47,15 +52,20 @@ function harness(opts: { heard?: string[]; micError?: MicError; model?: "ready" 
       feed = onFrame;
       return mic;
     },
-    player: (_render, _prepare, _events, voice) => {
+    player: (renderClip, _prepare, _events, voice) => {
       system = voice;
+      render = renderClip;
       return player as unknown as CallPlayer;
     },
     now: () => clock,
     pollMs: 400,
     chime: async (kind) => { chimes.push(kind); },
-    systemVoice: () => ({ use: () => true, speak: async () => {} }),
-    systemListener: (onSaid) => {
+    systemVoice: (_speed, language) => {
+      languages.voice = language;
+      return { use: () => true, speak: async () => {} };
+    },
+    systemListener: (onSaid, language) => {
+      languages.listener = language;
       if (!opts.listener) return null;
       said = onSaid;
       return listener;
@@ -67,7 +77,7 @@ function harness(opts: { heard?: string[]; micError?: MicError; model?: "ready" 
     decide(requestId, allow) { this.decided.push([requestId, allow]); },
     answer(messageId, text) { this.answered.push([messageId, text]); },
   };
-  const session = new VoiceCallSession({ id: "bot-1", threadId: "thread-1" }, actions, { voice: "af_heart", speed: 1, io });
+  const session = new VoiceCallSession({ id: "bot-1", threadId: "thread-1" }, actions, { voice: "af_heart", speed: 1, io, language: opts.language, serverHears: opts.serverHears, accountVoice: opts.accountVoice });
   const frames = async (amplitude: number, count: number) => {
     for (let i = 0; i < count; i += 1) {
       clock += 32;
@@ -78,7 +88,7 @@ function harness(opts: { heard?: string[]; micError?: MicError; model?: "ready" 
   const settle = async () => {
     for (let i = 0; i < 10; i += 1) await vi.advanceTimersByTimeAsync(0);
   };
-  return { session, actions, player, mic, frames, settle, requests, chimes, listener, systemVoice: () => system, saySystem: (text: string) => said?.(text), advance: async (ms: number) => { clock += ms; await vi.advanceTimersByTimeAsync(ms); } };
+  return { session, actions, player, mic, frames, settle, requests, chimes, listener, languages, render: (text: string) => render!(text, new AbortController().signal), systemVoice: () => system, saySystem: (text: string) => said?.(text), advance: async (ms: number) => { clock += ms; await vi.advanceTimersByTimeAsync(ms); } };
 }
 
 beforeEach(() => vi.useFakeTimers());
@@ -276,5 +286,67 @@ describe("VoiceCallSession", () => {
     await failed.session.start();
     failed.session.close();
     expect(failed.chimes).toEqual([]);
+  });
+  describe("in a language the built-in voice does not know", () => {
+    it("hears Russian with the key that can listen, in Russian, never with the English-only built-in hearer", async () => {
+      const { session, actions, frames, settle, requests } = harness({ language: "ru", serverHears: true, heard: ["какая погода завтра"] });
+      await session.start();
+      await frames(QUIET, 15);
+      await frames(VOICE, 25);
+      await frames(QUIET, 25);
+      await settle();
+      expect(actions.sent.map(([text]) => text)).toEqual(["какая погода завтра"]);
+      expect(requests).toContain("POST /api/tts/transcribe?language=ru");
+      expect(requests.some((line) => line.includes("/api/voice/local/transcribe"))).toBe(false);
+    });
+
+    it("keeps hearing with the computer's recognizer in Russian once the built-in voice has arrived", async () => {
+      const { session, actions, listener, languages, saySystem, frames, settle, requests } = harness({ language: "ru", listener: true, heard: ["meaningless english"] });
+      await session.start();
+      await vi.advanceTimersByTimeAsync(1_600);
+      expect(languages.listener).toBe("ru");
+      expect(listener.active).toBe(true);
+      await frames(QUIET, 15);
+      await frames(VOICE, 25);
+      await frames(QUIET, 25);
+      saySystem("привет");
+      await settle();
+      expect(actions.sent.map(([text]) => text)).toEqual(["привет"]);
+      expect(requests.some((line) => line.includes("/api/voice/local/transcribe"))).toBe(false);
+    });
+
+    it("speaks Russian with the computer's Russian voice, not the English built-in one", async () => {
+      const { session, languages, systemVoice, requests } = harness({ language: "ru" });
+      await session.start();
+      await vi.advanceTimersByTimeAsync(1_600);
+      expect(languages.voice).toBe("ru");
+      expect(systemVoice()?.use()).toBe(true);
+      session.close();
+      expect(requests.some((line) => line.includes("/api/voice/local/speak"))).toBe(false);
+    });
+
+    it("speaks with the voice set up in Settings when there is one, since it knows more languages", async () => {
+      const { session, systemVoice, render, requests } = harness({ language: "ru", accountVoice: true });
+      await session.start();
+      await vi.advanceTimersByTimeAsync(1_600);
+      expect(systemVoice()?.use()).toBe(false);
+      await render("привет");
+      expect(requests).toContain("POST /api/tts/speak");
+      expect(requests).not.toContain("POST /api/voice/local/speak");
+    });
+
+    it("an English call still hears and speaks with the built-in voice", async () => {
+      const { session, actions, frames, settle, requests, systemVoice } = harness({ language: "en-GB", serverHears: true });
+      await session.start();
+      await vi.advanceTimersByTimeAsync(1_600);
+      expect(systemVoice()?.use()).toBe(false);
+      await frames(QUIET, 15);
+      await frames(VOICE, 25);
+      await frames(QUIET, 25);
+      await settle();
+      expect(actions.sent).toHaveLength(1);
+      expect(requests).toContain("POST /api/voice/local/transcribe");
+      expect(requests.some((line) => line.startsWith("POST /api/tts/transcribe"))).toBe(false);
+    });
   });
 });

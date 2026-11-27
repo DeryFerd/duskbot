@@ -45,8 +45,10 @@ const SAY = {
   confirm: { say: "is this you?", accent: "pink" },
   cloudGone: { say: "bye, little cloud!", accent: "lav" },
   bye: { say: "bye for now!", accent: "lav" },
+  missed: { say: "still here for you", accent: "lav" },
   promo: { say: "Something new!", accent: "lime" },
   invite: { say: "you're invited!", accent: "sky" },
+  desktop: { say: "for your computer!", accent: "sky" },
 } as const;
 /** the plain way to the billing page: no plan buttons in email, and nothing that opens the payment provider */
 const billingLink = (cfg: EmailConfig, before: string): Block => ({ t: "link", before, label: "billing page", href: `${cfg.app}/billing` });
@@ -278,6 +280,29 @@ export function cancelledEmail(cfg: EmailConfig, input: CancelledInput): Rendere
   });
 }
 
+/** the one email a week after a person cancelled: what they had, how long its data is kept, and one way to resume.
+ *  `keepDays`: how long its data is kept after `endsAt` */
+export interface WinbackInput { description: string; cloudName: string | null; endsAt: number | null; keepDays: number; now: number }
+export function winbackEmail(cfg: EmailConfig, input: WinbackInput): Rendered {
+  const ends = input.endsAt === null ? null : formatDate(input.endsAt), running = input.endsAt !== null && input.endsAt > input.now;
+  const keepUntil = input.endsAt === null || !input.cloudName ? null : formatDate(input.endsAt + input.keepDays * DAY);
+  const what = input.cloudName ? `**${input.cloudName}**` : "your bots";
+  return render(cfg, {
+    subject: input.cloudName ? `${input.cloudName} is still here` : "your dusk bot plan is still here", preheader: keepUntil ? `we keep everything until ${keepUntil}.` : "you can pick up where you left off.", tag: "billing", ...SAY.missed,
+    blocks: [
+      { t: "h1", text: input.cloudName ? `${input.cloudName} is still here` : "your plan is still here" },
+      { t: "p", text: `last week you cancelled **${input.description}**. ${ends ? running ? `${what} keeps working until **${ends}**.` : `${what} stopped on **${ends}**.` : ""}`.trim() },
+      ...(keepUntil ? [{ t: "p", text: `its bots, chats, files and sign-ins are kept until **${keepUntil}**, then deleted. resume before then and everything is where you left it.` } as Block] : []),
+      { t: "facts", rows: [
+        ["plan", input.description],
+        ...(keepUntil ? [["data kept until", keepUntil, "warn"] as [string, string, "warn"]] : []),
+      ] },
+      { t: "button", label: "resume your plan", href: `${cfg.app}/account#billing` },
+    ],
+    reason: "you got this because you cancelled a dusk bot plan last week. it's the only email we send about it.",
+  });
+}
+
 /** a cloud that was taken down and its data removed */
 export function cloudDeletedEmail(cfg: EmailConfig, { name, at }: { name: string; at: number }): Rendered {
   return render(cfg, {
@@ -396,5 +421,21 @@ export function teamSeatFullEmail(cfg: EmailConfig, { team, email, seats }: { te
       { t: "button", label: "open your team", href: `${cfg.app}/team` },
     ],
     reason: ACCOUNT_REASON,
+  });
+}
+
+/** a phone visitor on dusk.bot typed their own address to get the desktop download link for later (email/desktop-link.ts).
+ *  no account is involved, so nothing here assumes one */
+export function desktopLinkEmail(cfg: EmailConfig): Rendered {
+  return render(cfg, {
+    subject: "dusk bot for your computer", preheader: "open this on your computer to download dusk bot. it's free for personal use.", tag: "download", ...SAY.desktop,
+    blocks: [
+      { t: "h1", text: "here's dusk bot for your computer" },
+      { t: "p", text: "open this email on your mac, windows or linux computer and download the app. it picks the right version for you." },
+      { t: "button", label: "download dusk bot", href: `${cfg.site}/download` },
+      { t: "p", text: "open it, sign in to the ai you already use or start on the free models, and your first bot is working a couple of minutes later." },
+      { t: "p", small: true, text: "didn't ask for this? you can ignore it. we won't write again." },
+    ],
+    reason: "you got this because someone typed this address on dusk.bot to send themselves the download link.",
   });
 }

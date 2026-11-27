@@ -220,10 +220,16 @@ How the free backup works:
   nothing within 25 seconds, or answers with nothing, the same message goes to
   the next free model, with one line in the chat saying so. OpenCode's own
   free models are tried first. A message tries at most 3 free models.
-- **It is rate-limited per IP right now.** OpenCode's free tier limits how much
-  each IP address can use. When the limit is reached, dusk bot does not try
-  more free models. The chat says the free backup has used up its free replies
-  for now, and suggests connecting an AI or trying again later.
+- **It is rate-limited per IP right now.** OpenCode's free tier counts requests
+  per IP address per day (UTC). Most free models share one count; a model Zen
+  gives its own limit is counted apart. When a model answers the limit, the
+  same message quietly moves to up to three free models that may be counted
+  apart, never to one already at the limit, and a model at the limit is skipped
+  for 30 minutes. Background work makes no free request while every free model
+  is at the limit. When none answers, the chat says the free backup has used up
+  its free replies for now and offers to connect an AI.
+- **Its wait starts with the model.** The free models' time budget starts when
+  the first model is asked, so a slow engine start never cuts a model short.
 - **It always comes last.** A connected AI outranks it as soon as it is ready.
   New bots start on the connected AI. Bots and conversations that were on the
   free backup move over the next time the engines are read, unless they are in

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, Check, LoaderCircle, Monitor } from "@/icons";
+import { ArrowLeft, Check, Download, LoaderCircle, Monitor } from "@/icons";
 import meadow from "../art/p-meadow.webp";
 import layers from "../art/wide-layers-plain.webp";
 import { useCloud } from "../data/cloud";
@@ -9,7 +9,8 @@ import { useSession } from "../data/session";
 import { api, FIXTURE } from "../lib/api";
 import { navigate, useLocation } from "../lib/router";
 import { planIntent } from "../lib/site";
-import { Downloads } from "../ui/Downloads";
+import { DIRECT, Downloads, isDesktop, NOTE_DIRECT, trackDownload } from "../ui/Downloads";
+import { detectOs, useReleaseState } from "../lib/downloads";
 import { StretchPill } from "../ui/Digits";
 import { SplitFrame } from "../ui/Frame";
 import { Button, cx, Skeleton } from "../ui/kit";
@@ -116,6 +117,57 @@ function PlanStep({ catalog, home, setHome, plan, setPlan }: { catalog: PlanCata
         <Dot on={home === "free"} />
       </label>
     </fieldset>
+  );
+}
+
+const OS_WORD = { macos: "mac", windows: "windows", linux: "linux" } as const;
+/** what to do once the file is down, for the computer it was for; windows shows its smartscreen page because the
+ *  installer isn't code-signed yet, so that page is named before it shows */
+export function nextSteps(os: keyof typeof OS_WORD, file: string | null, email: string | null): string[] {
+  const it = file ?? "the file";
+  const signIn = email ? `open dusk bot and sign in as ${email}. it picks up this account.` : "open dusk bot and sign in with this account.";
+  if (os === "windows") return [`open ${it} from your downloads.`, "if windows says it protected your pc, choose more info, then run anyway.", signIn];
+  if (os === "macos") return [`open ${it} and drag dusk bot into applications.`, "open it from applications. if your mac asks, choose open.", signIn.replace("open dusk bot and ", "")];
+  return [`open ${it}. if it won't start, allow it to run as a program first.`, signIn.replace("open dusk bot and ", "")];
+}
+
+/** the last step for someone who signed up here: their computer's download as the one big button, what to do once it
+ *  is down, the phone apps and other platforms below, and the dashboard as the quiet way on */
+function AppStep({ bought, email, error, busy, big, back, onDone }: { bought: boolean; email: string | null; error: string | null; busy: string | null; big: string; back: ReactNode; onDone(): void }) {
+  const release = useReleaseState();
+  const [os] = useState(detectOs);
+  const [got, setGot] = useState(false);
+  const own = isDesktop(os) && release !== "soon" && DIRECT[os].href ? DIRECT[os] : null;
+  const desktop = isDesktop(os) ? os : null;
+  const dashboard = <Button variant={own ? "ghost" : "primary"} className={own ? "-me-2 !h-11 !px-2 !text-14" : cx("mt-5", big)} onClick={onDone} disabled={busy !== null}>{busy ? <Busy>opening</Busy> : "go to the dashboard"}</Button>;
+  return (
+    <div key="app" className="step-in">
+      {bought && <p className="tag mb-4 !bg-lime !text-ink" role="status"><span className="live-dot text-good" data-live />your dusk cloud is being set up</p>}
+      <h1 className="t-title">get the app.</h1>
+      <p className="mt-3 text-16 text-ink-2">sign in with this account and make your first bot.</p>
+      {own && desktop && (
+        <div className="mt-6">
+          <a href={own.href!} download="" onClick={() => { trackDownload(desktop, os); setGot(true); }} data-track="download_own"
+            className={cx("press hover-primary inline-flex items-center justify-center gap-2 rounded-full bg-primary font-medium text-primary-ink", big)}>
+            <Download size={17} strokeWidth={1.75} aria-hidden />{got ? "download again" : `download for ${OS_WORD[desktop]}`}
+          </a>
+          <p className="mt-2 px-1 text-13 text-ink-3">
+            {NOTE_DIRECT[desktop]}
+            {own.also?.href && <> · <a href={own.also.href} download="" onClick={() => { trackDownload(desktop, os); setGot(true); }} className="underline-offset-2 hover:text-ink hover:underline">{own.also.label}</a></>}
+          </p>
+          <div role="status">{got && (
+            <ol aria-label="next" className="step-in mt-4 flex flex-col gap-2.5 rounded-[16px] bg-card px-4 py-3.5">
+              {nextSteps(desktop, own.name, email).map((line, i) => (
+                <li key={line} className="flex gap-3 text-14 leading-[1.45] text-ink-2"><span className="num w-3 shrink-0 font-medium text-ink">{i + 1}</span>{line}</li>
+              ))}
+            </ol>
+          )}</div>
+        </div>
+      )}
+      <div className={own ? "mt-5" : "mt-6"}><Downloads own={!own} /></div>
+      {error && <p role="alert" className="mt-3 text-14 text-bad">{error}</p>}
+      {own ? <div className="mt-2 flex items-center justify-between">{back ?? <span />}{dashboard}</div> : <>{dashboard}{back && <div className="mt-1">{back}</div>}</>}
+    </div>
   );
 }
 
@@ -260,15 +312,8 @@ export function Onboarding() {
       ) : inApp ? (
         <div key="app" className="min-h-[200px]" aria-busy="true" />
       ) : (
-        <div key="app" className="step-in">
-          {bought && <p className="tag mb-4 !bg-lime !text-ink" role="status"><span className="live-dot text-good" data-live />your dusk cloud is being set up</p>}
-          <h1 className="t-title">get the app.</h1>
-          <p className="mt-3 text-16 text-ink-2">sign in with this account and make your first bot.</p>
-          <div className="mt-6"><Downloads /></div>
-          {error && <p role="alert" className="mt-3 text-14 text-bad">{error}</p>}
-          <Button variant="primary" className={cx("mt-5", big)} onClick={() => void finish(bought ? "/billing" : "/", bought ? "cloud" : "free")} disabled={busy !== null}>{busy ? <Busy>opening</Busy> : "go to the dashboard"}</Button>
-          {!bought && <div className="mt-1">{back("plan")}</div>}
-        </div>
+        <AppStep bought={bought} email={me?.email ?? null} error={error} busy={busy} big={big} back={bought ? null : back("plan")}
+          onDone={() => void finish(bought ? "/billing" : "/", bought ? "cloud" : "free")} />
       )}
     </SplitFrame>
   );

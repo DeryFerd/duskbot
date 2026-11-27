@@ -8,7 +8,7 @@ const site = (page: string) => readFileSync(join(__dirname, "../../../apps/site/
 
 describe("the site on starting with no AI", () => {
   it("is something the AI step still offers", () => {
-    expect(en["funnel.ai.useFree"]).toBe("Use free models");
+    expect(en["funnel.ai.freeUntil"]).toContain("free model");
   });
 
   it.each(["download.html", "home.html", "docs/faq.md", "docs/getting-started.md"])("%s says the app comes with free models", (page) => {

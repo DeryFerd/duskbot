@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { enabledHereOf, nextDueOf, schedulerDueOf, wakeHoldOf } from "./routine-due.ts";
+import { enabledHereOf, nextDueOf, schedulerDueOf, wakeHoldOf, withHeldTurn } from "./routine-due.ts";
 
 const MINUTE = 60_000;
 const NOW = Date.UTC(2026, 9, 24, 9, 0);
@@ -86,5 +86,19 @@ describe("enabledHereOf: the routines the desktop's keep-awake while plugged in 
       { enabled: true, runOn: "cloud" },
       { enabled: true, runOn: "maus", heldFor: "limit" as never },
     ])).toBe(2);
+  });
+});
+
+describe("withHeldTurn: a chat turn waiting for a usage limit", () => {
+  const horizon = 60 * MINUTE;
+  it("holds the desktop awake within the hour before the turn carries on", () => {
+    expect(withHeldTurn({ hold: false }, NOW + 20 * MINUTE, NOW, horizon)).toEqual({ hold: true, reason: "due", at: NOW + 20 * MINUTE });
+    expect(withHeldTurn({ hold: false }, NOW + 3 * 60 * MINUTE, NOW, horizon)).toEqual({ hold: false });
+    expect(withHeldTurn({ hold: false }, undefined, NOW, horizon)).toEqual({ hold: false });
+  });
+  it("keeps a running routine's or a sooner routine's own reason", () => {
+    expect(withHeldTurn({ hold: true, reason: "running" }, NOW + MINUTE, NOW, horizon)).toEqual({ hold: true, reason: "running" });
+    expect(withHeldTurn({ hold: true, reason: "due", at: NOW + MINUTE }, NOW + 5 * MINUTE, NOW, horizon)).toEqual({ hold: true, reason: "due", at: NOW + MINUTE });
+    expect(withHeldTurn({ hold: true, reason: "due", at: NOW + 30 * MINUTE }, NOW + 5 * MINUTE, NOW, horizon)).toEqual({ hold: true, reason: "due", at: NOW + 5 * MINUTE });
   });
 });

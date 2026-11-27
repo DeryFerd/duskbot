@@ -8,7 +8,8 @@ import { ChevronRight } from "../icons";
 import { useStore, type AppSettingsSection } from "@/state/store";
 import { ADVANCED_PAGES, type AdvancedPage } from "@/lib/open-settings";
 import { t, tPreferred, tOptional } from "@/lib/i18n";
-import { HELP_CENTER_URL, appVersion, openExternalLink } from "@/lib/app-links";
+import { HELP_CENTER_URL, RELEASES_URL, appVersion, openExternalLink } from "@/lib/app-links";
+import { DESKTOP_AREAS, useReleases } from "@/lib/release-notes";
 import { openFeedback } from "@/lib/feedback-sheet";
 import { skillsLibraryEnabled } from "@/lib/feature-flags";
 import { setColorUserBubbles, useColorUserBubbles } from "@/lib/user-bubble-preference";
@@ -18,7 +19,8 @@ import type { LocaleKey } from "@/locales";
 import { productName } from "../lib/brand";
 import { AccountsSheet, useAccounts } from "./AccountMenu";
 import { AboutDialog } from "./AboutDialog";
-import { AppVersionRow } from "./AppVersionRow";
+import { AppVersionRow, showsOtherServer } from "./AppVersionRow";
+import { WhatsNewDialog } from "./WhatsNewDialog";
 import { AdminOnly } from "./AdminOnly";
 import { AmbientRows } from "./AmbientSettingsRows";
 import { BotDefaultsRows } from "./SettingsBots";
@@ -28,6 +30,7 @@ import { AttachmentStorageSettings } from "./AttachmentStorageSettings";
 import { AccessOverview } from "./bot-access/AccessOverview";
 import { BuiltInBrowserRow, ServerSitesRow } from "./BrowserSettingsRows";
 import { CloudPlanRow, useCloudPlan } from "./ProIntroduction";
+import { PLAN_BILLING_PAGE, PlanBillingPage, PlanBillingRow } from "./PlanBilling";
 import { buyOfferAllowed } from "@/lib/cloud-plan";
 import { CloudUsageDetails, CloudUsageSummaryView, useCloudUsageSettings } from "./CloudUsageMeter";
 import { CompanyBackupSettings } from "./CompanyBackupSettings";
@@ -140,7 +143,7 @@ export function AccountRows() {
             {who}
           </button>
           <div className="flex shrink-0 items-center gap-1.5">
-            {window.duskDesktop?.accounts && accounts.noRail && <button type="button" data-settings-open="add-account" className="ui-button" onClick={() => setAdding(true)}>{t("settings.grok.account.add")}</button>}
+            {window.duskDesktop?.accounts && <button type="button" data-settings-open="add-account" className="ui-button" onClick={() => setAdding(true)}>{t("settings.grok.account.add")}</button>}
             {accounts.openSheet && <button type="button" data-settings-open="account" className="ui-button" onClick={() => accounts.openSheet?.()}>{t("settings.rows.account")}</button>}
             <button type="button" data-settings-open="sign-out" className="ui-button" onClick={() => accounts.signOut(active.id)}>{t("settings.grok.account.signOut")}</button>
           </div>
@@ -193,6 +196,7 @@ export function GeneralPane({ has, remoteActive }: { has: Has; remoteActive: boo
   const { state } = useStore();
   if (at === "import") return <AdminOnly><ImportSettings /></AdminOnly>;
   if (at === SHARED_DATA_PAGE) return <SharedDataPage />;
+  if (at === PLAN_BILLING_PAGE) return <PlanBillingPage />;
   const lead = importFirst({ completedAt: state.config?.onboarding?.completedAt, lastOpenAt: previousOpenAt(), bots: state.bots?.length ?? 0 });
   const bring = has("import") && (
     <SettingsGroup label={tPreferred("settings.docs.bring", "settings.section.import")} block="import">
@@ -206,6 +210,7 @@ export function GeneralPane({ has, remoteActive }: { has: Has; remoteActive: boo
         <SettingsGroup label={tPreferred("settings.docs.you", "settings.group.account")} block="general">
           <SettingsRows>
             <AccountRows />
+            <PlanBillingRow />
           </SettingsRows>
         </SettingsGroup>
       )}
@@ -356,11 +361,28 @@ function ServerUpdatesRow() {
     : entry.phase === "available" ? t(entry.check?.compose?.supported ? "settings.updates.updateNow" : "settings.simple.updates.seeRelease")
     : entry.phase === "reload" ? t("settings.simple.updates.reload")
       : entry.phase === "checking" ? t("common.checking") : t("settings.updates.check");
-  const title = entry.check?.install === "docker" ? t("settings.updates.serverVersion", { version: entry.check.current }) : versionTitle();
+  // beside this app's own row (another server's page) it is named as the server, so the two never read alike
+  const other = showsOtherServer();
+  const title = entry.check && (other || entry.check.install === "docker") ? t("settings.updates.serverVersion", { version: entry.check.current })
+    : other ? t("settings.updates.server") : versionTitle();
   return <>
     <NavRow data-settings-open="server-update" title={title} hint={status} value={action} drill={false} disabled={entry.item.disabled} onClick={entry.item.onSelect} />
     {entry.toggleAutomatic && <SwitchRow title={t("settings.updates.automaticServer")} checked={entry.check?.compose?.automatic === true}
       disabled={entry.item.disabled} onChange={entry.toggleAutomatic} />}
+  </>;
+}
+
+/** What's new: this version's notes (the newest there are, on a build without its own); with none, the changelog page on dusk.bot */
+export function WhatsNewRow() {
+  const releases = useReleases(DESKTOP_AREAS);
+  const [open, setOpen] = useState(false);
+  const current = window.duskDesktop?.app?.version ?? appVersion();
+  const own = releases?.filter((release) => release.version === current) ?? [];
+  const notes = own.length ? own : (releases ?? []).slice(0, 1);
+  return <>
+    <NavRow data-settings-open="whats-new" title={t("whatsNew.title")} external={releases !== null && notes.length === 0}
+      onClick={() => (notes.length ? setOpen(true) : void openExternalLink(RELEASES_URL))} />
+    <WhatsNewDialog open={open} releases={notes} version={notes[0]?.version ?? current} onClose={() => setOpen(false)} />
   </>;
 }
 
@@ -372,6 +394,7 @@ export function UpdatesPane() {
       <SettingsGroup label={t("settings.grok.group.version")} block="updates">
         <SettingsRows>
           <AppVersionRow fallback={<ServerUpdatesRow />} />
+          <WhatsNewRow />
         </SettingsRows>
       </SettingsGroup>
       <HelpGroup />

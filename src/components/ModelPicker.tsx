@@ -4,7 +4,7 @@ import { ChevronDown, ChevronRight, X } from "../icons";
 import { api, useStore, currentTaskBot, type Bot, type InstanceInfo, type ModelSelection } from "@/state/store";
 import type { EffortLevel } from "../../shared/wire";
 import type { ModelVariantOption } from "../../shared/runtime-events";
-import { configuredModelInstances, isCustomOnly, modelsAwaitEngine } from "@/lib/engine-rail";
+import { configuredModelInstances, isCustomOnly, modelsAwaitEngine, signInRefusedHere } from "@/lib/engine-rail";
 import { isAutoFreeModel, isFreeModel, modelName, notConnectedRows, providerName, simpleModelMenu, unansweredReason, variantSuffix, type NotConnectedRow } from "@/lib/simple-model-menu";
 import { modelSelectionForPick, withTypedModels } from "@/lib/model-choices";
 export { modelSelectionForPick } from "@/lib/model-choices";
@@ -304,7 +304,9 @@ export function ModelPicker({
   const selection = bot.modelSelection;
   const refocusAfterPick = useRefocusAfterPick(menuRef, open, selection, query);
   useEffect(() => setRefreshFailedId(null), [state.instances]);
-  const instances = withTypedModels(state.instances, selection, query);
+  // the bot's own engine stays in view whatever it is, so its model never reads as missing
+  const offered = state.instances.filter((instance) => instance.instanceId === selection.instanceId || !signInRefusedHere(instance));
+  const instances = withTypedModels(offered, selection, query);
   const active = instances.find((instance) => instance.instanceId === selection.instanceId);
   const pickerInstances = configuredModelInstances(instances, selection.instanceId);
   const selectedVariantLabel = selection.variant === undefined ? undefined : variantLabel(
@@ -633,10 +635,10 @@ export function ModelPicker({
   });
 
   // only the owner connects a provider; the rows stay out of a search, which looks through the models there are
-  const connectRows = mayChangeBot && !simpleMenu.query ? notConnectedRows(state.instances, simpleMenu.connect) : [];
+  const connectRows = mayChangeBot && !simpleMenu.query ? notConnectedRows(offered, simpleMenu.connect) : [];
   const connectInstance = (instance: InstanceInfo) => {
     if (!mayChangeBot) return;
-    const [row] = notConnectedRows(state.instances, [{ instance, label: providerName(instance), provider: providerName(instance),
+    const [row] = notConnectedRows(offered, [{ instance, label: providerName(instance), provider: providerName(instance),
       body: needsCli(instance) ? { kind: "setUp" } : { kind: "signIn" } }]);
     if (row?.tile) connect(row);
     else if (!remote) openDirectory();

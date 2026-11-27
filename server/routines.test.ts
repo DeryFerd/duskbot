@@ -1134,15 +1134,28 @@ describe("persistent routine results destinations", () => {
     expect(h.manager.listRoutines()[0]).toMatchObject({ resultsThreadId: updated.resultsThreadId, sourceThreadId: "trusted-source" });
   });
 
-  it("keeps a first chat-invoked run's source override separate from the future destination", () => {
+  it("never lets the chat a Run now came from decide where the routine reports", () => {
     const h = resultsHarness();
+    const resolve = h.options.resolveResultsThread!, seen: Array<string | undefined> = [];
+    h.options.resolveResultsThread = (routine, forceNew) => { seen.push(routine.sourceThreadId); return resolve(routine, forceNew); };
     const routine = h.manager.create(input());
     const first = h.manager.runNow(routine.id, request("run_now", "trusted-source"))!;
     expect(first.sourceThreadId).toBe("trusted-source");
-    expect(first.resultsThreadId).toBeUndefined();
-    expect(h.created()).toBe(0);
+    expect(seen).toEqual([undefined]);
+    expect(first.resultsThreadId).toBe("results-1");
     expect(h.manager.listRoutines()[0]?.sourceThreadId).toBeUndefined();
     expect(h.manager.runNow(routine.id)?.resultsThreadId).toBe("results-1");
+    expect(h.created()).toBe(1);
+  });
+
+  it("names the chat a routine was made in as its destination from the moment it is made, unless it chose one", () => {
+    const h = resultsHarness();
+    h.visible.set("made-here", "maus-1");
+    h.options.sourceResultsThread = (routine) => routine.sourceThreadId === "made-here" ? "made-here" : undefined;
+    expect(h.manager.create(input(), request("create", "made-here")).resultsThreadId).toBe("made-here");
+    expect(h.manager.create({ ...input(), name: "Chosen", resultsThreadId: "chosen" }, { ...request("create", "made-here"), requestId: "other" }).resultsThreadId).toBe("chosen");
+    expect(h.manager.create({ ...input(), name: "Elsewhere" }, { ...request("create", "gone"), requestId: "third" }).resultsThreadId).toBeUndefined();
+    expect(h.created()).toBe(0);
   });
 
   it("reports into the main thread each run finds and never saves it on the routine", async () => {

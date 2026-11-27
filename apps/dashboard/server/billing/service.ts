@@ -7,7 +7,7 @@ import { BILLING_CONFIG, catalogView } from "./plans.ts";
 import { TRIAL_DATA_DAYS } from "../../../cloud-service/src/retention.ts";
 import type { BillingConfig } from "./plans.ts";
 import { changeTiming, dodoCart, dodoCartKeys, parseCart, quote, sameCart } from "./pricing.ts";
-import type { BillingMode, BillingStore, CloudAction, DunningStep, PaymentProblem, PendingChange, ScheduledChange, StoredCheckout, StoredSubscription } from "./store.ts";
+import type { BillingMode, BillingStore, CloudAction, DunningStep, PaymentProblem, PendingChange, ScheduledChange, StoredCheckout, StoredSubscription, StoredWinback } from "./store.ts";
 import { BillingProviderError, SYNC_PAGE } from "./types.ts";
 import type { AccountRef, BillingEvent, BillingProvider, ChangeMode } from "./types.ts";
 import type { WebhookHeaders } from "./webhook-signature.ts";
@@ -43,8 +43,13 @@ export type BillingNotice =
   | { kind: "payment_failed"; accountId: string; amountCents: number; currency: string; description: string; cloudId: string | null; fixBy: number | null; trial: boolean }
   | { kind: "payment_reminder"; step: DunningStep; accountId: string; amountCents: number; currency: string; description: string; cloudId: string | null; fixBy: number }
   | { kind: "payment_recovered"; accountId: string; description: string; cloudId: string | null }
-  | { kind: "cancelled"; accountId: string; description: string; cloudId: string | null; endsAt: number | null; graceDays: number };
+  | { kind: "cancelled"; accountId: string; description: string; cloudId: string | null; endsAt: number | null; graceDays: number }
+  | { kind: "winback"; accountId: string; description: string; cloudId: string | null; endsAt: number | null; graceDays: number };
 const day = 86_400_000;
+/** the winback email goes this many days after a person turned renewal off; one the sweep reaches past `lateDays` is let go */
+export const WINBACK = { afterDays: 7, lateDays: 14 } as const;
+/** a desktop's cancel survey (POST feedback) this recent is the one its cancel (POST clouds/:id/cancel) answers */
+const SURVEY_MATCH_MS = 30 * 60_000;
 /** after a failed paid renewal: the reminder 14 days in, and the last one this many days before the data is deleted */
 export const DUNNING = { reminderDay: 14, finalDaysBefore: 3 } as const;
 /** a scheduled change's renewal may arrive this much before the date we stored */
@@ -88,7 +93,7 @@ export function createBillingService(options: BillingServiceOptions) {
   const { store, provider, clouds } = options, state = store.state, config = options.config ?? BILLING_CONFIG;
   const now = options.now ?? Date.now, random = options.random ?? (bytes => randomBytes(bytes).toString("base64url"));
   const publicUrl = guarded(() => new URL(options.publicUrl).origin)();
-  state.cloudActions ??= []; state.teamInvites ??= []; state.teamLeaves ??= []; state.refunds ??= []; state.closures ??= []; state.providerCancels ??= []; state.duplicates ??= []; state.ledger ??= []; state.retention ??= []; state.retentionDiscounts ??= [];
+  state.cloudActions ??= []; state.teamInvites ??= []; state.teamLeaves ??= []; state.refunds ??= []; state.closures ??= []; state.providerCancels ??= []; state.duplicates ??= []; state.ledger ??= []; state.retention ??= []; state.retentionDiscounts ??= []; state.winbacks ??= [];
   const confirmations = new Map<string, { accountId: string; subscriptionId: string; cart: Cart; total: number; expiresAt: number; version: number; timing: ChangeTiming; chargeCents: number }>();
   const mode: BillingMode = options.mode ?? "test";
   const queues = new Map<string, Promise<unknown>>();
@@ -190,6 +195,7 @@ export function createBillingService(options: BillingServiceOptions) {
       for (const row of rows) if (row.accountId === original) row.accountId = anonId;
     }
     for (const row of state.ledger ?? []) if (row.accountId === original) row.accountId = anonId;
+    for (const row of state.winbacks ?? []) if (row.accountId === original) { row.accountId = anonId; if (row.sentAt === null) row.skipped = "closed"; }
     for (const row of state.customers) if (row.accountId === anonId) { row.email = ""; row.providerCustomerId = null; delete row.attribution; }
     for (const row of state.checkouts) if (row.accountId === anonId) { row.email = ""; row.source = null; row.url = null; }
     for (const row of state.feedback) if (row.accountId === anonId) { delete row.expected; delete row.improve; }
@@ -325,7 +331,13 @@ export function createBillingService(options: BillingServiceOptions) {
     if (!account) return config.trial.days;
     const email = emailOf(account.email);
     const owners = new Set([account.id, ...state.customers.filter(entry => entry.email === email).map(entry => entry.accountId)]);
-    return state.subscriptions.some(sub => owners.has(sub.accountId)) ? null : config.trial.days;
+    return state.subscriptions.some(sub => owners.has(sub.accountId) && usedPlan(sub)) ? null : config.trial.days;
+  }
+  /** a subscription that ran: live now, or ever had a period, a trial or a payment. one whose checkout's card check or
+   *  first payment failed ended before any of that and spent nothing */
+  function usedPlan(sub: StoredSubscription) {
+    return sub.status !== "ended" || sub.currentPeriodStart !== null || sub.trialEndsAt !== undefined
+      || state.invoices.some(row => row.checkoutId === sub.checkoutId && row.status !== "failed" && row.amountCents > 0);
   }
   function cap(accountId: string) { if (clouds.list(accountId, true).filter(cloud => cloud.status !== "destroyed").length >= config.maxCloudsPerAccount) fail(409, "cap"); }
   /** a live subscription this cart would duplicate: the same plan, or a second work license */
@@ -564,7 +576,7 @@ export function createBillingService(options: BillingServiceOptions) {
       // a change that started a new billing cycle (monthly to yearly) moves the period with it
       if (event.type === "plan_changed" && event.status === "active" && event.nextBillingAt !== null && event.nextBillingAt > now() && sub.currentPeriodEnd !== null
         && event.nextBillingAt > sub.currentPeriodEnd && (sub.trialEndsAt === undefined || now() >= sub.trialEndsAt)) { sub.currentPeriodStart = now(); sub.currentPeriodEnd = event.nextBillingAt; }
-      if (event.cancelAtPeriodEnd && !sub.cancelAtPeriodEnd && sub.status === "active") notices.push(cancelledNotice({ ...sub, cancelAtPeriodEnd: true }));
+      if (event.cancelAtPeriodEnd && !sub.cancelAtPeriodEnd && sub.status === "active") { notices.push(cancelledNotice({ ...sub, cancelAtPeriodEnd: true })); queueWinback(sub); }
       sub.cancelAtPeriodEnd = event.cancelAtPeriodEnd;
       const license = state.licenses.find(license => license.id === sub!.licenseId); if (license) license.validUntil = sub.currentPeriodEnd;
       if (sub.cloudId) {
@@ -873,6 +885,7 @@ export function createBillingService(options: BillingServiceOptions) {
   }
   const sweep = () => {
     try { dunning(); } catch (error) { console.warn(`billing: the payment reminders failed (${(error as Error).message})`); }
+    try { winbacks(); } catch (error) { console.warn(`billing: the winback emails failed (${(error as Error).message})`); }
     void retryPayments().catch(error => console.warn(`billing: the payment retries failed (${(error as Error).message})`));
   };
   setTimeout(sweep, 1000).unref();
@@ -990,9 +1003,59 @@ export function createBillingService(options: BillingServiceOptions) {
         store.commit();
       } catch (error) { Object.assign(state, before); throw error; }
       if (cancel && !wasCancelled && answer) saveRetention(account, sub.id, { reason: answer.answer, step: "confirm", outcome: "cancelled" });
-      if (cancel && !wasCancelled && sub.status === "active") { notices.push(cancelledNotice(sub)); sendNotices(); }
+      else if (cancel && !wasCancelled) closeSurvey(account, sub);
+      if (cancel && !wasCancelled && sub.status === "active") { notices.push(cancelledNotice(sub)); queueWinback(sub); store.commit(); sendNotices(); }
       flushCloudActions(); return view(sub);
     });
+  }
+  /** the desktop sends its survey (POST feedback) before its cancel, which carries none: the survey it sent for this plan a
+   *  moment ago is the one this cancel ends, so it counts as a cancel with its reason, as the dashboard's does */
+  function closeSurvey(account: AccountRef, sub: StoredSubscription) {
+    const since = now() - SURVEY_MATCH_MS;
+    const survey = state.feedback.filter(row => row.accountId === account.id && row.subscriptionId === sub.id && row.outcome === undefined && row.at >= since).at(-1);
+    if (!survey) return;
+    survey.outcome = "cancelled"; store.commit();
+    const logged = state.retention!.some(row => row.subscriptionId === sub.id && row.step === "confirm" && row.outcome === "cancelled" && row.at >= since);
+    if (!logged) saveRetention(account, sub.id, { reason: survey.answer, step: "confirm", outcome: "cancelled" });
+  }
+  /** a person turned renewal off: one winback, due WINBACK.afterDays from now. a plan that was resumed and is cancelled again
+   *  before its email went starts the wait over; one already sent is never sent again */
+  function queueWinback(sub: StoredSubscription) {
+    const row = state.winbacks!.find(item => item.subscriptionId === sub.id);
+    if (!row) { state.winbacks!.push({ id: id("wb"), accountId: sub.accountId, subscriptionId: sub.id, cancelledAt: now(), sentAt: null, skipped: null }); return; }
+    if (row.sentAt === null) { row.cancelledAt = now(); row.skipped = null; }
+  }
+  /** why a due winback is let go instead of sent: the plan renews again, another plan started since, the account is
+   *  closing, its cloud is gone, or the sweep reached it too late */
+  function winbackSkip(row: StoredWinback): StoredWinback["skipped"] {
+    const sub = state.subscriptions.find(item => item.id === row.subscriptionId);
+    if (!sub || closureFor(row.accountId)) return "closed";
+    if (now() >= row.cancelledAt + WINBACK.lateDays * day) return "late";
+    if (!sub.cancelAtPeriodEnd && sub.status !== "ended") return "resumed";
+    if (state.subscriptions.some(item => item.accountId === row.accountId && item.id !== sub.id && item.createdAt > row.cancelledAt && item.status !== "pending" && item.status !== "ended")) return "new_plan";
+    const cloud = sub.cloudId ? clouds.get(sub.cloudId) : null;
+    if (sub.cloudId && (!cloud || cloud.status === "destroyed" || cloud.status === "destroying")) return "gone";
+    return null;
+  }
+  /** the winbacks that are due: each one stored as sent (or let go) before its email goes, so a restart, a second sweep or
+   *  a webhook retry never sends it twice */
+  function winbacks() {
+    const due = state.winbacks!.filter(row => row.sentAt === null && row.skipped === null && now() >= row.cancelledAt + WINBACK.afterDays * day);
+    if (!due.length) return { sent: 0, skipped: 0 };
+    const before = copy(state);
+    let sent = 0, skipped = 0;
+    try {
+      for (const row of due) {
+        const reason = winbackSkip(row);
+        if (reason) { row.skipped = reason; skipped++; continue; }
+        const sub = state.subscriptions.find(item => item.id === row.subscriptionId)!;
+        row.sentAt = now(); sent++;
+        notices.push({ kind: "winback", accountId: sub.accountId, description: planLabel(sub), cloudId: sub.cloudId, endsAt: sub.currentPeriodEnd, graceDays: config.graceDays });
+      }
+      store.commit();
+    } catch (error) { Object.assign(state, before); notices = []; recorded = []; throw error; }
+    sendNotices();
+    return { sent, skipped };
   }
   function saveRetention(account: AccountRef, subscriptionId: string, input: RetentionInput) {
     const entry = { id: id("rt"), accountId: account.id, subscriptionId, reason: input.reason, step: input.step, outcome: input.outcome, at: now() };
@@ -1009,6 +1072,14 @@ export function createBillingService(options: BillingServiceOptions) {
     const note = typeof value.note === "string" ? value.note.trim() : "";
     if (entry.outcome !== "shown") saveFeedback(account, sub.cloudId, sub.id, { answer: entry.reason, ...(note ? { improve: note } : {}), ...(value.offer ? { offer: value.offer as NonNullable<RetentionInput["offer"]> } : {}), outcome: entry.outcome });
     return { ok: true as const };
+  }
+  /** a cancel flow step from an app, for the plan of a cloud the account owns */
+  function cloudRetentionStep(account: AccountRef, cloudId: string, input: unknown) {
+    if (!clouds.owned(account.id, cloudId)) fail(404, "not_found");
+    const subs = state.subscriptions.filter(sub => sub.accountId === account.id && sub.cloudId === cloudId);
+    const sub = subs.filter(item => item.status !== "ended" && item.status !== "pending").at(-1) ?? subs.at(-1);
+    if (!sub) fail(409, "not_subscribed");
+    return retentionStep(account, sub.id, input);
   }
   const discountable = (sub: StoredSubscription) => sub.status === "active" && !sub.cancelAtPeriodEnd && !sub.pendingChange && !sub.scheduledChange && sub.cart.interval === "month" && sub.totalCents > 0
     && !!sub.providerSubscriptionId && !sub.review && sub.source !== "admin_comp" && sub.source !== "ops_grant" && sub.currentPeriodEnd !== null && sub.currentPeriodEnd > now();
@@ -1383,12 +1454,12 @@ export function createBillingService(options: BillingServiceOptions) {
     syncFromProvider: guarded(syncFromProvider), recoverUnapplied: guarded(recoverUnapplied), setAttribution: guarded(setAttribution),
     funnel: guarded(funnel), markReview: guarded(markReview), grantReview: guarded(grantReview),
     deletionBlockers: guarded(deletionBlockers), closeAccount: guarded(closeAccount), accountDeleted: guarded(accountDeleted), scrubDeleted: guarded(scrubDeleted), destroyDeleted: guarded(destroyDeleted), drainProviderCancels: guarded(drainProviderCancels),
-    expireLapsed: guarded(expireLapsed), dunning: guarded(dunning),
+    expireLapsed: guarded(expireLapsed), dunning: guarded(dunning), winbacks: guarded(winbacks),
     catalog: guarded((account?: AccountRef | null) => { const trial = trialDays(account ?? null); return { ...catalogView(now(), config), ...(trial ? { trialDays: trial } : {}) }; }),
     trialDays: guarded((account: AccountRef | null) => trialDays(account)), quote: guarded((input: unknown) => quote(parsed(input), config)), checkout: guarded(checkout), handleWebhook: guarded(handleWebhook),
     subscriptions: guarded((accountId: string) => state.subscriptions.filter(sub => sub.accountId === accountId).map(view)), licenses: guarded(licenses), licenseCheck: guarded(licenseCheck), addMember: guarded(addMember), removeMember: guarded(removeMember),
     cancel: guarded((account: AccountRef, subscriptionId: string, survey?: CancelSurvey) => setCancel(account, subscriptionId, true, survey)), keep: guarded((account: AccountRef, subscriptionId: string) => setCancel(account, subscriptionId, false)),
-    feedback: guarded(feedback), retentionStep: guarded(retentionStep), retentionDiscount: guarded(retentionDiscount), previewChange: guarded(previewChange), change: guarded(change),
+    feedback: guarded(feedback), retentionStep: guarded(retentionStep), cloudRetentionStep: guarded(cloudRetentionStep), retentionDiscount: guarded(retentionDiscount), previewChange: guarded(previewChange), change: guarded(change),
     operatorChange: guarded(operatorChange), setPeriodEnd: guarded(setPeriodEnd), moveRenewal: guarded(moveRenewal), endNow: guarded(endNow), mode,
     updateCard: guarded(async (account: AccountRef, subscriptionId: string, path?: string) => {
       const url = returnUrl(path), sub = editable(account.id, subscriptionId);

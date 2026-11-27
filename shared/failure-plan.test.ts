@@ -63,6 +63,9 @@ describe("dusk bot's own refusals", () => {
       ["Echo's model is unavailable", "model_not_found"],
       ["provider instance \"x\" is unavailable: pick another model in settings", "model_not_found"],
       ["Acme allows only company models on this computer. Choose a Company model for this bot.", "model_not_found"],
+      // D-MK7E: codex-cli 0.160 on a ChatGPT account and gpt-6.2-sol, read as a failure to try again before
+      ["This ChatGPT account can't use this model in Codex, so it's now hidden from Codex's model list. Your next message will use Codex's default model.", "model_not_found"],
+      ["This model isn't available on your ChatGPT plan, so it's now hidden from this account's model list. Pick another model.", "model_not_found"],
       ["Acme does not allow the Codex engine. Choose another model for this bot, or ask a team admin.", "model_not_found"],
       ["Connect an AI first, so bots can answer.", "no_ai"],
       ["The workspace was restored from a backup before this finished.", undefined],
