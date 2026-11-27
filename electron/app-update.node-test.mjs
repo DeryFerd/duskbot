@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { createAppUpdater, DESKTOP_MANIFEST_URL, DOWNLOAD_PAGE, installerIn, installerUrl, justUpdated, LOOKUP_BACKOFF_MS, MANIFEST_SOURCES, mirrorUrl, OFFLINE_CHECKS_BEFORE_FAILED, POLICY_SOURCES, SLOW_UNPACKS_BEFORE_FAILED, quietNow, RELEASE_KEYS, storedBucket, sumsUrl, updatePlace, verifiedRelease, zipIn, zipUrl } from "./app-update.mjs";
+import { createAppUpdater, DESKTOP_MANIFEST_URL, DOWNLOAD_PAGE, installerIn, installerUrl, justUpdated, LOOKUP_BACKOFF_MS, MANIFEST_SOURCES, mirrorUrl, OFFLINE_CHECKS_BEFORE_FAILED, POLICY_SOURCES, SLOW_UNPACKS_BEFORE_FAILED, quietNow, RELEASE_KEYS, SKEWED_IDLE_MS, storedBucket, sumsUrl, updatePlace, verifiedRelease, zipIn, zipUrl } from "./app-update.mjs";
 import { failReason, resumableDownload, UpdateError } from "./app-update-download.mjs";
 import { updateFailStage } from "./experience-relay.mjs";
 
@@ -459,6 +459,33 @@ test("quiet: away (locked, or idle and not typing) and nothing running", async (
   assert.equal(await quietNow(signals({ idleMs: () => 11 * 60_000, focused: () => true }), now), false, "a focused window is in use");
   assert.equal(await quietNow(signals({ locked: () => true, focused: () => true }), now), true);
   assert.equal(await quietNow(signals({ idleMs: () => 11 * 60_000, busy: () => "dictation" }), now), false);
+});
+
+test("quiet: once the own server runs the downloaded version, a focused but idle window no longer waits ten minutes", async () => {
+  const signals = (o = {}) => ({ locked: () => false, idleMs: () => 0, typedAt: () => 0, work: async () => null, busy: () => null, ...o });
+  const now = 100 * 60_000, idle = SKEWED_IDLE_MS + 1_000;
+  const used = signals({ idleMs: () => idle, focused: () => true });
+  assert.equal(await quietNow(used, now), false);
+  assert.equal(await quietNow(used, now, { skewed: true }), true);
+  assert.equal(await quietNow(signals({ idleMs: () => idle, focused: () => true, typedAt: () => now - 30_000 }), now, { skewed: true }), false, "typing still counts");
+  assert.equal(await quietNow(signals({ idleMs: () => 30_000, focused: () => true }), now, { skewed: true }), false);
+  assert.equal(await quietNow(signals({ idleMs: () => idle, busy: () => "dictation" }), now, { skewed: true }), false);
+  assert.equal(await quietNow(signals({ idleMs: () => idle, work: async () => "bot" }), now, { skewed: true }), false, "a running bot still holds it");
+});
+
+test("the quiet watch tells whether the own server already runs the downloaded version", async () => {
+  const seen = [];
+  const w = world({ options: { serverRuns: () => "1.1.0", quiet: async (o) => { seen.push(o); return false; } } });
+  await w.updater.check();
+  await w.timers.shift()();
+  assert.deepEqual(seen, [{ skewed: true }]);
+  done(w);
+  const behind = [];
+  const b = world({ options: { serverRuns: () => "1.0.0", quiet: async (o) => { behind.push(o); return false; } } });
+  await b.updater.check();
+  await b.timers.shift()();
+  assert.deepEqual(behind, [{ skewed: false }]);
+  done(b);
 });
 
 test("the first check comes soon after launch, and a wake checks again soon", async () => {

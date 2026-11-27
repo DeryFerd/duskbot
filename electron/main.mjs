@@ -3685,6 +3685,7 @@ function startDemoUpdates() {
   appUpdater = createDemoUpdater({ flag, relaunch: relaunchAfterDesktopRemoteChange, onState: tellAppUpdate }); appUpdateMode = "self";
   appUpdater.start();
 }
+function linkedServerVersion() { try { return vpsLink.view().compat?.server ?? null; } catch { return null; } }
 function startAppUpdates(notice) {
   const updateDir = path.join(app.getPath("userData"), "app-update");
   const installedHere = () => (process.env.APPIMAGE ? swappedVersion(updateDir) === app.getVersion() : fs.existsSync(path.join(updateDir, process.platform === "win32" ? `DuskBot-${app.getVersion()}-setup.exe` : `DuskBot-${app.getVersion()}-${process.arch}.zip`)));
@@ -3699,7 +3700,7 @@ function startAppUpdates(notice) {
   const own = windowsInstaller ? { platform: "win32", signed: async () => true, blocked: async () => windowsPlace(app.getPath("exe")), asset: setupIn, sources: setupSources, keep: [TRIED], installer: windowsInstaller } : process.platform === "linux" && process.env.APPIMAGE ? appImageUpdates({ app, dir: updateDir, log: slog }) : null;
   if (own) {
     appUpdateMode = "self";
-    appUpdater = createAppUpdater({ current: app.getVersion(), arch: process.arch, dir: updateDir, ...own, quiet: () => quietNow(signals), fallback: notice, log: slog, onState: tellAppUpdate, onFailed });
+    appUpdater = createAppUpdater({ current: app.getVersion(), arch: process.arch, dir: updateDir, ...own, quiet: (o) => quietNow(signals, undefined, o), fallback: notice, log: slog, onState: tellAppUpdate, onFailed, serverRuns: linkedServerVersion });
     appUpdater.start();
     powerMonitor.on("resume", () => appUpdater?.soon?.());
     return;
@@ -3713,7 +3714,7 @@ function startAppUpdates(notice) {
   const bundle = path.resolve(path.dirname(app.getPath("exe")), "..", ".."), bundleId = macBundleId(bundle);
   appUpdateMode = "self";
   appUpdater = createAppUpdater({ current: app.getVersion(), arch: process.arch, dir: updateDir, signed: () => developerIdSigned(bundle), blocked: async () => updatePlace(bundle),
-    installer: squirrelInstaller({ autoUpdater, unpacked: since => squirrelBytes(os.tmpdir(), bundleId, since) }), awake: () => { const id = powerSaveBlocker.start("prevent-app-suspension"); return () => { if (powerSaveBlocker.isStarted(id)) powerSaveBlocker.stop(id); }; }, quiet: () => quietNow(signals), fallback: notice, log: slog, onState: tellAppUpdate, onFailed, serverRuns: () => { try { return vpsLink.view().compat?.server ?? null; } catch { return null; } } });
+    installer: squirrelInstaller({ autoUpdater, unpacked: since => squirrelBytes(os.tmpdir(), bundleId, since) }), awake: () => { const id = powerSaveBlocker.start("prevent-app-suspension"); return () => { if (powerSaveBlocker.isStarted(id)) powerSaveBlocker.stop(id); }; }, quiet: (o) => quietNow(signals, undefined, o), fallback: notice, log: slog, onState: tellAppUpdate, onFailed, serverRuns: linkedServerVersion });
   appUpdater.start();
   powerMonitor.on("resume", () => appUpdater?.soon?.());
 }
