@@ -357,7 +357,6 @@
   "voice.fish.modelHint": "請選擇你的 Fish Audio 方案涵蓋的模型。這會套用到此安裝實例中的所有機器人。",
   "call.voiceSetup.open": "設定語音",
   "call.voiceSetup.title": "為 {name} 設定語音",
-  "call.voiceSetup.subtitle": "選擇語音提供者，如有需要請輸入金鑰，然後選擇語音。",
   "call.voiceSetup.close": "關閉語音設定",
   "call.voiceSetup.loading": "正在載入語音設定…",
   "call.voiceSetup.ready": "語音已就緒，你現在可以與 {name} 通話。",

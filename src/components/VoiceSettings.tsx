@@ -1,5 +1,5 @@
 // Security: the harness holds the cloud provider keys; the renderer never talks to ElevenLabs or Fish Audio itself.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Check, Loader2, Volume2 } from "../icons";
 
 import { api, useStore, type Bot, type ConfigStatus } from "@/state/store";
@@ -30,6 +30,33 @@ const FISH_MODELS = [
   { value: "s2.1-pro-free", label: "voice.fish.modelFree" },
 ] as const;
 type FishModel = (typeof FISH_MODELS)[number]["value"];
+type ProviderChoice = NonNullable<NonNullable<ConfigStatus["tts"]>["provider"]>;
+const PROVIDERS: ReadonlyArray<{ value: Exclude<ProviderChoice, "system">; label: () => string }> = [
+  { value: "elevenlabs", label: () => t("voice.elevenlabs.label") },
+  { value: "fish", label: () => t("voice.fish.label") },
+  { value: "xai", label: () => t("voice.grok.label") },
+  { value: "gemini", label: () => "Gemini" },
+  { value: "openai", label: () => "OpenAI" },
+  { value: "deepgram", label: () => "Deepgram" },
+  { value: "cartesia", label: () => "Cartesia" },
+  { value: "chatterbox", label: () => t("voice.chatterboxLocal") },
+];
+
+function Reveal({ open, children }: { open: boolean; children: ReactNode }) {
+  const [mounted, setMounted] = useState(open);
+  if (open && !mounted) setMounted(true);
+  return (
+    <div
+      inert={!open}
+      className={cn(
+        "grid transition-[grid-template-rows,opacity] duration-[220ms] ease-[var(--dusk-ease-out)] motion-reduce:transition-none",
+        open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+      )}
+    >
+      <div className="min-h-0 overflow-hidden">{mounted && children}</div>
+    </div>
+  );
+}
 
 export function VoiceSettings({
   bot,
@@ -67,7 +94,8 @@ export function VoiceSettings({
   const [deviceProvider, setDeviceProvider] = useState<RemoteVoiceProvider>(() => remoteVoiceProvider());
   const [deviceVoice, setDeviceVoice] = useState(() => remoteSystemVoice(bot.id));
   const usesLocalSystem = localMacClient && deviceProvider === "system";
-  const provider = tts?.provider ?? "elevenlabs";
+  const systemVoicesAvailable = capabilities.host.platform === "darwin";
+  const provider = tts?.provider ?? (systemVoicesAvailable ? "system" : "elevenlabs");
   const fixedVoices = provider === "gemini" || provider === "openai" || provider === "deepgram";
   const searchable = (provider === "fish" || provider === "elevenlabs" || provider === "cartesia" || fixedVoices) && !usesLocalSystem;
   const voiceSearch = searchable && !fixedVoices ? searchedQuery : "";
@@ -100,6 +128,9 @@ export function VoiceSettings({
           keyUrl: "https://elevenlabs.io/app/settings/api-keys",
         }
       : null;
+  const lastKeyProvider = useRef(cloudProvider);
+  if (cloudProvider) lastKeyProvider.current = cloudProvider;
+  const keyProvider = cloudProvider ?? lastKeyProvider.current;
   const key = cloudProvider ? voiceKeyDraftValue(keyDraft, cloudProvider.id) : "";
   const hostProviderLabel = provider === "gemini" || provider === "openai" || provider === "deepgram" || provider === "cartesia"
     ? t("voice.hostLabel", { provider: provider === "gemini" ? "Gemini" : provider === "openai" ? "OpenAI" : cloudProvider?.name ?? "" }) : provider === "fish"
@@ -109,7 +140,6 @@ export function VoiceSettings({
       : provider === "chatterbox"
         ? t("voice.hostLabel", { provider: t("voice.chatterboxLabel") })
         : provider === "xai" ? t("voice.grok.host") : t("voice.host");
-  const systemVoicesAvailable = capabilities.host.platform === "darwin";
   const hostConfigured = Boolean(tts?.configured);
   const included = Boolean(tts?.included);
   const configured = usesLocalSystem || hostConfigured;
@@ -217,7 +247,7 @@ export function VoiceSettings({
       .finally(() => current() && setAddingVoice(null));
   };
 
-  const setProvider = (next: NonNullable<NonNullable<ConfigStatus["tts"]>["provider"]>) => {
+  const setProvider = (next: ProviderChoice) => {
     if (next === provider || switching || (next === "system" && !systemVoicesAvailable)) return;
     setSwitching(true);
     setKeyDraft({ provider: null, value: "" });
@@ -276,7 +306,7 @@ export function VoiceSettings({
   if (!tts) return null;
 
   const selectedVoice = usesLocalSystem ? deviceVoice : (bot.voice ?? "");
-  const ready = usesLocalSystem || (hostConfigured && Boolean(selectedVoice || tts.voice));
+  const ready = usesLocalSystem || (hostConfigured && (provider === "system" || Boolean(selectedVoice || tts.voice)));
   const selectedDescription = voices.find((voice) => voice.id === selectedVoice)?.description;
 
   return (
@@ -287,18 +317,9 @@ export function VoiceSettings({
           ? t("voice.macChoice")
           : workspaceConfigurationLocked
             ? t("voice.agentChoice")
-            : <>{t("voice.description")}
-              {provider === "system"
-                ? systemVoicesAvailable
-                  ? ` ${t("voice.macInstalled")}`
-                  : ` ${t("voice.macUnavailable")}`
-                : provider === "xai"
-                  ? ` ${t("voice.grok.sharedKey")}`
-                : provider === "openai"
-                  ? ` ${t("voice.openai.sharedKey")}`
-                : provider === "chatterbox"
-                  ? ` ${t("voice.chatterboxShared")}`
-                  : ` ${t("voice.providerShared", { provider: cloudProvider?.name ?? t("voice.provider") })}`}</>}
+            : provider === "system" && !systemVoicesAvailable
+              ? t("voice.nativeGone")
+              : t("voice.description")}
       </div>
 
       {localMacClient && (
@@ -330,56 +351,61 @@ export function VoiceSettings({
       )}
 
       {!workspaceConfigurationLocked && (
-        <div className="mt-4">
-          <div className="mb-2 text-[13px] text-ink-secondary">{t("voice.engine")}</div>
-          <div className="grid grid-cols-6 gap-1 rounded-xl bg-inset p-1" role="radiogroup" aria-label={t("voice.engine")}>
-            {([
-              { value: "elevenlabs", label: t("voice.elevenlabs.label"), available: true, span: "col-span-2" },
-              { value: "fish", label: t("voice.fish.label"), available: true, span: "col-span-2" },
-              { value: "xai", label: t("voice.grok.label"), available: true, span: "col-span-2" },
-              { value: "gemini", label: "Gemini", available: true, span: "col-span-2" },
-              { value: "openai", label: "OpenAI", available: true, span: "col-span-2" },
-              { value: "deepgram", label: "Deepgram", available: true, span: "col-span-2" },
-              { value: "cartesia", label: "Cartesia", available: true, span: "col-span-2" },
-              { value: "system", label: t("voice.macBuiltIn"), available: systemVoicesAvailable, span: "col-span-2" },
-              { value: "chatterbox", label: t("voice.chatterboxLocal"), available: true, span: "col-span-2" },
-            ] as const).map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                role="radio"
-                aria-checked={provider === option.value}
-                disabled={switching || !option.available}
-                title={!option.available ? t("voice.macOnly") : undefined}
-                onClick={() => setProvider(option.value)}
-                className={cn(
-                  "min-w-0 rounded-lg px-2 py-1.5 text-[13px] leading-tight transition-colors disabled:opacity-50",
-                  option.span,
-                  provider === option.value ? "bg-raised text-ink shadow" : "text-ink-secondary hover:text-ink",
-                )}
-              >
-                {option.label}
-              </button>
+        <div className="mt-4 flex flex-col gap-2">
+          {systemVoicesAvailable && (
+            <button
+              type="button"
+              aria-pressed={provider === "system"}
+              disabled={switching}
+              onClick={() => setProvider("system")}
+              className={cn(
+                "flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-3 text-left transition-colors duration-[120ms] ease-[ease] disabled:opacity-50",
+                provider === "system" ? "bg-raised shadow" : "bg-inset hover:bg-ink/[0.07]",
+              )}
+            >
+              <span className="min-w-0">
+                <span className="block text-[14px] font-medium text-ink">{t("voice.macBuiltIn")}</span>
+                <span className="mt-0.5 block text-[12px] text-ink-secondary">{t("voice.nativeHint")}</span>
+              </span>
+              {provider === "system" && <Check size={15} aria-hidden="true" className="shrink-0 text-ink" />}
+            </button>
+          )}
+          <Select
+            variant="quiet"
+            value={provider === "system" ? "" : provider}
+            disabled={switching}
+            onChange={(e) => setProvider(e.target.value as ProviderChoice)}
+            aria-label={systemVoicesAvailable ? t("voice.otherProviders") : t("voice.engine")}
+            className={cn(
+              "w-full",
+              provider !== "system" && systemVoicesAvailable && "[&_select]:bg-raised [&_select]:shadow",
+            )}
+          >
+            {provider === "system" && <option value="">{t("voice.otherProviders")}</option>}
+            {PROVIDERS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label()}</option>
             ))}
-          </div>
+          </Select>
         </div>
       )}
 
-      {!workspaceConfigurationLocked && cloudProvider && (
-        <div className="mt-4">
+      <Reveal open={!workspaceConfigurationLocked && cloudProvider !== null}>
+        {keyProvider && (
+        <div className="pt-4">
         <div className="mb-1.5 flex items-center gap-2 text-[13px] text-ink-secondary">
           <span className={cn("size-1.5 rounded-full", configured ? "bg-success" : "bg-raised-hover")} />
-          <span>{t("voice.providerKey", { provider: cloudProvider.name })}</span>
+          <span>{t("voice.providerKey", { provider: keyProvider.name })}</span>
           {configured && <span className="text-[11px] text-success">{included ? t("keys.includedWithCloudPro") : t("voice.connected")}</span>}
         </div>
+        {!included && (
         <div className="flex gap-2">
           <input
             type="password"
             value={key}
-            onChange={(e) => setKeyDraft({ provider: cloudProvider.id, value: e.target.value })}
+            onChange={(e) => setKeyDraft({ provider: keyProvider.id, value: e.target.value })}
             onKeyDown={(e) => e.key === "Enter" && key.trim() && void saveKey()}
-            placeholder={configured && !included ? "••••••••  (paste to replace)" : cloudProvider.placeholder}
-            aria-label={`${cloudProvider.name} key`}
+            placeholder={configured && !included ? "••••••••  (paste to replace)" : keyProvider.placeholder}
+            aria-label={`${keyProvider.name} key`}
             autoComplete="off"
             className="w-full rounded-lg border border-transparent bg-inset px-3 py-2 text-[13px] text-ink placeholder:text-ink-secondary focus:outline-none"
           />
@@ -391,18 +417,20 @@ export function VoiceSettings({
             {saving ? <Loader2 size={13} className="animate-spin" /> : <><Check size={13} />{t("common.save")}</>}
           </button>
         </div>
+        )}
         {!configured && (
           <a
-            href={cloudProvider.keyUrl}
+            href={keyProvider.keyUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="mt-1.5 inline-block text-[12px] font-medium text-accent hover:underline"
           >
-            {t("voice.getKey", { provider: cloudProvider.name })}
+            {t("voice.getKey", { provider: keyProvider.name })}
           </a>
         )}
         </div>
       )}
+      </Reveal>
 
       {!workspaceConfigurationLocked && provider === "fish" && (
         <div className="mt-4">
@@ -502,8 +530,8 @@ export function VoiceSettings({
         </label>
       )}
 
-      {configured && (
-        <div className="mt-4">
+      <Reveal open={configured}>
+        <div className="pt-4">
           <div className="mb-1.5 text-[13px] text-ink-secondary">{t("voice.title")}</div>
           <div className="flex gap-2">
             {searchable ? (
@@ -530,7 +558,7 @@ export function VoiceSettings({
                 <option value="">
                   {loadingVoices
                     ? t("voice.loading")
-                    : usesLocalSystem
+                    : usesLocalSystem || provider === "system"
                       ? t("voice.macDefault")
                       : tts.voice
                         ? t("voice.installDefault")
@@ -563,7 +591,7 @@ export function VoiceSettings({
             <div className="mt-1.5 text-[12px] leading-relaxed text-ink-secondary">{selectedDescription}</div>
           )}
         </div>
-      )}
+      </Reveal>
 
       <div className="mt-4 flex items-center justify-between gap-4 border-t border-transparent pt-4">
         <div>

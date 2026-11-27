@@ -315,7 +315,6 @@
   "cloudNotice.removed.title": "इस कंप्यूटर को dusk cloud से साइन आउट कर दिया गया",
   "cloudNotice.removed.hint": "इसका सहेजा गया साइन-इन पढ़ा नहीं जा सका, इसलिए उसे हटा दिया गया।",
   "voice.engine": "आवाज़ प्रदाता",
-  "call.voiceSetup.subtitle": "एक आवाज़ प्रदाता चुनें, ज़रूरत हो तो उसकी कुंजी जोड़ें, फिर एक आवाज़ चुनें।",
   "toolStep.useComputer": "स्क्रीन चलाएँ",
   "toolStep.manageAutomations": "स्वचालन प्रबंधित करें",
   "toolStep.checkAutomations": "स्वचालन देखें",

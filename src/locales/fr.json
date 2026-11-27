@@ -315,7 +315,6 @@
   "cloudNotice.removed.title": "Cet ordinateur a été déconnecté de dusk cloud",
   "cloudNotice.removed.hint": "Sa connexion enregistrée n'a pas pu être lue, elle a donc été supprimée.",
   "voice.engine": "Fournisseur de voix",
-  "call.voiceSetup.subtitle": "Choisissez un fournisseur de voix, ajoutez sa clé s'il en faut une, puis choisissez une voix.",
   "toolStep.useComputer": "Utiliser l'écran",
   "toolStep.manageAutomations": "Gérer les automatisations",
   "toolStep.checkAutomations": "Vérifier les automatisations",

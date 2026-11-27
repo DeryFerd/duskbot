@@ -359,7 +359,6 @@
   "voice.fish.modelHint": "Chọn mô hình mà gói Fish Audio của bạn hỗ trợ. Mô hình này áp dụng cho mọi agent trên bản cài đặt này.",
   "call.voiceSetup.open": "Thiết lập giọng nói",
   "call.voiceSetup.title": "Thiết lập giọng nói cho {name}",
-  "call.voiceSetup.subtitle": "Chọn một nhà cung cấp giọng nói, thêm khóa nếu cần, sau đó chọn một giọng nói.",
   "call.voiceSetup.close": "Đóng thiết lập giọng nói",
   "call.voiceSetup.loading": "Đang tải cài đặt giọng nói…",
   "call.voiceSetup.ready": "Giọng nói đã sẵn sàng — bạn đã có thể gọi cho {name}.",

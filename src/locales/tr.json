@@ -359,7 +359,6 @@
   "voice.fish.modelHint": "Fish Audio planınızın kapsadığı modeli seçin. Bu kurulumdaki her ajan için geçerlidir.",
   "call.voiceSetup.open": "Sesi ayarla",
   "call.voiceSetup.title": "{name} adlı bota bir ses verin",
-  "call.voiceSetup.subtitle": "Bir ses sağlayıcısı seçin, gerekirse anahtarını ekleyin, ardından bir ses seçin.",
   "call.voiceSetup.close": "Ses kurulumunu kapat",
   "call.voiceSetup.loading": "Ses ayarları yükleniyor…",
   "call.voiceSetup.ready": "Ses hazır — artık {name} adlı botu arayabilirsiniz.",

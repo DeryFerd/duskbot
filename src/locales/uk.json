@@ -316,7 +316,6 @@
   "cloudNotice.removed.title": "На цьому комп’ютері виконано вихід із dusk cloud",
   "cloudNotice.removed.hint": "Збережений вхід не вдалося прочитати, тому його видалено.",
   "voice.engine": "Постачальник голосу",
-  "call.voiceSetup.subtitle": "Оберіть постачальника голосу, додайте його ключ, якщо потрібно, а потім виберіть голос.",
   "toolStep.useComputer": "Користуватися екраном",
   "toolStep.manageAutomations": "Керувати автоматизаціями",
   "toolStep.checkAutomations": "Перевірити автоматизації",

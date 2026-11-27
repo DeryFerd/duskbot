@@ -5,6 +5,7 @@ import { CheckCircle2, ChevronRight, Loader2, Phone, X } from "../icons";
 import { glassPopupFrameStyle } from "@/lib/glass-popup";
 import { t } from "@/lib/i18n";
 import { openBot, useStore, type Bot } from "@/state/store";
+import { useDesktopCapabilities } from "./DesktopCapabilities";
 import { VoiceSettings } from "./VoiceSettings";
 import { useBotSettingsDerived } from "./bot-settings/useBotSettingsDerived";
 import { openBotSettings } from "./bot-panel/panel-link";
@@ -33,6 +34,7 @@ export function VoiceSetupDialog({
 }) {
   const { state, dispatch } = useStore();
   const { patch } = useBotSettingsDerived(bot);
+  const { capabilities } = useDesktopCapabilities();
   const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -126,7 +128,7 @@ export function VoiceSetupDialog({
 
         <div className={formBodyCls}>
           <p id={subtitleId} className={cn(rowHintCls, "m-0 mb-3 text-pretty")}>
-            {t("call.voiceSetup.subtitle")}
+            {t(capabilities.host.platform === "darwin" ? "call.voiceSetup.subtitle" : "call.voiceSetup.subtitleKey")}
           </p>
           {state.config?.tts ? (
             <VoiceSettings bot={bot} onPatch={patch} />
