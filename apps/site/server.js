@@ -55,6 +55,10 @@ function resolveFile(urlPath) {
   return fs.statSync(file, { throwIfNoEntry: false })?.isFile() ? file : null;
 }
 
+// what is served for a program or a person to download rather than read as a page
+const isDownload = (urlPath) => /^\/(releases|install-mac)(\/|$)|\.(sh|sha256|json|tgz|dmg|exe|msi|deb|rpm|appimage|apk)$|\/SHA256SUMS$/i.test(urlPath)
+  || (/\.txt$/i.test(urlPath) && !/^\/(robots|llms)\.txt$/.test(urlPath));
+
 // seo pages taken down for good (seo/release.json status pruned, with nowhere to send people), listed by the build in
 // _gone.json and answered 410 so search engines drop them; read again when it changes
 let gone = { at: 0, set: new Set() };
@@ -256,6 +260,8 @@ const server = http.createServer((req, res) => {
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()');
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   if (NO_INDEX) res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+  // the installers, checksums, release files and json are downloads, not pages: they stay fetchable, never in search
+  else if (isDownload((req.url || '/').split('?')[0])) res.setHeader('X-Robots-Tag', 'noindex');
   // /explore/ holds design boards that set positions and colours through style attributes
   const explore = (req.url || '').startsWith('/explore/');
   // cloudflare's edge injects its web analytics beacon into every page; allow just that script and where it reports

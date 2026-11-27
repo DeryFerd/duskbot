@@ -397,6 +397,8 @@ export function frameQueue(onPush = () => {}, memory = { bytes: 0 }, now = Date.
  * `grantKeys`: the account service's public keys a new session's link grant must verify against; null opens sessions to
  * anyone (local development and tests only, server.mjs refuses it unless DUSK_LINK_OPEN=1).
  */
+export const LINK_ROBOTS = "User-agent: *\nAllow: /install.sh\nAllow: /uninstall\nDisallow: /\n";
+
 export function createLinkService({ base, dataDir = null, scriptPath, uninstallPath = join(dirname(scriptPath), "uninstall.sh"), agentPath, gatePath = join(dirname(agentPath), "docker-gate.mjs"), packagesDir, trustProxy = true, now = Date.now, fetch: fetchImpl = fetch, log = () => {}, push = createPushRelay({ log }), grantKeys = null, maxQueuedBytes = MAX_QUEUED_BYTES, statsToken = null,
   ipLimits = { concurrent: IP_CONCURRENT, perSecond: IP_REQUESTS_PER_SECOND, burst: IP_REQUEST_BURST }, limits: startLimits = {},
   monthAllowanceBytes = MONTH_ALLOWANCE_BYTES, sleep = (ms) => delay(ms), nodes = null, peerToken = null, turn: turnConfig = null, box = null, turnWatch = null, shortBase = base }) {
@@ -1660,6 +1662,14 @@ export function createLinkService({ base, dataDir = null, scriptPath, uninstallP
     /** each account's relay bytes this month, this node's and its peers' (fair-use.mjs) */
     fairUse: accountMonths,
     async handler(req, res) {
+      // nothing on the link hosts (link.dusk.bot, link-in.dusk.bot) is a page for search: the installer and uninstaller
+      // stay downloadable, they just never show in results. robots.txt keeps crawlers off everything except the two
+      // addresses search engines already listed, which they must fetch once more to read the noindex and drop them
+      res.setHeader("x-robots-tag", "noindex, nofollow");
+      if (req.method === "GET" && (req.url ?? "/").split("?")[0] === "/robots.txt") {
+        res.writeHead(200, { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" });
+        return res.end(LINK_ROBOTS);
+      }
       if (!admit(req, res)) return;
       try {
         await handle(req, res);
