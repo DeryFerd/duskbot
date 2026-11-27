@@ -127,10 +127,15 @@ describe("the keys page", () => {
   it("offers the Live calls service, OpenAI or Azure OpenAI, on the separate live key row", () => {
     setConfig({ ...fx.config, live: { configured: false, provider: "azure", voice: "", readTypedReplies: true, idleMinutes: 5 } });
     page();
-    expect(row("liveKey")!.querySelector("select")).toBeNull();
-    const select = openDialog("liveKey").querySelector<HTMLSelectElement>("select")!;
-    expect([...select.options].map((option) => option.value)).toEqual(["openai", "azure"]);
-    expect(select.value).toBe("azure");
+    expect(row("liveKey")!.querySelector('[role="combobox"]')).toBeNull();
+    // the Service row is a Settings select chip: it shows the chosen service and lists both when opened
+    const chip = openDialog("liveKey").querySelector<HTMLButtonElement>('[role="combobox"][aria-label="Service"]')!;
+    expect(chip.textContent).toBe("Azure OpenAI");
+    flushSync(() => chip.click());
+    const options = [...document.querySelectorAll<HTMLElement>('[data-settings-listbox] [role="option"]')];
+    expect(options.map((option) => option.textContent)).toEqual(["OpenAI", "Azure OpenAI"]);
+    expect(options.map((option) => option.getAttribute("aria-selected"))).toEqual(["false", "true"]);
+    flushSync(() => chip.click());
     expect(dialog("liveKey")!.querySelector('input[type="url"]')).not.toBeNull();
   });
 
