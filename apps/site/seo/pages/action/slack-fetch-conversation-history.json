@@ -12,7 +12,7 @@
     "claude fetch slack history"
   ],
   "answer": "**come back from holiday knowing what the team announced.** name a slack channel or direct conversation and the dates you missed. a bot reads the main timeline your account can access and brings back a recap. thread replies need their own read, so ask it to flag those. read only access keeps the catch-up from changing slack.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,11 +45,12 @@
     "toolkit": "slack",
     "slug": "SLACK_FETCH_CONVERSATION_HISTORY"
   },
-  "what": "**get the week's announcements without scrolling the whole channel.** give the bot a conversation and a date window. it finds the place and narrows the timeline by time.\n\na parent message shows whether replies exist. a separate thread read gets those replies, including decisions made after the announcement. ask for a timeline recap first and open the flagged threads next.",
+  "what": "**get the week's announcements without scrolling the whole channel.** give the bot a conversation and a date window. it finds the place and narrows the timeline by time.\n\na parent message shows whether replies exist. a separate thread read gets those replies, including decisions made after the announcement. ask for a timeline recap first and open the flagged threads next.\n\nlooking for one phrase rather than a date window? [search messages](/integrations/slack/search-messages) instead. need a recap posted later? [schedule it](/integrations/slack/schedule-message).",
   "uses": [
     "**catch the announcements you missed on holiday.** keep the summary within those dates.",
     "**rebuild an outage timeline.** pick which threads need a closer read next.",
-    "**prepare a handover.** read the recent timeline of a direct conversation you can access."
+    "**prepare a handover.** read the recent timeline of a direct conversation you can access.",
+    "**start the monday sync from the right place.** read the channel since friday evening, then open the busy threads."
   ],
   "routine": {
     "message": "each saturday at 10:45, read the past week's main timeline in harborflint-dispatch on slack. list announced collection times and changed pickup locations here, with posting times. flag messages that have thread replies. don't treat the parent message as final until you read those replies separately. never post, react or edit anything in slack.",
@@ -108,6 +109,10 @@
     {
       "mistake": "stopping when a batch looks short",
       "fix": "ask whether slack has more history to return."
+    },
+    {
+      "mistake": "expecting thread replies in the timeline",
+      "fix": "this read returns the main channel only. replies need a separate thread read."
     }
   ],
   "tip": {
@@ -122,5 +127,9 @@
       "you read the replies behind any final decision"
     ]
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "stellan asks for #launch from tuesday to thursday.\nthe channel has 380 messages in that window.",
+    "after": "messages read in 4 batches.\n12 announcements summarised.\n3 have replies worth opening.\nreplies themselves not included yet."
+  }
 }

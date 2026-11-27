@@ -12,7 +12,7 @@
     "ai queue slack reminder"
   ],
   "answer": "**write it on friday. let slack deliver it when the monday shift starts.** a bot can queue a channel message, direct message or thread reply for a future time. give the destination, wording, time and time zone. once queued, slack posts it later without another yes, so review the note before scheduling.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -43,7 +43,7 @@
     "toolkit": "slack",
     "slug": "SLACK_SCHEDULE_MESSAGE"
   },
-  "what": "**your working day need not become someone else’s notification.** slack accepts future messages up to 120 days ahead. give your local time zone; the bot handles the conversion. delivery must still be in the future when it queues.\n\nthe connected account must belong to the destination channel. for a thread, link the original message. layout attachments mean formatting here; document uploads need another action.",
+  "what": "**your working day need not become someone else’s notification.** slack accepts future messages up to 120 days ahead. give your local time zone; the bot handles the conversion. delivery must still be in the future when it queues.\n\nthe connected account must belong to the destination channel. for a thread, link the original message. layout attachments mean formatting here; document uploads need another action.\n\nfind the thread to answer with [search messages](/integrations/slack/search-messages). for a nudge only to yourself, a [reminder](/integrations/slack/create-a-reminder) suits better.",
   "uses": [
     "**respect a later shift.** queue a reminder for when colleagues start.",
     "**prepare workshop instructions.** schedule the reviewed text in the session thread.",
@@ -121,5 +121,9 @@
     "text": "review the note before queueing. slack will not ask you again when delivery time arrives.",
     "careful": true
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "yvette writes at 18:40 in london.\nthe tidewell team in sydney starts at 9.",
+    "after": "scheduled for 9:00 sydney time.\nchannel: #tidewell-ops\nconfirmed time shown back in your zone.\nqueued only after your yes."
+  }
 }

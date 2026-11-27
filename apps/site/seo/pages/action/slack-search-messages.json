@@ -22,7 +22,7 @@
     "/integrations/slack/add-reaction-to-message"
   ],
   "og_line": "a focused search beats a remembered phrase.",
-  "what": "**start with the phrase you half remember.** add the channel, person or month if you know them. the bot returns matching wording with its author and time. ask for oldest first to trace the first mention.\n\nthen read the conversation. search and thread reading are separate actions, and later replies can turn a promising offer into a rejected one.",
+  "what": "**start with the phrase you half remember.** add the channel, person or month if you know them. the bot returns matching wording with its author and time. ask for oldest first to trace the first mention.\n\nthen read the conversation. search and thread reading are separate actions, and later replies can turn a promising offer into a rejected one.\n\nwant the whole stretch around a hit? [fetch the conversation history](/integrations/slack/fetch-conversation-history) for that window. found the answer someone needed? [reply with send message](/integrations/slack/send-message) once you approve it.",
   "uses": [
     "find the first proposal for a supplier discount",
     "locate the missing-adapter message in the equipment channel",
@@ -60,7 +60,7 @@
       "a": "**follow the match into its thread.** the replies tell you whether anyone answered the question."
     }
   ],
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",

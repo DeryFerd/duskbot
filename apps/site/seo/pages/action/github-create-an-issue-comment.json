@@ -12,7 +12,7 @@
     "claude comment on github pull request"
   ],
   "answer": "**get the missing detail without writing another follow-up yourself.** the bot reads a github issue or pull request and drafts a markdown comment. paste the discussion link so it lands in the right repository.\n\ncomments count as sends. they ask by default, and you can set a daily amount for the bot.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent, after two independent reviewer passes, against dusk bot docs and the composio catalog",
@@ -45,7 +45,7 @@
     "toolkit": "github",
     "slug": "GITHUB_CREATE_AN_ISSUE_COMMENT"
   },
-  "what": "**a good question gets the reporter unstuck.** paste the issue or pull request link. it gives the bot the account, repository and number. have it read the discussion so it asks for what's still missing.\n\nthis adds a new discussion comment. editing an old comment and reviewing specific code lines need other actions.\n\ncareful with **Full access**: a bot there with no sending rule can send up to 25 a day without asking. give it **Ask every time**.",
+  "what": "**a good question gets the reporter unstuck.** paste the issue or pull request link. it gives the bot the account, repository and number. have it read the discussion so it asks for what's still missing.\n\nthis adds a new discussion comment. editing an old comment and reviewing specific code lines need other actions.\n\ncareful with **Full access**: a bot there with no sending rule can send up to 25 a day without asking. give it **Ask every time**.\n\nfor a pull request, [read it first](/integrations/github/get-a-pull-request) so the comment matches what changed. a settled issue can then be [closed](/integrations/github/close-an-issue).",
   "uses": [
     "**ask for the missing step.** review the question before the reporter sees it.",
     "**share a confirmed workaround.** help people waiting on the issue without promising a release.",
@@ -114,5 +114,9 @@
   "tip": {
     "text": "read the last reply before posting. somebody may have answered while you were drafting."
   },
-  "voice": 2
+  "voice": 2,
+  "worked": {
+    "before": "issue 87 in vireo/app: export crashes.\nthe report has no app version.",
+    "after": "proposed comment:\n\"thanks willa. which app version were you on when the export crashed?\"\nposted only after your yes."
+  }
 }
