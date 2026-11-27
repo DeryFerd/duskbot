@@ -10,7 +10,7 @@ import { n } from "./ui";
 interface Count { key: string; count: number }
 interface RateRow { key: string; total: number; good: number; bad: number; rate: number | null; reason?: string }
 export interface MoreAnswer {
-  setup: { onboarding: Array<{ step: string; reached: number; medianMs: number | null }>; signIn: RateRow[];
+  setup: { onboarding: Array<{ step: string; reached: number; medianMs: number | null; fromApp?: number }>; signIn: RateRow[];
     /** the app's account sign-in funnel, by install; absent from an older server */
     account?: { steps: Array<{ step: string; reached: number }>; methods: RateRow[]; errors: Count[] };
     /** the app's account step to the website and back, one person across both; absent from an older server */
@@ -81,7 +81,7 @@ export function MoreCards({ more, open }: { more: MoreAnswer; open(detail: MoreD
     <>
       <div className="grid grid-cols-2 gap-2 max-lg:grid-cols-1">
         <Card title="setup and sign-in" icon={<KeyRound {...I} />} wash="bg-wash-sky" onOpen={() => open("setup")}>
-          {more.setup.onboarding.map((step) => <Line key={step.step} label={STEP[step.step] ?? words(step.step)} value={n(step.reached)} bar={step.reached / signups} onClick={() => open("setup")} />)}
+          {more.setup.onboarding.map((step) => <Line key={step.step} label={STEP[step.step] ?? words(step.step)} value={n(step.reached)} bar={step.reached / signups} note={step.fromApp ? `${n(step.fromApp)} had it already` : undefined} onClick={() => open("setup")} />)}
           {more.setup.handoff?.[0]?.reached ? <p className="mt-2 px-1 text-12 text-ink-3">sign-up from the app: {n(more.setup.handoff.find((row) => row.step === "back")?.reached ?? 0)} of {n(more.setup.handoff[0].reached)} back in the app</p> : null}
           {more.setup.account?.steps[0]?.reached ? <p className="mt-2 px-1 text-12 text-ink-3">app sign-in: {n(more.setup.account.steps.find((row) => row.step === "returned")?.reached ?? 0)} of {n(more.setup.account.steps[0].reached)} who saw it signed in</p> : null}
           {more.setup.signIn.length ? <p className="mt-2 px-1 text-12 text-ink-3">ai sign-ins that finish: {more.setup.signIn.slice(0, 4).map((row) => `${row.key} ${percent(row.rate)}`).join(", ")}</p> : null}

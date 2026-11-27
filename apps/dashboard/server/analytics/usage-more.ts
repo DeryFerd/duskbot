@@ -10,7 +10,7 @@ const DAY = 86_400_000;
 export interface Count { key: string; count: number }
 export interface RateRow { key: string; total: number; good: number; bad: number; rate: number | null; reason?: string }
 export interface MoreAnswer {
-  setup: { onboarding: Array<{ step: string; reached: number; medianMs: number | null }>; signIn: RateRow[]; account: AccountFunnel; handoff: HandoffStep[] };
+  setup: { onboarding: Array<{ step: string; reached: number; medianMs: number | null; fromApp?: number }>; signIn: RateRow[]; account: AccountFunnel; handoff: HandoffStep[] };
   reliability: { firstP50: number | null; firstP90: number | null; engines: Array<{ key: string; turns: number; p50: number | null; p90: number | null; firstP50: number | null }>;
     models: Array<{ key: string; turns: number; p50: number | null; firstP50: number | null; failRate: number | null }>; toolErrors: Array<{ kind: "tool" | "app"; key: string; errors: number; turns: number; rate: number | null }>;
     toolFailures: ToolFailureRow[]; crashes: { count: number; people: number; top: Count[] }; wake: { count: number; p50Ms: number | null; p90Ms: number | null } };
@@ -67,7 +67,11 @@ export function moreOf(input: MoreInput): MoreAnswer {
     steps.set(step, row);
   }
   const done = new Set(byName("onboarding_done").map(event => event.accountId).filter(Boolean) as string[]);
-  const onboarding = [...["name", "plan", "app"].map(step => ({ step, reached: steps.get(step)?.people.size ?? 0, medianMs: median(steps.get(step)?.ms ?? []) })), { step: "done", reached: done.size, medianMs: null }];
+  // someone the app sent has the app, so the website skips its app step for them: past the plans they count as having it
+  const fromApp = new Set(byName("onboarding_step").filter(event => event.props.from === "app" && event.props.step === "plan").map(event => event.accountId).filter(Boolean) as string[]);
+  const reachedOf = (step: string) => step === "app" ? new Set([...steps.get("app")?.people ?? [], ...fromApp]).size : steps.get(step)?.people.size ?? 0;
+  const onboarding = [...["name", "plan", "app"].map(step => ({ step, reached: reachedOf(step), medianMs: median(steps.get(step)?.ms ?? []), ...(step === "app" ? { fromApp: fromApp.size } : {}) })),
+    { step: "done", reached: done.size, medianMs: null }];
   const engines = keys("engine:").map(key => ({ key, turns: total(`engine:${key}`), p50: bucketQuantile(buckets(`lat_engine:${key}:`), 0.5), p90: bucketQuantile(buckets(`lat_engine:${key}:`), 0.9),
     firstP50: bucketQuantile(buckets(`first_engine:${key}:`), 0.5) })).sort((a, b) => b.turns - a.turns);
   const models = keys("model:").filter(key => key !== "other" || total("model:other") > 0).map(key => ({ key, turns: total(`model:${key}`), p50: bucketQuantile(buckets(`lat_model:${key}:`), 0.5),
