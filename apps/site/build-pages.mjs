@@ -222,6 +222,7 @@ export const release = {
   date: rel.date || '',
 };
 // the android app has its own version, which latest.json names once a release carries the apk
+release.trialDays = (() => { const d = Number(process.env.DUSK_TRIAL_DAYS || rel.trialDays); return Number.isInteger(d) && d >= 1 && d <= 30 ? d : 0; })();
 release.androidVersion = /^\d+(\.\d+){1,3}$/.test(latest.android?.version || '') ? latest.android.version : '';
 release.sums = release.version && fs.existsSync(path.join(site, 'releases', release.version, 'SHA256SUMS')) ? `/releases/${release.version}/SHA256SUMS` : `${rel.base}${rel.checksums}`;
 const withRelease = (html) => {
@@ -229,7 +230,7 @@ const withRelease = (html) => {
   for (let before; before !== html;) { before = html; html = html.replace(/\{\{([#^])([\w]+)\}\}((?:(?!\{\{[#^])[\s\S])*?)\{\{\/\2\}\}/g, (_, mark, key, inner) => (Boolean(release[key]) === (mark === '#') ? inner : '')); }
   return html.replace(/\{\{dl ([\w-]+)\}\}/g, (_, key) => { if (!rel.files[key]) throw new Error(`releases.json has no file ${key}`); return rel.files[key].startsWith('https://') ? rel.files[key] : rel.base + rel.files[key]; })
     .replace(/\{\{file ([\w-]+)\}\}/g, (_, key) => rel.files[key].split('/').pop()).replace(/\{\{(ios|android)-link\}\}/g, (_, key) => rel[key])
-    .replace(/\{\{size ([\w-]+)\}\}/g, (_, key) => (rel.sizes?.[key] ? `${Math.round(rel.sizes[key] / 1e6)} mb` : '')).replace(/\{\{android-version\}\}/g, release.androidVersion ? ` · ${release.androidVersion}` : '').replace(/\{\{version\}\}/g, release.version).replace(/\{\{released-on\}\}/g, release.date).replace(/\{\{sums\}\}/g, release.sums);
+    .replace(/\{\{size ([\w-]+)\}\}/g, (_, key) => (rel.sizes?.[key] ? `${Math.round(rel.sizes[key] / 1e6)} mb` : '')).replace(/\{\{android-version\}\}/g, release.androidVersion ? ` · ${release.androidVersion}` : '').replace(/\{\{trial-days\}\}/g, String(release.trialDays)).replace(/\{\{version\}\}/g, release.version).replace(/\{\{released-on\}\}/g, release.date).replace(/\{\{sums\}\}/g, release.sums);
 };
 // {{crew}} on the brand page is the twenty pixel bots, kit first, each in its own colour with its name and a link to its svg
 const CREW = [...CROWD.filter(([name]) => name === 'kit'), ...CROWD.filter(([name]) => name !== 'kit')].map(([name, colour]) => [name, colour]);

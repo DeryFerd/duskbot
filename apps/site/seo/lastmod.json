@@ -1,15 +1,15 @@
 {
  "/": {
-  "hash": "b7bcaa8dc424e97e",
+  "hash": "bfb5eb5d07a601e5",
   "lastmod": "2026-11-27"
  },
  "/download": {
-  "hash": "07f5b9cd07010420",
+  "hash": "0709e2858492f476",
   "lastmod": "2026-11-27"
  },
  "/pricing": {
-  "hash": "50a47d9d8388fe17",
-  "lastmod": "2026-11-22"
+  "hash": "b48aa9906afb5b7f",
+  "lastmod": "2026-11-27"
  },
  "/about": {
   "hash": "c59d064dc745fa33",
@@ -68,8 +68,8 @@
   "lastmod": "2026-11-27"
  },
  "/docs/dusk-cloud": {
-  "hash": "6d57d759fc68049e",
-  "lastmod": "2026-11-13"
+  "hash": "48776f6184ebd887",
+  "lastmod": "2026-11-27"
  },
  "/docs/phone": {
   "hash": "b67099de01b61d10",
@@ -1168,7 +1168,7 @@
   "lastmod": "2026-11-27"
  },
  "/alternatives": {
-  "hash": "87810a8b3efd50db",
+  "hash": "c2ef2894fbce841c",
   "lastmod": "2026-11-27"
  },
  "/integrations": {

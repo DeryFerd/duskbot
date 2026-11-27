@@ -13,6 +13,7 @@
   },
   "checksums": "SHA256SUMS",
   "macNotarized": true,
+  "trialDays": 3,
   "windowsReady": true,
   "linuxReady": true,
   "ios": "https://apps.apple.com/app/id6834725640",
