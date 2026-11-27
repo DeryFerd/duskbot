@@ -629,6 +629,7 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     const text = deltas.filter((d: any) => d.streamKind === "assistant_text");
     expect(text.map((d: any) => d.delta)).toEqual(["hello from ", "fake claude"]);
     expect(text.some((d: any) => d.delta.includes("SUBAGENT"))).toBe(false);
+    expect(recorder.events.some((e: any) => JSON.stringify(e).includes("SUBAGENT REPORT"))).toBe(false);
     expect(deltas.some((d: any) => d.streamKind === "reasoning_text" && d.delta === "hmm")).toBe(true);
     const settled = recorder.events.filter((e: any) => e.type === "item.completed" && e.itemType === "assistant_text");
     expect(settled).toHaveLength(1);

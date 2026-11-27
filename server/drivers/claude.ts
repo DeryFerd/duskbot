@@ -1511,7 +1511,9 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
               if (!session.turn?.stopRequested) emit({ ...base(threadId, currentTurnId()), type: "runtime.error", message: claudeApiErrorMessage(o, text) });
               break;
             }
-            if (text.trim()) {
+            // A Task subagent's prose, its closing report included, is for the bot that sent it, never the person:
+            // the bot relays what matters in its own reply. Its tool calls still show in the steps.
+            if (text.trim() && !o.parent_tool_use_id) {
               // fallback delta for CLIs/paths that never streamed the block
               if (!session.turn?.sawStreamDelta) emit({ ...base(threadId, currentTurnId()), type: "content.delta", streamKind: "assistant_text", delta: text });
               if (session.turn) session.turn.sawStreamDelta = false;

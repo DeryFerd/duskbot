@@ -1109,6 +1109,13 @@ const playTurn = (prompt: JsonValue, late = false) => {
       parent_tool_use_id: "task-1",
       event: { type: "content_block_delta", delta: { type: "text_delta", text: "SUBAGENT NOISE" } },
     });
+    // a Task subagent's own closing message, its report back to the bot
+    out({
+      type: "assistant",
+      parent_tool_use_id: "task-1",
+      session_id: sessionId,
+      message: { role: "assistant", content: [{ type: "text", text: "SUBAGENT REPORT: ## Summary of work done\n\nI searched three sources and compiled the findings." }] },
+    });
   }
 
   if (process.env.FAKE_CLAUDE_CONNECT_APPS) connectApps(process.env.FAKE_CLAUDE_CONNECT_APPS.split(",").filter(Boolean));
