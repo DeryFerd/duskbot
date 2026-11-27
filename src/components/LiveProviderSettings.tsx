@@ -3,12 +3,13 @@ import { useState } from "react";
 import { t } from "@/lib/i18n";
 import { api, useStore } from "@/state/store";
 import type { LiveProvider, LiveSettings } from "../../shared/wire";
-import { Select } from "./Select";
+import { cn } from "@/lib/cn";
+import { SettingsSelect } from "./SettingsSelect";
+import { SettingRow, SettingsRows } from "./SettingsPrimitives";
+import { rowPrimaryCls, textFieldCls } from "./ui/GrokDialog";
 import { friendlyError } from "@/lib/plain-error";
 
 type ProviderPatch = Partial<Pick<LiveSettings, "provider" | "azureEndpoint" | "azureDeployment">>;
-
-const FIELD = "w-full rounded-lg border border-transparent bg-inset px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-accent/60";
 
 export function LiveProviderSettings() {
   const { state, dispatch } = useStore();
@@ -34,65 +35,56 @@ export function LiveProviderSettings() {
   };
 
   return (
-    <div className="flex flex-col gap-2">
-      <label className="flex items-center justify-between gap-2">
-        <span className="text-[13px] text-ink-secondary">{t("call.live.provider")}</span>
-        <Select
-          size="sm"
-          value={provider}
-          disabled={saving}
-          onChange={(event) => void save({ provider: event.target.value as LiveProvider })}
-        >
-          <option value="openai">{t("call.live.provider.openai")}</option>
-          <option value="azure">{t("call.live.provider.azure")}</option>
-        </Select>
-      </label>
-      {provider === "azure" && (
-        <form
-          className="flex flex-col gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void save({ azureEndpoint: endpoint.trim(), azureDeployment: deployment.trim() });
-          }}
-        >
-          <label className="flex flex-col gap-1">
-            <span className="text-[12px] text-ink-secondary">{t("call.live.azureEndpoint")}</span>
-            <input
-              type="url"
-              inputMode="url"
-              autoComplete="off"
-              spellCheck={false}
-              value={endpoint}
-              placeholder="https://my-resource.openai.azure.com"
-              onChange={(event) => setEndpoint(event.target.value)}
-              className={FIELD}
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-[12px] text-ink-secondary">{t("call.live.azureDeployment")}</span>
-            <input
-              type="text"
-              autoComplete="off"
-              spellCheck={false}
-              value={deployment}
-              placeholder="gpt-live-1"
-              onChange={(event) => setDeployment(event.target.value)}
-              className={FIELD}
-            />
-          </label>
-          <div className="text-[12px] text-ink-tertiary">{t("call.live.azureHint")}</div>
-          {azureChanged && (
-            <button
-              type="submit"
-              disabled={saving}
-              className="self-start rounded-lg bg-ink px-3 py-1.5 text-[13px] font-medium text-app hover:bg-ink/85 disabled:opacity-50"
-            >
-              {t("common.save")}
-            </button>
-          )}
-        </form>
-      )}
-      {error && <div className="text-[12px] text-danger">{error}</div>}
+    <div data-settings-look="simple" className="flex flex-col gap-2">
+      <SettingsRows>
+        <SettingRow title={t("call.live.provider")}>
+          <SettingsSelect aria-label={t("call.live.provider")} value={provider} disabled={saving} onChange={(event) => void save({ provider: event.target.value as LiveProvider })}>
+            <option value="openai">{t("call.live.provider.openai")}</option>
+            <option value="azure">{t("call.live.provider.azure")}</option>
+          </SettingsSelect>
+        </SettingRow>
+        {provider === "azure" && (
+          <form
+            className="contents"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void save({ azureEndpoint: endpoint.trim(), azureDeployment: deployment.trim() });
+            }}
+          >
+            <SettingRow title={t("call.live.azureEndpoint")}>
+              <input
+                type="url"
+                inputMode="url"
+                autoComplete="off"
+                spellCheck={false}
+                aria-label={t("call.live.azureEndpoint")}
+                value={endpoint}
+                placeholder="https://my-resource.openai.azure.com"
+                onChange={(event) => setEndpoint(event.target.value)}
+                className={cn(textFieldCls, "w-56")}
+              />
+            </SettingRow>
+            <SettingRow title={t("call.live.azureDeployment")} subtitle={t("call.live.azureHint")}>
+              <input
+                type="text"
+                autoComplete="off"
+                spellCheck={false}
+                aria-label={t("call.live.azureDeployment")}
+                value={deployment}
+                placeholder="gpt-live-1"
+                onChange={(event) => setDeployment(event.target.value)}
+                className={cn(textFieldCls, "w-56")}
+              />
+            </SettingRow>
+            {azureChanged && (
+              <div className="flex justify-end px-2 py-1.5">
+                <button type="submit" disabled={saving} className={rowPrimaryCls}>{t("common.save")}</button>
+              </div>
+            )}
+          </form>
+        )}
+      </SettingsRows>
+      {error && <p role="alert" className="m-0 px-3 text-[12px] leading-4 text-danger">{error}</p>}
     </div>
   );
 }
