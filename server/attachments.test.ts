@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { link, unlink } from "node:fs/promises";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildZip } from "./testing/zip-fixture.ts";
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const fs = await importOriginal<typeof import("node:fs/promises")>();
@@ -65,6 +66,7 @@ const {
   saveAudio,
   saveFile,
   heifUploadAsPicture,
+  refuseDamagedDocument,
   saveImage,
   saveImageUpload,
   validateAttachmentUploadId,
@@ -341,6 +343,23 @@ describe("aggregate attachment storage", () => {
       expect(saved.path.endsWith(".zip")).toBe(true);
     }
     await expect(saveFile((async function* () { yield Buffer.from("MZ not a zip at all"); })(), "setup.zip", "application/zip")).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("refuses and removes a zip whose file list can't be read or a PDF without its header, and keeps whole ones", async () => {
+    const zip = buildZip([{ name: "a.txt", data: "hi" }]);
+    const whole = await saveFile((async function* () { yield zip; })(), "notes.zip", "application/zip");
+    await expect(refuseDamagedDocument(whole)).resolves.toBeUndefined();
+    expect(existsSync(whole.path)).toBe(true);
+    const cut = await saveFile((async function* () { yield zip.subarray(0, 30); })(), "cut.zip", "application/zip");
+    await expect(refuseDamagedDocument(cut)).rejects.toMatchObject({ status: 422 });
+    expect(existsSync(cut.path)).toBe(false);
+    const pdf = await saveFile((async function* () { yield Buffer.from("%PDF-1.4\n%%EOF"); })(), "a.pdf", "application/pdf");
+    await expect(refuseDamagedDocument(pdf)).resolves.toBeUndefined();
+    const renamed = await saveFile((async function* () { yield Buffer.from("not a pdf at all"); })(), "b.pdf", "application/pdf");
+    await expect(refuseDamagedDocument(renamed)).rejects.toMatchObject({ status: 422 });
+    expect(existsSync(renamed.path)).toBe(false);
+    const notes = await saveFile((async function* () { yield Buffer.from("plain"); })(), "c.txt", "text/plain");
+    await expect(refuseDamagedDocument(notes)).resolves.toBeUndefined();
   });
 
   it("keeps an image too large for a picture as a file, and refuses bytes that are not the image they claim", async () => {

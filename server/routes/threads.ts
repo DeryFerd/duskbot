@@ -3,7 +3,7 @@ import { basename, join } from "node:path";
 import type { WireBot, WireGroup } from "../../shared/wire.ts";
 import {
   ATTACHMENTS_DIR, attachmentStorageUsage, clearAttachments, deleteAttachment, extensionForMime, FILE_MAX_BYTES, IMAGE_MAX_BYTES, imageMimeOf,
-  parseAudioRange, readAttachment, saveFile, saveImageUpload, heifUploadAsPicture, validateAttachmentUploadId, type SavedAttachment,
+  parseAudioRange, readAttachment, saveFile, saveImageUpload, heifUploadAsPicture, refuseDamagedDocument, validateAttachmentUploadId, type SavedAttachment,
 } from "../attachments.ts";
 import { deliveredCopy } from "../bot-attachment.ts";
 import { attachmentImageSize } from "../media-size.ts";
@@ -451,6 +451,7 @@ export function createThreadRoutes(deps: ThreadRouteDeps): RouteHandler {
         // Returning must not destroy the socket: the caller still sends the 4xx when the byte count crosses the limit.
         const chunks = req.iterator({ destroyOnReturn: false }) as AsyncIterable<Buffer>;
         const saved = await saveFile(chunks, name, rawType ?? "", { uploadId, expectedBytes: declaredLength });
+        await refuseDamagedDocument(saved);
         deps.uploads.note(auth, basename(saved.path));
         deps.attached?.(saved.mime, saved.bytes);
         const picture = await heifUploadAsPicture(saved);

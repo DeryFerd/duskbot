@@ -16,6 +16,8 @@ import { basename, dirname, extname, join, resolve } from "node:path";
 import { FILE_MAX_BYTES } from "../shared/upload-limits.ts";
 import { DATA_DIR } from "./config.ts";
 import { boxUploadsDir } from "./bot-box/plan.ts";
+import { ZIP_LIMITS } from "./attached-zip.ts";
+import { readZipDirectory } from "./zip-archive.ts";
 
 export { FILE_MAX_BYTES } from "../shared/upload-limits.ts";
 export const ATTACHMENTS_DIR = join(DATA_DIR, "attachments");
@@ -746,6 +748,30 @@ export function saveAudio(bytes: Buffer, mime: string): SavedAttachment {
     if (partialCleanupFailed) invalidateAttachmentAccounting();
     reservation.release();
   }
+}
+
+/** A zip whose file list cannot be read, or a PDF without the header every reader looks for, is removed and refused
+ * (422) at upload, so the composer says it wasn't attached instead of only the bot learning it can't be opened. */
+export async function refuseDamagedDocument(saved: SavedFile): Promise<void> {
+  const extension = extname(saved.path).toLowerCase();
+  if (extension !== ".zip" && extension !== ".pdf") return;
+  let damaged: boolean;
+  if (extension === ".zip") {
+    damaged = await readZipDirectory(saved.path, ZIP_LIMITS.entries).then(() => false, () => true);
+  } else {
+    const handle = await open(saved.path, "r");
+    try {
+      const head = Buffer.alloc(1024);
+      const { bytesRead } = await handle.read(head, 0, head.byteLength, 0);
+      // the same test pdf-text.ts makes before it reads one
+      damaged = !head.subarray(0, bytesRead).includes(Buffer.from("%PDF-"));
+    } finally {
+      await handle.close();
+    }
+  }
+  if (!damaged) return;
+  deleteAttachment(saved.path);
+  throw statusError(422, `${extension === ".zip" ? "the zip" : "the PDF"} is damaged`);
 }
 
 /** Takes the per-id lock, so an image and a document with one caller-supplied UUID cannot commit with different extensions. */
