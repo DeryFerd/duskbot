@@ -1,20 +1,22 @@
 {
   "path": "/guides/grok-tasks",
   "type": "guide",
-  "title": "Grok tasks: how to set up a daily Grok Bot routine",
+  "title": "Grok tasks: set up Grok Bot routines, plans and limits",
   "nav": "grok tasks and automations",
-  "h1": "how to schedule a daily grok task with grok bot",
-  "description": "Schedule a daily Grok Bot brief in your time zone or start a routine from an event. See which plans include it and why it runs with your devices off.",
+  "h1": "grok tasks: how to schedule a daily grok bot routine",
+  "description": "Schedule a daily Grok Bot routine or start one from an event. See what Grok Bot costs as of 20 November 2026, the five-minute rule and the weekly pool.",
   "keyword": "grok tasks",
   "keywords": [
     "grok agent",
     "grok agent mode",
     "grok tasks",
     "grok bot schedule",
+    "grok bot routines",
+    "how much is grok bot",
     "grok tasks feature daily scheduled xai how to set up"
   ],
-  "answer": "**to schedule a daily grok task, give one grok bot a routine with a time, time zone and job.** for a morning brief, name the sources and what counts as news. you can also start a routine from an event, such as a slack message. the cloud computer runs it even with your devices off.[^2][^9]",
-  "updated": "2026-11-20",
+  "answer": "**to schedule a daily grok task, give a grok bot a routine with a time, time zone and job.** name the sources and when to stay quiet. a routine can also start from an event, such as a slack message. it runs on the cloud computer with your devices off. as of 20 november 2026, grok bot comes with x premium at $30 a month and up.[^2][^9][^10]",
+  "updated": "2026-11-27",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",
@@ -48,8 +50,16 @@
       "md": "**use grok bot for the cloud routine you want waiting in the morning.** as of 12 november 2026, the tasks page calls its feature automations. it describes recurring work, events and notifications.[^1]\n\na grok bot routine belongs to a bot. it can follow a schedule or start when an event arrives, such as a slack message or a github issue event.[^2]\n\ngrok build is a coding agent. its docs cover interactive terminal work, scripts, bots and acp use in other apps.[^3]\n\nstart with the result you need. a public-news brief and a coding script might both repeat weekly. they still need different settings and a different answer to “which computer runs this?”"
     },
     {
+      "h": "set the schedule or the event that starts it",
+      "md": "**a routine needs a trigger, a bot and a job you can judge.** grok bot takes the schedule in plain words and knows your time zone. runs must sit at least five minutes apart.[^2][^11]\n\nan event can start a routine too:[^2]\n\n- a slack message\n- a github, linear, sentry or pagerduty event\n- an email or a webhook\n\na skill is a reusable set of instructions you call with `/`. **teach a task** records a browser demo of up to ten minutes and turns it into a skill. it is still rolling out.[^2]"
+    },
+    {
       "h": "read the x plan beside the price",
       "md": "**the plan names changed on 12 october 2026.** xai brought grok, grok bot, the cursor coding app and x premium into the x subscription. new customers no longer buy standalone supergrok; existing subscribers can keep their plan.[^5]\n\nas of 20 november 2026, three x subscription plans include grok bot:[^10]\n\n- premium: $30 a month\n- super: $100 a month\n- ultra: $200 a month\n\nfree and the $8 plus plan exclude grok bot. there's no separate bot subscription.[^10] paid cursor individual plans and self-serve teams also qualify. see [grok bot pricing](/guides/grok-bot-pricing) for legacy subscriptions.[^9]\n\nread the amount at checkout; it may use local currency. the [agent cost guide](/guides/how-much-does-an-ai-agent-cost) separates product, machine and ai bills."
+    },
+    {
+      "h": "every run spends the weekly pool",
+      "md": "**a routine that fires every few minutes eats your allowance first.** grok bot usage comes from a weekly pool shared with grok and cursor. it counts agent steps and tokens, not messages. past the pool, you pay from prepaid credits.[^11]\n\nas of 20 november 2026, xai publishes no absolute pool sizes. premium gets 4x the plus base, super 15x and ultra 50x.[^11]\n\nheavy users hit the wall early. a cursor forum thread from 10 september 2026 reports a $200 ultra plan at 99% of its weekly allowance in three days.[^12] limits were cut again in early november 2026.[^13]\n\nrun daily, not hourly. add a quiet rule. long chats cost more to re-read, so start fresh ones."
     },
     {
       "h": "give the recurring job a question it can finish",
@@ -61,25 +71,29 @@
     },
     {
       "h": "when another routine app earns its place",
-      "md": "**keep a working grok routine if it already does the job.** another app can add setup without adding value.\n\ndusk suits someone who wants each bot’s job, memory, recurring work and follow-up questions together. send a routine request and read its schedule card for the next run. the routine in the bot’s side panel lists its recent runs.[^7][^8]\n\na local dusk routine stops when the computer sleeps or the app closes. dusk cloud runs the routine on time.[^8]\n\ncompare [grok bot and dusk bot](/alternatives/grok-bot) for model choice and hosting, or see [other schedulers](/scheduled-ai-tasks). choose the home that keeps its sources, results and review in reach."
+      "md": "**keep a working grok routine if it already does the job.** another app can add setup without adding value.\n\ngrok bot picks the model for you; there is no model picker and no way to bring your own key.[^9] if that is the sticking point, look elsewhere.\n\ndusk is free for personal use on your own computer, with every feature and no account. each bot thinks with the ai you already use, and that provider bills you.[^14][^15] say the routine in chat, then read its schedule card for the next run.[^8]\n\na local dusk routine stops when the computer sleeps or the app closes. dusk cloud runs it on time.[^8]\n\nmoving over? **start import** in settings brings each grok bot across with its skills, memories and routines, paused. [the move guide](/guides/move-from-grok-bot) walks through it. compare [grok bot alternatives](/alternatives/grok-bot) or [other schedulers](/scheduled-ai-tasks) first."
     }
   ],
   "faq": [
     {
+      "q": "how much is grok bot?",
+      "a": "**grok bot starts at $30 a month, as of 20 november 2026.** it comes with x subscription premium ($30 a month or $300 a year), super ($100) and ultra ($200). free and the $8 plus plan leave it out. there is no separate grok bot subscription.[^10]"
+    },
+    {
+      "q": "is there a free alternative to grok bot?",
+      "a": "**dusk bot is free for personal use on your own computer, with every feature.** you need no account and no card. its bots think with an ai you already use or an api key, and that provider bills you. local routines pause while the computer sleeps; dusk cloud plus, at $20 a month, runs them on time.[^14][^15][^8]"
+    },
+    {
       "q": "can grok tasks work with my laptop closed?",
-      "a": "**yes, if it's a grok bot routine.** it runs on the cloud computer. a grok build script running on your own laptop needs that laptop awake.[^9][^3]"
-    },
-    {
-      "q": "is supergrok still a separate plan?",
-      "a": "**new customers use the x subscription as of 12 november 2026.** existing supergrok subscribers can keep their plan. read the name on your bill.[^5]"
-    },
-    {
-      "q": "what should i try as my first recurring grok task?",
-      "a": "**pick a public topic you already follow.** ask for dated sources, new evidence and gaps. test that answer before repeating it."
+      "a": "**yes, if it is a grok bot routine.** it runs on the grok bot cloud computer, so closing the app, laptop or phone does not stop it. a grok build script on your own laptop is different: that laptop has to stay awake.[^9][^3]"
     },
     {
       "q": "how do i set up a daily grok bot schedule?",
       "a": "**assign the routine to the bot that should do the work.** write the schedule in plain language, for example “every weekday at 7am london time, summarise today's rail notices for my route.” include the route and source. grok bot supports time zones and requires at least five minutes between runs.[^2]"
+    },
+    {
+      "q": "how often can a grok bot routine run?",
+      "a": "**at most once every five minutes.** each run spends agent steps and tokens from your weekly usage pool, so a tight schedule drains it fastest. a daily or weekday routine with a quiet rule lasts much longer, and you still get the result when it matters.[^2][^11]"
     }
   ],
   "sources": [
@@ -130,6 +144,29 @@
       "label": "the x subscription: grok bot plan pricing",
       "url": "https://docs.x.ai/x-subscription/pricing.md",
       "checked": "2026-11-20"
+    },
+    {
+      "label": "the x subscription: grok bot usage limits",
+      "url": "https://docs.x.ai/x-subscription/usage-limits.md",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "cursor forum: ultra weekly allowance at 99% in three days",
+      "url": "https://forum.cursor.com/t/grok-bot-ultra-users-how-do-you-make-the-weekly-allowance-last-mine-reached-99-in-three-days/171221",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "elon musk on grok bot serving costs",
+      "url": "https://x.com/elonmusk/status/2116992258520064397",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "dusk bot: account and billing",
+      "url": "/docs/account-and-billing"
+    },
+    {
+      "label": "dusk bot: getting started",
+      "url": "/docs/getting-started"
     }
   ],
   "quick": {
@@ -157,6 +194,10 @@
     {
       "mistake": "expecting a local script to behave like a cloud routine",
       "fix": "identify the machine running it before closing your laptop."
+    },
+    {
+      "mistake": "scheduling a routine every few minutes",
+      "fix": "start daily with a quiet rule. every run spends the weekly pool."
     }
   ],
   "tip": {
