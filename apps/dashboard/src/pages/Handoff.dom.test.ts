@@ -102,6 +102,6 @@ test("while the link is redeemed the page already has the plans' shape, never a 
 
 test("a next that is not one of the handoff pages is never followed", async () => {
   const { handoffNext } = await import("../data/handoff");
-  for (const good of ["/billing?plan=plus&src=app_card", "/cloud", "/account", "/usage", "/?workspace=ws_abc-1", "/"]) expect(handoffNext(good)).toBe(good);
+  for (const good of ["/billing?plan=plus&src=app_card", "/cloud", "/account", "/account#billing", "/usage", "/?workspace=ws_abc-1", "/"]) expect(handoffNext(good)).toBe(good);
   for (const bad of ["//evil.test", "https://evil.test/billing", "/billing/../account", "/admin", "/account#x", null]) expect(handoffNext(bad)).toBe("/");
 });

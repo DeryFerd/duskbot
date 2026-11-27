@@ -24,7 +24,7 @@ export const handoffArrived = () => arrived;
 export function forgetHandoff() { kept = null; }
 
 /** the page the service named, only ever one of ours: anything else goes home */
-export const handoffNext = (next: unknown) => typeof next === "string" && /^\/(?:billing|cloud|account|usage)?(?:\?[A-Za-z0-9_=&-]*)?$/.test(next) ? next : "/";
+export const handoffNext = (next: unknown) => typeof next === "string" && /^\/(?:billing|cloud|account(?:#billing)?|usage)?(?:\?[A-Za-z0-9_=&-]*)?$/.test(next) ? next : "/";
 
 /** a full load that replaces the handoff page, so every cached view starts again as the account the link signed in */
 export function leaveHandoff(path: string) { location.replace(withBase(path)); }

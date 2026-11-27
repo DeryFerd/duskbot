@@ -834,7 +834,7 @@ describe("local account service", () => {
       expect((await redeem(token)).status).toBe(410);
       const plain = tokenOf(await body<WebHandoffAnswer>(issue(grant, { next: "plans" })));
       expect(await body(redeem(plain))).toMatchObject({ next: "/billing" });
-      for (const [input, next] of [[{ next: "cloud" }, "/cloud"], [{ next: "account" }, "/account"], [{ next: "home" }, "/"], [{ next: "workspace", workspaceId: "ws_abc-1" }, "/?workspace=ws_abc-1"]] as const) {
+      for (const [input, next] of [[{ next: "cloud" }, "/cloud"], [{ next: "account" }, "/account"], [{ next: "billing" }, "/account#billing"], [{ next: "home" }, "/"], [{ next: "workspace", workspaceId: "ws_abc-1" }, "/?workspace=ws_abc-1"]] as const) {
         expect(await body(redeem(tokenOf(await body<WebHandoffAnswer>(issue(grant, input)))))).toMatchObject({ next });
       }
     });
