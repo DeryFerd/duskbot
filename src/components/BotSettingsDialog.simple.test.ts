@@ -611,7 +611,7 @@ describe("the Bot settings page", () => {
     expect(order.every((index) => index > -1)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     const pages = [...rendered.html.matchAll(/data-panel-page="(\w+)"/g)].map((match) => match[1]);
-    expect(pages).toEqual(["identity", "instructions", "memory", "skills", "tools", "permissions", "folder", "backups"]);
+    expect(pages).toEqual(["identity", "instructions", "memory", "skills", "sessions", "tools", "permissions", "folder", "backups"]);
     expect(rendered.html).not.toContain('data-panel-advanced="settings"');
     for (const page of pages) {
       click(find(rendered, "data-panel-page", page));

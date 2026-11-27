@@ -6,6 +6,7 @@ import { InstructionsModal } from "./InstructionsModal";
 import { MemoryModal } from "./MemoryModal";
 import type { SheetPage } from "./panel-modal";
 import { IdentityModal, PermissionsModal, SlackModal, ToolsModal } from "./SectionModals";
+import { SessionsModal } from "./SessionsModal";
 import { SkillsModal } from "./SkillsModal";
 import { WhereModal } from "./WhereModal";
 
@@ -32,6 +33,8 @@ export function PanelModal({ page, bot, derived, onClose }: {
       return <FolderModal bot={bot} onClose={onClose} />;
     case "where":
       return <WhereModal bot={bot} derived={derived} onClose={onClose} />;
+    case "sessions":
+      return <SessionsModal bot={bot} derived={derived} />;
     case "backups":
       return <BackupsModal bot={bot} derived={derived} onClose={onClose} />;
     case "slack":

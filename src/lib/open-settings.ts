@@ -54,7 +54,7 @@ export function openSettings(target: SettingsPane | AdvancedPage | keyof typeof 
 }
 
 /** A row of a bot's settings on the Bots pane, each opening its page there; or a group chat's. */
-export type BotSettingsRow = "instructions" | "memory" | "skills" | "identity" | "tools" | "permissions" | "folder" | "where" | "backups" | "slack";
+export type BotSettingsRow = "instructions" | "memory" | "skills" | "sessions" | "identity" | "tools" | "permissions" | "folder" | "where" | "backups" | "slack";
 export type RoomSettingsRow = "instructions" | "responder" | "folder" | "about";
 
 export type SettingsBotTarget =

@@ -20,6 +20,7 @@ import { Card, NavRow, SheetInSettings, SwitchRow, useSubPage } from "./ListRows
 import { effortLabel } from "./ModelPicker";
 import { effortLevelsFor } from "./model-picker-reasoning";
 import { ModelSelectRow } from "./native/ModelSelectRow";
+import { sessionsValue } from "./bot-panel/modals/SessionsModal";
 import { RoomAboutModal, RoomFolderModal, RoomInstructionsModal, RoomResponderModal } from "./room-panel/RoomModals";
 import { SettingRow, SettingsGroup, SettingsRows } from "./SettingsPrimitives";
 import { SettingsSelect } from "./SettingsSelect";
@@ -29,6 +30,7 @@ import { NewBotEffortRow } from "./AppSettingsRows";
 const BOT_HINTS: Partial<Record<BotSettingsRow, () => string>> = {
   backups: () => t("settings.bots.hint.backups"),
   skills: () => t("settings.bots.hint.skills"),
+  sessions: () => t("settings.bots.hint.sessions"),
   tools: () => t("settings.bots.hint.tools"),
   permissions: () => t("settings.bots.hint.permissions"),
   folder: () => t("settings.bots.hint.folder"),
@@ -217,6 +219,7 @@ function BotRows({ bot }: { bot: Bot }) {
           disabled={Boolean(bot.busy) || !editable} onChange={() => derived.patch({ memoryEnabled: !memoryOn })} />
         {memoryOn && <NavRow data-panel-page="memory" title={t("sheet.rows.notes")} hint={t("settings.bots.hint.notes")} onClick={() => open("bot:memory", sheetLabel("memory", bot))} />}
         {row("skills", skills.loading ? undefined : skills.loadFailed ? t("botPanel.skills.notLoaded") : skillsOn > 0 ? t("settings.bots.panel.botPanelSkillsOn", { count: skillsOn }) : t("settings.bots.panel.botPanelNone"))}
+        {row("sessions", sessionsValue(bot))}
       </Card>
       <Card label={t("botSettings.sections.access")} data-settings-block="bot-access">
         {row("tools", bot.toolScope !== undefined ? t("settings.bots.panel.botPanelToolsCustom") : undefined)}

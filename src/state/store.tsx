@@ -337,6 +337,8 @@ export interface Bot extends DefaultBotFields, Pick<WireBot, "mascotFaceColor" |
   outbound?: { policy: "ask" | "allow"; dailyCap: number };
   fallback?: Array<{ instanceId: string; model: string }>;
   limitMode?: WireBot["limitMode"];
+  freshSession?: WireBot["freshSession"] | null;
+  compactAt?: number | null;
   browser?: boolean;
   recordBrowserSteps?: boolean;
   readsOtherChats?: boolean;
