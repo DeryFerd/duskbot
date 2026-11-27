@@ -52,6 +52,12 @@ export interface HomeLifecycleState {
   /** why the power policy or the rails last kept a home up (or a sleeping one asleep), for the operator */
   stayReason?: string | null;
   wakeStartedAt: number | null;
+  /** a client reached the machine's public port and met the provider's pause page while this service read it as running:
+   *  not an awake home until a pass confirms it, and the next pass resumes it */
+  pausedSeenAt?: number | null;
+  /** the provider refused to resume this machine for its own reason (an unpaid workspace): since when, and whether the
+   *  operator was alerted (one alert per incident) */
+  providerPause?: { since: number; code: string; alerted: boolean } | null;
   backups: Array<{ file: string; at: number; bytes: number; sha256: string; verifiedAt: number | null; snapshotAt: number }>;
   lastBackupTryAt: number | null;
   backupProblem: string | null;

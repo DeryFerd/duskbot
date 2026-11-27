@@ -1,4 +1,6 @@
 import { readHeader, withLegacyHeaders } from "../../electron/legacy-names.mjs";
+import { providerPausePage } from "../../electron/cloud-power.mjs";
+export { providerPausePage };
 // A Cloud home on a plan that sleeps tells its pages it is going to sleep (a `power` frame on the event stream, or an
 // "asleep" answer). Nobody is ever shown that: a page someone is using wakes it at once (one POST the home counts as
 // someone using it, which through the public edge also starts a stopped machine) and only says it is connecting. A page
@@ -160,6 +162,14 @@ export function pageShown(signal?: AbortSignal): Promise<void> {
 /** The Cloud's edge answers this way while it starts a stopped machine: the request never reached the home. */
 export function wakingAnswer(response: Pick<Response, "status" | "headers">): boolean {
   return response.status === 503 && (readHeader(response.headers, CLOUD_POWER_HEADER) === "waking" || response.headers.has("retry-after"));
+}
+
+/** The provider's own page for a paused machine came back instead of the home's answer (the edge resumes the machine and says
+ *  "waking" itself once it is deployed; this keeps the page from ever showing the provider's words before that). */
+export async function providerPausedAnswer(response: Pick<Response, "status" | "headers" | "ok" | "clone">): Promise<boolean> {
+  if (response.ok || response.status < 500 || response.headers.has(CLOUD_POWER_HEADER)) return false;
+  if ((response.headers.get("content-type") ?? "").includes("json")) return false;
+  return providerPausePage(await response.clone().text().catch(() => ""));
 }
 
 /** An "asleep" answer from the home (held polls and refused background requests carry it). */

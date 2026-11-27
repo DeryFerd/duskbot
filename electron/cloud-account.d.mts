@@ -357,7 +357,7 @@ export interface CloudAccountClient {
   /** The Admin's last word on a Cloud whose plan sleeps; null for any other. */
   power(): import("./cloud-power.mjs").CloudPower | null;
   /** Asks the Admin to start a sleeping Cloud (POST /api/cloud/desktop/wake), then reads the session again. */
-  wakeHome(intent: WakeIntent): Promise<"awake" | "waking" | "asleep" | null>;
+  wakeHome(intent: WakeIntent, options?: { paused?: boolean }): Promise<"awake" | "waking" | "asleep" | null>;
   setWaking(on: boolean): void;
   /** My Cloud's one-time code, or (`cloudId`) another Cloud of the person's own that the verified session lists, its
    * grant for that Cloud's own address only. Rejects with `gone: true` once that Cloud is no longer theirs. */

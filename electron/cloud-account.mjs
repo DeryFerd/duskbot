@@ -868,13 +868,14 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
     /** Starts a sleeping Cloud through the Admin (`awake` once started, `waking` if it is still starting), then reads the
      *  session again so Files and lending resume. `intent` says what the person did: `type`, `click` and `send` wake it,
      *  `open` and `view` leave it `asleep`. Null when there is nothing to wake or the Admin can't say. */
-    async wakeHome(intent) {
+    async wakeHome(intent, { paused = false } = {}) {
       const current = grant, power = value.status === "connected" ? value.machine?.power : null;
-      if (!current || !power || power.state === "awake") return null;
+      // `paused`: the window met the provider's own pause page at the address, so the Admin's "awake" is stale
+      if (!current || !power || (power.state === "awake" && !paused)) return null;
       if (!WAKE_INTENTS.includes(intent)) throw new Error("Invalid wake intent.");
       let woke = null;
       try {
-        const result = await request("wake", { method: "POST", body: { intent }, token: current.token });
+        const result = await request("wake", { method: "POST", body: paused ? { intent, paused: true } : { intent }, token: current.token });
         woke = WAKE_STATES.includes(result?.state) ? result.state : null;
       } catch {}
       await refresh().catch(() => {});

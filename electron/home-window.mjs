@@ -10,7 +10,7 @@
 // Admin's team pairing (its claims are the Admin's), never an address a page supplied.
 import { cloudHomeConnectUrl, cloudSetupOf, cloudUnreachableText, machineSetup, readyCloudOrigin } from "./cloud-home.mjs";
 import { cloudMachine, cloudState, otherOwnClouds, ownCloud } from "./cloud-list.mjs";
-import { asleepAnswer, BACKGROUND_HEADERS, goneAnswer, SIGNED_IN_MS } from "./cloud-power.mjs";
+import { asleepAnswer, BACKGROUND_HEADERS, goneAnswer, providerPausePage, SIGNED_IN_MS } from "./cloud-power.mjs";
 import { awayIn, parseJournal } from "./one-home.mjs";
 
 export const HOME_SCREEN_PATH = "/home";
@@ -382,7 +382,10 @@ export function createHomeWindow(deps) {
     ...(wakingSince !== null && now() - wakingSince >= WAKE_SLOW_MS ? { slow: true } : {}), ...(held ? { held: held.text } : {}) });
   /** the Admin's word on My Cloud's power: "asleep", "waking", "awake", or null for a Cloud that never sleeps */
   const adminSays = () => { try { return account()?.power?.()?.state ?? null; } catch { return null; } };
+  /** the cloud's machine is paused by its provider: the Admin resumes it (the wake says so, since it reads the cloud as awake) */
+  let providerPaused = false;
   function endWaking() {
+    providerPaused = false;
     if (wakingSince === null) return;
     wakingSince = null;
     try { account()?.setWaking?.(false); } catch {}
@@ -394,7 +397,8 @@ export function createHomeWindow(deps) {
       wakingSince = now();
       try { account()?.setWaking?.(true); } catch {}
       log("home: waking My Cloud");
-      if (adminSays() !== "waking" && adminSays() !== "awake") await Promise.resolve().then(() => account()?.wakeHome(wakeIntent ?? "click")).catch(() => null);
+      if (providerPaused) await Promise.resolve().then(() => account()?.wakeHome(wakeIntent ?? "click", { paused: true })).catch(() => null);
+      else if (adminSays() !== "waking" && adminSays() !== "awake") await Promise.resolve().then(() => account()?.wakeHome(wakeIntent ?? "click")).catch(() => null);
       if (!wanted(token)) return false;
     }
     const look = await answers(place.origin);
@@ -476,9 +480,12 @@ export function createHomeWindow(deps) {
     try {
       const response = await cookieFetch(`${origin}/api/health`, { credentials: "include", cache: "no-store", redirect: "manual",
         signal: AbortSignal.timeout(LOOK_MS), headers: { accept: "application/json", ...BACKGROUND_HEADERS } });
+      if (asleepAnswer(response)) { await response.body?.cancel?.().catch(() => {}); return "asleep"; }
+      if (goneAnswer(response)) { await response.body?.cancel?.().catch(() => {}); return "gone"; }
+      // a machine the provider paused answers with the provider's own page: that is a cloud to resume, never a page to show
+      const plain = response.status >= 500 || !String(response.headers?.get?.("content-type") ?? "").includes("json");
+      if (plain && providerPausePage(await response.text?.().catch(() => "") ?? "")) return "paused";
       await response.body?.cancel?.().catch(() => {});
-      if (asleepAnswer(response)) return "asleep";
-      if (goneAnswer(response)) return "gone";
       return response.type === "opaqueredirect" || response.status < 500 ? "yes" : "no";
     } catch { return "no"; }
   }
@@ -570,10 +577,18 @@ export function createHomeWindow(deps) {
       } else if (!asleep) {
         if (naming) await forgetNames();
         const look = await answers(origin);
-        if (look === "no") return unreachable(place, token);
-        if (look === "gone") { clearRetry(); connecting = null; return toScreen(goneScreen(place)); }
-        if (look === "asleep" && (otherPlace(place) || wakeGaveUp)) return offline(token, wakeGaveUp);
-        if (look === "asleep") { power.hold(); asleep = true; }
+        if (look === "paused") {
+          if (place.kind !== "cloud") return unreachable(place, token);
+          if (wakeGaveUp) return offline(token, true);
+          log("home: My Cloud's machine is paused by its provider; resuming it");
+          providerPaused = true; wakeIntent ??= "click";
+          if (!(await untilAwake(place, token))) return;
+        } else {
+          if (look === "no") return unreachable(place, token);
+          if (look === "gone") { clearRetry(); connecting = null; return toScreen(goneScreen(place)); }
+          if (look === "asleep" && (otherPlace(place) || wakeGaveUp)) return offline(token, wakeGaveUp);
+          if (look === "asleep") { power.hold(); asleep = true; }
+        }
       }
       // opening never wakes My Cloud: its last-seen chats show, read-only, until the person types, clicks or sends there
       if (asleep && place.kind === "cloud") { clearRetry(); connecting = null; return toScreen(asleepScreen()); }

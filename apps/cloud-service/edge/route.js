@@ -2,6 +2,18 @@
 export const LABEL = /^d[0-9a-f]{20}$/;
 /** a home answering with one of these is not up (yet), whatever the route says */
 export const DOWN = [502, 503, 504, 521, 522, 523];
+/** The provider's own page for a machine it paused (InstaBox, seen 2026-11-27): its text names the sandbox and the provider's CLI,
+ *  and nobody on a dusk cloud should read it. */
+const PAUSE_PAGE = /sandbox offline|instabox resume|only a sandbox that paused itself/i;
+/** whether a home's answer is that page: the home's own answers carry x-dusk-cloud-power or are JSON or the app's pages */
+export async function providerPausePage(response) {
+  if (response.headers.has("x-dusk-cloud-power") || response.headers.has("x-omb-cloud-power")) return false;
+  const type = response.headers.get("content-type") ?? "";
+  if (!DOWN.includes(response.status) && !type.startsWith("text/plain")) return false;
+  if (type.startsWith("application/json")) return false;
+  const text = await response.clone().text().catch(() => "");
+  return PAUSE_PAGE.test(text.slice(0, 2000));
+}
 /** a hung account service must not pin a Worker request or the queue's alarm: it reads as unavailable */
 export const ROUTE_TIMEOUT_MS = 8_000;
 

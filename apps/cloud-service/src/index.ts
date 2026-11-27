@@ -161,7 +161,7 @@ export function createManagedCloud(deps: ManagedCloudDeps): ManagedCloudFactory 
         if (url.pathname === "/v1/managed/edge/wake") {
           const want = deps.edgeToken ? `Bearer ${deps.edgeToken}` : null;
           if (req.method !== "POST" || !want || !digest(String(req.headers.authorization ?? "")).equals(digest(want))) { routes.json(res, 404, { error: "not_found" }); return true; }
-          const reason = url.searchParams.get("reason") === "webhook" ? "webhook" : "client";
+          const asked = url.searchParams.get("reason"), reason = asked === "webhook" || asked === "paused" ? asked : "client";
           const answer = lifecycle.edgeWake(url.searchParams.get("label") ?? "", reason);
           if (answer.status === 202) ctx.kick?.(lifecycle.cloudOfLabel(url.searchParams.get("label") ?? ""));
           res.setHeader("cache-control", "no-store");
@@ -181,7 +181,7 @@ export function createManagedCloud(deps: ManagedCloudDeps): ManagedCloudFactory 
           return { provider: "managed", lastBackupAt: m?.backups.at(-1)?.at ?? null,
             deleteScheduledAt: m?.deleteRequest?.confirmedAt && m.deleteRequest.cancelledAt === null ? m.deleteRequest.executeAfter : null,
             deleteAskedAt: m?.deleteRequest && !m.deleteRequest.confirmedAt && m.deleteRequest.cancelledAt === null && (m.deleteRequest.tokenExpiresAt ?? 0) > ctx.now() ? m.deleteRequest.requestedAt : null,
-            waking: c.status === "sleeping" && (c.wantPower === "on" || m?.wakeStartedAt != null) && egress?.state !== "paused",
+            waking: (c.status === "sleeping" && (c.wantPower === "on" || m?.wakeStartedAt != null) && egress?.state !== "paused") || (c.status === "running" && (m?.pausedSeenAt != null || !!m?.providerPause)),
             stoppedBy: c.status === "sleeping" || c.status === "stopped" ? (m?.sleepReason === "owner" ? "user" : m?.sleepReason ?? null) : null,
             egress: egress && { bytes: egress.bytes, state: egress.state === "alerted" ? "ok" : egress.state, until: egress.until },
             ...(c.status !== "destroyed" ? { destroyAt: retained.earliestAt } : {}) };
@@ -193,6 +193,7 @@ export function createManagedCloud(deps: ManagedCloudDeps): ManagedCloudFactory 
         cancelDelete: c => lifecycle.cancelDelete(c),
         operatorDelete: (c, reason) => lifecycle.operatorDelete(c, reason),
         accountDeleted: (c) => { lifecycle.accountDeleted(c); sweep.soon(); },
+        providerPageSeen: c => lifecycle.providerPageSeen(c, "owner"),
         resizeNow: c => lifecycle.resizeNow(c),
         backupNow: c => lifecycle.backupNow(c),
         noteView: c => lifecycle.noteView(c),

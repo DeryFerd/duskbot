@@ -11,7 +11,7 @@ import { nextRun, plannedRuns, runnableFrom } from "./power/schedule.ts";
 import { StartCapError, type StartKind, type StartLedger } from "./starts.ts";
 import type { SpendInit, SpendLedger } from "./spend.ts";
 import { linkKeys } from "../../dashboard/server/clouds/bootstrap.ts";
-import { ProviderBusyError, ProviderError, ProviderLimitError, type MachineProvider, type MachineImage } from "./provider.ts";
+import { ProviderBusyError, ProviderError, ProviderLimitError, ProviderPausedError, type MachineProvider, type MachineImage } from "./provider.ts";
 import type { ReleaseKey } from "./release-signing.ts";
 import { homeBackupKey, homeVolumeScan, skippedPath, tarWithout, type BackupStore } from "./backups.ts";
 import { STREAM_SKIPPED } from "./home.ts";
@@ -278,7 +278,7 @@ export function createLifecycle(deps: LifecycleDeps) {
       const refusedByProvider = error instanceof ProviderLimitError || error instanceof ProviderBusyError || error instanceof ProviderError && error.status < 500;
       if (deps.spend && refusedByProvider) spendNote(c, extra ? { e: "extra", cents: -(worst + extraCents), why: "refused" } : { e: "settle", cents: worst, void: true });
       if (error instanceof ProviderLimitError) { if (error.info.nextStartAt !== null) deps.starts?.block(error.info.nextStartAt); }
-      else if (!(error instanceof ProviderBusyError) && noteFailure(m, now(), rails)) breakerOpened(c, m);
+      else if (!(error instanceof ProviderBusyError) && !(error instanceof ProviderPausedError) && noteFailure(m, now(), rails)) breakerOpened(c, m);
       deps.save(c);
       throw error;
     }
@@ -290,6 +290,34 @@ export function createLifecycle(deps: LifecycleDeps) {
     deps.starts?.record(c.id, kind);
     noteStart(m, now()); deps.save(c);
     return result;
+  }
+  /** the provider's own pause of the workspace refuses every machine alike: one outage for the whole fleet (the operator is
+   *  mailed once when it opens and once when a resume works again), however many clouds meet it */
+  const PAUSE_OUTAGE = "provider-paused", PAUSE_TITLE = "dusk cloud: the provider paused its machines";
+  let pauseOpen = false;
+  function providerPaused(c: StoredCloud, error: ProviderPausedError) {
+    const b = state(c);
+    b.providerPause = { since: b.providerPause?.since ?? now(), code: error.code, alerted: true };
+    if (!pauseOpen) {
+      pauseOpen = true;
+      console.warn(`managed: the provider refuses to resume machines (${error.code}); its account needs the operator, and clouds are retried every 2 minutes`);
+      deps.alert?.(outageEntry(true, now(), c.id, PAUSE_OUTAGE, PAUSE_TITLE, `the provider refuses to resume machines (${error.code}): its account needs the operator. Clouds are retried every 2 minutes and wake by themselves once it answers.`));
+    }
+    deps.save(c);
+  }
+  function providerResumed(c: StoredCloud) {
+    if (!state(c).providerPause) return;
+    state(c).providerPause = null; pauseOpen = false;
+    deps.alert?.(outageEntry(false, now(), c.id, PAUSE_OUTAGE, PAUSE_TITLE, "a paused machine resumed: the provider answers again."));
+  }
+  /** a client met the provider's own pause page at this home's address while it reads as running */
+  function providerPageSeen(c: StoredCloud, by: "edge" | "owner"): boolean {
+    const b = state(c);
+    if (c.status !== "running" || b.wakeStartedAt !== null) return false;
+    if (b.pausedSeenAt != null && now() - b.pausedSeenAt < 30_000) return true;
+    b.pausedSeenAt = now(); c.wantPower = "on"; c.nextAttemptAt = 0;
+    log(c, "provider_page_seen", by, "paused_page"); deps.save(c);
+    return true;
   }
   const secret = (c: StoredCloud) => deps.unseal(c.bootstrapSecret);
   const keyOf = (c: StoredCloud) => homeBackupKey(deps.backupSecret, c.id);
@@ -977,7 +1005,9 @@ export function createLifecycle(deps: LifecycleDeps) {
         const intent = wanted && c.wakeRequestedAt !== undefined && now() - c.wakeRequestedAt < 5 * MINUTE;
         if (intent) deps.sleepPolicy.observe(m, c.wakeRequestedAt!, b.wakeBy === "webhook" ? "connector" : "user");
         if (intent) b.wakeBy = null;
-        await start(c, intent ? "wake" : due ? "routine" : "wake", () => provider.power(c.serverId!, "on"), due ? plan!.latest : null); b.wakeStartedAt = now(); b.wakeFailureNoted = false; c.wantPower = "on";
+        try { await start(c, intent ? "wake" : due ? "routine" : "wake", () => provider.power(c.serverId!, "on"), due ? plan!.latest : null); }
+        catch (error) { if (error instanceof ProviderPausedError) providerPaused(c, error); throw error; }
+        b.wakeStartedAt = now(); b.wakeFailureNoted = false; c.wantPower = "on";
         log(c, "wake", intent ? "owner" : "reconciler", due ? "routine_due" : "asked");
         b.wokeFor = !intent && due ? "routine" : "person";
         deps.save(c); return;
@@ -994,6 +1024,11 @@ export function createLifecycle(deps: LifecycleDeps) {
     if (!up) return;
     if (egress.paused(c)) return sleepNow(c, "egress", "reconciler");
     if (!c.origin || !b.upstream) publish(c, b.upstream ?? c.origin ?? await provider.origin(c.serverId));
+    if (b.pausedSeenAt != null && b.wakeStartedAt === null && c.status === "running") {
+      // the machine reads as running: if the home answers the page was a stale one, else it goes through the wake's own checks
+      if (await deps.home.healthy(homeOrigin(c), secret(c)).catch(() => false)) { b.pausedSeenAt = null; log(c, "provider_page_cleared", "reconciler", "healthy"); deps.save(c); }
+      else { b.wakeStartedAt = now(); deps.save(c); }
+    }
     if (b.wakeStartedAt !== null || c.status !== "running") {
       if (relayExits(homeVersion(c))) await deps.updates?.asideRelay(c);
       // a resume that kept memory finds the home running (the start command says so); a cold boot starts it
@@ -1015,7 +1050,7 @@ export function createLifecycle(deps: LifecycleDeps) {
       noteHealthy(memory(c)); b.wakeFailureNoted = false;
       await entitle(c, true);
       log(c, "awake", "reconciler", "healthy", { ms: b.wakeStartedAt === null ? null : now() - b.wakeStartedAt });
-      c.status = "running"; c.powerSince = now(); b.wakeStartedAt = null; b.sleptAt = null; b.sleepReason = null; b.lastPowerAt = now(); b.leaseAt = now();
+      c.status = "running"; c.powerSince = now(); b.wakeStartedAt = null; b.pausedSeenAt = null; providerResumed(c); b.sleptAt = null; b.sleepReason = null; b.lastPowerAt = now(); b.leaseAt = now();
       await provider.lease(c.serverId, settings.leaseSeconds);
       deps.save(c);
       await deps.computer?.check(c, "wake", now());
@@ -1125,21 +1160,23 @@ export function createLifecycle(deps: LifecycleDeps) {
     edgeRoute(value: string): { upstream: string; awake: boolean; wakeable: boolean } | null {
       const c = edgeCloud(value), upstream = c?.managed?.upstream;
       if (!c || !upstream) return null;
-      return { upstream, awake: c.status === "running" && state(c).wakeStartedAt === null, wakeable: edgeWakeable(c) };
+      return { upstream, awake: c.status === "running" && state(c).wakeStartedAt === null && state(c).pausedSeenAt == null && !state(c).providerPause, wakeable: edgeWakeable(c) };
     },
     /** a request at the edge for a sleeping home (a webhook, the app): woken like the owner's own wake, under its own hourly cap */
-    edgeWake(value: string, reason: "webhook" | "client"): { ok: boolean; status: number } {
+    edgeWake(value: string, reason: "webhook" | "client" | "paused"): { ok: boolean; status: number } {
       const c = edgeCloud(value);
       if (!c || !edgeWakeable(c)) return { ok: false, status: 409 };
-      if (c.status === "running" && state(c).wakeStartedAt === null) return { ok: true, status: 200 };
+      if (reason === "paused" && providerPageSeen(c, "edge")) return { ok: true, status: 202 };
+      if (c.status === "running" && state(c).wakeStartedAt === null && state(c).pausedSeenAt == null && !state(c).providerPause) return { ok: true, status: 200 };
       const b = state(c), recent = (b.edgeWakes ?? []).filter(t => t > now() - HOUR);
       // anyone can reach a public name: each wake is a provider start, so strangers get a small budget, never an open tap
       if (c.wantPower !== "on" && recent.length >= settings.edgeWakesPerHour) { b.edgeWakes = recent; deps.save(c); return { ok: false, status: 429 }; }
       if (c.wantPower !== "on") { recent.push(now()); log(c, "wake_asked", "edge", reason); }
-      b.edgeWakes = recent; b.wakeBy = reason; c.wantPower = "on"; c.wakeRequestedAt = now(); c.nextAttemptAt = 0; deps.save(c);
+      b.edgeWakes = recent; b.wakeBy = reason === "paused" ? "client" : reason; c.wantPower = "on"; c.wakeRequestedAt = now(); c.nextAttemptAt = 0; deps.save(c);
       return { ok: true, status: 202 };
     },
     reconcile,
+    providerPageSeen,
     /** after each pass: any cloud flagged for a day awake over half of it without bot work gets one ops alert for all of them */
     dailyCheck(clouds: readonly StoredCloud[]) {
       const at = now(), flagged = clouds.filter(c => c.managed && (state(c).flaggedDay ?? null) !== null);
@@ -1237,6 +1274,8 @@ export function createLifecycle(deps: LifecycleDeps) {
       const b = state(c);
       // the rails held a start back, or the pool is full: waiting, not failing
       if (error instanceof StartHeldError || error instanceof StartCapError) return Math.max(now() + 5_000, error.retryAt);
+      // the provider's own pause is no failure of this home: asked again every 2 minutes, never counted
+      if (error instanceof ProviderPausedError) return now() + 2 * MINUTE;
       if (!(error instanceof ProviderLimitError)) {
         if (b.limitStreak) { b.limitStreak = 0; deps.save(c); }
         // a provider outage during a first setup waits it out (30 s doubling to 15 minutes) for up to SETUP_PATIENCE_MS

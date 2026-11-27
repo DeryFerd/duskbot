@@ -59,7 +59,7 @@ export function createAdminRoutes(ctx: BillingContext) {
   }
   function managedPower(c: StoredCloud) {
     if (!c.backend || !c.origin || !["running", "sleeping"].includes(c.status) || c.ended) return null;
-    const state = c.status === "running" ? "awake" : c.wantPower === "on" ? "waking" : "asleep";
+    const state = c.status === "running" ? (clouds.view(c).waking ? "waking" : "awake") : c.wantPower === "on" ? "waking" : "asleep";
     return { state, since: c.powerSince, sleeps: true as const };
   }
   function cloudEntry(account: AccountRef, c: StoredCloud) {
@@ -204,6 +204,8 @@ export function createAdminRoutes(ctx: BillingContext) {
           const intent = optionalText(data.intent);
           if (intent !== undefined && !WAKE_INTENTS.includes(intent) && cloud.status !== "running") return send({ state: "asleep", wakesOn: "intent" });
           if (["stopped", "sleeping"].includes(cloud.status)) await clouds.power(account.id, cloud.id, "on");
+          // the app reached its home's address and met the provider's own pause page: the cloud reads as running, but its machine is paused
+          else if (data.paused === true && cloud.status === "running" && cloud.backend && clouds.managed?.providerPageSeen?.(cloud)) { await clouds.reconcile(); return send({ state: "waking" }); }
           return send({ state: cloud.status === "running" ? "awake" : "waking" });
         }
         if (cloud.backend && clouds.managed) { clouds.managed.resizeNow(cloud); await clouds.reconcile(); return send({ state: clouds.managed.resizing(cloud) ? "restarting" : "current" }); }

@@ -36,3 +36,5 @@ export declare function openSleepingCloud(options: {
   setTimer?: (work: () => void, ms: number) => unknown;
   clearTimer?: (timer: unknown) => void;
 }): Promise<boolean>;
+export declare const PROVIDER_PAUSE_PAGE: RegExp;
+export declare function providerPausePage(text: unknown): boolean;
