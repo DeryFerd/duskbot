@@ -184,7 +184,10 @@ Audit actions: `update_applied`, `update_settled`, `update_rolled_back`, `update
 A run that failed for want of its bot computer is never counted for or against the version on trial: the home marks
 one whose error is the computer-unreachable sentence or a raw docker transport error (`infra`), and the reconciler
 checks the machine when a trial run fails; if that check found docker or the gate not answering, the failed runs are
-excused (`update_runs_excused`). Nothing installs on a home whose computer is down. A `runs_failed` rollback whose
+excused (`update_runs_excused`). Nothing installs on a home whose computer is down. A computer that answered before an
+install and is still down after it, its gate and docker restarted, fails the release's self-test
+(`update_computer_down`, then a `self_test` rollback): the package carries the gate. When the version before does not
+bring it back either, the release gets its version back (`update_forgiven`, reason `computer_down`). A `runs_failed` rollback whose
 trial saw the computer down gives its version back once (`update_forgiven`), as does, once per cloud, a `runs_failed`
 rollback between 2026-11-21 and 2026-11-28 (0.2.26 and 0.2.27, blamed while gates on homes set up before 2026-11-19
 were wedged).

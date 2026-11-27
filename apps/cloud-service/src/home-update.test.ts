@@ -227,6 +227,37 @@ describe("staged home updates", () => {
     expect(t.f.audit.entries(t.c.id).map(e => e.action)).toContain("computer_ok");
   });
 
+  it("rolls back a release that takes down a computer which answered before it, and keeps it failed here", async () => {
+    const t = await updating();
+    t.f.power.busy = [];
+    await t.pass();
+    t.f.api.computerAnswers("down gate");
+    t.offer(release("1.1.0"));
+    await t.pass();
+    expect(t.c.managed!.installed).toBe(sha("1.0.0"));
+    expect(t.actions()).toEqual(["update_applied:idle", "update_computer_down:after_update", "update_rolled_back:self_test"]);
+    expect(t.c.managed!.update!.guard.failed).toContain("1.1.0");
+    t.f.advance(COMPUTER_CHECK_MS);
+    await t.pass(); await t.pass();
+    expect(t.commands().filter(x => x.includes("omb-home install") && x.includes(sha("1.1.0")))).toHaveLength(1);
+    expect(t.actions().at(-1)).toBe("update_refused:failed_here");
+  });
+
+  it("gives a release back when the computer stays down on the version before too, and installs it again once it answers", async () => {
+    const t = await updating();
+    t.f.power.busy = [];
+    await t.pass();
+    t.f.api.computerAnswers("down gate", "down gate");
+    t.offer(release("1.1.0"));
+    await t.pass();
+    expect(t.c.managed!.installed).toBe(sha("1.0.0"));
+    expect(t.actions()).toEqual(["update_applied:idle", "update_computer_down:after_update", "update_rolled_back:self_test", "update_forgiven:computer_down"]);
+    expect(t.c.managed!.update!.guard.failed).not.toContain("1.1.0");
+    t.f.advance(COMPUTER_CHECK_MS);
+    await t.pass();
+    expect(t.c.managed!.installed).toBe(sha("1.1.0"));
+  });
+
   it("gives a release rolled back on runs_failed while the gates were down (2026-11-21 on) back once, with the other release of that incident", async () => {
     const t = await updating();
     t.f.power.busy = ["turn"];
@@ -307,7 +338,7 @@ describe("staged home updates", () => {
     expect(t.actions().at(-1)).toBe("update_refused:invalid");
     t.offer(release("2.0.0"));
     await t.pass();
-    expect(t.commands().at(-2)).toMatch(/omb-home install \S+ [a-f0-9]{64} r1\.\S+ 1\.0\.0$/);
+    expect(t.commands().filter(x => !x.includes(COMPUTER_CHECK_MARK)).at(-2)).toMatch(/omb-home install \S+ [a-f0-9]{64} r1\.\S+ 1\.0\.0$/);
   });
 
   it("offers a canary release only to the clouds it names, and holds every install while the policy is paused", async () => {
