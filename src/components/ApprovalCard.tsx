@@ -12,7 +12,7 @@ import { niceDate, niceTime, scheduleLabel } from "@/lib/schedule-label";
 import { cronScheduleLabel } from "../../shared/cron-label";
 import { spellOutHiddenCharacters } from "../../shared/hidden-characters";
 import { PROFILE_REQUEST_FIELDS, type ProfileRequestField } from "../../shared/profile-request";
-import type { RoutineRequestSchedule } from "../../shared/routine-request";
+import { routineSetsScript, type RoutineRequestSchedule } from "../../shared/routine-request";
 import type { SkillShareRecord } from "../../shared/skill-request";
 import { cardAutomation } from "@/lib/automations";
 import { yourComputerAsk } from "@/lib/your-computer";
@@ -82,8 +82,9 @@ const PROFILE_FIELD_LABEL: Record<ProfileRequestField, LocaleKey> = {
   voiceNotes: "approval.applied.field.voiceNotes",
 };
 
-/** A routine card no one answered is from before Triggers v2 applied changes on their own: nothing can confirm it now. */
-const staleRoutineCard = (card: OptionCardData) => Boolean(card.routineRequest && !card.answered);
+/** A routine card no one answered is from before Triggers v2 applied changes on their own: nothing can confirm it now.
+ * A script check is the exception, its card waits on the person. */
+const staleRoutineCard = (card: OptionCardData) => Boolean(card.routineRequest && !card.answered && !routineSetsScript(card.routineRequest.operation));
 
 /** The card brings its own question and answer words (its title and first option): team setup and MCP server changes. */
 export const titledCard = (card: OptionCardData | undefined) => Boolean(card?.teamSetupRequest || card?.mcpRequest);

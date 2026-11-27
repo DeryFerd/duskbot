@@ -13,6 +13,7 @@ import { AskDetail, CARD_BUTTON_MD, CardTitlebar, cardPrimary, cardSecondary, ca
 import { BotAvatar } from "./Avatar";
 import { outboundSummary } from "@/lib/approval-summary";
 import { reviewedSkillSha256 } from "../../shared/skill-request";
+import { routineSetsScript } from "../../shared/routine-request";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { useInboxOrigin } from "./InboxLine";
 import { yourComputerAsk } from "@/lib/your-computer";
@@ -52,8 +53,10 @@ export function isProfileApproval(pending: Pending): boolean {
 
 export function pendingApprovals(messages: Message[]): Pending[] {
   return messages
-    // A routine card left open from before Triggers v2 can't be confirmed: trigger changes apply on their own.
-    .filter((m) => m.kind === "options" && m.card?.requestId && m.card.tool && !m.card.answered && !m.card.dismissed && !m.card.expired && !m.card.routineRequest)
+    // A routine card left open from before Triggers v2 can't be confirmed: trigger changes apply on their own. A script
+    // check still waits on the person's Confirm.
+    .filter((m) => m.kind === "options" && m.card?.requestId && m.card.tool && !m.card.answered && !m.card.dismissed && !m.card.expired
+      && (!m.card.routineRequest || routineSetsScript(m.card.routineRequest.operation)))
     .map((m) => ({
       message: m,
       requestId: m.card!.requestId!,

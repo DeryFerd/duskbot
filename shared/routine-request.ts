@@ -103,6 +103,13 @@ export type RoutineRequestOperation =
   | { action: "run_now"; routineId: string; expectedUpdatedAt: number; forBot?: RoutineRequestTargetBot; test?: true }
   | { action: "delete"; routineId: string; expectedUpdatedAt: number; forBot?: RoutineRequestTargetBot };
 
+/** A change that sets a script check: the one routine change that still waits on the person's card (Confirm or Cancel),
+ * since the check runs a command with no AI. Every other routine change applies on its own. */
+export function routineSetsScript(operation: RoutineRequestOperation): boolean {
+  const probe = operation.action === "create" ? operation.routine.probe : operation.action === "update" ? operation.changes.probe : undefined;
+  return probe?.kind === "script";
+}
+
 /** A routine as it stood before a change applied without a person, so Undo
  * can put it back. Room goals keep their room; attachments are not kept, so
  * a routine that has any is not offered an Undo for its update or delete. */
