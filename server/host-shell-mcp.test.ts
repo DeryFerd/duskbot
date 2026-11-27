@@ -140,7 +140,8 @@ describe("find_files", () => {
     expect(findInvocations("invoice", { content: true, folder: "/Users/a/Documents", limit: 50, platform: "darwin", home: "/Users/a" })[0])
       .toEqual({ file: "mdfind", args: ["-onlyin", "/Users/a/Documents", "invoice"], index: true });
   });
-  it("walks the home folder when Spotlight finds nothing, with iCloud Drive and every word of the name", async () => {
+  // the walk runs the real POSIX find, which Windows does not have (its find.exe searches text)
+  it.skipIf(process.platform === "win32")("walks the home folder when Spotlight finds nothing, with iCloud Drive and every word of the name", async () => {
     const home = mkdtempSync(join(tmpdir(), "find-home-"));
     const put = (path: string, body: string) => { mkdirSync(dirname(join(home, path)), { recursive: true }); writeFileSync(join(home, path), body); };
     put("Desktop/old stuff/scans 2024/IMG_4471 halyard paddle club card.txt", "member no. HPC-20417");
