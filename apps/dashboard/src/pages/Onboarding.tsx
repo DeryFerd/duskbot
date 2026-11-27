@@ -17,7 +17,7 @@ import { Button, cx, Skeleton } from "../ui/kit";
 import { Mascot, type MascotHandle } from "../ui/Mascot";
 import type { SceneHandle, SceneMood } from "../ui/Scene";
 import { points } from "./Billing";
-import { CHECKOUT_SOON, trialAction, trialTerms } from "./cloud-offer";
+import { CHECKOUT_SOON, trialAction } from "./cloud-offer";
 import { track, trackOnboardingStep } from "../lib/analytics";
 import { per, planSelection, type PaidPlan } from "./plan-sheet";
 import { fromApp } from "../lib/from-app";
@@ -268,7 +268,6 @@ export function Onboarding() {
 
   const chosen = catalog ? bundleOf(catalog, plan) : null;
   const price = chosen && catalog ? per(chosen.monthly, interval, catalog) : null;
-  const terms = trialTerms(catalog, price ? `${price.amount}${price.unit}` : null);
   const mood: SceneMood = busy ? "thinking" : focused ? "typing" : "idle";
   const back = (to: Step) => <button type="button" onClick={() => go(to)} disabled={busy !== null} className="text-link -ms-2 inline-flex h-11 items-center gap-1.5 rounded-full px-2 text-14 disabled:opacity-50"><ArrowLeft size={15} strokeWidth={1.75} aria-hidden />back</button>;
   const big = "w-full !h-12 !text-15";
@@ -298,7 +297,6 @@ export function Onboarding() {
               <button type="button" onClick={() => go("plan")} className="text-link h-11 shrink-0 rounded-full px-1 text-14">change</button>
             </div>
           )}
-          {direct && terms && <p data-trial-terms="" className="mt-2.5 px-1 text-13 leading-[1.45] text-ink-3">{terms}</p>}
           {error && <p id="onb-error" role="alert" className="mt-2.5 text-14 text-bad">{error}</p>}
           <Button type="submit" variant="primary" className={cx("mt-3", big)} disabled={busy !== null || (direct && !catalog)}>{busy ? <Busy>{direct ? "opening checkout" : "saving"}</Busy> : direct ? trialAction(catalog) ?? "continue to checkout" : "continue"}</Button>
         </form>
@@ -307,7 +305,6 @@ export function Onboarding() {
           <h1 className="t-title">where should your bots live?</h1>
           <p className="mb-6 mt-3 text-16 text-ink-2">on dusk cloud they keep working, even when your computer is off.</p>
           {catalog ? <PlanStep catalog={catalog} home={home} setHome={(h) => { setHome(h); setError(null); }} plan={plan} setPlan={(p) => { setPlan(p); setError(null); }} /> : <div className="flex flex-col gap-2" aria-busy="true"><Skeleton className="h-[300px] !rounded-[22px]" /><Skeleton className="h-[72px] !rounded-[18px]" /></div>}
-          {home === "cloud" && terms && <p data-trial-terms="" className="mt-3 px-1 text-13 leading-[1.45] text-ink-3">{terms}</p>}
           {error && <p role="alert" className="mt-3 text-14 text-bad">{error}</p>}
           <Button variant="primary" className={cx("mt-5", big)} onClick={() => void choose(home)} disabled={busy !== null || !catalog}>{busy === "cloud" ? <Busy>opening checkout</Busy> : busy === "done" ? <Busy>opening</Busy> : home === "free" ? "continue with free" : trialAction(catalog) ?? (price ? `continue to checkout, ${price.amount}${price.unit}` : "continue to checkout")}</Button>
           <div className="mt-2 flex items-center justify-between">{back("name")}{home === "cloud" && <span className="text-14 text-ink-3">cancel any time</span>}</div>

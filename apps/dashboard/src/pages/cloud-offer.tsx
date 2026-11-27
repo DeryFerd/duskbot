@@ -7,7 +7,6 @@ import poster from "../art/wide-layers.webp";
 import { useCloud } from "../data/cloud";
 import type { CheckoutSource, PlanCatalog } from "../data/contracts";
 import { bundleOf, dollars } from "../data/pricing";
-import { shortDate } from "../lib/format";
 import { useSession } from "../data/session";
 import { Button, ButtonLink, cx } from "../ui/kit";
 import { AnimatePresence } from "../ui/motion";
@@ -37,13 +36,6 @@ export const CHECKOUT_SOON = "paid plans open soon. your account is ready, and w
 
 /** the checkout button while a first plan starts free, else null */
 export const trialAction = (catalog: Pick<PlanCatalog, "trialDays"> | null) => (catalog?.trialDays ? `start ${catalog.trialDays}-day free trial` : null);
-/** what a trial checkout charges and when, said before the payment page opens: that page asks for a card and shows the
- * full price with tax, so the free days and the first charge's date are spelled out first */
-export const trialTerms = (catalog: Pick<PlanCatalog, "trialDays"> | null, price: string | null, now = Date.now()) => {
-  const days = catalog?.trialDays;
-  if (!days) return null;
-  return `checkout asks for a card, but nothing is charged today. after ${days} free ${days === 1 ? "day" : "days"}, it's ${price ?? "the plan's price"} + tax where applicable from ${shortDate(now + days * 86_400_000).toLowerCase()}, unless you cancel before then.`;
-};
 export const checkoutDone = (catalog: Pick<PlanCatalog, "trialDays"> | null) => (catalog?.trialDays ? "your free trial started. your dusk cloud is being set up." : "paid. your dusk cloud is being set up.");
 
 /** checkout for a plan in one click: monthly, the first region, personal use; the plans page has every option */
@@ -80,8 +72,6 @@ export const monthlyOf = (catalog: PlanCatalog | null, plan: PaidPlan) => {
 export function CloudHero({ source = "dash_home" }: { source?: CheckoutSource }) {
   const { catalog } = useCloud();
   const { busy, error, buy } = useQuickCheckout(source);
-  const monthly = monthlyOf(catalog, "starter");
-  const terms = trialTerms(catalog, monthly && `${monthly}/mo`);
   return (
     <section className="enter relative isolate overflow-hidden rounded-card bg-[#3fbdfb]" aria-labelledby="cloud-hero-title">
       <img src={poster} alt="" className="absolute inset-0 -z-10 size-full object-cover object-[center_80%]" draggable={false} />
@@ -98,7 +88,6 @@ export function CloudHero({ source = "dash_home" }: { source?: CheckoutSource })
             </Button>
             <ButtonLink to="/billing">compare plans</ButtonLink>
           </div>
-          {terms && <p data-trial-terms="" className="mt-3 text-13 leading-[1.45] text-ink-3">{terms}</p>}
         </div>
         <div className="relative flex min-h-[220px] origin-bottom items-end justify-center gap-3 pb-3 max-md:-mb-8 max-md:min-h-[150px] max-md:scale-[0.7]" aria-hidden>
           <img src={computer} alt="" width={520} height={599} className="w-[150px] drop-shadow-[0_10px_0_rgb(19_19_22/0.08)]" draggable={false} />

@@ -9,13 +9,12 @@ import { fixtureCatalog } from "../data/fixtures";
 const state = vi.hoisted(() => ({
   query: "step=plan",
   os: "windows" as string,
-  trialDays: 0,
   moved: [] as string[],
   finish: vi.fn(async (_home?: string) => {}),
   checkout: vi.fn(async () => true),
 }));
 vi.mock("../data/cloud", () => ({
-  useCloud: () => ({ account: { profile: { name: "Sam", onboarded: false } }, catalog: { ...fixtureCatalog, checkoutOpen: true, ...(state.trialDays ? { trialDays: state.trialDays } : {}) }, billing: null, clouds: [],
+  useCloud: () => ({ account: { profile: { name: "Sam", onboarded: false } }, catalog: { ...fixtureCatalog, checkoutOpen: true }, billing: null, clouds: [],
     checkout: state.checkout, updateProfile: async () => {}, finishOnboarding: state.finish }),
 }));
 vi.mock("../data/session", () => ({ useSession: () => ({ account: { id: "a", email: "sam@qa.dusk.test" }, setAccount: () => {}, toast: () => {} }) }));
@@ -28,7 +27,7 @@ vi.mock("../lib/downloads", async (actual) => ({ ...(await actual<typeof import(
 vi.mock("../ui/Digits", () => ({ StretchPill: () => null }));
 
 const roots: Root[] = [];
-afterEach(async () => { for (const root of roots.splice(0)) await act(async () => root.unmount()); document.body.innerHTML = ""; state.moved = []; state.query = "step=plan"; state.trialDays = 0; state.os = "windows"; sessionStorage.clear(); vi.clearAllMocks(); vi.useRealTimers(); });
+afterEach(async () => { for (const root of roots.splice(0)) await act(async () => root.unmount()); document.body.innerHTML = ""; state.moved = []; state.query = "step=plan"; state.os = "windows"; sessionStorage.clear(); vi.clearAllMocks(); vi.useRealTimers(); });
 
 async function open() {
   const { Onboarding } = await import("./Onboarding");
@@ -63,34 +62,6 @@ test("on the website alone, this computer still goes on to getting the app", asy
   await act(async () => press(host, "continue with free").click());
   expect(state.finish).not.toHaveBeenCalled();
   expect(state.moved.at(-1)).toContain("step=app");
-});
-
-// the payment page asks for a card and shows the full price with tax: before it opens, the trial says what is charged and when
-test("a trial says before checkout that nothing is charged today, then the price and the date it starts", async () => {
-  vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 10, 27, 12) });
-  state.trialDays = 3;
-  const host = await open();
-  expect(press(host, "start 3-day free trial")).toBeTruthy();
-  const terms = host.querySelector("[data-trial-terms]")?.textContent ?? "";
-  expect(terms).toContain("nothing is charged today");
-  expect(terms).toContain("$20/mo + tax where applicable from 30 nov");
-  await act(async () => host.querySelector<HTMLInputElement>("#home-free")!.click());
-  expect(host.querySelector("[data-trial-terms]")).toBeNull();
-});
-
-test("a plan picked on the site says the same on the way straight to checkout", async () => {
-  vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 10, 27, 12) });
-  state.trialDays = 3;
-  state.query = "step=name&plan=plus";
-  const host = await open();
-  expect(press(host, "start 3-day free trial")).toBeTruthy();
-  expect(host.querySelector("[data-trial-terms]")?.textContent).toContain("nothing is charged today. after 3 free days, it's $20/mo + tax where applicable from 30 nov");
-});
-
-test("without a trial the plans keep their plain price and no trial line", async () => {
-  const host = await open();
-  expect(host.querySelector("[data-trial-terms]")).toBeNull();
-  expect(press(host, "continue to checkout, $20/mo")).toBeTruthy();
 });
 
 test("signed up here, the app step offers this computer's download as the one big button and says what to do once it is down", async () => {
