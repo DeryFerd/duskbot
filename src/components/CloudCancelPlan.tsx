@@ -64,19 +64,6 @@ export function stopsLine(renewal: CloudRenewal): string {
   return `${stops} ${files}`;
 }
 
-/** what stops with the plan: the team's cloud, the bots while the Mac sleeps, the routines */
-export function lossLines(renewal: CloudRenewal): string[] {
-  return [renewal.team ? t("cloudCancel.teamStops", { team: renewal.team }) : null, t("cloudCancel.lossBots"), t("cloudCancel.lossRoutines")].filter((line): line is string => line !== null);
-}
-
-/** when the files go, from the real end of the period and the days they are kept */
-export function filesLine(renewal: CloudRenewal): string | null {
-  const at = endsAt(renewal), kept = renewal.keptDays;
-  if (kept === null) return null;
-  if (kept <= 0) return t("cloudCancel.lossFilesNone");
-  return at ? t("cloudCancel.lossFilesUntil", { date: day(at + kept * DAY_MS) }) : null;
-}
-
 /** what the bots used of the plan this month, one line a meter, the ones that moved */
 function usedLines(usage: CloudUsage | null | undefined): string[] {
   return (usage?.meters ?? []).filter(meter => meter.kind !== "storage" && meter.used > 0).map(meter => `${meterLabel(meter.kind)}: ${meterAmounts(meter)}`);
@@ -124,15 +111,18 @@ export function lossRows(renewal: CloudRenewal, recap: AccountRecap | null): Arr
 }
 
 type Screen = "recap" | "why" | "offer" | "losses" | "confirm";
-/** the screens a reason walks through; switching and prefer not to say have no offer of their own, "what you'd lose" is theirs */
+/** switching and prefer not to say have no offer of their own: "what you'd lose" is theirs */
+type OfferReason = Exclude<Answer, "switching" | "skip">;
+const hasOffer = (answer: Answer): answer is OfferReason => answer !== "switching" && answer !== "skip";
+/** the screens a reason walks through */
 export function stepsFor(answer: Answer | null): Screen[] {
-  return ["recap", "why", ...(answer === "switching" || answer === "skip" ? [] : ["offer" as const]), "losses", "confirm"];
+  return ["recap", "why", ...(answer && !hasOffer(answer) ? [] : ["offer" as const]), "losses", "confirm"];
 }
 
 type OfferView = { offer: CloudRetentionOffer; title: LocaleKey; body?: string; lines?: string[]; action: { label: LocaleKey; outcome: CloudRetentionStep["outcome"]; run?: () => Promise<unknown> } };
 
 /** The one offer for the reason, only what this app can really do. */
-export function offerFor(answer: Answer, renewal: CloudRenewal, offers: CloudCancelOffers, note: string): OfferView {
+export function offerFor(answer: OfferReason, renewal: CloudRenewal, offers: CloudCancelOffers, note: string): OfferView {
   const keep = { label: "cloudCancel.keep", outcome: "kept" } as const;
   switch (answer) {
     case "price": return offers.cheaper && offers.openPlans && !renewal.trial
@@ -151,7 +141,6 @@ export function offerFor(answer: Answer, renewal: CloudRenewal, offers: CloudCan
     }
     case "broken": return { offer: "help", title: "cloudCancel.offer.brokenTitle", body: t("cloudCancel.offer.broken"),
       action: { label: "cloudCancel.offer.openHelp", outcome: "helped", ...(offers.openLink ? { run: () => offers.openLink!(CANCEL_HELP_URL) } : {}) } };
-    case "switching": case "skip": return { offer: "losses", title: "cloudCancel.offer.lossesTitle", lines: [...lossLines(renewal), ...[filesLine(renewal)].filter((line): line is string => line !== null)], action: keep };
   }
 }
 
@@ -206,8 +195,8 @@ export function CloudCancelSheet({ renewal, actions, offers = {}, onClose }: { r
     void loadRecap().catch(() => null).then(value => { if (alive) setRecap({ value: value ?? null, loading: false }); });
     return () => { alive = false; };
   }, [loadRecap]);
-  const offer = picked && picked !== "switching" && picked !== "skip" ? offerFor(picked, renewal, offers, note) : null;
-  const offerKind: CloudRetentionOffer | undefined = picked === "switching" || picked === "skip" ? "losses" : offer?.offer;
+  const offer = picked && hasOffer(picked) ? offerFor(picked, renewal, offers, note) : null;
+  const offerKind: CloudRetentionOffer | undefined = picked && !hasOffer(picked) ? "losses" : offer?.offer;
   const steps = stepsFor(picked);
   const log = (step: CloudRetentionStep["step"], outcome: CloudRetentionStep["outcome"]) => {
     const said = note.trim();
@@ -322,7 +311,7 @@ export function CloudCancelSheet({ renewal, actions, offers = {}, onClose }: { r
                 <SceneSprite bot={top} size={26} state="happy" />
                 <span>{t(top.replies === 1 ? "cloudCancel.topBot.one" : "cloudCancel.topBot", { bot: top.name, count: count(top.replies) })}</span>
               </p>}
-              <div className="mt-6 flex flex-wrap justify-end gap-2">{keepButton}{onward}</div>
+              <div className="mt-6 flex flex-wrap justify-end gap-2">{onward}{keepButton}</div>
             </>}
             {state.step === "why" && <>
               <fieldset className="mt-1" aria-describedby={missing ? `${named}-missing` : undefined}>
@@ -339,15 +328,15 @@ export function CloudCancelSheet({ renewal, actions, offers = {}, onClose }: { r
               {missing && <p id={`${named}-missing`} role="alert" className="mt-2 text-[13px] text-danger">{t("cloudCancel.pickOne")}</p>}
               <label className="mt-4 block text-[13px] text-ink">{t("cloudCancel.note")} <span className="text-ink-secondary">{t("cloudCancel.optional")}</span>
                 <textarea rows={2} maxLength={BOX_MAX} value={note} onChange={event => setNote(event.target.value)} className={box} /></label>
-              <div className="mt-6 flex flex-wrap justify-end gap-2">{keepButton}{onward}</div>
+              <div className="mt-6 flex flex-wrap justify-end gap-2">{onward}{keepButton}</div>
             </>}
             {state.step === "offer" && offer && <>
               {offer.body && <p className={body}>{offer.body}</p>}
               {offer.lines && <ul className="mt-3 flex flex-col gap-1.5">{offer.lines.map(line => <li key={line} className="rounded-lg bg-inset px-3 py-2 text-[13px] text-ink">{line}</li>)}</ul>}
               <div className="mt-6 flex flex-wrap justify-end gap-2">
+                {onward}
                 <button type="button" data-cloud-cancel-first data-cloud-cancel-take className="ui-button ui-button-primary gap-1.5" onClick={take}>
                   {t(offer.action.label)}{offer.action.run && <ArrowUpRight size={13} aria-hidden="true" />}</button>
-                {onward}
               </div>
             </>}
             {state.step === "losses" && <>
@@ -358,15 +347,15 @@ export function CloudCancelSheet({ renewal, actions, offers = {}, onClose }: { r
                   <span className="min-w-0">{row.text}</span>
                 </li>)}
               </ul>
-              <div className="mt-6 flex flex-wrap justify-end gap-2">{keepButton}{onward}</div>
+              <div className="mt-6 flex flex-wrap justify-end gap-2">{onward}{keepButton}</div>
             </>}
             {state.step === "confirm" && <>
               <p className={body}>{at ? t(renewal.trial ? "cloudCancel.confirmTrialOn" : "cloudCancel.confirmPlanOn", { date: day(at) }) : t("cloudCancel.accessNoDate")}</p>
               {alert}
               <div className="mt-6 flex flex-wrap justify-end gap-2">
-                {keepButton}
                 <button type="button" data-cloud-cancel-confirm className="ui-button border-transparent bg-danger text-white hover:brightness-110" disabled={busy} onClick={cancel}>
                   {t(busy ? "cloudCancel.cancelling" : "cloudCancel.cancelSubscription")}</button>
+                {keepButton}
               </div>
             </>}
             {state.step === "done" && <>

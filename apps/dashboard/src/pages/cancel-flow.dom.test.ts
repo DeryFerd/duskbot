@@ -66,6 +66,8 @@ const type = async (value: string) => {
 };
 const dots = () => document.querySelector("[role=dialog] [data-dots]")?.getAttribute("data-dots");
 const onward = () => click("continue to cancel");
+/** the dialog's own buttons, left to right, without close */
+const footer = () => [...document.querySelectorAll("[role=dialog] button")].filter((b) => !b.hasAttribute("data-close")).slice(-2).map((b) => b.textContent);
 /** past the recap to the reason step */
 const toReason = async () => { expect(title()).toBe("look what you and your bots did"); await onward(); expect(title()).toBe("why are you leaving?"); };
 /** the reason step, a reason picked, then on */
@@ -80,6 +82,7 @@ test("the first screen is a look back in the person's own numbers, with the top 
   expect(stats).toEqual({ replies: "replies from your bots1,804", days: "days you worked together140", streak: "days in a row, your best streak23", routines: "routines on a schedule3", apps: "apps connected5", bots: "bots you made2" });
   expect(document.querySelector("[data-top-bot]")?.textContent).toBe("Nova did the most: 1,120 replies.");
   expect(document.querySelector("[data-cancel-scene=day]")).toBeTruthy();
+  expect(footer()).toEqual(["continue to cancel", "keep my plan"]);
   await onward();
   expect(title()).toBe("why are you leaving?");
   expect(spies.retentionStep).not.toHaveBeenCalled();
@@ -179,6 +182,7 @@ test("too expensive: one offer, the discount, which can be taken", async () => {
   await toOffer("it's too expensive");
   expect(title()).toBe("keep it for less");
   expect(dots()).toBe("3/5");
+  expect(footer()).toEqual(["continue to cancel", "keep my plan"]);
   expect(text()).toContain("30% off your next 3 months");
   expect(button("switch to plus")).toBeNull();
   await click("take 30% off");
@@ -261,6 +265,7 @@ test("switching: what you'd lose, confirm and cancel with the survey; done shows
   expect(text()).toContain("your plan ends on 13 Dec 2026, not today");
   expect(text()).toContain("your dusk cloud's files are kept until 12 Jan 2027");
   expect(button("keep my plan")?.className).toContain("bg-primary");
+  expect(footer()).toEqual(["cancel subscription", "keep my plan"]);
   await click("cancel subscription");
   expect(spies.cancel).toHaveBeenCalledWith({ answer: "switching", offer: "losses", improve: "going elsewhere" });
   expect(title()).toBe("your plan is cancelled");

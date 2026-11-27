@@ -46,6 +46,8 @@ const write = async (value: string) => {
 const next = () => click(sheet()!.querySelector("[data-cloud-cancel-next]"));
 const open = () => click(button("Cancel subscription"));
 const choose = async (label: string) => { await click(radio(label)); await next(); };
+/** the sheet's own buttons at its foot, left to right */
+const foot = () => [...sheet()!.querySelectorAll("button")].filter(item => item.getAttribute("aria-label") !== "Close").slice(-2).map(item => item.textContent);
 const dots = () => sheet()?.querySelector("[data-cloud-cancel-dots]")?.getAttribute("data-cloud-cancel-dots");
 /** past the recap to Why are you leaving? */
 const toWhy = async () => { expect(step()).toBe("recap"); await next(); expect(step()).toBe("why"); };
@@ -78,6 +80,7 @@ describe("the cancel sheet", () => {
     expect(sheet()!.querySelector("[data-cancel-scene='day']")).toBeTruthy();
     expect(document.activeElement?.textContent).toBe("Keep my plan");
     expect(sheet()!.querySelector("[data-cloud-cancel-next]")?.textContent).toBe("Continue to cancel");
+    expect(foot()).toEqual(["Continue to cancel", "Keep my plan"]);
     await next();
     expect([step(), title(), dots()]).toEqual(["why", "Why are you leaving?", "2/5"]);
     expect(actions.retention).not.toHaveBeenCalled();
@@ -96,7 +99,7 @@ describe("the cancel sheet", () => {
     expect(actions.retention).toHaveBeenLastCalledWith({ reason: "price", step: "reason", outcome: "shown", note: "Too much for a side project." });
     expect([step(), title(), dots()]).toEqual(["offer", "Try a smaller plan", "3/5"]);
     expect(text()).toContain("Plus costs less and keeps your bots running on dusk cloud.");
-    expect(button("See plans")).toBeTruthy();
+    expect(foot()).toEqual(["Continue to cancel", "See plans"]);
     await next();
     expect(actions.retention).toHaveBeenLastCalledWith({ reason: "price", step: "help", outcome: "shown", offer: "downgrade", note: "Too much for a side project." });
     expect([step(), title(), dots()]).toEqual(["losses", "What you'd lose", "4/5"]);
@@ -107,6 +110,7 @@ describe("the cancel sheet", () => {
     await next();
     expect([step(), title(), dots()]).toEqual(["confirm", "Cancel your plan", "5/5"]);
     expect(text()).toContain(`Your plan ends on ${day(END)}, not today.`);
+    expect(foot()).toEqual(["Cancel subscription", "Keep my plan"]);
     expect(document.activeElement?.textContent).toBe("Keep my plan");
     expect(sheet()!.querySelector("[data-cloud-cancel-next]")).toBeNull();
     await click(sheet()!.querySelector("[data-cloud-cancel-confirm]"));
