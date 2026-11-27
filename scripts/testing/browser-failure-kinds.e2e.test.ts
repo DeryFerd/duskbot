@@ -14,8 +14,9 @@ const binaryPath = process.env.DUSK_VERIFY_BROWSER_BINARY;
 const executablePath = process.env.DUSK_VERIFY_BROWSER_CHROME;
 const stepsFile = process.env.DUSK_PROBE_STEPS;
 
-// each step's answer as the bot reads it: ok or not, and a pattern its text must match
-const EXPECTED: Array<[string, Record<string, unknown>, boolean, RegExp]> = [
+// each step's answer as the bot reads it: ok or not, a pattern its text must match, and at most how long it took
+const STOPPED = /^The site did not answer within 30 s, so dusk bot stopped loading it; the browser is free for your next call\.[\s\S]*The page showing now: /;
+const EXPECTED: Array<[string, Record<string, unknown>, boolean, RegExp, number?]> = [
   ["agent_browser_wait_ms", { ms: 300 }, true, /"waited":"timeout"/],
   ["agent_browser_open", { url: "ORIGIN/alert" }, true, /button "Confirm"/],
   ["agent_browser_click", { selector: "#c" }, true, /answered Cancel.*"dialog": "accept"/],
@@ -31,6 +32,14 @@ const EXPECTED: Array<[string, Record<string, unknown>, boolean, RegExp]> = [
   ["agent_browser_click", { selector: "#late" }, true, /Text that appeared on the page: "Ready"/],
   ["agent_browser_click", { selector: "#never" }, false, /after waiting 5 s for it to show/],
   ["agent_browser_batch", { steps: [{ do: "navigate", url: "ORIGIN/form" }, { action: "fill", selector: "#name", text: "x" }, { do: "click", selector: "#greet" }, { do: "wait", ms: 100 }, { do: "get_text", selector: "#result" }] }, true, /Ran all 5 steps[\s\S]*Hello, x/],
+  // a site that accepts the connection and never answers, opened and then gone back to
+  ["agent_browser_open", { url: "ORIGIN/hang" }, false, STOPPED, 45_000],
+  ["agent_browser_get_url", {}, true, /^\S+$/, 3_000],
+  ["agent_browser_open", { url: "ORIGIN/once" }, true, /Once/],
+  ["agent_browser_open", { url: "ORIGIN/form" }, true, /textbox "Name"/],
+  ["agent_browser_back", {}, false, STOPPED, 45_000],
+  ["agent_browser_get_url", {}, true, /^\S+$/, 3_000],
+  ["agent_browser_open", { url: "ORIGIN/form" }, true, /textbox "Name"/, 10_000],
 ];
 
 const PAGES: Record<string, string> = {
@@ -46,10 +55,12 @@ const PAGES: Record<string, string> = {
 };
 
 it.skipIf(!binaryPath || !executablePath)("answers the browser calls that failed in real use, or says plainly what to do instead", async () => {
+  let onceServed = false;
   const page = createServer((req, res) => {
     const path = (req.url ?? "/").split("?")[0]!;
     if (path === "/slow") { setTimeout(() => { res.writeHead(200, { "content-type": "text/html" }); res.end("<title>Slow</title>slow"); }, 25_000); return; }
-    if (path === "/hang") return;
+    if (path === "/hang" || (path === "/once" && onceServed)) return;
+    if (path === "/once") { onceServed = true; res.writeHead(200, { "content-type": "text/html", "cache-control": "no-store" }); res.end("<title>Once</title>once"); return; }
     if (path === "/missing") { res.writeHead(404, { "content-type": "text/html" }); res.end("<title>Not found</title><h1>404 Not Found</h1>"); return; }
     if (path === "/pdf") { res.writeHead(200, { "content-type": "application/pdf" }); res.end("%PDF-1.1\n%%EOF"); return; }
     if (path === "/json") { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true })); return; }
@@ -84,16 +95,18 @@ it.skipIf(!binaryPath || !executablePath)("answers the browser calls that failed
     }, { timeout: Number(process.env.DUSK_PROBE_WAIT_MS ?? 290_000), interval: 200 }).toBe(true);
     const lines = turn.evidence.filter((entry: any) => entry.step?.server === "browser").map((entry: any) => {
       const r = entry.response?.result; const text = (r?.content ?? []).filter((p: any) => p.type === "text").map((p: any) => p.text).join(" | ");
-      return `${r?.isError ? "ERR" : entry.response?.error ? "RPC" : "ok "} ${entry.step.tool} ${JSON.stringify(entry.step.arguments).replace(origin, "")}\n    ${(entry.response?.error ? JSON.stringify(entry.response.error) : text).slice(0, 700).replaceAll("\n", "\\n")}`;
+      return `${r?.isError ? "ERR" : entry.response?.error ? "RPC" : "ok "} ${entry.ms} ms ${entry.step.tool} ${JSON.stringify(entry.step.arguments).replace(origin, "")}\n    ${(entry.response?.error ? JSON.stringify(entry.response.error) : text).slice(0, 700).replaceAll("\n", "\\n")}`;
     });
     writeFileSync(process.env.DUSK_PROBE_OUT ?? `${fixture.info.logPath}.probe.txt`, lines.join("\n") + "\n");
     if (!stepsFile) {
-      const answers = turn.evidence.filter((entry: any) => entry.step?.server === "browser").map((entry: any) => entry.response?.result);
-      expect(answers).toHaveLength(EXPECTED.length);
-      EXPECTED.forEach(([tool, , ok, pattern], i) => {
-        const text = (answers[i]?.content ?? []).filter((p: any) => p.type === "text").map((p: any) => p.text).join(" | ");
-        expect(answers[i]?.isError === true, `${i + 1}. ${tool}: ${text}`).toBe(!ok);
+      const ran = turn.evidence.filter((entry: any) => entry.step?.server === "browser");
+      expect(ran).toHaveLength(EXPECTED.length);
+      EXPECTED.forEach(([tool, , ok, pattern, withinMs], i) => {
+        const answer = ran[i].response?.result;
+        const text = (answer?.content ?? []).filter((p: any) => p.type === "text").map((p: any) => p.text).join(" | ");
+        expect(answer?.isError === true, `${i + 1}. ${tool}: ${text}`).toBe(!ok);
         expect(text, `${i + 1}. ${tool}`).toMatch(pattern);
+        if (withinMs) expect(ran[i].ms, `${i + 1}. ${tool} took ${ran[i].ms} ms`).toBeLessThan(withinMs);
       });
     }
   } finally {

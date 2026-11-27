@@ -214,9 +214,10 @@ export async function runRoomHandoffAgent(argv: string[], planPath: string, prom
         const args = withCaptured(step.arguments, captured);
         const shown = plan.streamTools && toolCall ? { id: `scripted-${process.pid}-${evidence.length}`, tool: String(step.tool ?? "coordinate_bots"), args } : undefined;
         if (shown) toolCall!("start", shown);
+        const startedAt = Date.now();
         const response = server ? await serverToolCall(server, step.tool, args) : await call("tools/call", { name: step.tool ?? "coordinate_bots", arguments: args });
         if (shown) toolCall!("end", { ...shown, ok: !(response.error || response.result?.isError), text: (response.result?.content ?? []).map((part: any) => part?.text ?? "").join("\n") });
-        evidence.push({ step, response });
+        evidence.push({ step, response, ms: Date.now() - startedAt });
         if (!step.anyOutcome && Boolean(response.error || response.result?.isError) !== Boolean(step.expectError)) throw new Error(`Unexpected tool outcome: ${JSON.stringify(response)}`);
         for (const [name, pattern] of Object.entries((step.capture ?? {}) as Record<string, string>)) {
           const text = (response.result?.content ?? []).map((part: any) => part?.text ?? "").join("\n");

@@ -25,6 +25,7 @@ export class DialogWatch {
   #waiters = new Set<() => void>();
   #closed = false;
   #opened = 0;
+  readonly #pages = new Set<string>();
 
   constructor(onChange: (dialog: PageDialog | null) => void) {
     this.#onChange = onChange;
@@ -39,6 +40,7 @@ export class DialogWatch {
     const cdp = await connect(url, 10_000, {
       event: ({ method, params, sessionId }) => {
         if (method === "Target.attachedToTarget" && (params?.targetInfo as { type?: unknown } | undefined)?.type === "page" && typeof params?.sessionId === "string") {
+          this.#pages.add(params.sessionId);
           void cdp.send("Page.enable", {}, params.sessionId).catch(() => undefined);
         } else if (method === "Page.javascriptDialogOpening" && sessionId && (params?.type === "confirm" || params?.type === "prompt")) {
           this.#set({ session: sessionId, dialog: {
@@ -49,6 +51,7 @@ export class DialogWatch {
         } else if ((method === "Page.javascriptDialogClosed" || method === "Target.detachedFromTarget") && this.#open && (sessionId ?? params?.sessionId) === this.#open.session) {
           this.#set(null);
         }
+        if (method === "Target.detachedFromTarget" && typeof params?.sessionId === "string") this.#pages.delete(params.sessionId);
       },
       closed: () => this.close(),
     });
@@ -63,6 +66,13 @@ export class DialogWatch {
     this.#open = open;
     if (!open) { for (const done of this.#waiters) done(); this.#waiters.clear(); }
     this.#onChange(open?.dialog ?? null);
+  }
+
+  /** Stops every page's loading, as the browser's stop button does: a navigation waiting on a site that never answers
+   * then fails, which frees the engine waiting on it. */
+  async stopLoading(): Promise<void> {
+    const cdp = this.#cdp;
+    if (cdp) await Promise.all([...this.#pages].map((session) => cdp.send("Page.stopLoading", {}, session).catch(() => undefined)));
   }
 
   /** False when there was no dialog to answer, or the browser did not take the answer. */
@@ -139,26 +149,39 @@ export function withoutDialogWarning(result: unknown): unknown {
 /** The DevTools address of a session's running browser, or null when it has none to watch. */
 export type DevToolsOf = () => Promise<string | null>;
 type Watched = { watch: DialogWatch; call: (DialogAnswer & { asked: PageDialog[] }) | null };
+type Connect = (url: string, timeoutMs: number, listeners: CdpListeners) => Promise<Cdp>;
 const RETRY_MS = 15_000;
+/** How long a navigation waits for a site before dusk bot stops loading it. */
+export const SITE_ANSWER_MS = 30_000;
+const NAVIGATIONS: ReadonlySet<string> = new Set(["open", "back", "forward", "reload", "tab_new"].map((name) => `agent_browser_${name}`));
+
+export const siteDidNotAnswer = (ms: number) =>
+  `The site did not answer within ${Math.round(ms / 1_000)} s, so dusk bot stopped loading it; the browser is free for your next call. The site may be down or very slow: check it once more in a while, or use another source.`;
+/** A navigation dusk bot stopped because its site never answered. */
+export const stoppedLoad = (result: unknown): boolean =>
+  (result as { isError?: unknown } | null)?.isError === true && String((result as { content?: Array<{ text?: unknown }> }).content?.[0]?.text ?? "").startsWith("The site did not answer within");
 
 /**
- * agent-browser 0.37.0 answers a page's alert itself, but a confirm or prompt stays open in its headless Chrome and
- * holds the call that opened it, and every call after it, until the browser restarts. A bot call's own dialog is
- * answered over a second DevTools client, which must be watching before the dialog opens; a person's never is.
+ * A second DevTools client per browser, beside agent-browser 0.37.0's own. A confirm or prompt stays open in its headless
+ * Chrome and holds the call that opened it, and every call after it, until the browser restarts, so a bot call's own
+ * dialog is answered here; it must be watching before the dialog opens, and a person's dialog is never answered. And a
+ * navigation to a site that accepts the connection and never answers holds the engine 120 s or more, so it is stopped.
  */
 export class BotDialogs {
   readonly #watched = new Map<string, Watched>();
   readonly #tried = new Map<string, number>();
   readonly #personHolds: (session: string) => boolean;
+  readonly #connect: Connect | undefined;
 
-  constructor(personHolds: (session: string) => boolean) {
+  constructor(personHolds: (session: string) => boolean, connect?: Connect) {
     this.#personHolds = personHolds;
+    this.#connect = connect;
   }
 
-  async #watch(session: string, devTools: DevToolsOf): Promise<Watched | null> {
+  async #watch(session: string, devTools: DevToolsOf, now = false): Promise<Watched | null> {
     const kept = this.#watched.get(session);
     if (kept && !kept.watch.closed) return kept;
-    if ((this.#tried.get(session) ?? 0) > Date.now() - RETRY_MS) return null;
+    if (!now && (this.#tried.get(session) ?? 0) > Date.now() - RETRY_MS) return null;
     this.#tried.set(session, Date.now());
     const url = localDevToolsUrl(await devTools().catch(() => null));
     if (!url) return null;
@@ -171,29 +194,39 @@ export class BotDialogs {
     }), call: null };
     kept?.watch.close();
     this.#watched.set(session, entry);
-    await entry.watch.start(url).catch(() => entry.watch.close());
+    await entry.watch.start(url, this.#connect).catch(() => entry.watch.close());
     return entry.watch.closed ? null : entry;
   }
 
-  /** Runs one bot call with its page questions answered as `params` asks, and says in its answer what was asked. */
-  async during(session: string, params: unknown, devTools: DevToolsOf | null, run: () => Promise<unknown>): Promise<unknown> {
+  /** Runs one bot call with its page questions answered as `params` asks, and a navigation stopped after `stopAfterMs`. */
+  async during(session: string, params: unknown, devTools: DevToolsOf | null, run: () => Promise<unknown>, stopAfterMs = SITE_ANSWER_MS): Promise<unknown> {
+    const name = (params as { name?: unknown } | null)?.name;
     const watched = devTools ? await this.#watch(session, devTools) : null;
-    if (!watched) {
-      const result = await run();
-      // the first open is what starts the browser, so there was no DevTools address to watch before it
-      const name = (params as { name?: unknown } | null)?.name;
-      if (name === "agent_browser_open" || name === "agent_browser_tab_new") this.#tried.delete(session);
-      return result;
-    }
     const call = { ...dialogAnswerOf(params), asked: [] as PageDialog[] };
-    watched.call = call;
-    const open = watched.watch.dialog;
-    if (open && !this.#personHolds(session)) { call.asked.push(open); void watched.watch.answer(call.accept, call.promptText); }
+    if (watched) {
+      watched.call = call;
+      const open = watched.watch.dialog;
+      if (open && !this.#personHolds(session)) { call.asked.push(open); void watched.watch.answer(call.accept, call.promptText); }
+    }
+    let stopped = false;
+    // the first open is what starts the browser, so its DevTools address is looked up only once it runs
+    const timer = devTools && typeof name === "string" && NAVIGATIONS.has(name) ? setTimeout(() => {
+      void (async () => {
+        const watching = watched ?? await this.#watch(session, devTools, true);
+        if (!watching || this.#personHolds(session)) return;
+        stopped = true;
+        await watching.watch.stopLoading();
+      })();
+    }, stopAfterMs) : null;
     try {
       const result = await run();
+      // agent-browser 0.37.0 answers a stopped back or forward as if it had gone there, naming the page it stayed on
+      if (stopped) return { isError: true, content: [{ type: "text", text: siteDidNotAnswer(stopAfterMs) }] };
+      if (!watched && (name === "agent_browser_open" || name === "agent_browser_tab_new")) this.#tried.delete(session);
       return call.asked.length ? withNote(withoutDialogWarning(result), dialogNote(call.asked[0]!, call)) : result;
     } finally {
-      if (watched.call === call) watched.call = null;
+      if (timer) clearTimeout(timer);
+      if (watched?.call === call) watched.call = null;
     }
   }
 

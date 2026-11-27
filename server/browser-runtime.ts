@@ -13,7 +13,7 @@ import { HARNESS_CALL_BUDGET_MS } from "./harness-budget.ts";
 import { launchSettingsKey } from "./browser-launch-key.ts";
 import { AGENT_BROWSER_BATCH_SPEC, agentBrowserStep, planAgentBrowserBatch, PROBE_SCRIPT, probeOfEval, SETTLED_READS, type AgentBrowserCall } from "./browser/agent-browser-batch.ts";
 import { runSteps } from "./browser/batch.ts";
-import { BotDialogs, withoutDialogAnswer } from "./browser-dialogs.ts";
+import { BotDialogs, stoppedLoad, withoutDialogAnswer } from "./browser-dialogs.ts";
 import { answerMisses, plainWait } from "./browser/agent-browser-misses.ts";
 import { settleNote, settlePage, type PageReader } from "./browser/cdp/settle.ts";
 
@@ -625,6 +625,7 @@ export class BrowserRuntime {
             })
             : entry.client.rpc(method, request, engineTimeoutMs));
         phases.engineMs = performance.now() - engineStarted;
+        if (stoppedLoad(result)) result = withNote(result, `The page showing now: ${await pageUrl() || "unknown"}.`);
         result = withPickNote(result, picked);
         if (toolName && !relayed && !inLines) {
           const engineRpc = (name: string, rpcArgs: Record<string, unknown>, ms: number) => entry.client.rpc("tools/call", { name, arguments: rpcArgs }, ms)
