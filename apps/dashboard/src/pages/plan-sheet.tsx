@@ -10,7 +10,7 @@ import { navigate } from "../lib/router";
 import { Choice, Field, Select, Sheet, Toggle } from "../ui/controls";
 import { track } from "../lib/analytics";
 import { Button, cx, Skeleton } from "../ui/kit";
-import { CHECKOUT_SOON, checkoutDone, trialAction } from "./cloud-offer";
+import { CHECKOUT_SOON, checkoutDone, trialAction, trialTerms } from "./cloud-offer";
 import { EASE_OUT, m } from "../ui/motion";
 
 /** a submit in flight: the button keeps its color and shows a quiet spinner */
@@ -163,7 +163,7 @@ export function PlanSheet({ start, source, work = false, onClose }: { source: Ch
             <span className="text-14 text-ink-3">total</span>
             <span className="num"><span className="text-24 font-medium tracking-[-0.035em] text-ink">{cart ? money(interval === "year" ? cart.dueNow : cart.perMonth) : "..."}</span><span className="text-14 text-ink-3">{interval === "year" ? "/yr" : "/mo"}</span></span>
           </div>
-          <p className="num mt-0.5 text-end text-13 text-ink-4">{!owned && catalog.trialDays ? `free for ${catalog.trialDays} days, then ` : ""}{interval === "year" ? "billed yearly, + tax where applicable" : "billed monthly, + tax where applicable"}</p>
+          <p className="num mt-0.5 text-end text-13 text-ink-4">{(!owned && trialTerms(catalog, cart ? cartText(cart, interval) : null)) || (interval === "year" ? "billed yearly, + tax where applicable" : "billed monthly, + tax where applicable")}</p>
           {offer !== null && owned && <OfferLine offer={offer} from={planName(catalog, billing?.subscription?.bundle)} to={b?.name ?? "the new plan"} fromInterval={owned.interval} toInterval={interval} />}
           {(error ?? quoteError) && <p role="alert" className="mt-3 text-13 text-bad">{error ?? quoteError}</p>}
           <Button variant="primary" className={cx("mt-4 w-full !h-11", busy && BUSY)} onClick={() => void go()} disabled={busy || (unchanged && !scheduled)} aria-busy={busy}>{busy ? <Working>{owned ? "switching" : "opening checkout"}</Working> : offer !== null ? offerAction(offer, b?.name ?? "it", planName(catalog, billing?.subscription?.bundle)) : unchanged ? (scheduled ? `keep ${b?.name}` : "your plan") : owned ? "review switch" : trialAction(catalog) ?? "checkout"}</Button>
