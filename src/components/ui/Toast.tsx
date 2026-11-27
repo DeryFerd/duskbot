@@ -68,6 +68,18 @@ export function Toast({ text, tone = "done", action, onDone, timeoutMs, classNam
       setOffset(Math.round(safeInsetPx("bottom") + 28));
     }
   }, [glass, text]);
+  // on a desktop the toast sits over the chat column, so a sidebar beside it in a narrow window never runs under it
+  const [column, setColumn] = useState<{ center: number; width: number } | null>(null);
+  useLayoutEffect(() => {
+    if (glass?.pill) return;
+    const place = () => {
+      const main = document.querySelector("main")?.getBoundingClientRect();
+      setColumn(main && main.width > 0 && main.width < window.innerWidth - 1 ? { center: Math.round(main.left + main.width / 2), width: Math.round(main.width) } : null);
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [glass]);
   const pillText = typeof text === "string" ? text : measuredText;
   const nativePill = useGlassPill(
     glass,
@@ -96,6 +108,7 @@ export function Toast({ text, tone = "done", action, onDone, timeoutMs, classNam
   };
   const toast = (
     <div ref={node} {...rest} role={error ? "alert" : "status"} aria-live={error ? "assertive" : "polite"} data-kind={tone} className={cn("ui-toast", nativePill && "pointer-events-none opacity-0", className)}
+      style={column ? { insetInlineStart: column.center, width: `min(440px, ${column.width - 32}px)` } : undefined}
       onPointerEnter={() => setHeld(true)} onPointerLeave={() => setHeld(false)} onFocus={() => setHeld(true)} onBlur={release}>
       <span aria-hidden="true" className={cn("inline-flex shrink-0", error ? "text-danger" : "text-ink-secondary")}>
         <Icon name={error ? "exclamation-circle" : "check"} size={13} />
