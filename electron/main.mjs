@@ -538,6 +538,7 @@ import {
 } from "./companion.mjs";
 import { autoStartCompanion } from "./companion-autostart.mjs";
 import { createRoutineWakeHold, rememberRoutineWake, routineWakePatch, routineWakeSettings } from "./routine-wake.mjs";
+import { createSystemAwake } from "./system-awake.mjs";
 import { CREDENTIAL_PATCH, credentialSaveError } from "./credential-patch.mjs";
 import { createCappedLog } from "./capped-log.mjs";
 import { TRAIL_CAP_BYTES, configureTrail, createTrailWriter, trail } from "./trail.mjs";
@@ -594,6 +595,7 @@ const routineWake = createRoutineWakeHold({
   log: (line) => slog(line),
   powerMonitor, isOnline: () => net.isOnline(),
   notify: (event) => localServerRequest("/api/routines/wake", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ event }) }).then((response) => { if (!response.ok) throw new Error(`HTTP ${response.status}`); }),
+  systemAwake: createSystemAwake({ log: (line) => slog(line) }),
 });
 
 const cloudGone = createCloudGone({ log: (line) => slog(line) });
