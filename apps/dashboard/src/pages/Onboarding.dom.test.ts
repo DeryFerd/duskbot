@@ -8,6 +8,7 @@ import { fixtureCatalog } from "../data/fixtures";
 
 const state = vi.hoisted(() => ({
   query: "step=plan",
+  os: "windows" as string,
   trialDays: 0,
   moved: [] as string[],
   finish: vi.fn(async (_home?: string) => {}),
@@ -22,11 +23,12 @@ vi.mock("../lib/router", () => ({ useLocation: () => ({ path: "/welcome", query:
 vi.mock("../lib/analytics", () => ({ track: () => {}, trackOnboardingStep: () => {} }));
 vi.mock("../ui/Frame", () => ({ SplitFrame: ({ children }: { children: ReactNode }) => createElement("div", null, children) }));
 vi.mock("../ui/Mascot", () => ({ Mascot: () => null }));
-vi.mock("../ui/Downloads", () => ({ Downloads: () => null }));
+vi.mock("../ui/Downloads", async (actual) => ({ ...(await actual<typeof import("../ui/Downloads")>()), Downloads: () => null }));
+vi.mock("../lib/downloads", async (actual) => ({ ...(await actual<typeof import("../lib/downloads")>()), detectOs: () => state.os, useReleaseState: () => "out" }));
 vi.mock("../ui/Digits", () => ({ StretchPill: () => null }));
 
 const roots: Root[] = [];
-afterEach(async () => { for (const root of roots.splice(0)) await act(async () => root.unmount()); document.body.innerHTML = ""; state.moved = []; state.query = "step=plan"; state.trialDays = 0; sessionStorage.clear(); vi.clearAllMocks(); vi.useRealTimers(); });
+afterEach(async () => { for (const root of roots.splice(0)) await act(async () => root.unmount()); document.body.innerHTML = ""; state.moved = []; state.query = "step=plan"; state.trialDays = 0; state.os = "windows"; sessionStorage.clear(); vi.clearAllMocks(); vi.useRealTimers(); });
 
 async function open() {
   const { Onboarding } = await import("./Onboarding");
@@ -89,4 +91,27 @@ test("without a trial the plans keep their plain price and no trial line", async
   const host = await open();
   expect(host.querySelector("[data-trial-terms]")).toBeNull();
   expect(press(host, "continue to checkout, $20/mo")).toBeTruthy();
+});
+
+test("signed up here, the app step offers this computer's download as the one big button and says what to do once it is down", async () => {
+  state.query = "step=app";
+  const host = await open();
+  const own = [...host.querySelectorAll("a")].find((a) => a.textContent?.includes("download for windows"))!;
+  expect(own.getAttribute("href")).toMatch(/DuskBot-setup\.exe$/);
+  expect(host.textContent).not.toContain("protected your pc");
+  await act(async () => { own.addEventListener("click", (e) => e.preventDefault()); own.click(); });
+  const steps = [...host.querySelectorAll("ol li")].map((li) => li.textContent);
+  expect(steps).toHaveLength(3);
+  expect(steps[0]).toContain("DuskBot-setup.exe");
+  expect(steps[1]).toContain("more info, then run anyway");
+  expect(steps[2]).toContain("sam@qa.dusk.test");
+  await act(async () => press(host, "go to the dashboard").click());
+  expect(state.finish).toHaveBeenCalledWith("free");
+});
+
+test("on a phone the app step keeps every download in the list and the dashboard as its button", async () => {
+  state.query = "step=app"; state.os = "ios";
+  const host = await open();
+  expect([...host.querySelectorAll("a")].some((a) => a.textContent?.includes("download for"))).toBe(false);
+  expect(press(host, "go to the dashboard").className).toContain("bg-primary");
 });

@@ -26,12 +26,14 @@ const file = (key: string) => { const f = files[key]; return f ? (f.startsWith("
 const mb = (key: string) => (sizes[key] ? `${Math.round(sizes[key]! / 1e6)} mb` : "");
 
 // the file itself, so a press downloads right here instead of opening another page
-const DIRECT: Partial<Record<Platform, { href: string | null; also?: { label: string; href: string | null } }>> = {
-  macos: { href: file("mac-arm64"), also: { label: "intel mac", href: file("mac-x64") } },
-  windows: { href: file("windows") },
-  linux: { href: file("linux-appimage"), also: { label: ".deb", href: file("linux-deb") } },
+type Desktop = "macos" | "windows" | "linux";
+export const DIRECT: Record<Desktop, { href: string | null; name: string | null; also?: { label: string; href: string | null } }> = {
+  macos: { href: file("mac-arm64"), name: files["mac-arm64"] ?? null, also: { label: "intel mac", href: file("mac-x64") } },
+  windows: { href: file("windows"), name: files.windows ?? null },
+  linux: { href: file("linux-appimage"), name: files["linux-appimage"] ?? null, also: { label: ".deb", href: file("linux-deb") } },
 };
-const NOTE_DIRECT: Partial<Record<Platform, string>> = { macos: "apple silicon", windows: "windows 10 and 11", linux: "appimage" };
+export const NOTE_DIRECT: Record<Desktop, string> = { macos: "apple silicon", windows: "windows 10 and 11", linux: "appimage" };
+export const isDesktop = (p: Platform | "unknown"): p is Desktop => p === "macos" || p === "windows" || p === "linux";
 const PHONES: { p: "ios" | "android"; href: string | null; note: string; store: boolean }[] = [
   { p: "ios", href: releases.ios || null, note: "iphone", store: true },
   { p: "android", href: releases.android || file("android"), note: releases.android ? "google play" : [".apk", mb("android")].filter(Boolean).join(" · "), store: Boolean(releases.android) },
@@ -39,17 +41,20 @@ const PHONES: { p: "ios" | "android"; href: string | null; note: string; store: 
 
 const BUTTON = "inline-flex shrink-0 items-center gap-1 rounded-full bg-ink px-3.5 py-1.5 text-14 text-pop transition-opacity hover:opacity-90";
 
-/** the visitor's own computer, downloading in place, then the phone apps, then every other platform on the site */
-export function Downloads() {
+export const trackDownload = (p: Platform, detected = detectOs()) => track({ name: "download_click", props: { platform: p, detected_os: detected } });
+
+/** the visitor's own computer, downloading in place, then the phone apps, then every other platform on the site; a
+ *  page that offers the computer's own download itself leaves it out (`own`) */
+export function Downloads({ own = true }: { own?: boolean }) {
   const release = useReleaseState();
   const detected = detectOs();
-  const desktops: Platform[] = detected === "macos" || detected === "windows" || detected === "linux" ? [detected] : ["macos", "windows", "linux"];
-  const clicked = (p: Platform) => track({ name: "download_click", props: { platform: p, detected_os: detected } });
+  const desktops: Desktop[] = isDesktop(detected) ? (own ? [detected] : []) : ["macos", "windows", "linux"];
+  const clicked = (p: Platform) => trackDownload(p, detected);
   return (
     <div>
       <ul className="flex flex-col gap-1.5" aria-label="downloads">
         {desktops.map((p) => {
-          const direct = DIRECT[p]!;
+          const direct = DIRECT[p];
           const soon = release === "soon" || !direct.href;
           return (
             <li key={p} className="flex min-h-14 items-center gap-3.5 rounded-[16px] bg-card px-4 py-2.5">
