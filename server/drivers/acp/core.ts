@@ -208,6 +208,12 @@ export interface AcpSupport {
    * "fail-request": cached API credentials need no method, but a requested
    * OAuth login must succeed. "continue": proceed on an ambient login. */
   authFailure: "fail" | "fail-request" | "continue";
+  /** Whether a failed `authenticate` may be momentary: "momentary" is a network or server hiccup, "unconfirmed" a refusal
+   * that a failed renewal also causes. Both are tried again after each of `authenticateRetryDelaysMs` before they count. */
+  authenticateRetry?(error: unknown): "momentary" | "unconfirmed" | undefined;
+  authenticateRetryDelaysMs?: readonly number[];
+  /** What a turn says when `authenticate` kept failing for a momentary reason, in place of the sign-in note. */
+  momentaryAuthNote?: string;
   /** A turn the CLI refused for want of a login: what isAuthenticated answers goes signed out until a sign-in. */
   noteSignedOut?(env: Record<string, string | undefined>, config: AcpConfig): void;
   /** The app's own sign-in finished for this engine. */
@@ -1305,11 +1311,23 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                   : [];
                 const methodId = support.pickAuthMethod(methods, spawnEnv);
                 if (methodId) {
-                  try {
-                    await session.host.once("authenticate", () => request("authenticate", { methodId }, INIT_TIMEOUT));
-                    session.authenticated = true;
-                  } catch {
-                    if (support.authFailure !== "continue") throw new Error(support.loginNote);
+                  const delays = support.authenticateRetryDelaysMs ?? [];
+                  for (let attempt = 0; ; attempt++) {
+                    try {
+                      await session.host.once("authenticate", () => request("authenticate", { methodId }, INIT_TIMEOUT));
+                      session.authenticated = true;
+                      break;
+                    } catch (error) {
+                      const kind = support.authenticateRetry?.(error);
+                      if (kind && attempt < delays.length) {
+                        await new Promise((resolveWait) => setTimeout(resolveWait, delays[attempt]));
+                        requireRunning();
+                        continue;
+                      }
+                      if (support.authFailure === "continue") break;
+                      console.warn(`${support.displayName}: sign-in check failed (${kind ?? "refused"}): ${error instanceof Error ? error.message : String(error)}`);
+                      throw new Error(kind === "momentary" && support.momentaryAuthNote ? support.momentaryAuthNote : support.loginNote);
+                    }
                   }
                 } else if (support.authFailure === "fail") {
                   throw new Error(support.loginNote);
