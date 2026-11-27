@@ -48,3 +48,12 @@ it("stops a spawn of a real engine through the live child_process exports", asyn
   expect(() => spawn(process.execPath, [sdk])).toThrow("refused @anthropic-ai/claude-agent-sdk");
   expect(() => execFileSync(join(bin, "codex"), ["exec", "hello"])).toThrow("refused codex");
 });
+
+it("keeps execFile's and exec's promisified answers whole, so code awaiting { stdout } reads what the command printed", async () => {
+  guardRealEngines(fixtures, (engine) => { throw new Error(`refused ${engine}`); });
+  const { execFile, exec } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  expect(await promisify(execFile)(process.execPath, ["-e", "process.stdout.write('{}')"], { encoding: "utf8" })).toEqual({ stdout: "{}", stderr: "" });
+  expect(await promisify(exec)(`"${process.execPath}" -e "process.stdout.write('ok')"`, { encoding: "utf8" })).toEqual({ stdout: "ok", stderr: "" });
+  await expect(async () => promisify(execFile)(join(bin, "codex"), ["exec", "hello"])).rejects.toThrow("refused codex");
+});

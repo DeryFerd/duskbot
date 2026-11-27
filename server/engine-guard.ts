@@ -8,6 +8,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, delimiter, join, resolve, sep } from "node:path";
+import { promisify } from "node:util";
 
 export const REAL_ENGINES = new Set(["claude", "codex", "cursor-agent", "gemini", "qwen", "hermes", "copilot", "opencode", "grok", "cline", "droid", "kimi", "agy"]);
 const PACKAGES = /@anthropic-ai[\\/](?:claude-code|claude-agent-sdk)|@openai[\\/]codex|@google[\\/]gemini-cli|@github[\\/]copilot|@qwen-code[\\/]|opencode-ai[\\/]/;
@@ -64,14 +65,24 @@ export function fixtureServer(env: NodeJS.ProcessEnv = process.env): boolean {
 export function guardRealEngines(fixtures: readonly string[], refuse: (engine: string, command: string) => never): void {
   const methods = ["spawn", "spawnSync", "execFile", "execFileSync", "exec", "execSync"] as const;
   const target = childProcess as unknown as Record<string, (...args: unknown[]) => unknown>;
+  const check = (command: unknown, rest: unknown[]) => {
+    const options = (Array.isArray(rest[0]) ? rest[1] : rest[0]) as { env?: NodeJS.ProcessEnv } | undefined;
+    const engine = realEngine(command, Array.isArray(rest[0]) ? rest[0] : [], fixtures, options?.env?.PATH ?? process.env.PATH ?? "");
+    if (engine) refuse(engine, [command, ...(Array.isArray(rest[0]) ? rest[0] : [])].map(String).join(" ").slice(0, 200));
+  };
   for (const method of methods) {
-    const original = target[method]!;
-    target[method] = function (this: unknown, command: unknown, ...rest: unknown[]) {
-      const options = (Array.isArray(rest[0]) ? rest[1] : rest[0]) as { env?: NodeJS.ProcessEnv } | undefined;
-      const engine = realEngine(command, Array.isArray(rest[0]) ? rest[0] : [], fixtures, options?.env?.PATH ?? process.env.PATH ?? "");
-      if (engine) refuse(engine, [command, ...(Array.isArray(rest[0]) ? rest[0] : [])].map(String).join(" ").slice(0, 200));
+    const original = target[method]! as ((...args: unknown[]) => unknown) & { [promisify.custom]?: (...args: unknown[]) => unknown };
+    const guarded = function (this: unknown, command: unknown, ...rest: unknown[]) {
+      check(command, rest);
       return Reflect.apply(original, this, [command, ...rest]);
+    } as typeof original;
+    // execFile and exec carry their own promisified form ({ stdout, stderr }); without it util.promisify resolves with stdout alone
+    const promised = original[promisify.custom];
+    if (promised) guarded[promisify.custom] = function (this: unknown, command: unknown, ...rest: unknown[]) {
+      check(command, rest);
+      return Reflect.apply(promised, this, [command, ...rest]);
     };
+    target[method] = guarded;
   }
   syncBuiltinESMExports();
 }

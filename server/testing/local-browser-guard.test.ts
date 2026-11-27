@@ -19,3 +19,19 @@ it("refuses container subprocesses before launching them inside an isolated nati
       .toEqual([{ command: "docker" }, { command: "podman" }]);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
+
+it("keeps execFile's promisified answer whole, so the browser view reads the engine's output", () => {
+  const directory = mkdtempSync(join(tmpdir(), "dusk-native-guard-"));
+  try {
+    const result = spawnSync(process.execPath, ["--import", new URL("./local-browser-guard.mjs", import.meta.url).href,
+      "--input-type=module", "-e", `
+        import assert from 'node:assert/strict';
+        import {execFile} from 'node:child_process';
+        import {promisify} from 'node:util';
+        const ran = await promisify(execFile)(process.execPath, ['-e', 'process.stdout.write("{}")'], { encoding: 'utf8' });
+        assert.deepEqual(ran, { stdout: '{}', stderr: '' });
+        await assert.rejects(promisify(execFile)('docker', ['version']), /refuses container commands/);
+      `], { env: { HOME: directory, DUSK_DATA_DIR: directory, DUSK_TEST_LOCAL_BROWSER_GUARD: "1" }, encoding: "utf8", timeout: 5_000 });
+    expect(result.status, result.stderr).toBe(0);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
