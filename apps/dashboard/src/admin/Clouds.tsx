@@ -9,11 +9,12 @@ import { adminCall, useAdmin, type CloudRow } from "./api";
 import { AnimatePresence } from "../ui/motion";
 import { AdminHeader, ConfirmAction, Failed, Loading, n, Status } from "./ui";
 
-type Action = "pause" | "resume" | "delete" | "end-trial";
+type Action = "pause" | "resume" | "delete" | "end-trial" | "retry-setup";
 const COPY: Record<Action, { title: (name: string) => string; body: string; button: string; done: string }> = {
   pause: { title: (name) => `pause ${name}?`, body: "the machine powers off. the owner's bots stop answering until it's resumed, by you or by them.", button: "pause cloud", done: "paused" },
   resume: { title: (name) => `resume ${name}?`, body: "the machine starts again and its bots come back within a few minutes.", button: "resume cloud", done: "resuming" },
   "end-trial": { title: (name) => `end the update trial on ${name}?`, body: "the home update on trial is kept now instead of after its day of trial, once its self-test has passed, so the next release installs at the cloud's next quiet moment.", button: "end trial", done: "trial ended" },
+  "retry-setup": { title: (name) => `retry setup on ${name} now?`, body: "its next setup attempt runs on the next pass instead of hours after the error. it starts from the step that failed, on a paying plan only.", button: "retry setup", done: "setup retry queued" },
   delete: { title: (name) => `delete ${name}?`, body: "this skips the retention wait and the owner's undo window. a final backup is taken, then the machine and its disk are deleted. it can't be undone.", button: "delete cloud", done: "deleting" },
 };
 
@@ -40,6 +41,7 @@ export function CloudTable({ clouds, onChanged, owner = true }: { clouds: CloudR
                   { label: "pause", disabled: !c.actions.pause, onSelect: () => setPending({ cloud: c, action: "pause" }) },
                   { label: "resume", disabled: !c.actions.resume, onSelect: () => setPending({ cloud: c, action: "resume" }) },
                   ...(c.actions.endTrial ? [{ label: "end update trial", onSelect: () => setPending({ cloud: c, action: "end-trial" }) }] : []),
+                  ...(c.actions.retrySetup ? [{ label: "retry setup now", onSelect: () => setPending({ cloud: c, action: "retry-setup" }) }] : []),
                   { label: c.actions.delete ? "delete now" : "delete (ended managed clouds only)", danger: true, disabled: !c.actions.delete, onSelect: () => setPending({ cloud: c, action: "delete" }) },
                 ]} />
               </Td>

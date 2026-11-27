@@ -5,6 +5,7 @@ import type { createAuth } from "../auth/index.ts";
 import type { createBilling } from "../billing/index.ts";
 import { BILLING_CONFIG, MANAGED_REGION, regionLabel as labelOfRegion } from "../billing/plans.ts";
 import type { StoredCloud } from "../clouds/types.ts";
+import type { RetrySetupRefusal } from "../clouds/managed.ts";
 import type { StoredWorkspace } from "../store.ts";
 import type { Analytics } from "../analytics/index.ts";
 import type { Usage } from "../analytics/usage.ts";
@@ -99,6 +100,14 @@ const REALTIME_TTL_MS = 4_000;
 const STALE_MS = 12 * 60 * 60_000;
 const SUBSCRIBER_EVENTS = ["app_messages", "app_open"];
 const bundleLabel = (id: string | null | undefined) => BILLING_CONFIG.bundles.find(bundle => bundle.id === id)?.label.toLowerCase() ?? (id ? "custom" : null);
+const RETRY_SETUP_REFUSED: Record<RetrySetupRefusal, string> = {
+  not_in_setup_error: "This cloud's setup is not in its error state.",
+  suspended: "This cloud is suspended. Resume it first.",
+  no_plan: "This cloud has no paying plan, so its setup waits for one.",
+  deleting: "This cloud is being deleted.",
+  setup_script_failed: "Its setup script failed on every machine. That needs a fix before another try.",
+  busy: "A step of this cloud is running. Try again in a minute.",
+};
 const regionLabel = (id: string, managed: boolean) => (labelOfRegion(managed ? MANAGED_REGION.id : id) ?? id).toLowerCase();
 const int = (value: string | null, fallback: number, min: number, max: number) => {
   const n = value === null || value === "" ? fallback : Number(value);
@@ -280,6 +289,7 @@ export function createAdmin(options: AdminOptions) {
         resume: c.suspended !== null ? c.status === "suspended" && usable : usable && ["stopped", "sleeping"].includes(c.status),
         delete: managed && !!c.ended && c.status !== "destroyed" && c.status !== "destroying",
         endTrial: managed && !!billing.endTrials && !!billing.clouds.managed?.endTrial && usable,
+        retrySetup: managed && !!billing.clouds.retrySetup && usable && c.status === "error" && c.setupStep !== null && c.suspended === null,
       },
     };
   }
@@ -505,9 +515,15 @@ export function createAdmin(options: AdminOptions) {
   async function cloudAction(owner: { id: string }, id: string, action: string, input: Record<string, unknown>) {
     const cloud = billing.clouds.get(id);
     if (!cloud) throw new AdminError(404, "not_found", "Not found.");
-    const row = cloudRow(cloud, emailMap()), key = action === "end-trial" ? "endTrial" : action;
+    const row = cloudRow(cloud, emailMap()), key = action.replace(/-([a-z])/g, (_, ch: string) => ch.toUpperCase());
     if (!(key in row.actions) || !row.actions[key as keyof typeof row.actions]) throw new AdminError(409, "not_available", `This cloud can't ${action.replace("-", " ")} in its current state.`);
     if (input.confirm !== cloud.id && input.confirm !== cloud.name) throw new AdminError(400, "confirm_required", "Type the cloud's name to confirm.");
+    if (key === "retrySetup") {
+      const answer = billing.clouds.retrySetup!(cloud.id, "admin_panel");
+      await audit(owner.id, "cloud.retry_setup", cloud.id, "refused" in answer ? { ok: false, code: answer.refused } : { ok: true, already: answer.already });
+      if ("refused" in answer) throw new AdminError(409, answer.refused, RETRY_SETUP_REFUSED[answer.refused]);
+      return { cloud: cloudRow(cloud, emailMap()), already: answer.already };
+    }
     if (key === "endTrial") {
       // the same early settle as POST /v1/billing/ops/clouds/<id>/end-trial, from the panel instead of the ops token
       const answer = billing.clouds.managed!.endTrial!(cloud, "admin_panel");
@@ -811,7 +827,7 @@ export function createAdmin(options: AdminOptions) {
         await audit(owner.id, "revenue.sync", null, result);
         return send(result);
       }
-      const action = /^\/clouds\/(c[0-9a-f]{24})\/(pause|resume|delete|end-trial)$/.exec(route);
+      const action = /^\/clouds\/(c[0-9a-f]{24})\/(pause|resume|delete|end-trial|retry-setup)$/.exec(route);
       if (action) return send(await cloudAction(owner, action[1]!, action[2]!, options.bodyObject(await options.readBody(req))));
     }
     throw new AdminError(404, "not_found", "Route not found.");

@@ -26,7 +26,7 @@ const PATTERN_ROUTES: Array<[method: string, route: string]> = [
   ["GET", "/v2/people/acct_someone1"], ["GET", "/users/acct_someone1"], ["GET", `/clouds/${CLOUD}/usage`], ["GET", "/journeys/acct_someone1"],
   ["PATCH", "/notes/note_abcdef12"], ["DELETE", "/notes/note_abcdef12"], ["PUT", "/ops/relays/cloudflare/limits"],
   ["POST", "/users/acct_someone1/plan"], ["POST", "/users/acct_someone1/plan/preview"], ["POST", "/users/acct_someone1/admin-role"],
-  ["POST", `/clouds/${CLOUD}/pause`], ["POST", `/clouds/${CLOUD}/resume`], ["POST", `/clouds/${CLOUD}/delete`], ["POST", `/clouds/${CLOUD}/end-trial`],
+  ["POST", `/clouds/${CLOUD}/pause`], ["POST", `/clouds/${CLOUD}/resume`], ["POST", `/clouds/${CLOUD}/delete`], ["POST", `/clouds/${CLOUD}/end-trial`], ["POST", `/clouds/${CLOUD}/retry-setup`],
 ];
 const PATTERN_COUNT = 11;
 const ALLOWED_GETS = ["/me", "/overview", "/web", "/web/country", "/funnel", "/realtime", "/retention", "/waitlist", "/revenue", "/subscribers"];

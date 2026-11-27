@@ -22,7 +22,7 @@ import type { Audit, AuditActor, AuditEntry } from "./audit.ts";
 import { RetryableCloudError } from "../../dashboard/server/clouds/http.ts";
 import { homeFailure } from "../../dashboard/server/clouds/home-client.ts";
 import { ENTITLEMENT_DEFAULT_TTL_MS } from "../../../shared/entitlement.ts";
-import { ManagedCloudError } from "../../dashboard/server/clouds/managed.ts";
+import { ManagedCloudError, type RetrySetupRefusal } from "../../dashboard/server/clouds/managed.ts";
 import type { HomeClient, HomePower, StoredCloud } from "../../dashboard/server/clouds/types.ts";
 import type { HomeLifecycleState } from "./state.ts";
 import { homeVersion, relayExits, takesLinkGrant, type HomeUpdates } from "./home-update.ts";
@@ -593,7 +593,7 @@ export function createLifecycle(deps: LifecycleDeps) {
   }
 
   /** a first setup a plan's end cut off, carried on once a plan pays for it again */
-  async function resumeSetup(c: StoredCloud) {
+  async function resumeSetup(c: StoredCloud, actor: AuditActor = "billing", reason = "plan_renewed") {
     const b = state(c);
     renewed(c);
     if (c.serverId) {
@@ -603,8 +603,8 @@ export function createLifecycle(deps: LifecycleDeps) {
     }
     // a cold boot lost the started home: started again
     if (c.setupStep === "checking") c.setupStep = "starting";
-    b.setupSince = now(); b.setupErrorAt = null; b.setupRetries = 0; c.status = "provisioning"; c.wantPower = "on"; c.nextAttemptAt = 0; c.attempts = 0; c.error = null;
-    log(c, "setup_resumed", "billing", "plan_renewed", { step: c.setupStep });
+    b.setupSince = now(); b.setupErrorAt = null; b.setupRetryAskedAt = null; b.setupRetries = 0; c.status = "provisioning"; c.wantPower = "on"; c.nextAttemptAt = 0; c.attempts = 0; c.error = null;
+    log(c, "setup_resumed", actor, reason, { step: c.setupStep });
     deps.save(c);
   }
 
@@ -615,8 +615,8 @@ export function createLifecycle(deps: LifecycleDeps) {
     if (b.setupErrorAt == null) { b.setupErrorAt = now(); log(c, "setup_error", "reconciler", "paused"); console.warn(`managed: cloud ${c.id}: its first setup failed; its machine is paused and setup is tried again later`); }
     if (c.serverId) { const s = await provider.machine(c.serverId); if (s && (s.state === "running" || s.state === "starting")) await provider.power(c.serverId, "off"); }
     await retiredStep(c);
-    const againAt = b.setupErrorAt + SETUP_ERROR_RETRY_MS;
-    if ((b.setupFailures ?? 0) < SETUP_TRIES && now() >= againAt) return resumeSetup(c);
+    const asked = b.setupRetryAskedAt != null, againAt = asked ? now() : b.setupErrorAt + SETUP_ERROR_RETRY_MS;
+    if ((b.setupFailures ?? 0) < SETUP_TRIES && now() >= againAt) return asked ? resumeSetup(c, "operator", "retry_asked") : resumeSetup(c);
     c.nextAttemptAt = Math.min(againAt, now() + 30 * MINUTE); deps.save(c);
   }
 
@@ -1256,6 +1256,22 @@ export function createLifecycle(deps: LifecycleDeps) {
       deps.save(c);
       const notBefore = error.info.nextStartAt !== null ? Math.min(error.info.nextStartAt - now(), 15 * MINUTE) : 0;
       return now() + Math.max(backoff, Math.min(error.retryAfterMs ?? 0, 15 * MINUTE), notBefore);
+    },
+    /** the operator's "retry setup now": a first setup in its error state gets its next attempt on the next pass instead of
+     *  SETUP_ERROR_RETRY_MS after the error. Refused wherever the scheduled retry would not run; asked twice, it is asked once */
+    retrySetup(c: StoredCloud, reason: string): { queued: true; already: boolean } | { refused: Exclude<RetrySetupRefusal, "busy"> } {
+      const b = state(c);
+      if (c.status !== "error" || c.setupStep === null) return { refused: "not_in_setup_error" };
+      if (c.suspended !== null) return { refused: "suspended" };
+      const entitlement = deps.entitlement(c);
+      if (c.ended || !entitlement.active) return { refused: "no_plan" };
+      if (b.deletion || verdictFor(c, entitlement).delete) return { refused: "deleting" };
+      if ((b.setupFailures ?? 0) >= SETUP_TRIES) return { refused: "setup_script_failed" };
+      if (b.setupRetryAskedAt != null) return { queued: true, already: true };
+      b.setupRetryAskedAt = now(); c.nextAttemptAt = 0;
+      log(c, "setup_retry_asked", "operator", reason, { step: c.setupStep });
+      deps.save(c);
+      return { queued: true, already: false };
     },
     setHold(c: StoredCloud, hold: boolean) { state(c).hold = hold; log(c, hold ? "hold" : "hold_released", "operator", "manual"); deps.save(c); },
   };

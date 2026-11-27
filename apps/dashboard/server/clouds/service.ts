@@ -463,6 +463,15 @@ export function createCloudsService(options: CloudsServiceOptions): CloudsServic
         c.suspended = null; c.suspensionApplied = undefined; c.wantPower = "on"; c.status = c.setupStep ? "provisioning" : c.serverId ? "running" : "checkout"; c.nextAttemptAt = 0; save(c);
       });
     },
+    retrySetup(id, reason) {
+      const c = requireCloud(id);
+      if (!c.backend || !managed?.retrySetup) return { refused: "not_in_setup_error" };
+      // never beside a running step: the attempt itself runs in the reconciler's own pass
+      if (stepping.has(c.id) || detached.has(c.id)) return { refused: "busy" };
+      const answer = managed.retrySetup(c, reason);
+      if ("queued" in answer) kick();
+      return answer;
+    },
     hide(accountId, id) { const c = requireOwned(accountId, id); if (!["stopped", "destroyed", "error", "checkout"].includes(c.status)) throw new CloudError(409, "not_removable"); c.hidden = true; save(c); return c; },
     async power(accountId, id, action) { const c = requireOwned(accountId, id);
       if (c.backend) {

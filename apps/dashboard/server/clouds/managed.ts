@@ -75,12 +75,19 @@ export interface ManagedCloud {
   setHold(cloud: StoredCloud, hold: boolean): void;
   /** the operator ends a home package's trial early, once its self-test passed (preview's test clouds) */
   endTrial?(cloud: StoredCloud, reason: string): { ended: string } | { refused: "no_trial" | "self_test_pending" };
+  /** the operator's "retry setup now" for a first setup in its error state: its next attempt on the next pass, with the
+   *  scheduled retry's guards (a paying plan, not suspended, no deletion, its setup script not failed every time) */
+  retrySetup?(cloud: StoredCloud, reason: string): RetrySetupAnswer;
   /** what the provider measured for the cloud's current machine, this month or from `from` until now */
   usage?(cloud: StoredCloud, from?: number): Promise<{ runningSeconds: number; vcpuSeconds: number; memGiBSeconds: number; diskGiBSeconds: number; egressBytes: number } | null>;
   /** the backend's own routes (machine claims, the edge's route lookup); true when answered */
   handle?(req: IncomingMessage, res: ServerResponse, url: URL, context: ManagedCloudRoutesContext): Promise<boolean>;
   close(): void;
 }
+
+/** why a "retry setup now" was refused; "busy" is the clouds service's own: a step of that cloud is running */
+export type RetrySetupRefusal = "not_in_setup_error" | "suspended" | "no_plan" | "deleting" | "setup_script_failed" | "busy";
+export type RetrySetupAnswer = { queued: true; already: boolean } | { refused: RetrySetupRefusal };
 
 /** How a backend is attached: built once the clouds service can lend it a context. */
 export interface ManagedCloudFactory {

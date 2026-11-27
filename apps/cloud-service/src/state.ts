@@ -89,6 +89,8 @@ export interface HomeLifecycleState {
   setupRetries?: number;
   /** when a first setup was first seen in its error state */
   setupErrorAt?: number | null;
+  /** the operator asked for the next setup attempt now (admin "retry setup now"); cleared when that attempt starts */
+  setupRetryAskedAt?: number | null;
   /** wakes for a final backup since the plan ended that brought none */
   finalWakes?: number;
   /** when the current machine's setup began */

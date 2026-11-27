@@ -199,6 +199,7 @@ export function createManagedCloud(deps: ManagedCloudDeps): ManagedCloudFactory 
         resizing: c => lifecycle.resizing(c),
         setHold: (c, hold) => lifecycle.setHold(c, hold),
         endTrial: (c, reason) => updates.endTrial(c, reason),
+        retrySetup: (c, reason) => lifecycle.retrySetup(c, reason),
         usage: async (c, from) => c.serverId ? provider.usage(c.serverId, from).catch(() => null) : null,
         handle,
         close: () => { sweep.close(); starts.close(); },
