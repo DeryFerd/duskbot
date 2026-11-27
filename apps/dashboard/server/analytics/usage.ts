@@ -5,7 +5,7 @@
 // whose it is; only the workspace that wrote it knows the id, and that is how it asks for it to be deleted.
 import { createHash } from "node:crypto";
 import type { Collection, Db } from "mongodb";
-import { USAGE_RETENTION_DAYS, type UsageForget, USAGE_REASONS, type UsagePlace, type UsageDigest, type UsageFrustration, type UsageReport, type UsageRun, type UsageSession, type UsageSignal, type UsageSnapshot, type UsageTurn } from "../../../../shared/usage-signals.ts";
+import { EXPECTED_TOOL_ERRORS, USAGE_RETENTION_DAYS, type UsageForget, USAGE_REASONS, type UsagePlace, type UsageDigest, type UsageFrustration, type UsageReport, type UsageRun, type UsageSession, type UsageSignal, type UsageSnapshot, type UsageTurn } from "../../../../shared/usage-signals.ts";
 import { DAY_MS, dayOf } from "./events.ts";
 
 export { USAGE_RETENTION_DAYS };
@@ -247,6 +247,14 @@ export const notesOnly = (report: UsageReport): UsageReport => ({ turns: [], run
 /** a frustration's problem group: engine, category and the first app or tool it touched */
 export const problemKey = (f: Pick<UsageFrustration, "engine" | "category" | "apps" | "tools">) => `${f.engine}|${f.category}|${f.apps[0] ?? f.tools.find(tool => tool !== "memory" && tool !== "other") ?? "none"}`;
 
+/** the tools a turn's calls failed on only in ways the model handles (a non-zero exit, bad arguments), so its rate can
+ * show them apart from real failures */
+export function expectedOnly(t: Pick<UsageTurn, "failedTools" | "toolFailures">): string[] {
+  const real = new Set<string>(t.failedTools ?? []), soft = new Set<string>();
+  for (const f of t.toolFailures ?? []) if (EXPECTED_TOOL_ERRORS.has(f.error)) soft.add(f.tool.split(".")[0]!);
+  return [...soft].filter(tool => !real.has(tool)).sort();
+}
+
 /** the day's counters a set of fresh records adds, keyed flat so they sum across days */
 export function rollup(records: UsageRecord[]): Map<string, Record<string, number>> {
   const days = new Map<string, Record<string, number>>();
@@ -261,6 +269,7 @@ export function rollup(records: UsageRecord[]): Map<string, Record<string, numbe
       for (const tool of t.failedTools ?? []) add(day, `tool_err:${tool}`);
       for (const app of t.failedApps ?? []) add(day, `app_err:${app}`);
       for (const f of t.toolFailures ?? []) { const key = toolFailKey(f.tool, f.error); add(day, `tfail:${key}`); add(day, `tfail_calls:${key}`, f.count); }
+      for (const tool of expectedOnly(t)) add(day, `tool_soft:${tool}`);
       for (const action of t.actions ?? []) add(day, `action:${action}`);
       add(day, `engine:${t.engine}`); add(day, `lat_engine:${t.engine}:${bucket}`); add(day, `category:${t.category}`); add(day, `from:${t.from}`); add(day, `place:${t.place}`);
       if (t.room) add(day, "room");

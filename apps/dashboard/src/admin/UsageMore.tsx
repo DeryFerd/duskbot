@@ -16,7 +16,9 @@ export interface MoreAnswer {
     /** the app's account step to the website and back, one person across both; absent from an older server */
     handoff?: Array<{ step: string; side: "app" | "web"; from: string | null; reached: number; medianMs: number | null }> };
   reliability: { firstP50: number | null; firstP90: number | null; engines: Array<{ key: string; turns: number; p50: number | null; p90: number | null; firstP50: number | null }>;
-    models: Array<{ key: string; turns: number; p50: number | null; firstP50: number | null; failRate: number | null }>; toolErrors: Array<{ kind: "tool" | "app"; key: string; errors: number; turns: number; rate: number | null }>;
+    models: Array<{ key: string; turns: number; p50: number | null; firstP50: number | null; failRate: number | null }>; toolErrors: Array<{ kind: "tool" | "app"; key: string; errors: number; turns: number; rate: number | null;
+      /** turns whose calls failed only in ways the model handles (a non-zero exit, bad arguments), not in `errors`; absent from an older server */
+      expected?: number }>;
     /** absent from an older server */
     toolFailures?: Array<{ tool: string; error: string; turns: number; calls: number; people: number }>;
     crashes: { count: number; people: number; top: Count[] }; wake: { count: number; p50Ms: number | null; p90Ms: number | null } };
@@ -36,7 +38,7 @@ export const MORE_TITLE: Record<MoreDetail, string> = { setup: "setup and sign-i
 const I = { size: 14, strokeWidth: 1.75 } as const;
 const words = (key: string) => key.replace(/_/g, " ");
 const TOOL_WORDS: Record<string, string> = { app: "connected apps", web: "web search", x: "X search", computer: "computer use", mcp: "mcp tools", other: "other tools" };
-const TOOL_ERROR_WORDS: Record<string, string> = { not_found: "not found", schema_invalid: "bad arguments (model)", bot_wall: "bot wall", crashed: "crashed" };
+const TOOL_ERROR_WORDS: Record<string, string> = { not_found: "not found", schema_invalid: "bad arguments (model)", exit_code: "exited non-zero (expected)", bot_wall: "bot wall", crashed: "crashed" };
 const toolWords = (kind: "tool" | "app", key: string) => kind === "tool" ? TOOL_WORDS[key] ?? words(key) : words(key);
 const ACCOUNT_STEP: Record<string, string> = { shown: "saw the sign-in", method: "picked a way", handoff: "went to the website", returned: "came back signed in",
   cancelled: "cancelled", skipped: "skipped", error: "hit an error", back: "back from the website" };
@@ -92,7 +94,7 @@ export function MoreCards({ more, open }: { more: MoreAnswer; open(detail: MoreD
               <button key={label} type="button" onClick={() => open("reliability")} className="rounded-[16px] bg-pop px-3 py-2 text-start"><span className="block truncate text-12 text-ink-3">{label}</span><span className="block font-mono text-[20px] font-medium leading-7 text-ink num">{value}</span></button>
             ))}
           </div>
-          {r.toolErrors.length ? <Slotted rows={r.toolErrors.slice(0, 3)} keyOf={(row) => `${row.kind}:${row.key}`} render={(row, key) => <Line key={key} label={`${toolWords(row.kind, row.key)} ${row.kind}`} value={percent(row.rate)} note={`${n(row.errors)} errors`} onClick={() => open("reliability")} />} />
+          {r.toolErrors.length ? <Slotted rows={r.toolErrors.slice(0, 3)} keyOf={(row) => `${row.kind}:${row.key}`} render={(row, key) => <Line key={key} label={`${toolWords(row.kind, row.key)} ${row.kind}`} value={percent(row.rate)} note={`${n(row.errors)} errors${row.expected ? `, ${n(row.expected)} expected` : ""}`} onClick={() => open("reliability")} />} />
             : <Empty>no tool errors in this window.</Empty>}
         </Card>
       </div>
@@ -165,7 +167,7 @@ export function MoreTable({ detail, more }: { detail: MoreDetail; more: MoreAnsw
       <Table label="by model"><thead><tr><Th>model</Th><Th className="!text-end">turns</Th><Th className="!text-end">first reply</Th><Th className="!text-end">median</Th><Th className="!text-end">failed</Th></tr></thead>
         <tbody>{r.models.map((row) => <tr key={row.key}><Td>{row.key}</Td><Td className="text-end font-mono num">{n(row.turns)}</Td><Td className="text-end font-mono num">{duration(row.firstP50)}</Td><Td className="text-end font-mono num">{duration(row.p50)}</Td><Td className="text-end font-mono num">{percent(row.failRate)}</Td></tr>)}</tbody></Table>
       <Table label="tool and app errors"><thead><tr><Th>what</Th><Th className="!text-end">turns using it</Th><Th className="!text-end">errors</Th><Th className="!text-end">rate</Th></tr></thead>
-        <tbody>{r.toolErrors.map((row) => <tr key={`${row.kind}:${row.key}`}><Td>{toolWords(row.kind, row.key)} <span className="text-ink-4">{row.kind}</span></Td><Td className="text-end font-mono num">{n(row.turns)}</Td><Td className="text-end font-mono num">{n(row.errors)}</Td><Td className="text-end font-mono num">{percent(row.rate)}</Td></tr>)}</tbody></Table>
+        <tbody>{r.toolErrors.map((row) => <tr key={`${row.kind}:${row.key}`}><Td>{toolWords(row.kind, row.key)} <span className="text-ink-4">{row.kind}</span></Td><Td className="text-end font-mono num">{n(row.turns)}</Td><Td className="text-end font-mono num">{n(row.errors)}{row.expected ? <span className="text-ink-4"> +{n(row.expected)} expected</span> : null}</Td><Td className="text-end font-mono num">{percent(row.rate)}</Td></tr>)}</tbody></Table>
       {r.toolFailures?.length ? <Table label="tool failures"><thead><tr><Th>tool</Th><Th>error</Th><Th className="!text-end">turns</Th><Th className="!text-end">calls</Th><Th className="!text-end">people</Th></tr></thead>
         <tbody>{r.toolFailures.map((row) => <tr key={`${row.tool}|${row.error}`}><Td className="font-mono">{row.tool}</Td><Td>{TOOL_ERROR_WORDS[row.error] ?? words(row.error)}</Td><Td className="text-end font-mono num">{n(row.turns)}</Td><Td className="text-end font-mono num">{n(row.calls)}</Td><Td className="text-end font-mono num">{n(row.people)}</Td></tr>)}</tbody></Table> : null}
       <CountTable title={`app errors (${n(r.crashes.count)} from ${n(r.crashes.people)} people)`} rows={r.crashes.top} />

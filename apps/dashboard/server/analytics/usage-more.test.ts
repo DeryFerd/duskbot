@@ -147,4 +147,16 @@ describe("tool failures", () => {
     ]);
     expect(m.reliability.toolErrors.find(row => row.kind === "tool" && row.key === "browser")).toMatchObject({ errors: 1 });
   });
+
+  it("counts turns whose commands only exited non-zero apart from the terminal's errors", async () => {
+    const store = memoryUsageStore(() => NOW);
+    const usage = createUsage({ store, now: () => NOW, optedOut: () => false });
+    const exited = { tools: ["terminal" as const], toolFailures: [{ tool: "terminal", error: "exit_code" as const, count: 3 }] };
+    await usage.ingest("acct_a", "ws_1", { turns: [turn(exited), turn(exited), turn({ tools: ["terminal"], failedTools: ["terminal"], toolFailures: [{ tool: "terminal", error: "not_found", count: 1 }, { tool: "terminal", error: "exit_code", count: 1 }] }), turn({ tools: ["terminal"] })], runs: [] });
+    const days = [dayOf(NOW)], daily = new Map((await store.daily(days[0]!, days[0]!)).map(row => [row.day, row.c]));
+    const m = moreOf({ days, daily, people: await store.people(days[0]!, days[0]!), snapshots: [], routines: [], from: NOW - DAY, to: NOW + DAY, now: NOW, accounts: [], events: [],
+      billing: { checkouts: [], subscriptions: [], feedback: [] } });
+    expect(m.reliability.toolErrors.find(row => row.kind === "tool" && row.key === "terminal")).toEqual({ kind: "tool", key: "terminal", errors: 1, turns: 4, rate: 0.25, expected: 2 });
+    expect(m.reliability.toolFailures.map(row => row.error)).toEqual(["not_found", "exit_code"]);
+  });
 });

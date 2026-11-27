@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { USAGE_TURN_KEYS, cleanUsageTurn, failedToolName, toolErrorClass, toolFailures } from "../shared/usage-signals.ts";
 import { parseWorkspaceReport } from "../shared/dashboard-protocol.ts";
 import { turnRecord } from "./usage-signals.ts";
+import { toolErrorLine } from "./usage-trace/detail.ts";
 
 const NOW = Date.now();
 const SECRET = "Navigation to https://bank.example.com/acct?u=jane.doe@acme.com failed: Jane Doe";
@@ -28,7 +29,32 @@ describe("tool error class", () => {
     ["The browser connection closed (pipe) before Page.navigate answered.", "crashed"],
     ["something odd", "other"],
     [undefined, "other"],
+    ["Exit code 1", "exit_code"],
+    ["Exit code 1: grep: no match in notes.txt", "exit_code"],
+    ["Exit code 2: ls: /nope: No such file or directory", "exit_code"],
+    ["exit code 1: Permission denied (publickey).", "exit_code"],
+    ["Exit code 127: zsh: command not found: jq", "not_found"],
+    ["exit code 1: jq : The term 'jq' is not recognized as the name of a cmdlet, function, script file", "not_found"],
+    ["Exit code 143: Command timed out after 2m 0s", "timeout"],
+    ["Exit code 124: timeout: sending signal TERM to command 'make'", "timeout"],
+    ["The command was stopped: it ran past its 60-second limit.", "timeout"],
+    ["Exit code 1: ls: Desktop: Operation not permitted", "permission"],
+    ["Exit code 1: Access to the path 'C:\\Users\\a\\x' is denied.", "permission"],
   ])("%s -> %s", (text, kind) => expect(toolErrorClass(text)).toBe(kind));
+});
+
+describe("tool error line", () => {
+  it.each([
+    ["Exit code 1\ngrep: notes.txt: no match\nmore", "Exit code 1: grep: notes.txt: no match"],
+    ["exit code 2\n--- stdout ---\npartial\n--- stderr ---\nls: x: No such file or directory", "exit code 2: ls: x: No such file or directory"],
+    ["exit code 1\n(no output)", "exit code 1"],
+    [JSON.stringify({ output: "zsh: command not found: jq\n", exitCode: 127 }, null, 2), "Exit code 127: zsh: command not found: jq"],
+    [JSON.stringify([{ type: "text", text: "No element matches @e12. Take a new snapshot." }], null, 2), "No element matches @e12. Take a new snapshot."],
+    [JSON.stringify({ ok: false, result: "Navigation timeout of 30000 ms exceeded" }, null, 2), "Navigation timeout of 30000 ms exceeded"],
+    [JSON.stringify({ message: "tool call failed: connect ECONNREFUSED" }, null, 2), "tool call failed: connect ECONNREFUSED"],
+    [`{\n  "output": "${"x".repeat(40)}\\nTimed out waiting",\n  "exitCode": 1\n[… preview shortened]`, `${"x".repeat(40)}`],
+    ["The page crashed.", "The page crashed."],
+  ])("%j", (output, line) => expect(toolErrorLine(output)).toBe(line));
 });
 
 describe("failed tool name", () => {
@@ -65,6 +91,15 @@ describe("tool failures on a turn", () => {
     expect(record.toolFailures).toEqual([{ tool: "computer.click", error: "schema_invalid", count: 1 }, { tool: "terminal", error: "other", count: 1 }]);
     expect(Object.keys(record).every((key) => (USAGE_TURN_KEYS as readonly string[]).includes(key))).toBe(true);
     expect(JSON.stringify(record)).not.toMatch(/example|jane|acme/i);
+  });
+
+  it("leaves commands that ran and exited non-zero out of the failed tool kinds, keeping a command that could not run", () => {
+    const facts = { driverKind: "claudeAgent", status: "ok", startedAt: NOW - 1000, endedAt: NOW, toolNames: ["Bash", "mcp__computer__click"], trigger: { kind: "owner" }, room: false } as const;
+    const expected = turnRecord({ ...facts, failedNames: ["Bash"], failedCalls: [{ name: "Bash", error: "Exit code 1: grep: no match" }] }, "desktop", NOW)!;
+    expect(expected.failedTools ?? []).toEqual([]);
+    expect(expected.toolFailures).toEqual([{ tool: "terminal", error: "exit_code", count: 1 }]);
+    const missing = turnRecord({ ...facts, failedNames: ["Bash"], failedCalls: [{ name: "Bash", error: "Exit code 127: zsh: command not found: ffprobe" }] }, "desktop", NOW)!;
+    expect(missing.failedTools).toEqual(["terminal"]);
   });
 
   it("keeps the old failed names path when no calls are given", () => {

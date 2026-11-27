@@ -4,9 +4,9 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { RuntimeEvent } from "../../shared/runtime-events.ts";
 import { TOOL_NAMESPACE } from "../../shared/tool-surface.ts";
 import { failureOf, type UsageFailure } from "../../shared/usage-signals.ts";
-import { runnerActions, type TraceParent, type TraceStatus, type TraceTokens, type TraceUsageStatus } from "../../shared/usage-trace.ts";
+import { runnerActions, traceToolLook, type TraceParent, type TraceStatus, type TraceTokens, type TraceUsageStatus } from "../../shared/usage-trace.ts";
 import { onJsonBody, parsedBodyOf } from "../harness/http.ts";
-import { errorLine, pageTitle, toolDetail } from "./detail.ts";
+import { errorLine, pageTitle, toolDetail, toolErrorLine } from "./detail.ts";
 import { appendSpans, type SpanRecord, type StepSpan, type ToolSpan } from "./spans.ts";
 
 /** What a booked turn adds to its usage row. */
@@ -133,6 +133,8 @@ function difference(now: TraceTokens, before: TraceTokens): TraceTokens | null {
 
 export type TraceRecorder = ReturnType<typeof createTraceRecorder>;
 
+const COMMAND_TITLE_ICONS = new Set(["tool", "plan", "files"]);
+
 export function createTraceRecorder(options: { dataDir: string; now?: () => number }) {
   const now = options.now ?? Date.now;
   const live = new Map<string, Turn>();
@@ -142,6 +144,9 @@ export function createTraceRecorder(options: { dataDir: string; now?: () => numb
   const nodeTurns = new Map<string, TraceParent>();
   const threadTotals = new Map<string, TraceTokens>();
   const finished = new Map<string, true>();
+  // calls an engine titled with the command itself (Codex, ACP engines) are booked as the shell, not an unknown tool
+  const shellCalls = new WeakSet<Tool>();
+  const usageName = (tool: Tool, name: string) => shellCalls.has(tool) && COMMAND_TITLE_ICONS.has(traceToolLook(name).icon) ? "shell" : name;
 
   const stepId = (turn: Turn) => `${turn.threadId}:${turn.turnId}:step-${turn.steps.length + 1}`;
   const openStep = (turn: Turn, startedAt: number): StepSpan => {
@@ -209,6 +214,7 @@ export function createTraceRecorder(options: { dataDir: string; now?: () => numb
       turn.tools.set(id, tool);
       turn.byItem.set(itemId, tool);
     }
+    if (event.summary) shellCalls.add(turn.byItem.get(itemId)!);
     const actions = runnerActions(name, event.input);
     if (actions.length) turn.actions.set(itemId, actions);
     turn.openTools.add(itemId);
@@ -228,7 +234,7 @@ export function createTraceRecorder(options: { dataDir: string; now?: () => numb
     if (tool.timedBy === "engine") tool.endedAt = Math.max(tool.startedAt, endedAt);
     if (!event.ok) {
       tool.status = "error";
-      tool.error ??= errorLine(event.output);
+      tool.error ??= toolErrorLine(event.output);
     }
     const title = pageTitle(event.output);
     if (title && !tool.detail?.includes(title)) tool.detail = tool.detail ? `${tool.detail} · ${title}`.slice(0, 120) : title;
@@ -419,7 +425,7 @@ export function createTraceRecorder(options: { dataDir: string; now?: () => numb
       const failed = answer.error !== undefined || answer.result?.isError === true;
       const detail = toolDetail(name, request?.params?.arguments);
       const rpc = answer.error && typeof answer.error === "object" ? answer.error as { code?: unknown; message?: unknown } : undefined;
-      const error = failed ? errorLine(typeof answer.error === "string" ? answer.error : typeof rpc?.message === "string" ? `${rpc.code ?? ""} ${rpc.message}`.trim()
+      const error = failed ? toolErrorLine(typeof answer.error === "string" ? answer.error : typeof rpc?.message === "string" ? `${rpc.code ?? ""} ${rpc.message}`.trim()
         : answer.result?.content?.find((part) => typeof part.text === "string")?.text) : undefined;
       receipt(threadId, { name, startedAt, endedAt: now(), ok: !failed, ...(detail ? { detail } : {}), ...(error ? { error } : {}) });
       return body;
@@ -451,7 +457,7 @@ export function createTraceRecorder(options: { dataDir: string; now?: () => numb
      * connected-apps runner call by the app actions it ran. */
     toolNames(threadId: string): string[] {
       const turn = ended.get(threadId)?.turn;
-      return turn ? [...turn.tools.values()].flatMap((tool) => (tool.itemId && turn.actions.get(tool.itemId)) || [tool.name]) : [];
+      return turn ? [...turn.tools.values()].flatMap((tool) => (tool.itemId && turn.actions.get(tool.itemId)) || [usageName(tool, tool.name)]) : [];
     },
     /** The tools that failed in an ended, not yet settled turn, each with its error line, and when its first model step
      * ended. */
@@ -460,7 +466,7 @@ export function createTraceRecorder(options: { dataDir: string; now?: () => numb
       if (!turn) return { failedNames: [], failedCalls: [] };
       const first = turn.steps.find((step) => typeof step.endedAt === "number");
       const failedCalls = [...turn.tools.values()].filter((tool) => tool.status === "error")
-        .flatMap((tool) => ((tool.itemId && turn.actions.get(tool.itemId)) || [tool.name]).map((name) => ({ name, ...(tool.error ? { error: tool.error } : {}) })));
+        .flatMap((tool) => ((tool.itemId && turn.actions.get(tool.itemId)) || [usageName(tool, tool.name)]).map((name) => ({ name, ...(tool.error ? { error: tool.error } : {}) })));
       return { failedNames: failedCalls.map((call) => call.name), failedCalls, ...(first?.endedAt ? { firstStepAt: first.endedAt } : {}) };
     },
     liveTurns,

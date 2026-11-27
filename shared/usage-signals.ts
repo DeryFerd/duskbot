@@ -67,13 +67,17 @@ export function toolSignals(names: readonly string[]): { tools: UsageTool[]; app
 }
 
 /** why one tool call failed, read from its error on the workspace. `schema_invalid` is the model sending arguments the
- * tool refused (a weak model's mistake), counted apart so it never reads as the tool breaking */
-export const USAGE_TOOL_ERRORS = ["timeout", "permission", "not_found", "schema_invalid", "network", "bot_wall", "crashed", "other"] as const;
+ * tool refused (a weak model's mistake) and `exit_code` a command that ran and exited non-zero (grep finding nothing, a
+ * failing test being checked): both are counted apart so they never read as the tool breaking. A command that could not
+ * run (not found, no permission, out of time) keeps its own class. */
+export const USAGE_TOOL_ERRORS = ["timeout", "permission", "not_found", "schema_invalid", "network", "bot_wall", "crashed", "exit_code", "other"] as const;
+/** the classes the model meets and handles itself; a turn's tool counts as failed only for the others */
+export const EXPECTED_TOOL_ERRORS: ReadonlySet<UsageToolError> = new Set(["schema_invalid", "exit_code"]);
 export type UsageToolError = (typeof USAGE_TOOL_ERRORS)[number];
 const TOOL_ERROR_WORDS: ReadonlyArray<[UsageToolError, RegExp]> = [
   ["schema_invalid", /invalid[ _-]?(?:arg|param|input|type|enum|selector|json|request params)|-32602|is required|required (?:property|field|param)|missing required|expected (?:a |an )?(?:string|number|integer|boolean|object|array)|must be (?:a|an|one of) |unknown (?:argument|parameter|property|field|key|tool)|unrecognized (?:argument|parameter|key)|additional propert|validation (?:error|failed)|does not match (?:the )?schema|no such tool|tool .{0,60} not found/i],
   ["bot_wall", /captcha|turnstile|cloudflare|human check|verify you are (?:a )?human|are you a robot|unusual traffic|bot detection|perimeterx|datadome|you have been (?:rate[- ]limited|blocked)|(?:request|access) (?:was |has been )?blocked/i],
-  ["timeout", /timed? ?out|timeout|deadline exceeded|took too long/i],
+  ["timeout", /timed? ?out|timeout|deadline exceeded|took too long|ran past its .{0,20}limit/i],
   ["permission", /permission|not permitted|\beacces\b|\beperm\b|screen recording|accessibility (?:access|is not|isn't|not)|not allowed|forbidden|denied|unauthori[sz]ed|\b40[13]\b/i],
   ["network", /econnrefused|econnreset|enotfound|eai_again|ehostunreach|enetunreach|net::err_|err_(?:name|internet|connection|network)|socket hang up|fetch failed|network|\bdns\b|offline|unreachable|\b50[234]\b/i],
   ["not_found", /not found|no (?:such|matching) |no (?:element|file|tab|window|app|node|frame) |\benoent\b|\b404\b|does not exist|doesn't exist|could not find|couldn't find|cannot find|can't find|unable to (?:locate|find)/i],
@@ -84,8 +88,22 @@ const TOOL_ERROR_WORDS: ReadonlyArray<[UsageToolError, RegExp]> = [
 export function toolErrorClass(text: unknown): UsageToolError {
   const line = typeof text === "string" ? text.slice(0, 500) : "";
   if (!line) return "other";
+  const exit = EXIT_LINE.exec(line);
+  if (exit) return exitClass(Number(exit[1]), line.slice(exit[0].length));
   for (const [kind, pattern] of TOOL_ERROR_WORDS) if (pattern.test(line)) return kind;
   return "other";
+}
+
+const EXIT_LINE = /^(?:error:\s*)?exit code (-?\d+)\b/i;
+const COMMAND_MISSING = /command not found|is not recognized as (?:the name of )?(?:a cmdlet|an internal or external command)|commandnotfoundexception|could not find executable/i;
+const COMMAND_STOPPED = /timed? ?out|timeout|took too long|ran past its|killed/i;
+const COMMAND_REFUSED = /operation not permitted|\beperm\b|\beacces\b|unauthorizedaccess|access (?:to the path .{0,80} )?is denied|requested permissions|not allowed/i;
+/** a command that ran and exited non-zero: its own result unless the shell says it never got to run */
+function exitClass(code: number, said: string): UsageToolError {
+  if (code === 127 || COMMAND_MISSING.test(said)) return "not_found";
+  if (code === 124 || COMMAND_STOPPED.test(said)) return "timeout";
+  if (code === 126 || COMMAND_REFUSED.test(said)) return "permission";
+  return "exit_code";
 }
 
 const TOOL_ACTION = /^[a-z][a-z0-9_]{0,31}$/;

@@ -4,6 +4,7 @@ import { LATENCY_EDGES, REASON_WORDS, type PersonDay, type RoutineSpan, type Sna
 import type { StoredEvent } from "./sink.ts";
 import type { FocusItem } from "./usage-summary.ts";
 import { ACCOUNT_SIGN_IN_STEPS } from "../../../../shared/product-signals.ts";
+import { EXPECTED_TOOL_ERRORS, type UsageToolError } from "../../../../shared/usage-signals.ts";
 import { cancelledFeedback, type RetentionOutcome } from "../../../../shared/billing-api.ts";
 
 const DAY = 86_400_000;
@@ -12,7 +13,7 @@ export interface RateRow { key: string; total: number; good: number; bad: number
 export interface MoreAnswer {
   setup: { onboarding: Array<{ step: string; reached: number; medianMs: number | null; fromApp?: number }>; signIn: RateRow[]; account: AccountFunnel; handoff: HandoffStep[] };
   reliability: { firstP50: number | null; firstP90: number | null; engines: Array<{ key: string; turns: number; p50: number | null; p90: number | null; firstP50: number | null }>;
-    models: Array<{ key: string; turns: number; p50: number | null; firstP50: number | null; failRate: number | null }>; toolErrors: Array<{ kind: "tool" | "app"; key: string; errors: number; turns: number; rate: number | null }>;
+    models: Array<{ key: string; turns: number; p50: number | null; firstP50: number | null; failRate: number | null }>; toolErrors: Array<{ kind: "tool" | "app"; key: string; errors: number; turns: number; rate: number | null; expected?: number }>;
     toolFailures: ToolFailureRow[]; crashes: { count: number; people: number; top: Count[] }; wake: { count: number; p50Ms: number | null; p90Ms: number | null } };
   engagement: { sessionsPerPersonDay: number | null; sessionMedianMs: number | null; hours: number[]; weekdays: number[]; turnsPerChat: number | null; chatsPerPersonDay: number | null;
     attachments: Count[]; attachmentSizes: Count[]; chatsDeleted: number; archivedShare: number | null; settings: Count[] };
@@ -77,14 +78,14 @@ export function moreOf(input: MoreInput): MoreAnswer {
   const models = keys("model:").filter(key => key !== "other" || total("model:other") > 0).map(key => ({ key, turns: total(`model:${key}`), p50: bucketQuantile(buckets(`lat_model:${key}:`), 0.5),
     firstP50: bucketQuantile(buckets(`first_model:${key}:`), 0.5), failRate: rate(total(`model_fail:${key}`), total(`model:${key}`)) })).sort((a, b) => b.turns - a.turns);
   const toolErrors = [
-    ...keys("tool_err:").map(key => ({ kind: "tool" as const, key, errors: total(`tool_err:${key}`), turns: total(`tool:${key}`) })),
+    ...[...new Set([...keys("tool_err:"), ...keys("tool_soft:")])].map(key => ({ kind: "tool" as const, key, errors: total(`tool_err:${key}`), turns: total(`tool:${key}`), ...(total(`tool_soft:${key}`) ? { expected: total(`tool_soft:${key}`) } : {}) })),
     ...keys("app_err:").map(key => ({ kind: "app" as const, key, errors: total(`app_err:${key}`), turns: total(`app:${key}`) })),
   ].map(row => ({ ...row, rate: rate(row.errors, row.turns) })).sort((a, b) => b.errors - a.errors);
   const toolFailures = keys("tfail:").map(key => {
     const split = key.lastIndexOf("|");
     return { tool: key.slice(0, split).replace(":", "."), error: key.slice(split + 1), turns: total(`tfail:${key}`), calls: total(`tfail_calls:${key}`),
       people: new Set(input.people.filter(row => (row.fails?.[key] ?? 0) > 0).map(row => row.accountId)).size };
-  }).sort((a, b) => Number(a.error === "schema_invalid") - Number(b.error === "schema_invalid") || b.turns - a.turns);
+  }).sort((a, b) => Number(EXPECTED_TOOL_ERRORS.has(a.error as UsageToolError)) - Number(EXPECTED_TOOL_ERRORS.has(b.error as UsageToolError)) || b.turns - a.turns);
   const errors = byName("app_error");
   const crashes = { count: errors.length, people: new Set(errors.map(event => event.accountId ?? event.ctx?.install).filter(Boolean)).size, top: counts(errors.map(event => `${event.props.kind}:${event.props.code}`)).slice(0, 8) };
   const people = input.people.filter(row => row.turns > 0), personDays = people.length;
