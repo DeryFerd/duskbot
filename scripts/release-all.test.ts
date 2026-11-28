@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { signPolicy, verifyPolicy } from "../apps/cloud-service/src/update-policy.ts";
 import type { FleetAnswer } from "../apps/dashboard/server/admin/ops/fleet.ts";
-import { configOf, createRelease, judge, macUpdateSigned, nextPolicy, release, rolloutSteps } from "./release-all.ts";
+import { configOf, createRelease, judge, macUpdateSigned, nextPolicy, release, rolloutSteps, shellQuote } from "./release-all.ts";
 import { releaseAssets } from "./release-assets.ts";
 
 const { privateKey } = generateKeyPairSync("ed25519");
@@ -65,6 +65,15 @@ describe("the release tool's decisions", () => {
     // a fleet view from before errorInstalls was counted judges by the ratio alone
     const { errorInstalls: _, ...older } = { version: "0.2.29", installs: 25, errors: 12, errorInstalls: 2 };
     expect(judge(fleetOf({ desktops: [older as never, quiet] }), base)).toMatchObject({ verdict: "halt" });
+  });
+});
+
+describe("remote command quoting", () => {
+  it("keeps a path one word for the remote shell, even with a quote, space or dollar sign in it", () => {
+    expect(shellQuote("/var/lib/dusk-account-prod/home")).toBe("'/var/lib/dusk-account-prod/home'");
+    expect(shellQuote("/tmp/a b/$x")).toBe("'/tmp/a b/$x'");
+    // a single quote ends the quoted word and is re-entered with an escaped one, so the value can never break out
+    expect(shellQuote("/tmp/a'b")).toBe("'/tmp/a'\\''b'");
   });
 });
 

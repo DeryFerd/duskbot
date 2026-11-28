@@ -36,6 +36,11 @@ export interface Config {
   /** the account service's DUSK_UPDATE_POLICY_FILE and DUSK_MANAGED_HOME_RELEASE_FILE */
   policyFile: string; releaseFile: string;
 }
+/** Quote a value for a command a remote shell parses, so a path with a space, `$` or quote stays one word. */
+export function shellQuote(text: string): string {
+  return `'${String(text).replaceAll("'", "'\\''")}'`;
+}
+
 export function configOf(env: Record<string, string | undefined>): Config {
   const homeDir = env.RELEASE_HOME_DIR || "/var/lib/dusk-account-prod/home";
   return { account: (env.RELEASE_ACCOUNT_URL || "https://dusk.bot").replace(/\/$/, ""), ssh: env.RELEASE_SSH || "contabo", homeDir,
@@ -104,7 +109,7 @@ export function createRelease(o: { cfg: Config; env: Record<string, string | und
   /** a file put on the host by rename, so the service never reads half of it */
   function place(remote: string, text: string) {
     const part = `${remote}.part-${randomBytes(4).toString("hex")}`;
-    act("ssh", ["-o", "BatchMode=yes", cfg.ssh, `umask 077 && cat > '${part}' && mv -f '${part}' '${remote}'`], text);
+    act("ssh", ["-o", "BatchMode=yes", cfg.ssh, `umask 077 && cat > ${shellQuote(part)} && mv -f ${shellQuote(part)} ${shellQuote(remote)}`], text);
   }
 
   /** the policy in force: the account service's, or (it down, so a pause still works) the file it reads, read over ssh */
@@ -114,7 +119,7 @@ export function createRelease(o: { cfg: Config; env: Record<string, string | und
     if (answer?.ok) return verifyPolicy(await answer.json(), keys);
     log(`  ${cfg.account}/v1/updates/policy answered ${answer?.status ?? "nothing"}; reading ${cfg.policyFile} instead`);
     let text = "";
-    try { text = sh("ssh", ["-o", "BatchMode=yes", cfg.ssh, `cat '${cfg.policyFile}' 2>/dev/null || true`]); } catch (error) { if (!dryRun) throw error; }
+    try { text = sh("ssh", ["-o", "BatchMode=yes", cfg.ssh, `cat ${shellQuote(cfg.policyFile)} 2>/dev/null || true`]); } catch (error) { if (!dryRun) throw error; }
     if (text) return verifyPolicy(JSON.parse(text), keys);
     if (!dryRun) throw new Error(`no policy could be read from ${cfg.account} or ${cfg.ssh}:${cfg.policyFile}`);
     log("  (dry run) going on from no policy");
@@ -266,7 +271,7 @@ export async function release(r: Release, opt: ReleaseOptions): Promise<"done" |
     const signature = key ? signRelease({ kind: "home-package", name: "omb-home", version, sha256, signedAt: r.now() }, key) : "(dry run)";
     const file = `${r.cfg.homeDir}/omb-home-${version}.tgz`;
     r.act("scp", ["-q", local, `${r.cfg.ssh}:${file}.part`]);
-    r.act("ssh", ["-o", "BatchMode=yes", r.cfg.ssh, `test "$(sha256sum '${file}.part' | cut -c1-64)" = '${sha256}' && mv -f '${file}.part' '${file}'`]);
+    r.act("ssh", ["-o", "BatchMode=yes", r.cfg.ssh, `test "$(sha256sum ${shellQuote(`${file}.part`)} | cut -c1-64)" = ${shellQuote(sha256)} && mv -f ${shellQuote(`${file}.part`)} ${shellQuote(file)}`]);
     r.place(r.cfg.releaseFile, `${JSON.stringify({ sha256, signature, file, version, ...(canary.length ? { clouds: canary } : {}) })}\n`);
     state.cloud = { sha256, signature, file };
   });
@@ -287,7 +292,7 @@ export async function release(r: Release, opt: ReleaseOptions): Promise<"done" |
     for (const [name, sha] of manifest ? [[manifest.file, manifest.sha256], [manifest.desktop.file, manifest.desktop.sha256]] : [["<build>.tgz", "<sha256>"]]) {
       const remote = `${r.cfg.linkPackages}/${sha}.tgz`;
       r.act("scp", ["-q", join(ROOT, "release", "vps", name!), `${r.cfg.ssh}:${remote}.part`]);
-      r.act("ssh", ["-o", "BatchMode=yes", r.cfg.ssh, `test "$(sha256sum '${remote}.part' | cut -c1-64)" = '${sha}' && mv -f '${remote}.part' '${remote}'`]);
+      r.act("ssh", ["-o", "BatchMode=yes", r.cfg.ssh, `test "$(sha256sum ${shellQuote(`${remote}.part`)} | cut -c1-64)" = ${shellQuote(sha)} && mv -f ${shellQuote(`${remote}.part`)} ${shellQuote(remote)}`]);
     }
     if (manifest) r.place(`${r.cfg.linkPackages}/current.json`, `${JSON.stringify({ sha256: manifest.sha256, version, commit: manifest.commit, builtAt: manifest.builtAt, signature: manifest.signature, desktop: { sha256: manifest.desktop.sha256, image: manifest.desktop.image } })}\n`);
     else r.log("  would write current.json");
