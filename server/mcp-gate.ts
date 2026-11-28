@@ -220,7 +220,14 @@ const appOnly = new Set<string>();
 const spec = upstreamSpec();
 if (SPILL_DIR) sweepSpill(SPILL_DIR);
 
-const childEnv: NodeJS.ProcessEnv = { ...process.env, ...spec.env };
+// The engine shares its own environment — DUSK_* holds a per-turn token — with every MCP child, so the upstream
+// server gets this process's environment without any dusk-owned name. spec.env is the server's own record (the
+// agents proxy's token, a remote proxy's settings) and is kept as given.
+const childEnv: NodeJS.ProcessEnv = {};
+for (const [key, value] of Object.entries(process.env)) {
+  if (value !== undefined && !key.startsWith("DUSK_")) childEnv[key] = value;
+}
+Object.assign(childEnv, spec.env);
 for (const key of Object.keys(childEnv)) if (key.startsWith("DUSK_GATE_")) delete childEnv[key];
 
 // CreateProcess cannot exec an npm .cmd shim or a node-shebang script, and a shell would re-interpret JSON argv.

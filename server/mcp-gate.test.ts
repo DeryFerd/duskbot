@@ -159,6 +159,19 @@ describe("mcp-gate", () => {
     expect(JSON.parse(await nextLine())).toEqual({ jsonrpc: "2.0", id: 7, result: { echoed: "tools/list", params: null } });
   });
 
+  it("keeps the engine's DUSK_ environment away from the upstream server but passes the server's own", async () => {
+    const source = `
+const { createInterface } = require("node:readline");
+createInterface({ input: process.stdin }).on("line", (line) => {
+  const msg = JSON.parse(line);
+  process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: { token: process.env.DUSK_COMMS_TOKEN ?? null, own: process.env.UPSTREAM_ONLY ?? null } }) + "\\n");
+});
+`;
+    start({}, { DUSK_COMMS_TOKEN: "leaked-token" }, source);
+    send({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    expect(JSON.parse(await nextLine()).result).toEqual({ token: null, own: "yes" });
+  });
+
   it.each([undefined, "not-json", "{}", '{"DUSK_GATE_NAME":"notes","DUSK_GATE_TOOL_SCOPE":"{}"}'])("refuses missing or corrupt private gate settings before spawning upstream: %s", value => {
     const key = `DUSK_GATE_CONFIG_${"a".repeat(64)}`;
     start({}, value === undefined ? {} : { [key]: value }, SCOPED_UPSTREAM, ["--config-env", key]);
